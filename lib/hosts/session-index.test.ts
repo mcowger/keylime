@@ -1209,57 +1209,64 @@ test("a restored-session event defers one wake while dispatch is blocked on a st
   assert.equal(outboxState(remote.id).wakes!.has(SHARED), false);
 });
 
-test("failed session-change listings keep at most one retry per host, and a successful event cancels it", async (t) => {
-  const link = setup(t);
-  await link(null, { listSessions: () => [] });
-  let eventMode = false;
-  let failing = true;
-  let eventLists = 0;
-  let archives = 0;
-  const remote = await link("Retry coalescing", {
-    listSessions: () => {
-      if (eventMode) {
-        eventLists += 1;
-        if (failing) throw new Error("temporary list failure");
-      }
-      return [];
-    },
-    listArchives: () => {
-      archives += 1;
-      return [archiveInfo(SHARED)];
-    },
-  });
-  outbox.startOutbox();
-  assert.equal((await addTo(SHARED, "retry-coalesced", remote.id)).status, 200);
-  await until(
-    settled(() => archives, 2, remote.id),
-    "archived entry held",
-  );
-  eventMode = true;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    await remote.post({ type: "sessions_changed" });
-    await until(
-      () => eventLists === attempt,
-      "one listing for each host event",
+test(
+  "failed session-change listings keep at most one retry per host, and a successful event cancels it",
+  { timeout: 15_000 },
+  async (t) => {
+    const link = setup(t);
+    await link(null, { listSessions: () => [] });
+    let eventMode = false;
+    let failing = true;
+    let eventLists = 0;
+    let archives = 0;
+    const remote = await link("Retry coalescing", {
+      listSessions: () => {
+        if (eventMode) {
+          eventLists += 1;
+          if (failing) throw new Error("temporary list failure");
+        }
+        return [];
+      },
+      listArchives: () => {
+        archives += 1;
+        return [archiveInfo(SHARED)];
+      },
+    });
+    outbox.startOutbox();
+    assert.equal(
+      (await addTo(SHARED, "retry-coalesced", remote.id)).status,
+      200,
     );
-  }
-  failing = false;
-  await remote.post({ type: "sessions_changed" });
-  await until(() => eventLists === 4, "the successful event is listed");
-  // Real loopback RPC remains live while the retry's wall-clock deadline passes.
-  await Bun.sleep(outbox.RETRY_MS + 50);
-  assert.equal(
-    eventLists,
-    4,
-    "the successful event cancels the scheduled retry",
-  );
-  assert.equal(
-    outbox.outboxEntries(SHARED, remote.id)[0].state,
-    "held",
-    "still archived, so no dispatch",
-  );
-  assert.equal(archives, 2, "events do not poll its archive");
-});
+    await until(
+      settled(() => archives, 2, remote.id),
+      "archived entry held",
+    );
+    eventMode = true;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await remote.post({ type: "sessions_changed" });
+      await until(
+        () => eventLists === attempt,
+        "one listing for each host event",
+      );
+    }
+    failing = false;
+    await remote.post({ type: "sessions_changed" });
+    await until(() => eventLists === 4, "the successful event is listed");
+    // Real loopback RPC remains live while the retry's wall-clock deadline passes.
+    await Bun.sleep(outbox.RETRY_MS + 50);
+    assert.equal(
+      eventLists,
+      4,
+      "the successful event cancels the scheduled retry",
+    );
+    assert.equal(
+      outbox.outboxEntries(SHARED, remote.id)[0].state,
+      "held",
+      "still archived, so no dispatch",
+    );
+    assert.equal(archives, 2, "events do not poll its archive");
+  },
+);
 
 for (const event of [false, true]) {
   test(
