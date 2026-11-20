@@ -7,7 +7,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { Database } from "bun:sqlite";
 
 export type DeployState = {
   id: string;
@@ -50,21 +49,4 @@ export function readDeployState(base: string): DeployState | null {
       return null;
     throw error;
   }
-}
-/** Kernel-owned SQLite writer lock: release on process death, never expire by clock or PID. */
-export function acquireDeployLock(base: string): () => void {
-  const db = new Database(path.join(base, "deployment-lock.sqlite"));
-  db.exec(
-    "PRAGMA busy_timeout = 0; CREATE TABLE IF NOT EXISTS owner (id INTEGER PRIMARY KEY);",
-  );
-  try {
-    db.exec("BEGIN IMMEDIATE");
-  } catch (error) {
-    db.close(true);
-    throw error;
-  }
-  return () => {
-    db.exec("ROLLBACK");
-    db.close(true);
-  };
 }

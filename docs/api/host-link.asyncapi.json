@@ -106,6 +106,9 @@
         "HostLinkWorkspaceFile": {
           "$ref": "#/components/messages/HostLinkWorkspaceFile"
         },
+        "HostReply_activateHostArtifact": {
+          "$ref": "#/components/messages/HostReply_activateHostArtifact"
+        },
         "HostReply_addProject": {
           "$ref": "#/components/messages/HostReply_addProject"
         },
@@ -186,6 +189,9 @@
         },
         "HostReply_home": {
           "$ref": "#/components/messages/HostReply_home"
+        },
+        "HostReply_hostArtifactActivationStatus": {
+          "$ref": "#/components/messages/HostReply_hostArtifactActivationStatus"
         },
         "HostReply_inspectUploads": {
           "$ref": "#/components/messages/HostReply_inspectUploads"
@@ -301,6 +307,9 @@
         "HostReply_shipStatus": {
           "$ref": "#/components/messages/HostReply_shipStatus"
         },
+        "HostReply_stageHostArtifact": {
+          "$ref": "#/components/messages/HostReply_stageHostArtifact"
+        },
         "HostReply_startClone": {
           "$ref": "#/components/messages/HostReply_startClone"
         },
@@ -345,6 +354,9 @@
         },
         "HostReply_workspaceCreationStatus": {
           "$ref": "#/components/messages/HostReply_workspaceCreationStatus"
+        },
+        "HostRequest_activateHostArtifact": {
+          "$ref": "#/components/messages/HostRequest_activateHostArtifact"
         },
         "HostRequest_addProject": {
           "$ref": "#/components/messages/HostRequest_addProject"
@@ -426,6 +438,9 @@
         },
         "HostRequest_home": {
           "$ref": "#/components/messages/HostRequest_home"
+        },
+        "HostRequest_hostArtifactActivationStatus": {
+          "$ref": "#/components/messages/HostRequest_hostArtifactActivationStatus"
         },
         "HostRequest_inspectUploads": {
           "$ref": "#/components/messages/HostRequest_inspectUploads"
@@ -540,6 +555,9 @@
         },
         "HostRequest_shipStatus": {
           "$ref": "#/components/messages/HostRequest_shipStatus"
+        },
+        "HostRequest_stageHostArtifact": {
+          "$ref": "#/components/messages/HostRequest_stageHostArtifact"
         },
         "HostRequest_startClone": {
           "$ref": "#/components/messages/HostRequest_startClone"
@@ -879,6 +897,18 @@
         },
         "title": "HostLinkWorkspaceFile"
       },
+      "HostReply_activateHostArtifact": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to activateHostArtifact; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+        "name": "HostReply_activateHostArtifact",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_activateHostArtifact"
+        },
+        "title": "HostReply_activateHostArtifact"
+      },
       "HostReply_addProject": {
         "contentType": "application/json",
         "correlationId": {
@@ -1202,6 +1232,18 @@
           "$ref": "#/components/schemas/HostReply_home"
         },
         "title": "HostReply_home"
+      },
+      "HostReply_hostArtifactActivationStatus": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to hostArtifactActivationStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
+        "name": "HostReply_hostArtifactActivationStatus",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_hostArtifactActivationStatus"
+        },
+        "title": "HostReply_hostArtifactActivationStatus"
       },
       "HostReply_inspectUploads": {
         "contentType": "application/json",
@@ -1659,6 +1701,18 @@
         },
         "title": "HostReply_shipStatus"
       },
+      "HostReply_stageHostArtifact": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to stageHostArtifact; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Stage a binary, runner or other artifact for manual installation.\nInputs: Supply the ID of a completed upload on this link.\nInvariants: The upload must be nonempty and unused by a session or workspace. The daemon picks the destination; it never overwrites an artifact or an installed binary.\nEffects: Moves the file into private host staging without execute permission and returns its host-local path. It does not install, start or restart anything.\nRecovery: If confirmation is lost, inspect keylime/host-artifacts/<upload id> under the daemon's agent directory before uploading again.",
+        "name": "HostReply_stageHostArtifact",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_stageHostArtifact"
+        },
+        "title": "HostReply_stageHostArtifact"
+      },
       "HostReply_startClone": {
         "contentType": "application/json",
         "correlationId": {
@@ -1838,6 +1892,18 @@
           "$ref": "#/components/schemas/HostReply_workspaceCreationStatus"
         },
         "title": "HostReply_workspaceCreationStatus"
+      },
+      "HostRequest_activateHostArtifact": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+        "name": "HostRequest_activateHostArtifact",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_activateHostArtifact"
+        },
+        "title": "HostRequest_activateHostArtifact"
       },
       "HostRequest_addProject": {
         "contentType": "application/json",
@@ -2162,6 +2228,18 @@
           "$ref": "#/components/schemas/HostRequest_home"
         },
         "title": "HostRequest_home"
+      },
+      "HostRequest_hostArtifactActivationStatus": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
+        "name": "HostRequest_hostArtifactActivationStatus",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_hostArtifactActivationStatus"
+        },
+        "title": "HostRequest_hostArtifactActivationStatus"
       },
       "HostRequest_inspectUploads": {
         "contentType": "application/json",
@@ -2618,6 +2696,18 @@
           "$ref": "#/components/schemas/HostRequest_shipStatus"
         },
         "title": "HostRequest_shipStatus"
+      },
+      "HostRequest_stageHostArtifact": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Stage a binary, runner or other artifact for manual installation.\nInputs: Supply the ID of a completed upload on this link.\nInvariants: The upload must be nonempty and unused by a session or workspace. The daemon picks the destination; it never overwrites an artifact or an installed binary.\nEffects: Moves the file into private host staging without execute permission and returns its host-local path. It does not install, start or restart anything.\nRecovery: If confirmation is lost, inspect keylime/host-artifacts/<upload id> under the daemon's agent directory before uploading again.",
+        "name": "HostRequest_stageHostArtifact",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_stageHostArtifact"
+        },
+        "title": "HostRequest_stageHostArtifact"
       },
       "HostRequest_startClone": {
         "contentType": "application/json",
@@ -3126,7 +3216,19 @@
             "minimum": 0,
             "type": "integer"
           },
+          "arch": {
+            "description": "CPU architecture reported by a daemon supporting paired release deployment.",
+            "type": "string"
+          },
           "autoApproveExtension": {
+            "type": "boolean"
+          },
+          "canActivateArtifact": {
+            "description": "This standalone daemon accepts staged binary activation.",
+            "type": "boolean"
+          },
+          "canStageArtifact": {
+            "description": "This daemon accepts stageHostArtifact. Omitted when unsupported.",
             "type": "boolean"
           },
           "channels": {
@@ -42771,6 +42873,176 @@
         "title": "HostLinkWorkspaceFile",
         "type": "object"
       },
+      "HostReply_activateHostArtifact": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "description": "Daemon-owned activation state, readable through the original link after restarting.",
+                "properties": {
+                  "backup": {
+                    "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+                    "type": "string"
+                  },
+                  "error": {
+                    "description": "Reason for a known failure.",
+                    "type": "string"
+                  },
+                  "runnerBackup": {
+                    "description": "Path to the retained runner backup for a paired deployment.",
+                    "type": "string"
+                  },
+                  "state": {
+                    "anyOf": [
+                      {
+                        "const": "pending",
+                        "type": "string"
+                      },
+                      {
+                        "const": "succeeded",
+                        "type": "string"
+                      },
+                      {
+                        "const": "failed",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+                  }
+                },
+                "required": ["state"],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "description": "Daemon-owned activation state, readable through the original link after restarting.",
+              "properties": {
+                "backup": {
+                  "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+                  "type": "string"
+                },
+                "error": {
+                  "description": "Reason for a known failure.",
+                  "type": "string"
+                },
+                "runnerBackup": {
+                  "description": "Path to the retained runner backup for a paired deployment.",
+                  "type": "string"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "succeeded",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+                }
+              },
+              "required": ["state"],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to activateHostArtifact; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+        "title": "HostReply_activateHostArtifact"
+      },
       "HostReply_addProject": {
         "anyOf": [
           {
@@ -49684,6 +49956,176 @@
         ],
         "description": "Reply to home; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Get the host home directory.\nInputs: No arguments.\nInvariants: The returned path belongs to the host machine, not the browser.\nEffects: Reads process environment state.\nRecovery: Re-query after reconnecting to a host.",
         "title": "HostReply_home"
+      },
+      "HostReply_hostArtifactActivationStatus": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "description": "Daemon-owned activation state, readable through the original link after restarting.",
+                "properties": {
+                  "backup": {
+                    "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+                    "type": "string"
+                  },
+                  "error": {
+                    "description": "Reason for a known failure.",
+                    "type": "string"
+                  },
+                  "runnerBackup": {
+                    "description": "Path to the retained runner backup for a paired deployment.",
+                    "type": "string"
+                  },
+                  "state": {
+                    "anyOf": [
+                      {
+                        "const": "pending",
+                        "type": "string"
+                      },
+                      {
+                        "const": "succeeded",
+                        "type": "string"
+                      },
+                      {
+                        "const": "failed",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+                  }
+                },
+                "required": ["state"],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "description": "Daemon-owned activation state, readable through the original link after restarting.",
+              "properties": {
+                "backup": {
+                  "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+                  "type": "string"
+                },
+                "error": {
+                  "description": "Reason for a known failure.",
+                  "type": "string"
+                },
+                "runnerBackup": {
+                  "description": "Path to the retained runner backup for a paired deployment.",
+                  "type": "string"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "succeeded",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+                }
+              },
+              "required": ["state"],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to hostArtifactActivationStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
+        "title": "HostReply_hostArtifactActivationStatus"
       },
       "HostReply_inspectUploads": {
         "anyOf": [
@@ -73037,6 +73479,128 @@
         "description": "Reply to shipStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read a ship job by id.\nInputs: id identifies the host job.\nInvariants: Status and ordered steps report persisted progress, not an atomic transaction.\nEffects: Reads job state; recovery marks jobs interrupted after restart.\nRecovery: Inspect steps and repository/PR state before deciding how to proceed.",
         "title": "HostReply_shipStatus"
       },
+      "HostReply_stageHostArtifact": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "description": "Confirms the daemon staged the file without installing or running it.",
+                "properties": {
+                  "path": {
+                    "description": "Absolute path on the selected host, not on the web server.",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": ["path"],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "description": "Confirms the daemon staged the file without installing or running it.",
+              "properties": {
+                "path": {
+                  "description": "Absolute path on the selected host, not on the web server.",
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["path"],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to stageHostArtifact; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Stage a binary, runner or other artifact for manual installation.\nInputs: Supply the ID of a completed upload on this link.\nInvariants: The upload must be nonempty and unused by a session or workspace. The daemon picks the destination; it never overwrites an artifact or an installed binary.\nEffects: Moves the file into private host staging without execute permission and returns its host-local path. It does not install, start or restart anything.\nRecovery: If confirmation is lost, inspect keylime/host-artifacts/<upload id> under the daemon's agent directory before uploading again.",
+        "title": "HostReply_stageHostArtifact"
+      },
       "HostReply_startClone": {
         "anyOf": [
           {
@@ -78464,6 +79028,82 @@
         "description": "Reply to workspaceCreationStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read an asynchronous creation job.\nInputs: id identifies the host job.\nInvariants: Stage, status and logs describe recorded progress; interrupted is distinct from failure.\nEffects: Observes job state, including recovery of interrupted work.\nRecovery: Inspect the job and workspace before restarting creation.",
         "title": "HostReply_workspaceCreationStatus"
       },
+      "HostRequest_activateHostArtifact": {
+        "description": "Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+        "properties": {
+          "args": {
+            "additionalProperties": false,
+            "description": "An explicit standalone host activation request; contains no filesystem path.",
+            "properties": {
+              "artifactId": {
+                "description": "ID from a successful staging operation on this daemon and server link.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "operationId": {
+                "description": "Operator action ID used to read the outcome across restart. Reusing it cannot start a second install.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "runner": {
+                "additionalProperties": false,
+                "description": "Matching staged runner to install with target keylime before one restart.",
+                "properties": {
+                  "artifactId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["artifactId", "sha256"],
+                "type": "object"
+              },
+              "sha256": {
+                "description": "Expected SHA-256 of the exact binary from a trusted source, in lowercase hex.",
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "const": "keylime",
+                    "type": "string"
+                  },
+                  {
+                    "const": "keylime-omp",
+                    "type": "string"
+                  }
+                ],
+                "description": "The installed standalone executable to replace."
+              }
+            },
+            "required": ["artifactId", "operationId", "target", "sha256"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "activateHostArtifact",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_activateHostArtifact",
+        "type": "object"
+      },
       "HostRequest_addProject": {
         "description": "Usage: Register a project.\nInputs: Supply path and optional launch configuration.\nInvariants: Invalid paths produce project-specific errors; worktrees resolve to their main repository.\nEffects: Updates the daemon project registry.\nRecovery: Inspect the registry after an uncertain result before repeating.",
         "properties": {
@@ -80206,6 +80846,43 @@
         },
         "required": ["type", "seq", "id", "op", "args"],
         "title": "HostRequest_home",
+        "type": "object"
+      },
+      "HostRequest_hostArtifactActivationStatus": {
+        "description": "Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
+        "properties": {
+          "args": {
+            "additionalProperties": false,
+            "description": "Read an activation previously sent to this daemon.",
+            "properties": {
+              "operationId": {
+                "description": "Operator action ID used to read the outcome across restart. Reusing it cannot start a second install.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "required": ["operationId"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "hostArtifactActivationStatus",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_hostArtifactActivationStatus",
         "type": "object"
       },
       "HostRequest_inspectUploads": {
@@ -82957,6 +83634,43 @@
         "title": "HostRequest_shipStatus",
         "type": "object"
       },
+      "HostRequest_stageHostArtifact": {
+        "description": "Usage: Stage a binary, runner or other artifact for manual installation.\nInputs: Supply the ID of a completed upload on this link.\nInvariants: The upload must be nonempty and unused by a session or workspace. The daemon picks the destination; it never overwrites an artifact or an installed binary.\nEffects: Moves the file into private host staging without execute permission and returns its host-local path. It does not install, start or restart anything.\nRecovery: If confirmation is lost, inspect keylime/host-artifacts/<upload id> under the daemon's agent directory before uploading again.",
+        "properties": {
+          "args": {
+            "additionalProperties": false,
+            "description": "Stage a completed upload for manual installation on its host.",
+            "properties": {
+              "id": {
+                "description": "UUID of the completed upload on the selected daemon.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "stageHostArtifact",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_stageHostArtifact",
+        "type": "object"
+      },
       "HostRequest_startClone": {
         "description": "Usage: Start cloning a repository into a host directory.\nInputs: id identifies the clone; parent is a host path and url is the Git remote.\nInvariants: The target directory derives from the supported remote URL; progress is asynchronous.\nEffects: Starts Git and creates files in the target directory; jobs survive web/link restart but not daemon shutdown or prolonged inactivity.\nRecovery: Read clone progress and inspect the target after uncertainty; do not blindly start another clone.",
         "properties": {
@@ -84279,11 +84993,34 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 80 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 83 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "13"
   },
   "operations": {
+    "operation_activateHostArtifact": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_activateHostArtifact"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_activateHostArtifact"
+          }
+        ]
+      },
+      "summary": "activateHostArtifact"
+    },
     "operation_addProject": {
       "action": "send",
       "channel": {
@@ -84904,6 +85641,29 @@
         ]
       },
       "summary": "home"
+    },
+    "operation_hostArtifactActivationStatus": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_hostArtifactActivationStatus"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_hostArtifactActivationStatus"
+          }
+        ]
+      },
+      "summary": "hostArtifactActivationStatus"
     },
     "operation_inspectUploads": {
       "action": "send",
@@ -85778,6 +86538,29 @@
         ]
       },
       "summary": "shipStatus"
+    },
+    "operation_stageHostArtifact": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Stage a binary, runner or other artifact for manual installation.\nInputs: Supply the ID of a completed upload on this link.\nInvariants: The upload must be nonempty and unused by a session or workspace. The daemon picks the destination; it never overwrites an artifact or an installed binary.\nEffects: Moves the file into private host staging without execute permission and returns its host-local path. It does not install, start or restart anything.\nRecovery: If confirmation is lost, inspect keylime/host-artifacts/<upload id> under the daemon's agent directory before uploading again.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_stageHostArtifact"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_stageHostArtifact"
+          }
+        ]
+      },
+      "summary": "stageHostArtifact"
     },
     "operation_startClone": {
       "action": "send",

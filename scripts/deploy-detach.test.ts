@@ -2,11 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  acquireDeployLock,
-  saveDeployState,
-  readDeployState,
-} from "./deploy-state";
+import { acquireDeployLock } from "../lib/deploy-lock";
+import { saveDeployState, readDeployState } from "./deploy-state";
 
 test("deployment worker survives termination of its submitting process group", async () => {
   // Real subprocess/session survival requires the OS scheduler; fake timers cannot drive another process.

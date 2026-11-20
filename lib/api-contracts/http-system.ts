@@ -11,6 +11,15 @@ import {
 import { EventStreamChannelSchema } from "./browser-link";
 import { ConfigStateSchema } from "./host-schemas";
 import {
+  StageHostArtifactArgsSchema,
+  StageHostArtifactResultSchema,
+  ActivateHostArtifactArgsSchema,
+  HostArtifactActivationArgsSchema,
+  HostArtifactActivationResultSchema,
+  HostReleaseListSchema,
+  DeployHostReleaseArgsSchema,
+} from "./host-control-models";
+import {
   NotificationHistoryEntrySchema,
   NotificationPrefsSchema,
 } from "./notification-models";
@@ -68,6 +77,14 @@ const hostBase = {
   hostVersion: Type.Union([N, Nil]),
   serverVersion: N,
   workspaceOps: Type.Array(S),
+  canStageArtifact: Type.Optional(
+    Type.Boolean({
+      description:
+        "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+    }),
+  ),
+  canActivateArtifact: Type.Optional(Type.Boolean({ description: "The linked standalone daemon advertised artifact activation." })),
+  arch: Type.Optional(Type.String({ description: "CPU architecture for selecting a compatible host release." })),
 };
 const host = Type.Union([
   obj({
@@ -332,6 +349,69 @@ add(
   }),
 );
 add("/api/hosts/[id]/terminal-sessions", "get", "getHostsIdTerminalSessions", "List live session terminals", obj({ sessionIds: Type.Array(S) }), { parameters: [id] });
+add(
+  "/api/hosts/[id]/artifacts",
+  "post",
+  "stageHostArtifact",
+  "Stage an artifact on the selected daemon",
+  StageHostArtifactResultSchema,
+  {
+    parameters: [id],
+    body: StageHostArtifactArgsSchema,
+    responses: {
+      501: fail("The selected daemon does not support artifact staging."),
+      503: fail(
+        "The link is unavailable; staging may have completed if the link dropped during the request.",
+      ),
+      504: fail("The daemon did not confirm staging in time."),
+    },
+  },
+);
+add(
+  "/api/hosts/[id]/artifacts",
+  "patch",
+  "activateHostArtifact",
+  "Install a staged binary and restart the standalone daemon",
+  HostArtifactActivationResultSchema,
+  {
+    parameters: [id],
+    body: ActivateHostArtifactArgsSchema,
+    status: 202,
+    responses: {
+      501: fail("The selected daemon does not support artifact activation."),
+      503: fail("The link is unavailable; if the request was sent, reconcile by operation ID."),
+      504: fail("Activation was not confirmed; reconcile by operation ID."),
+    },
+  },
+);
+add(
+  "/api/hosts/[id]/artifacts",
+  "get",
+  "getHostArtifactActivation",
+  "Read a standalone daemon activation outcome",
+  HostArtifactActivationResultSchema,
+  {
+    parameters: [id, queryParameter("operationId", HostArtifactActivationArgsSchema.properties.operationId, true)],
+    responses: {
+      501: fail("The selected daemon does not support artifact activation status."),
+      503: fail("The link is unavailable. Retry the read, not the install."),
+      504: fail("The daemon did not confirm the status in time."),
+    },
+  },
+);
+add(
+  "/api/hosts/[id]/releases", "get", "listHostReleases",
+  "List compatible standalone host releases", HostReleaseListSchema,
+  { parameters: [id], responses: { 501: fail("This host does not support paired releases."), 503: fail("The host is offline.") } },
+);
+add(
+  "/api/hosts/[id]/releases", "post", "deployHostRelease",
+  "Deploy a matched daemon and runner to a linked host", HostArtifactActivationResultSchema,
+  {
+    parameters: [id], body: DeployHostReleaseArgsSchema, status: 202,
+    responses: { 501: fail("This host does not support paired releases."), 503: fail("The host is offline."), 504: fail("The host did not confirm activation." ) },
+  },
+);
 add("/api/terminal/attach", "get", "getTerminalAttach", "Attach to a session terminal", null, {
   parameters: [queryParameter("hostId", S, true), queryParameter("sessionId", S, true)],
   status: 101,

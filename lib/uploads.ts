@@ -2,6 +2,11 @@
 // of the uploads browsers send through it, relaying their bytes to the target host's daemon and the host's acks back,
 // and attaching finished ones to a prompt. The server keeps no upload bytes on its own disk.
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { Value } from "@sinclair/typebox/value";
+import {
+  StageHostArtifactResultSchema,
+  type StageHostArtifactResult,
+} from "./api-contracts/host-control-models";
 import { RequestBodyTooLargeError } from "./bounded-form-data";
 import {
   dropUploadFrames,
@@ -125,6 +130,7 @@ interface Upload {
   } | null;
   attempt: string;
   touched: number;
+  stagingArtifact?: boolean;
   workspace?: {
     directory: string;
     name: string;
@@ -183,6 +189,7 @@ export function snapshotOutboxUploads(
     const stored = completedUpload(id);
     const actualOwner = stored?.owner ?? upload?.owner;
     if (!actualOwner) throw missing();
+    if (upload?.stagingArtifact) throw artifactDestinationConflict();
     const claim =
       isRecord(proofs) && Object.hasOwn(proofs, id)
         ? (proofs[id] as string)
@@ -445,6 +452,13 @@ const missing = () =>
     "The upload is gone: attach the file again",
   );
 
+const artifactDestinationConflict = () =>
+  new UploadError(
+    409,
+    "upload_destination_conflict",
+    "The upload is being staged as a host artifact",
+  );
+
 /** Room for one more unfinished upload of `owner`: its idle ones give their place up (an up_start re-registers them). */
 function makeRoom(map: Map<string, Upload>, owner: string): void {
   const now = Date.now();
@@ -541,6 +555,7 @@ export async function startUpload(
       "Another upload has this id",
     );
   }
+  if (upload?.stagingArtifact) throw artifactDestinationConflict();
   const attempt = randomUUID();
   if (upload) {
     // Bytes still queued would land after the offset this start reports: they go again from that offset instead.
@@ -948,6 +963,7 @@ export async function attachUploads(
         "upload_wrong_host",
         "The file was uploaded to another host than the session's",
       );
+    if (upload.stagingArtifact) throw artifactDestinationConflict();
     if (upload.workspace)
       throw new UploadError(
         409,
@@ -1048,6 +1064,60 @@ export function forgetUploads(
   }
 }
 
+/** Stage an upload on the daemon that received it; never resolve the returned path on main. */
+export async function stageHostArtifact(
+  id: string,
+  owner: string,
+  hostId: string,
+): Promise<StageHostArtifactResult> {
+  const map = uploads();
+  const upload = map.get(id);
+  if (!upload || upload.owner !== owner) throw missing();
+  if (upload.hostId !== hostId)
+    throw new UploadError(
+      409,
+      "upload_wrong_host",
+      "The file was uploaded to another host",
+    );
+  if (!upload.done)
+    throw new UploadError(
+      409,
+      "upload_incomplete",
+      "The upload has not finished",
+    );
+  if (upload.size === 0)
+    throw new UploadError(400, "invalid_request", "Select a nonempty artifact");
+  if (upload.stagingArtifact) throw artifactDestinationConflict();
+  if (
+    upload.attached ||
+    upload.attaching ||
+    upload.workspace ||
+    outboxUsesUpload(id)
+  )
+    throw new UploadError(
+      409,
+      "upload_destination_conflict",
+      "The upload already has another destination",
+    );
+  upload.stagingArtifact = true;
+  try {
+    const staged = await hostUploadOp(hostId, "stageHostArtifact", { id });
+    if (!Value.Check(StageHostArtifactResultSchema, staged))
+      throw new UploadError(
+        502,
+        "host_bad_result",
+        "The host did not send a valid artifact staging result",
+      );
+    if (map.get(id) === upload) {
+      forgetCompletedUpload(id);
+      map.delete(id);
+    }
+    return staged;
+  } finally {
+    upload.stagingArtifact = false;
+  }
+}
+
 /** Bind one completed upload to one authorized workspace destination, including lost-reply retries. */
 export async function publishWorkspaceUpload(
   id: string,
@@ -1072,6 +1142,7 @@ export async function publishWorkspaceUpload(
       "upload_incomplete",
       "The upload has not finished",
     );
+  if (upload.stagingArtifact) throw artifactDestinationConflict();
   if (upload.attached || upload.attaching || upload.name !== name)
     throw new UploadError(
       409,

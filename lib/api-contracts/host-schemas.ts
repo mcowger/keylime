@@ -392,7 +392,17 @@ export const UpMessageSchema = Type.Union(
           Type.Object({ id: Type.String(), notifier: Type.Boolean() }),
         ),
         workspaceOps: Type.Optional(Type.Array(Type.String())),
+        canStageArtifact: Type.Optional(
+          Type.Boolean({
+            description:
+              "This daemon accepts stageHostArtifact. Omitted when unsupported.",
+          }),
+        ),
+        canActivateArtifact: Type.Optional(
+          Type.Boolean({ description: "This standalone daemon accepts staged binary activation." }),
+        ),
         platform: Type.String(),
+        arch: Type.Optional(Type.String({ description: "CPU architecture reported by a daemon supporting paired release deployment." })),
         home: Type.String(),
         autoApproveExtension: Type.Boolean(),
         ack: SafeCount,

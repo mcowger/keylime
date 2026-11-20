@@ -10,6 +10,12 @@ import {
 import { randomUUID } from "node:crypto";
 import { Value } from "@sinclair/typebox/value";
 import {
+  HostArtifactActivationResultSchema,
+  type ActivateHostArtifactArgs,
+  type HostArtifactActivationArgs,
+  type HostArtifactActivationResult,
+} from "../api-contracts/host-control-models";
+import {
   BrowserListSchema,
   BrowserFrameSchema,
 } from "../api-contracts/host-control-operations";
@@ -193,7 +199,10 @@ interface Link {
   ompVersion: string | null;
   keylimeVersion: string | null;
   workspaceOps: Set<string>;
+  canStageArtifact: boolean;
+  canActivateArtifact: boolean;
   platform: string | null;
+  releaseArch?: string;
   lastSeenAt: string | null;
   autoApprove: boolean;
   notifier: boolean;
@@ -433,6 +442,8 @@ function linkFor(id: string): Link {
       ompVersion: null,
       keylimeVersion: null,
       workspaceOps: new Set(),
+      canStageArtifact: false,
+      canActivateArtifact: false,
       platform: null,
       lastSeenAt: null,
       autoApprove: false,
@@ -1034,8 +1045,11 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
   link.ompVersion = hello.ompVersion;
   link.keylimeVersion = hello.keylimeVersion ?? null;
   link.workspaceOps = new Set(hello.workspaceOps ?? []);
+  link.canStageArtifact = hello.canStageArtifact === true;
+  link.canActivateArtifact = hello.canActivateArtifact === true;
   endWorkspaceWatches(link.id);
   link.platform = hello.platform;
+  link.releaseArch = hello.arch;
   link.autoApprove = hello.autoApproveExtension;
   sawDaemon(link);
   persistLastSeen(link);
@@ -2439,6 +2453,9 @@ export interface LinkedHostRow {
   hostVersion: number | null;
   serverVersion: number;
   workspaceOps: string[];
+  canStageArtifact?: boolean;
+  canActivateArtifact?: boolean;
+  arch?: string;
   /** v10: the daemon's last cluster configuration report; `owned` when the configuration it holds is this server's,
    * `current` when that is the master's version with its plugins in line. */
   clusterConfig?: ConfigState & { owned: boolean; current: boolean };
@@ -2460,6 +2477,9 @@ export function listHosts(): LinkedHostRow[] {
         hostVersion: link?.hostVersion ?? null,
         serverVersion: LINK_PROTOCOL_VERSION,
         workspaceOps: [...(link?.workspaceOps ?? [])],
+        ...(link?.canStageArtifact && { canStageArtifact: true }),
+        ...(link?.canActivateArtifact && { canActivateArtifact: true }),
+        ...(link?.releaseArch && { arch: link.releaseArch }),
         ...(link?.configState
           ? {
               clusterConfig: {
@@ -2607,6 +2627,9 @@ export interface LocalHostRow {
   hostVersion: number | null;
   serverVersion: number;
   workspaceOps: string[];
+  canStageArtifact?: boolean;
+  canActivateArtifact?: boolean;
+  arch?: string;
   /** `process.platform` of this server: picks the daemon install command while no daemon has linked. */
   serverPlatform: string;
   /** False under the dev server (`NODE_ENV=development`), where this machine runs sessions in-process and is offline by design: no install hints. */
@@ -2635,6 +2658,7 @@ export function hostsSnapshot(): {
     hostVersion: link?.hostVersion ?? null,
     serverVersion: LINK_PROTOCOL_VERSION,
     workspaceOps: [...(link?.workspaceOps ?? [])],
+    ...(link?.canStageArtifact && { canStageArtifact: true }),
     serverPlatform: process.platform,
     daemonManaged: process.env.NODE_ENV !== "development",
   };
@@ -2849,15 +2873,57 @@ export async function hostBrowserControl(
 /** An upload op on `hostId`'s daemon (an offline one fails 503). */
 export function hostUploadOp(
   hostId: string,
-  op: "uploadStart" | "uploadAbort" | "uploadAttach",
+  op: "uploadStart" | "uploadAbort" | "uploadAttach" | "stageHostArtifact",
   args: Record<string, unknown>,
 ): Promise<unknown> {
+  if (op === "stageHostArtifact") {
+    const link = hub().links.get(hostId);
+    if (link?.socket && isLinkUp(link.status) && !link.canStageArtifact)
+      return Promise.reject(
+        new HostOpError(
+          501,
+          "host_artifact_unsupported",
+          "This daemon does not support artifact staging",
+        ),
+      );
+  }
   return request(
     hostId,
     op,
     args,
     op === "uploadAttach" ? UPLOAD_ATTACH_TIMEOUT_MS : linkTimings.opTimeoutMs,
   );
+}
+
+/** Activation is for standalone remote hosts, never the paired local services. */
+export async function hostArtifactActivationOp(
+  hostId: string,
+  ...[op, args]:
+    | ["activateHostArtifact", ActivateHostArtifactArgs]
+    | ["hostArtifactActivationStatus", HostArtifactActivationArgs]
+): Promise<HostArtifactActivationResult> {
+  if (hostId === LOCAL_HOST_ID || !getHost(hostId))
+    throw new HostOpError(404, "host_not_found", "Select a linked remote host");
+  const link = hub().links.get(hostId);
+  if (op === "activateHostArtifact" && link?.socket && isLinkUp(link.status) && !link.canActivateArtifact)
+    throw new HostOpError(501, "host_activation_unsupported", "This daemon does not support artifact activation");
+  const result = await request(hostId, op, args);
+  if (!Value.Check(HostArtifactActivationResultSchema, result))
+    throw new HostOpError(502, "host_bad_result", "The host did not send a valid activation result");
+  return result;
+}
+
+/** Releases are available only to live standalone hosts that can install a pair. */
+export function hostReleaseTarget(hostId: string): { platform: string; arch: string } {
+  if (hostId === LOCAL_HOST_ID || !getHost(hostId))
+    throw new HostOpError(404, "host_not_found", "Select a linked remote host");
+  const link = hub().links.get(hostId);
+  if (!link?.socket || !isLinkUp(link.status))
+    throw new HostOpError(503, "host_offline", "The selected host is offline");
+  const { platform, releaseArch: arch } = link;
+  if (!link.canActivateArtifact || (platform !== "linux" && platform !== "darwin") || (arch !== "x64" && arch !== "arm64"))
+    throw new HostOpError(501, "host_activation_unsupported", "This host does not support release deployment");
+  return { platform, arch };
 }
 
 /** Tell `hostId`'s daemon how many days to keep sent uploads (null: for ever). A daemon from before the op answers 501. */

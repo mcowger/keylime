@@ -271,6 +271,11 @@ export class TerminalManager {
     const entry = this.entries.get(id);
     return entry !== undefined && running(entry.process);
   }
+  hasLiveProcesses(): boolean {
+    for (const entry of this.entries.values())
+      if (running(entry.process)) return true;
+    return false;
+  }
   list(cwd: string): WorkspaceTerminal[] {
     const directory = this.registered(cwd);
     return [...this.entries.values()]

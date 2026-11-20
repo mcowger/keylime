@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { constants as fsConstants, createReadStream } from "node:fs";
 import {
   appendFile,
+  chmod,
   link,
   lstat,
   mkdir,
@@ -14,6 +15,7 @@ import {
   readFile,
   rename,
   rm,
+  rmdir,
   stat,
   utimes,
   writeFile,
@@ -21,6 +23,7 @@ import {
 import type { FileHandle } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
+import type { StageHostArtifactResult } from "../api-contracts/host-control-models";
 import { getAgentDir, sessionLocalRoot } from "../omp/paths";
 import {
   inspectUploadTargets,
@@ -190,7 +193,7 @@ const uncertainPublication = () =>
 /** This daemon's staged uploads. Frames for one upload are written in arrival order; `send` gets each `upload_ack`. */
 export class StagedUploads {
   private readonly open = new Map<string, OpenUpload>();
-  /** Start, attach and abort for one id run in arrival order; other ids remain independent. */
+  /** Controls for one id run in arrival order; other ids remain independent. */
   private readonly controls = new Map<string, Promise<void>>();
   private readonly agentDir = getAgentDir();
 
@@ -544,6 +547,83 @@ export class StagedUploads {
       }
       await this.remove(id);
       return null;
+    });
+  }
+
+  async stageHostArtifact(id: unknown): Promise<StageHostArtifactResult> {
+    if (!isUploadId(id))
+      throw new HostOpError(400, "invalid_request", "Invalid upload id");
+    return this.control(id, async () => {
+      const meta = await this.meta(id);
+      if (!meta)
+        throw new HostOpError(404, "upload_missing", "The upload is gone");
+      if (meta.attached || meta.workspace)
+        throw new HostOpError(
+          409,
+          "upload_destination_conflict",
+          "The upload already belongs to another destination",
+        );
+      if (meta.size <= 0)
+        throw new HostOpError(400, "invalid_request", "The artifact is empty");
+
+      const part = this.path(id, "part");
+      const source = await lstat(part).catch((error: unknown) => {
+        if (errno(error) === "ENOENT") return null;
+        throw error;
+      });
+      if (!source)
+        throw new HostOpError(404, "upload_missing", "The upload is gone");
+      if (!source.isFile() || source.nlink !== 1)
+        throw new HostOpError(400, "invalid_request", "Invalid artifact file");
+      if (this.open.has(id) || source.size !== meta.size)
+        throw new HostOpError(
+          409,
+          "upload_incomplete",
+          "The upload is incomplete",
+        );
+
+      const keylime = join(this.agentDir, "keylime");
+      await mkdir(keylime, { recursive: true });
+      const root = join(keylime, "host-artifacts");
+      await mkdir(root, { mode: 0o700 }).catch((error: unknown) => {
+        if (errno(error) !== "EEXIST") throw error;
+      });
+      const rootStat = await lstat(root);
+      const uid = process.getuid?.();
+      if (
+        !rootStat.isDirectory() ||
+        (rootStat.mode & 0o077) !== 0 ||
+        (uid !== undefined && rootStat.uid !== uid)
+      )
+        throw new HostOpError(
+          409,
+          "artifact_root_conflict",
+          "The host artifact directory is not private",
+        );
+
+      const directory = join(root, id);
+      const path = join(directory, sanitizeUploadName(meta.name));
+      // Reserve a fresh directory so rename cannot overwrite a previously staged file.
+      try {
+        await mkdir(directory, { mode: 0o700 });
+      } catch (error) {
+        if (errno(error) !== "EEXIST") throw error;
+        throw new HostOpError(
+          409,
+          "upload_id_conflict",
+          "The host artifact id is already in use",
+        );
+      }
+      try {
+        await chmod(part, 0o600);
+        await rename(part, path);
+      } catch (error) {
+        // Only remove the directory we reserved, and only if it is still empty.
+        await rmdir(directory).catch(() => {});
+        throw error;
+      }
+      // Abort and retention only clean up the temporary upload registry.
+      return { path };
     });
   }
 

@@ -72,6 +72,7 @@ import {
 import { createClusterConfig } from "./daemon-cluster-config";
 import { runOmpCli } from "../omp/plugins-cli";
 import { HostResumeTracker, type HostResumeEntry } from "./host-resume";
+import { ManagedArtifactActivation } from "./managed-artifact-activation";
 import {
   CONFIG_VERSION_RE,
   CREATION_ID_RE,
@@ -105,6 +106,7 @@ import { createWorkspaceService, type WorkspaceService } from "./workspace-ops";
 import {
   acceptShipDigestReceipt,
   removeShipMonitorsForSession,
+  shipWorkBusy,
   startShipWatcher,
   stopShipWatcher,
 } from "./workspace-ship";
@@ -184,6 +186,7 @@ type DaemonOptions = {
   token?: string;
   links?: HostLink[];
   hostSocket?: string;
+  standaloneControl?: boolean;
 };
 export function runHostDaemon(options: DaemonOptions): HostDaemon {
   const explicit =
@@ -222,6 +225,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   const entrypoint =
     canonicalPath(process.argv[1] || process.execPath) ||
     resolve(process.argv[1] || process.execPath);
+  const activation = new ManagedArtifactActivation(getAgentDir(), options.standaloneControl === true);
   const resume = new HostResumeTracker();
   // Each mirror is fetched over its own authenticated link.
   const config = createClusterConfig({
@@ -661,6 +665,9 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     if (workspaceCreationBusy())
       return "Wait for workspace creation/setup to finish.";
     if (systemsBusy()) return "Wait for Effort setup or cleanup to finish.";
+    if (shipWorkBusy()) return "Wait for Ship work to finish.";
+    if (!allowIdleChannels && terminals.hasLiveProcesses())
+      return "Close this host's workspace terminals and service shells before updating its daemon.";
     if (
       allowIdleChannels
         ? channels.hasBusyChannels
@@ -727,7 +734,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   }
   const capacityTimer = setInterval(reportCapacity, 5_000);
   capacityTimer.unref?.();
-  startShipWatcher(sessionsChanged, offerShipDigest);
+  startShipWatcher(sessionsChanged, offerShipDigest, () => !drained && !stopped);
 
   function offerShipDigest(owner: string, digest: ShipPrDigest): void {
     const link = shipOwners.get(owner);
@@ -809,7 +816,10 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           ompVersion,
           keylimeVersion: packageJson.version,
           workspaceOps: Object.keys(WORKSPACE_OP_PARAMS),
+          canStageArtifact: true,
+          ...(activation.supported() ? { canActivateArtifact: true } : {}),
           platform: process.platform,
+          arch: process.arch,
           home: homedir(),
           autoApproveExtension: localHost.autoApproveExtension(),
           ack: link.ackedDown,
@@ -1063,6 +1073,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         "cancelClone",
         "close",
         "ptySessions",
+        "hostArtifactActivationStatus",
       ].includes(op) &&
       !(op === "clusterConfig" && args.action === "restore")
     ) {
@@ -1381,6 +1392,24 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       case "uploadAbort":
         requireUploadOwner(link, args.id);
         return uploads.abort(args.id);
+      case "stageHostArtifact": {
+        requireUploadOwner(link, args.id);
+        const owner = shipOwnerByLink.get(link);
+        const ownedUpload = typeof args.id === "string" && uploadOwners.get(args.id)?.link === link;
+        const staged = await uploads.stageHostArtifact(args.id);
+        if (ownedUpload && owner && links.get(link.login.url) === link)
+          activation.stage(args.id as string, staged.path, owner);
+        return staged;
+      }
+      case "activateHostArtifact":
+      case "hostArtifactActivationStatus": {
+        const owner = shipOwnerByLink.get(link);
+        if (!owner || !link.isUp() || links.get(link.login.url) !== link)
+          throw new HostOpError(403, "link_not_authenticated", "The server link is no longer authenticated");
+        return op === "activateHostArtifact"
+          ? activation.start(args, owner)
+          : activation.status(args.operationId, owner);
+      }
       case "uploadAttach":
         requireUploadOwner(link, args.id);
         return uploads.attach(

@@ -29507,6 +29507,94 @@
       ],
       "type": "object"
     },
+    "host_activateHostArtifact_args": {
+      "additionalProperties": false,
+      "description": "An explicit standalone host activation request; contains no filesystem path.",
+      "properties": {
+        "artifactId": {
+          "description": "ID from a successful staging operation on this daemon and server link.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "operationId": {
+          "description": "Operator action ID used to read the outcome across restart. Reusing it cannot start a second install.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "runner": {
+          "additionalProperties": false,
+          "description": "Matching staged runner to install with target keylime before one restart.",
+          "properties": {
+            "artifactId": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": ["artifactId", "sha256"],
+          "type": "object"
+        },
+        "sha256": {
+          "description": "Expected SHA-256 of the exact binary from a trusted source, in lowercase hex.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "const": "keylime",
+              "type": "string"
+            },
+            {
+              "const": "keylime-omp",
+              "type": "string"
+            }
+          ],
+          "description": "The installed standalone executable to replace."
+        }
+      },
+      "required": ["artifactId", "operationId", "target", "sha256"],
+      "type": "object"
+    },
+    "host_activateHostArtifact_result": {
+      "description": "Daemon-owned activation state, readable through the original link after restarting.",
+      "properties": {
+        "backup": {
+          "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+          "type": "string"
+        },
+        "error": {
+          "description": "Reason for a known failure.",
+          "type": "string"
+        },
+        "runnerBackup": {
+          "description": "Path to the retained runner backup for a paired deployment.",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "const": "pending",
+              "type": "string"
+            },
+            {
+              "const": "succeeded",
+              "type": "string"
+            },
+            {
+              "const": "failed",
+              "type": "string"
+            }
+          ],
+          "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+        }
+      },
+      "required": ["state"],
+      "type": "object"
+    },
     "host_addProject_args": {
       "additionalProperties": false,
       "properties": {
@@ -33129,6 +33217,55 @@
           "type": "object"
         }
       ]
+    },
+    "host_hostArtifactActivationStatus_args": {
+      "additionalProperties": false,
+      "description": "Read an activation previously sent to this daemon.",
+      "properties": {
+        "operationId": {
+          "description": "Operator action ID used to read the outcome across restart. Reusing it cannot start a second install.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["operationId"],
+      "type": "object"
+    },
+    "host_hostArtifactActivationStatus_result": {
+      "description": "Daemon-owned activation state, readable through the original link after restarting.",
+      "properties": {
+        "backup": {
+          "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+          "type": "string"
+        },
+        "error": {
+          "description": "Reason for a known failure.",
+          "type": "string"
+        },
+        "runnerBackup": {
+          "description": "Path to the retained runner backup for a paired deployment.",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "const": "pending",
+              "type": "string"
+            },
+            {
+              "const": "succeeded",
+              "type": "string"
+            },
+            {
+              "const": "failed",
+              "type": "string"
+            }
+          ],
+          "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+        }
+      },
+      "required": ["state"],
+      "type": "object"
     },
     "host_HostCapacity": {
       "description": "Advisory host resource sample; active sessions are active turns.",
@@ -44858,6 +44995,31 @@
         }
       ]
     },
+    "host_stageHostArtifact_args": {
+      "additionalProperties": false,
+      "description": "Stage a completed upload for manual installation on its host.",
+      "properties": {
+        "id": {
+          "description": "UUID of the completed upload on the selected daemon.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "host_stageHostArtifact_result": {
+      "description": "Confirms the daemon staged the file without installing or running it.",
+      "properties": {
+        "path": {
+          "description": "Absolute path on the selected host, not on the web server.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["path"],
+      "type": "object"
+    },
     "host_startClone_args": {
       "properties": {
         "id": {
@@ -46935,7 +47097,19 @@
               "minimum": 0,
               "type": "integer"
             },
+            "arch": {
+              "description": "CPU architecture reported by a daemon supporting paired release deployment.",
+              "type": "string"
+            },
             "autoApproveExtension": {
+              "type": "boolean"
+            },
+            "canActivateArtifact": {
+              "description": "This standalone daemon accepts staged binary activation.",
+              "type": "boolean"
+            },
+            "canStageArtifact": {
+              "description": "This daemon accepts stageHostArtifact. Omitted when unsupported.",
               "type": "boolean"
             },
             "channels": {
@@ -48851,6 +49025,152 @@
       "description": "File watch notification; change reports ISO modification time and size in bytes, while error reports watch failure. A replacement watch has its own epoch.",
       "title": "WorkspaceFileEvent"
     },
+    "hostControl_ActivateHostArtifactArgs": {
+      "additionalProperties": false,
+      "description": "An explicit standalone host activation request; contains no filesystem path.",
+      "properties": {
+        "artifactId": {
+          "description": "ID from a successful staging operation on this daemon and server link.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "operationId": {
+          "description": "Operator action ID used to read the outcome across restart. Reusing it cannot start a second install.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "runner": {
+          "additionalProperties": false,
+          "description": "Matching staged runner to install with target keylime before one restart.",
+          "properties": {
+            "artifactId": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": ["artifactId", "sha256"],
+          "type": "object"
+        },
+        "sha256": {
+          "description": "Expected SHA-256 of the exact binary from a trusted source, in lowercase hex.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "const": "keylime",
+              "type": "string"
+            },
+            {
+              "const": "keylime-omp",
+              "type": "string"
+            }
+          ],
+          "description": "The installed standalone executable to replace."
+        }
+      },
+      "required": ["artifactId", "operationId", "target", "sha256"],
+      "type": "object"
+    },
+    "hostControl_DeployHostReleaseArgs": {
+      "additionalProperties": false,
+      "description": "Deploy the selected server build's matched daemon and runner.",
+      "properties": {
+        "operationId": {
+          "description": "Operator action ID used to read the outcome across restart. Reusing it cannot start a second install.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "releaseId": {
+          "description": "ID selected from the host's release list.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["releaseId", "operationId"],
+      "type": "object"
+    },
+    "hostControl_HostArtifactActivationArgs": {
+      "additionalProperties": false,
+      "description": "Read an activation previously sent to this daemon.",
+      "properties": {
+        "operationId": {
+          "description": "Operator action ID used to read the outcome across restart. Reusing it cannot start a second install.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["operationId"],
+      "type": "object"
+    },
+    "hostControl_HostArtifactActivationResult": {
+      "description": "Daemon-owned activation state, readable through the original link after restarting.",
+      "properties": {
+        "backup": {
+          "description": "Path to the retained backup on the daemon; omitted before a backup exists.",
+          "type": "string"
+        },
+        "error": {
+          "description": "Reason for a known failure.",
+          "type": "string"
+        },
+        "runnerBackup": {
+          "description": "Path to the retained runner backup for a paired deployment.",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "const": "pending",
+              "type": "string"
+            },
+            {
+              "const": "succeeded",
+              "type": "string"
+            },
+            {
+              "const": "failed",
+              "type": "string"
+            }
+          ],
+          "description": "Pending is not confirmation; succeeded requires the replacement service to start."
+        }
+      },
+      "required": ["state"],
+      "type": "object"
+    },
+    "hostControl_HostReleaseList": {
+      "description": "Release picker options from the web server's complete builds for the selected daemon.",
+      "properties": {
+        "releases": {
+          "description": "Complete daemon and runner pairs for this host, newest first.",
+          "items": {
+            "properties": {
+              "builtAt": {
+                "description": "Build timestamp in UTC.",
+                "format": "date-time",
+                "type": "string"
+              },
+              "id": {
+                "description": "Opaque build ID, not a path.",
+                "type": "string"
+              }
+            },
+            "required": ["id", "builtAt"],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["releases"],
+      "type": "object"
+    },
     "hostControl_OpenChannelRequest": {
       "description": "Join an existing daemon-owned session, or start it if no process owns it. Membership, not WebSocket lifetime, controls interest.",
       "properties": {
@@ -49060,6 +49380,31 @@
       },
       "required": ["cwd", "recordedCwd", "sessionFile", "advisor"],
       "title": "SpawnRequest",
+      "type": "object"
+    },
+    "hostControl_StageHostArtifactArgs": {
+      "additionalProperties": false,
+      "description": "Stage a completed upload for manual installation on its host.",
+      "properties": {
+        "id": {
+          "description": "UUID of the completed upload on the selected daemon.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "hostControl_StageHostArtifactResult": {
+      "description": "Confirms the daemon staged the file without installing or running it.",
+      "properties": {
+        "path": {
+          "description": "Absolute path on the selected host, not on the web server.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["path"],
       "type": "object"
     },
     "hostControl_UploadAttachArgs": {

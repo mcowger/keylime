@@ -10,10 +10,14 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { promptPassword } from "../bin/keylime-hash-password";
+import {
+  STANDALONE_HOST_INSTALL as INSTALL,
+  STANDALONE_HOST_LAUNCH_AGENT as MAC_LABEL,
+  STANDALONE_HOST_UNIT as LINUX_SERVICE,
+} from "../lib/hosts/standalone-service";
 
 const USAGE =
   "Usage: bun run deploy:host <[user@]ssh-host> [--release <directory>]";
-const INSTALL = ".local/share/keylime-host";
 const BIN = `"$HOME/${INSTALL}/keylime"`;
 const FILES = [
   "keylime",
@@ -22,8 +26,6 @@ const FILES = [
   "native-video-LICENSE.txt",
   "licenses",
 ];
-const LINUX_SERVICE = "keylime-host.service";
-const MAC_LABEL = "com.mcowger.keylime-host";
 const shellQuote = (arg: string) => `'${arg.replaceAll("'", `'"'"'`)}'`;
 
 const SYSTEMD = `
@@ -304,7 +306,7 @@ async function main(args: string[]) {
   if (
     await runSsh(
       host,
-      `exec ${BIN} host login --add --url "$1"`,
+      `umask 077; exec ${BIN} host login --add --url "$1"`,
       [url.origin],
       `${token}\n`,
     )

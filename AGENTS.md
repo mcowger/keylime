@@ -425,7 +425,7 @@ The table is static imports, not a runtime glob, so `bun build --compile` (`scri
 - `OMP_WEB_PACKAGE_DIR` (set by the launcher) is the root for `dist/`, `public/` and KaTeX; `process.cwd()` is the fallback for dev and tests. The compiled binary sets it to its own directory (unless set) before any server module loads, so every runtime file must come from that root: a module's `import.meta.url` in the binary is Bun's virtual `/$bunfs/`, which no other process can read. A new file the server or daemon reads at runtime also goes into `scripts/build-binary.ts`'s copy list.
 - The binary needs `process.env.NODE_ENV` defined as `"production"` at build time (`scripts/build-binary.ts`): a plain `bun build --compile` inlines `"development"`, and the server then never writes the daemon's link. `bun run smoke -- --binary` catches that (no session lists).
 - `Bun.serve` turns on `SO_REUSEPORT` when `development` is false, so a second omp-web would share the port instead of failing; `startServer` passes `reusePort: false`, and `startProduction` (`server/app.ts`) reports an `EADDRINUSE` in one line.
-- In-app web-server and host updates are not supported. Local deployment preflights the candidate runner before activation; `ompweb fetch-omp` remains available for fetching a release's runner.
+- Web-server updates use manual deployment. Settings → Hosts may activate an operator-selected, checksum-verified staged binary on a linked standalone host. Local deployment preflights the candidate runner before activation; `ompweb fetch-omp` remains available for fetching a release's runner.
 - The daemon-owned watcher (`lib/hosts/workspace-watch.ts`) re-stats ~50 ms after every event to catch burst saves (Bun may drop native events within ~2 ms); main only routes its sequenced watch events.
 - `bun:sqlite` `.get()` returns `null` for no row (not `undefined`).
 - `bun:sqlite` `close()` keeps the database file open while prepared statements are alive; stores use `close(true)` to finalize them (`closeNotificationStore`, `closeUsageDatabase`).
@@ -1845,7 +1845,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 
 ### Software deployment
 
-- Update the web server and host daemons through manual deployment, not the application. Local deployment is described in `docs/local-deployment.md`.
+- Deploy the web server and the paired local services manually (`docs/local-deployment.md`). For a standalone linked host, Settings → Hosts may install a staged `keylime` or `keylime-omp` binary and restart its service after explicit operator confirmation. Require an expected SHA-256 and refuse busy daemons. Keep the previous binary as a backup and do not automatically roll back after restart admission.
 - `/api/omp-update` retains only `restart`, an explicit server-side maintenance API for existing callers.
 
 ### Auth and model config

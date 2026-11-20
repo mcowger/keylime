@@ -1,11 +1,27 @@
 "use client";
 
-import { useEffect, useId, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/primitives";
 import { toast } from "@/components/ui/toast";
 import { copyText } from "@/lib/clipboard";
+import type {
+  ActivateHostArtifactArgs,
+  DeployHostReleaseArgs,
+  HostArtifactActivationResult,
+  HostReleaseList,
+  StageHostArtifactArgs,
+  StageHostArtifactResult,
+} from "@/lib/api-contracts/host-control-models";
+import { newUploadId, uploadFile, type UploadHandle } from "@/lib/event-stream";
 import {
   clusterJoinBlock,
   clusterOf,
@@ -25,6 +41,7 @@ import {
 } from "./host-status";
 import { CreationPipelineEditor } from "./CreationPipelineEditor";
 import { isLinkUp } from "@/lib/hosts/host";
+import { isRecord } from "@/lib/type-guards";
 
 type Dialogs =
   | { kind: "add" }
@@ -298,6 +315,552 @@ function HostDialog({
   );
 }
 
+type ArtifactStage =
+  | { kind: "idle" }
+  | { kind: "uploading"; received: number }
+  | { kind: "finishing" }
+  | ({ kind: "staged"; id: UploadHandle["id"] } & StageHostArtifactResult)
+  | { kind: "unconfirmed"; directory: string }
+  | { kind: "error"; message: string };
+
+// Give the 30s host op time to report its result over HTTP.
+const ARTIFACT_FINALIZATION_TIMEOUT_MS = 40_000;
+
+type ArtifactActivation =
+  | { kind: "idle" | "installing" | "checking" }
+  | ({ kind: "succeeded" } & ActivationBackups)
+  | ({ kind: "failed"; message: string } & ActivationBackups)
+  | { kind: "unconfirmed"; operationId: string };
+
+type ActivationBackups = Pick<HostArtifactActivationResult, "backup" | "runnerBackup">;
+
+type ReleaseCatalog =
+  | { kind: "loading" }
+  | { kind: "loaded"; releases: HostReleaseList["releases"] }
+  | { kind: "error"; message?: string };
+
+const ACTIVATION_POLL_TIMEOUT_MS = 60_000;
+const ACTIVATION_POLL_INTERVAL_MS = 2_000;
+
+function activationOutcome(
+  result: Record<string, unknown> | null,
+  failedMessage: string,
+): ArtifactActivation | null {
+  const state = result?.state;
+  const terminal: HostArtifactActivationResult["state"] | null =
+    state === "succeeded" || state === "failed" ? state : null;
+  const backup = typeof result?.backup === "string" ? result.backup : undefined;
+  const runnerBackup = typeof result?.runnerBackup === "string" ? result.runnerBackup : undefined;
+  if (terminal === "succeeded") return { kind: "succeeded", backup, runnerBackup };
+  if (terminal === "failed") {
+    return {
+      kind: "failed",
+      backup,
+      runnerBackup,
+      message: typeof result?.error === "string" ? result.error : failedMessage,
+    };
+  }
+  return null;
+}
+
+function StageArtifactDialog({
+  host,
+  mode,
+  releaseAvailable,
+  onClose,
+}: {
+  host: HostRow;
+  mode: "manual" | "release";
+  releaseAvailable: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const name = hostName(t, host);
+  const deployingRelease = mode === "release";
+  const title = t(deployingRelease ? "hostsConfig.deployReleaseTitle" : "hostsConfig.stageArtifactTitle", { name });
+  const hostUrl = `/api/hosts/${encodeURIComponent(host.id)}`;
+  const releasesUrl = `${hostUrl}/releases`;
+  const [catalog, setCatalog] = useState<ReleaseCatalog>({ kind: "loading" });
+  const [releaseId, setReleaseId] = useState("");
+  const canStage = !!host.canStageArtifact && isLinkUp(host.status);
+  const canActivate = host.id !== LOCAL_HOST_ID && !!host.canActivateArtifact;
+  const [target, setTarget] = useState<ActivateHostArtifactArgs["target"]>("keylime");
+  const [sha256, setSha256] = useState("");
+  const expectedHash = sha256.trim().toLowerCase();
+  const [confirming, setConfirming] = useState(false);
+  const [activation, setActivation] = useState<ArtifactActivation>({ kind: "idle" });
+  const activationRequest = useRef<AbortController | null>(null);
+  const mayRetry = !deployingRelease && activation.kind === "failed" && !activation.backup;
+  const canConfigure = canActivate && (activation.kind === "idle" || mayRetry);
+  const canInstall =
+    deployingRelease
+      ? activation.kind === "idle" && releaseAvailable && catalog.kind === "loaded" && !!releaseId
+      : canConfigure && isLinkUp(host.status) && /^[0-9a-f]{64}$/.test(expectedHash);
+  const installing =
+    activation.kind === "installing" || activation.kind === "checking";
+  const targetName = target === "keylime" ? "Keylime" : "keylime-omp";
+  const available = useRef(canStage);
+  const active = useRef<UploadHandle | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [stage, setStage] = useState<ArtifactStage>({ kind: "idle" });
+  const busy = stage.kind === "uploading" || stage.kind === "finishing";
+  const done = stage.kind === "staged" || stage.kind === "unconfirmed";
+  const release = useCallback((handle: UploadHandle) => {
+    if (active.current !== handle) return;
+    active.current = null;
+    handle.abort();
+  }, []);
+
+  useEffect(() => {
+    available.current = canStage;
+  }, [canStage]);
+
+  useEffect(() => {
+    if (!deployingRelease) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    void (async () => {
+      try {
+        const response = await fetch(releasesUrl, {
+          cache: "no-store",
+          signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+        });
+        const data: unknown = await response.json();
+        if (signal.aborted) return;
+        if (!response.ok) {
+          setCatalog({ kind: "error", message: isRecord(data) && typeof data.error === "string" ? data.error : undefined });
+          return;
+        }
+        if (!isRecord(data) || !Array.isArray(data.releases)) {
+          setCatalog({ kind: "error" });
+          return;
+        }
+        const releases: HostReleaseList["releases"] = [];
+        for (const item of data.releases as unknown[]) {
+          if (!isRecord(item) || typeof item.id !== "string" || typeof item.builtAt !== "string") {
+            setCatalog({ kind: "error" });
+            return;
+          }
+          releases.push({ id: item.id, builtAt: item.builtAt });
+        }
+        // The API lists releases newest first.
+        setReleaseId(releases[0]?.id ?? "");
+        setCatalog({ kind: "loaded", releases });
+      } catch {
+        if (!signal.aborted) setCatalog({ kind: "error" });
+      }
+    })();
+    return () => controller.abort();
+  }, [deployingRelease, releasesUrl]);
+
+  useEffect(() => {
+    return () => {
+      const handle = active.current;
+      if (handle) release(handle);
+      activationRequest.current?.abort();
+    };
+  }, [release]);
+
+  function close() {
+    if (stage.kind === "finishing" || activationRequest.current) return;
+    const handle = active.current;
+    if (handle) release(handle);
+    onClose();
+  }
+
+  async function install() {
+    if (!confirming || !canInstall || activationRequest.current) return;
+
+    const operationId = newUploadId();
+    const artifactsUrl = `${hostUrl}/artifacts`;
+    const statusUrl = `${artifactsUrl}?operationId=${encodeURIComponent(operationId)}`;
+    let requestBody: DeployHostReleaseArgs | ActivateHostArtifactArgs;
+    if (deployingRelease) {
+      requestBody = { releaseId, operationId };
+    } else {
+      if (stage.kind !== "staged") return;
+      requestBody = { artifactId: stage.id, operationId, target, sha256: expectedHash };
+    }
+    const controller = new AbortController();
+    const { signal } = controller;
+    const failedMessage = t("hostsConfig.activateArtifactFailed");
+    activationRequest.current = controller;
+    setConfirming(false);
+    setActivation({ kind: "installing" });
+
+    try {
+      try {
+        const response = await fetch(deployingRelease ? releasesUrl : artifactsUrl, {
+          method: deployingRelease ? "POST" : "PATCH",
+          signal: AbortSignal.any([signal, AbortSignal.timeout(deployingRelease ? 120_000 : 40_000)]),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        const data: unknown = await response.json();
+        if (signal.aborted) return;
+        const result = isRecord(data) ? data : null;
+        const outcome = response.ok ? activationOutcome(result, failedMessage) : null;
+        if (outcome) {
+          setActivation(outcome);
+          return;
+        }
+        if (
+          ((response.status >= 400 && response.status < 500 && response.status !== 408) ||
+            (response.status === 501 && result?.code === "host_activation_unsupported")) &&
+          typeof result?.code === "string" && typeof result.error === "string"
+        ) {
+          setActivation({ kind: "failed", message: result.error });
+          return;
+        }
+      } catch {
+        // A lost reply doesn't tell us whether the host accepted the install.
+      }
+
+      if (signal.aborted) return;
+      setActivation({ kind: "checking" });
+      const polling = AbortSignal.any([signal, AbortSignal.timeout(ACTIVATION_POLL_TIMEOUT_MS)]);
+      while (!polling.aborted) {
+        try {
+          const response = await fetch(statusUrl, {
+            cache: "no-store",
+            signal: AbortSignal.any([polling, AbortSignal.timeout(5_000)]),
+          });
+          if (response.ok) {
+            const data: unknown = await response.json();
+            const outcome = activationOutcome(isRecord(data) ? data : null, failedMessage);
+            if (!polling.aborted && outcome) {
+              setActivation(outcome);
+              return;
+            }
+          }
+        } catch {
+          // The daemon can disconnect during restart. Keep checking this operation only.
+        }
+        if (!polling.aborted) {
+          const { promise, resolve } = Promise.withResolvers<void>();
+          const wake = () => {
+            window.clearTimeout(timer);
+            polling.removeEventListener("abort", wake);
+            resolve();
+          };
+          const timer = window.setTimeout(wake, ACTIVATION_POLL_INTERVAL_MS);
+          polling.addEventListener("abort", wake, { once: true });
+          await promise;
+        }
+      }
+      if (!signal.aborted) setActivation({ kind: "unconfirmed", operationId });
+    } finally {
+      activationRequest.current = null;
+    }
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (deployingRelease || !file || !canStage || active.current || done) return;
+    let handle: UploadHandle | null = null;
+    let unconfirmedDirectory: string | null = null;
+    let finalizationTimer: number | undefined;
+    setStage({ kind: "uploading", received: 0 });
+    try {
+      handle = uploadFile(file, host.id, (received) => {
+        if (handle && active.current === handle) {
+          setStage((current) =>
+            current.kind === "uploading"
+              ? { kind: "uploading", received }
+              : current,
+          );
+        }
+      });
+      active.current = handle;
+      await handle.promise;
+      if (active.current !== handle) return;
+      if (!available.current) {
+        throw new Error(t("hostsConfig.stageArtifactUnavailable"));
+      }
+
+      setStage({ kind: "finishing" });
+      unconfirmedDirectory = `<agent dir>/keylime/host-artifacts/${handle.id}`;
+      const controller = new AbortController();
+      finalizationTimer = window.setTimeout(
+        () => controller.abort(),
+        ARTIFACT_FINALIZATION_TIMEOUT_MS,
+      );
+      const response = await fetch(
+        `/api/hosts/${encodeURIComponent(host.id)}/artifacts`,
+        {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: handle.id,
+          } satisfies StageHostArtifactArgs),
+        },
+      );
+      const data: unknown = await response.json();
+      const result = isRecord(data) ? data : null;
+      if (active.current !== handle) return;
+      if (response.ok && typeof result?.path === "string" && result.path) {
+        setStage({ kind: "staged", id: handle.id, path: result.path });
+      } else if (
+        response.status >= 400 &&
+        response.status < 500 &&
+        response.status !== 408 &&
+        typeof result?.error === "string" &&
+        typeof result.code === "string"
+      ) {
+        unconfirmedDirectory = null;
+        throw new Error(result.error);
+      } else {
+        setStage({ kind: "unconfirmed", directory: unconfirmedDirectory });
+      }
+    } catch (error) {
+      if (handle && active.current !== handle) return;
+      setStage(
+        unconfirmedDirectory
+          ? { kind: "unconfirmed", directory: unconfirmedDirectory }
+          : {
+              kind: "error",
+              message: error instanceof Error ? error.message : String(error),
+            },
+      );
+    } finally {
+      window.clearTimeout(finalizationTimer);
+      if (handle) release(handle);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+    >
+      <DialogContent
+        ariaLabel={title}
+        style={{ width: 520, maxWidth: "min(92vw, 520px)", padding: 22 }}
+      >
+        <DialogTitle>{title}</DialogTitle>
+        <form
+          onSubmit={(event) => void submit(event)}
+          style={{ display: "flex", flexDirection: "column", gap: 12 }}
+        >
+          {host.platform && <span>{host.platform}</span>}
+          {deployingRelease && (
+            <>
+              {catalog.kind === "loading" && (
+                <div role="status">{t("hostsConfig.deployReleaseLoading")}</div>
+              )}
+              {catalog.kind === "error" && (
+                <div role="alert" style={{ color: "var(--status-error)" }}>
+                  {catalog.message ?? t("hostsConfig.deployReleaseListFailed")}
+                </div>
+              )}
+              {catalog.kind === "loaded" && catalog.releases.length === 0 && (
+                <div role="status">{t("hostsConfig.deployReleaseEmpty")}</div>
+              )}
+              {catalog.kind === "loaded" && catalog.releases.length > 0 && (
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {t("hostsConfig.deployReleaseVersion")}
+                  <select
+                    style={inputStyle}
+                    value={releaseId}
+                    disabled={confirming || activation.kind !== "idle" || !releaseAvailable}
+                    onChange={(event) => setReleaseId(event.currentTarget.value)}
+                  >
+                    {catalog.releases.map(({ id }, index) => (
+                      <option key={id} value={id}>
+                        {index === 0 ? t("hostsConfig.deployReleaseNewest", { id }) : id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {!releaseAvailable && activation.kind === "idle" && (
+                <div role="status">{t("hostsConfig.deployReleaseUnavailable")}</div>
+              )}
+              {confirming && (
+                <p role="status" style={{ margin: 0 }}>
+                  {t("hostsConfig.deployReleaseConfirm", { name, id: releaseId })}
+                </p>
+              )}
+            </>
+          )}
+          {!deployingRelease && !done && (
+            <p style={{ margin: 0 }}>
+              {t("hostsConfig.stageArtifactDescription")}
+            </p>
+          )}
+          {!deployingRelease && !done && (
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {t("hostsConfig.stageArtifactFile")}
+              <input
+                type="file"
+                required
+                disabled={busy || !canStage}
+                onChange={(event) => {
+                  setFile(event.currentTarget.files?.[0] ?? null);
+                  setStage({ kind: "idle" });
+                }}
+                style={inputStyle}
+              />
+            </label>
+          )}
+          {stage.kind === "uploading" && (
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {t("hostsConfig.stageArtifactUploading")}
+              <progress max={file?.size || 1} value={stage.received} />
+            </label>
+          )}
+          <div role="status">
+            {stage.kind === "finishing" &&
+              t("hostsConfig.stageArtifactFinishing")}
+            {stage.kind === "staged" && activation.kind === "idle" &&
+              t("hostsConfig.stageArtifactStaged")}
+            {activation.kind === "installing" && t("hostsConfig.activateArtifactInstalling")}
+            {activation.kind === "checking" && t("hostsConfig.activateArtifactChecking")}
+            {activation.kind === "succeeded" &&
+              (deployingRelease
+                ? t("hostsConfig.deployReleaseSucceeded", { name, id: releaseId })
+                : t("hostsConfig.activateArtifactSucceeded", { name, target: targetName }))}
+            {!deployingRelease && stage.kind === "idle" &&
+              !canStage &&
+              t("hostsConfig.stageArtifactUnavailable")}
+          </div>
+          {stage.kind === "staged" && (
+            <CopyField
+              label={t("hostsConfig.stageArtifactPath")}
+              value={stage.path}
+            />
+          )}
+          {(activation.kind === "succeeded" || activation.kind === "failed") &&
+            activation.backup && (
+              <CopyField
+                label={t(deployingRelease ? "hostsConfig.deployReleaseDaemonBackup" : "hostsConfig.activateArtifactBackup")}
+                value={activation.backup}
+              />
+            )}
+          {(activation.kind === "succeeded" || activation.kind === "failed") && activation.runnerBackup && (
+            <CopyField label={t("hostsConfig.deployReleaseRunnerBackup")} value={activation.runnerBackup} />
+          )}
+          {stage.kind === "staged" && canConfigure && (
+              <>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {t("hostsConfig.activateArtifactTarget")}
+                  <select
+                    value={target}
+                    disabled={confirming}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      if (value === "keylime" || value === "keylime-omp") setTarget(value);
+                    }}
+                    style={inputStyle}
+                  >
+                    <option value="keylime">Keylime</option>
+                    <option value="keylime-omp">keylime-omp</option>
+                  </select>
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {t("hostsConfig.activateArtifactSha256")}
+                  <input
+                    type="text"
+                    value={sha256}
+                    disabled={confirming}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(event) => setSha256(event.currentTarget.value)}
+                    style={inputStyle}
+                  />
+                </label>
+                {confirming && (
+                  <p role="status" style={{ margin: 0 }}>
+                    {t("hostsConfig.activateArtifactConfirm", { name, target: targetName })}
+                  </p>
+                )}
+              </>
+            )}
+          {activation.kind === "failed" && (
+            <div role="alert" style={{ color: "var(--status-error)" }}>
+              {activation.message}
+            </div>
+          )}
+          {activation.kind === "unconfirmed" && (
+            <>
+              <div role="alert">{t("hostsConfig.activateArtifactUnconfirmed", { name })}</div>
+              <CopyField
+                label={t("hostsConfig.activateArtifactOperationId")}
+                value={activation.operationId}
+              />
+            </>
+          )}
+          {stage.kind === "unconfirmed" && (
+            <>
+              <div role="alert">
+                {t("hostsConfig.stageArtifactUnconfirmed")}
+              </div>
+              <CopyField
+                label={t("hostsConfig.stageArtifactInspect")}
+                value={stage.directory}
+              />
+            </>
+          )}
+          {stage.kind === "error" && (
+            <div role="alert" style={{ color: "var(--status-error)" }}>
+              {stage.message}
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              type="button"
+              className="ui-focus-ring"
+              style={buttonStyle}
+              disabled={stage.kind === "finishing" || installing}
+              onClick={confirming ? () => setConfirming(false) : close}
+            >
+              {t(
+                (deployingRelease ? activation.kind === "idle" : !done) || confirming
+                  ? "hostsConfig.cancel"
+                  : stage.kind === "staged" && canActivate && activation.kind === "idle"
+                    ? "hostsConfig.activateArtifactStageOnly"
+                    : "hostsConfig.stageArtifactClose",
+              )}
+            </button>
+            {(deployingRelease
+              ? catalog.kind === "loaded" && !!releaseId && activation.kind === "idle"
+              : stage.kind === "staged" && canConfigure) && (
+              <button
+                type="button"
+                className="ui-focus-ring"
+                style={primaryStyle}
+                disabled={!canInstall}
+                onClick={confirming ? () => void install() : () => setConfirming(true)}
+              >
+                {deployingRelease
+                  ? t(confirming ? "hostsConfig.deployReleaseInstall" : "hostsConfig.deployReleaseReview")
+                  : t(confirming
+                    ? "hostsConfig.activateArtifactInstall"
+                    : activation.kind === "failed"
+                      ? "hostsConfig.activateArtifactRetry"
+                      : "hostsConfig.activateArtifactReview")}
+              </button>
+            )}
+            {!deployingRelease && !done && (
+              <button
+                type="submit"
+                className="ui-focus-ring"
+                style={primaryStyle}
+                disabled={!file || !canStage || busy}
+              >
+                {t("hostsConfig.stageArtifact")}
+              </button>
+            )}
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type ClusterState = {
   pools: HostPool[];
   masterFailed: boolean;
@@ -323,7 +886,9 @@ function HostCard({
 }) {
   const { t } = useI18n();
   const name = hostName(t, host);
+  const [artifactMode, setArtifactMode] = useState<"manual" | "release" | null>(null);
   const linked = isLocalRow(host) ? null : host;
+  const releaseAvailable = !!linked && !!linked.canActivateArtifact && !!linked.arch && isLinkUp(linked.status);
   const member = isClusterMember(cluster.pools, host.id);
   const details = [
     host.platform,
@@ -466,6 +1031,27 @@ function HostCard({
           maxWidth: "100%",
         }}
       >
+        {releaseAvailable && (
+          <button
+            type="button"
+            className="ui-focus-ring"
+            style={primaryStyle}
+            aria-label={t("hostsConfig.deployReleaseTitle", { name })}
+            onClick={() => setArtifactMode("release")}
+          >
+            {t("hostsConfig.deployRelease")}
+          </button>
+        )}
+        <button
+          type="button"
+          className="ui-focus-ring"
+          style={buttonStyle}
+          disabled={!host.canStageArtifact || !isLinkUp(host.status)}
+          aria-label={t("hostsConfig.stageArtifactTitle", { name })}
+          onClick={() => setArtifactMode("manual")}
+        >
+          {t("hostsConfig.stageArtifact")}
+        </button>
         {isLocalRow(host) && member && (
           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
             {t("hostsConfig.clusterMaster")}
@@ -503,6 +1089,14 @@ function HostCard({
           </button>
         )}
       </div>
+      {artifactMode && (
+        <StageArtifactDialog
+          host={host}
+          mode={artifactMode}
+          releaseAvailable={releaseAvailable}
+          onClose={() => setArtifactMode(null)}
+        />
+      )}
     </li>
   );
 }

@@ -187,6 +187,9 @@ export const HOST_OP_NAMES = [
   "uploadStart",
   "uploadAbort",
   "uploadAttach",
+  "stageHostArtifact",
+  "activateHostArtifact",
+  "hostArtifactActivationStatus",
   "setUploadRetention",
   "ptySessions",
   "clusterConfig",
@@ -713,8 +716,15 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
                 .slice(0, Object.keys(WORKSPACE_OP_PARAMS).length)
                 .filter(isWorkspaceOp),
             }),
+        ...(o.canStageArtifact === undefined
+          ? {}
+          : { canStageArtifact: bool(o, "canStageArtifact") }),
+        ...(o.canActivateArtifact === undefined
+          ? {}
+          : { canActivateArtifact: bool(o, "canActivateArtifact") }),
         ...(o.link === undefined ? {} : { link: helloLink(o.link) }),
         platform: str(o, "platform"),
+        ...(o.arch === undefined ? {} : { arch: str(o, "arch") }),
         home: str(o, "home"),
         autoApproveExtension: bool(o, "autoApproveExtension"),
         ack: seqNum(o, "ack"),

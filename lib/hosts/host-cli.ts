@@ -1,5 +1,7 @@
 import { createHostControlServer, requestHostControl } from "./host-control";
 import type { HostDaemon } from "./daemon";
+import { runInstallArtifact } from "./install-artifact";
+import { ACTIVATION_WORKER, runManagedArtifactWorker } from "./managed-artifact-activation";
 
 // `keylime host`: link this machine to web servers through ./daemon.
 // Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
@@ -12,7 +14,7 @@ import {
 } from "./host-login";
 
 const USAGE =
-  "Usage: keylime host login [--add] --url <server url>   (the host token is read from stdin)\n       keylime host logout --url <server url>\n       keylime host [--allow-http]\n       keylime host status|drain|drain-idle|drain-force|resume";
+  "Usage: keylime host login [--add] --url <server url>   (the host token is read from stdin)\n       keylime host logout --url <server url>\n       keylime host [--allow-http]\n       keylime host status|drain|drain-idle|drain-force|resume\n       keylime host install-artifact --help";
 
 /** A host token is 43 characters; anything this long is not one. */
 const MAX_TOKEN_LINE_BYTES = 4096;
@@ -45,6 +47,8 @@ function readTokenLine(): Promise<string> {
 }
 
 async function main(argv: string[], signal?: AbortSignal): Promise<number> {
+  if (argv[0] === "install-artifact") return runInstallArtifact(argv.slice(1));
+  if (argv[0] === ACTIVATION_WORKER) return runManagedArtifactWorker(argv.slice(1));
   if (argv[0] === "login" || argv[0] === "logout") {
     const add = argv[0] === "login" && argv.includes("--add");
     const args = add ? argv.filter((arg) => arg !== "--add") : argv;
@@ -117,6 +121,7 @@ async function main(argv: string[], signal?: AbortSignal): Promise<number> {
     daemon = runHostDaemon({
       allowHttp: argv.includes("--allow-http"),
       hostSocket: hostSocketPath(),
+      standaloneControl: !!endpoint && !signal,
     });
     // Worker cutover starts fail-closed; ordinary hosts have no maintenance environment.
     if (process.env.KEYLIME_HOST_DRAINED === "1") daemon.control("drain");

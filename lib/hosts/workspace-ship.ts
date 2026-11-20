@@ -1336,15 +1336,21 @@ export async function refreshShipPrs() {
     watching = false;
   }
 }
+export function shipWorkBusy(): boolean {
+  return watching || active.size > 0;
+}
+
 export function startShipWatcher(
   onChanged: () => void,
   offer?: (owner: string, digest: ShipPrDigest) => void,
+  mayPoll?: () => boolean,
 ) {
   changed = onChanged;
   offerDigest = offer;
   recover();
   if (!timer) {
     timer = setInterval(() => {
+      if (mayPoll && !mayPoll()) return;
       void refreshShipPrs();
     }, 60_000);
     timer.unref();

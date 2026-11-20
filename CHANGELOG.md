@@ -8,6 +8,10 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Added
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
+- **Settings → Hosts → Deploy release** lists compatible builds already on the web server and marks the newest. Deploy a matched daemon and runner with one restart, without opening a file picker.
+- In **Settings → Hosts**, use **Stage artifact** on a linked host to transfer a binary without SSH. On supported standalone hosts you can then verify its SHA-256, choose **Install & restart**, and confirm the outcome after reconnect.
+- Run `keylime host install-artifact` on the target host to verify the SHA-256 of a staged binary, replace the installed daemon or runner with a backup, and restart the standalone host service. The command refuses a busy daemon.
+- Standalone host activation runs `keylime preflight` before drain or replacement. A matching checksum alone no longer lets a wrong-platform or incompatible binary through.
 - Open **Notes & Tasks** from a Repo or System to save Markdown notes and plan work outside Git. Enter a Brief, optionally expand it in place with **Improve**, then launch a Workspace or Effort with the current text. If an Effort plan changes before creation, **Resume** lets you review the new starting commits without starting a second launch.
 - Task launch saves slash-prefixed Briefs as the first chat message instead of running them as commands.
 - Improve uses the task's attached images with a vision-capable planning model.
@@ -146,6 +150,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Open Notes & Tasks from a Repo or System to save Markdown notes and plan work outside Git. Enter a Brief, optionally expand it in place with Improve, then launch a Workspace or Effort with the current text. If an Effort plan changes before creation, Resume lets you review the new starting commits without starting a second launch
 - Task launch saves slash-prefixed Briefs as the first chat message instead of running them as commands
 - Improve uses the task's attached images with a vision-capable planning model
+- Settings → Hosts can deploy a compatible release by transferring and activating its matched daemon and runner over the managed link
+- Linked hosts can stage artifacts without SSH; supported standalone hosts can verify and install staged binaries with backups and service restart
+- The `keylime host install-artifact` command verifies staged binary checksums, runs preflight, and replaces supported standalone daemon or runner installs
 
 ### Changed
 - Repo and System Notes & Tasks use the workspace's compact typography, with a shorter notes editor and task actions on one row where space allows.

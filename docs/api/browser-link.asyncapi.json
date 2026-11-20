@@ -43760,6 +43760,18 @@
                       "anyOf": [
                         {
                           "properties": {
+                            "arch": {
+                              "description": "CPU architecture for selecting a compatible host release.",
+                              "type": "string"
+                            },
+                            "canActivateArtifact": {
+                              "description": "The linked standalone daemon advertised artifact activation.",
+                              "type": "boolean"
+                            },
+                            "canStageArtifact": {
+                              "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+                              "type": "boolean"
+                            },
                             "daemonManaged": {
                               "type": "boolean"
                             },
@@ -43863,6 +43875,18 @@
                         },
                         {
                           "properties": {
+                            "arch": {
+                              "description": "CPU architecture for selecting a compatible host release.",
+                              "type": "string"
+                            },
+                            "canActivateArtifact": {
+                              "description": "The linked standalone daemon advertised artifact activation.",
+                              "type": "boolean"
+                            },
+                            "canStageArtifact": {
+                              "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+                              "type": "boolean"
+                            },
                             "clusterConfig": {
                               "allOf": [
                                 {

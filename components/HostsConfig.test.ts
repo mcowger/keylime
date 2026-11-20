@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import type { TestContext } from "node:test";
 import { createElement } from "react";
-const { act, cleanup, render, screen, waitFor, within } =
+const { act, cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react/pure.js");
 const { default: userEvent } = await import("@testing-library/user-event");
 
@@ -297,3 +297,89 @@ test("the local name hint is the input's description, not part of its label", as
   );
 });
 
+const hostRow = (overrides: Record<string, unknown> = {}) => ({
+  id: "local",
+  label: "",
+  status: "online",
+  ompVersion: "1.0.0",
+  platform: "linux",
+  hostVersion: 3,
+  serverVersion: 3,
+  lastSeenAt: null,
+  workspaceOps: [],
+  ...overrides,
+});
+async function showHosts(hosts: ReturnType<typeof hostRow>[]) {
+  globalThis.Worker = FakeWorker as unknown as typeof Worker;
+  const view = render(createElement(HostsConfig));
+  await waitFor(() =>
+    assert.ok(
+      workers[0].posted.some(
+        (message) => message.op === "open" && message.channel.kind === "hosts",
+      ),
+    ),
+  );
+  const { id } = workers[0].posted.findLast(
+    (message) => message.op === "open" && message.channel.kind === "hosts",
+  )!;
+  act(() =>
+    workers[0].onmessage({
+      data: { id, type: "message", data: JSON.stringify({ hosts }) },
+    }),
+  );
+  return view;
+}
+
+
+test("staging shows the host recovery path when the confirmation body stalls", async (t) => {
+  let uploadId = "";
+  mockHostRequests(t, async (url, init) => {
+    if (String(url) === "/api/uploads") {
+      const upload = JSON.parse(String(init?.body));
+      uploadId = upload.id;
+      return Response.json({ received: upload.size });
+    }
+    assert.equal(String(url), "/api/hosts/local/artifacts");
+    const signal = init?.signal;
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          signal?.addEventListener(
+            "abort",
+            () => controller.error(signal.reason),
+            { once: true },
+          );
+        },
+      }),
+    );
+  });
+  const user = userEvent.setup();
+  await showHosts([hostRow({ canStageArtifact: true })]);
+  await user.click(
+    screen.getByRole("button", { name: "Stage artifact on This machine" }),
+  );
+  const dialog = within(screen.getByRole("dialog"));
+  await user.upload(
+    dialog.getByLabelText("Local file"),
+    new File(["bytes"], "runner"),
+  );
+  const form = dialog.getByRole<HTMLButtonElement>("button", {
+    name: "Stage artifact",
+  }).form!;
+
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  await act(async () => {
+    fireEvent.submit(form);
+  });
+  assert.ok(dialog.getByText("Finishing on the host…"));
+  await act(async () => t.mock.timers.tick(40_000));
+  t.mock.timers.reset();
+
+  assert.match(
+    dialog.getByRole("alert").textContent ?? "",
+    /couldn't be confirmed/,
+  );
+  assert.ok(dialog.getByText(`<agent dir>/keylime/host-artifacts/${uploadId}`));
+  await user.click(dialog.getByRole("button", { name: "Close" }));
+  assert.equal(screen.queryByRole("dialog"), null);
+});

@@ -7,6 +7,11 @@ import {
   UploadStartResultSchema,
   UploadAttachArgsSchema,
   UploadAttachResultSchema,
+  StageHostArtifactArgsSchema,
+  StageHostArtifactResultSchema,
+  ActivateHostArtifactArgsSchema,
+  HostArtifactActivationArgsSchema,
+  HostArtifactActivationResultSchema,
 } from "./host-control-models";
 import { ConfigStateSchema } from "./host-schemas";
 import { BrowserListResultSchema, BrowserCaptureResultSchema, BrowserControlArgsSchema, BrowserControlResultSchema } from "./runner-lifecycle";
@@ -108,6 +113,27 @@ export const hostControlOperations: readonly OperationContract[] = [
       "Usage: Attach a completed staged upload to a session.\nInputs: Supply upload ID and daemon-local session identity and file.\nInvariants: The retained generation must exist; existing names are not overwritten. Repeating for the same destination is idempotent only while its receipt target exists, but a different consumed destination is 404.\nEffects: Installs the file under local/uploads, choosing another name on collision; cross-device copies may take ten minutes.\nRecovery: Retry the same destination after an uncertain response, not a different destination.",
     args: UploadAttachArgsSchema,
     result: UploadAttachResultSchema,
+  },
+  {
+    name: "stageHostArtifact",
+    description:
+      "Usage: Stage a binary, runner or other artifact for manual installation.\nInputs: Supply the ID of a completed upload on this link.\nInvariants: The upload must be nonempty and unused by a session or workspace. The daemon picks the destination; it never overwrites an artifact or an installed binary.\nEffects: Moves the file into private host staging without execute permission and returns its host-local path. It does not install, start or restart anything.\nRecovery: If confirmation is lost, inspect keylime/host-artifacts/<upload id> under the daemon's agent directory before uploading again.",
+    args: StageHostArtifactArgsSchema,
+    result: StageHostArtifactResultSchema,
+  },
+  {
+    name: "activateHostArtifact",
+    description:
+      "Usage: Install a selected staged binary and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifact. Replaying an admitted operation ID cannot trigger a second activation. Busy hosts refuse activation.\nEffects: Hands installation to a worker that verifies the bytes and preflights the replacement with the other installed binary before draining. On success, it saves a backup, replaces the binary atomically and restarts the unit. Acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
+    args: ActivateHostArtifactArgsSchema,
+    result: HostArtifactActivationResultSchema,
+  },
+  {
+    name: "hostArtifactActivationStatus",
+    description:
+      "Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
+    args: HostArtifactActivationArgsSchema,
+    result: HostArtifactActivationResultSchema,
   },
   {
     name: "setUploadRetention",

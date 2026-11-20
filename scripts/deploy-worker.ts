@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { acquireDeployLock } from "../lib/deploy-lock";
 import { activateRelease } from "./deploy-activate";
 import {
   assertFrontendCompatible,
@@ -18,7 +19,6 @@ import {
   selectFrontend,
 } from "./deploy-frontend";
 import {
-  acquireDeployLock,
   readDeployState,
   saveDeployState,
   type DeployState,

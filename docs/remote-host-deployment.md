@@ -41,6 +41,104 @@ directory. It won't overwrite existing installs or host configuration. Verify
 the result in **Settings → Hosts**: the host should show `online`. See the
 manual steps below for token revocation, service logs, and troubleshooting.
 
+## Deploy a release without SSH
+
+In **Settings → Hosts**, choose **Deploy release** on the target host. Pick
+a build (the newest is marked), review it, then choose **Deploy & restart**.
+Keylime sends the matched daemon and runner over the managed link, checks both
+digests, and runs preflight on the pair. It refuses a busy host. Otherwise it
+keeps backups of both binaries, replaces them, and restarts the service once.
+
+The list comes from builds already on the web server. It includes matching
+native builds from `~/.local/share/keylime/releases/` and the unpacked
+`release/keylime-<os>-<arch>/` build under the server's package directory. A
+build must contain both `keylime` and `keylime-omp` to appear. If the list is
+empty, [build a matching release](release.md#building-binary-archives) on the
+web server and reopen it.
+
+Deploy from Hosts requires a standalone remote daemon that already supports
+release deployment. The web server and its own daemon aren't updated by this
+action.
+
+The picker checks OS, CPU, and whether both binaries are present. It doesn't
+check whether a build can report deployment status. If you deploy a build
+from before managed activation, the daemon can reconnect while the deployment
+still shows as unconfirmed, and **Deploy release** may disappear for that host.
+Check the installed build before retrying. Use the host console to upgrade
+again if the button is gone.
+
+## Stage an individual binary manually
+
+Once the host has a live Keylime link, open **Settings → Hosts**. On the
+target host's card, choose **Stage artifact**, select a local binary or runner
+for that host's OS and CPU, then submit. The file travels over the managed
+link. The daemon must support artifact staging, but the runner doesn't need
+to be installed or running. The limit is 2 GiB per file.
+
+On success, copy the path shown in the dialog. The daemon puts the file in
+`<agent dir>/keylime/host-artifacts/<upload id>/` without execute permissions.
+The upload doesn't replace a binary or restart the daemon. Delete staged copies
+when you no longer need them; Keylime doesn't remove them automatically.
+
+The browser waits up to 40 seconds for the final confirmation after upload.
+If the dialog can't confirm staging, check the directory it shows on the host
+before uploading again.
+
+On a supported standalone remote host, the same dialog offers **Install &
+restart** after staging. Select `keylime` or `keylime-omp`, enter the SHA-256
+from a trusted copy of that exact binary, and confirm the host and target.
+Keylime sends the file you picked, not an automatically selected release.
+Before draining, Keylime gives the verified copy 40 seconds to pass `keylime
+preflight` with the other installed binary. This catches wrong-platform files
+and incompatible daemon/runner pairs without restarting the host.
+
+A busy daemon refuses the install. After restart, the dialog waits for the
+host to reconnect and confirm the outcome. Keep the reported backup until
+you've verified the host. If the outcome can't be confirmed, don't send
+another install until you've checked the host. The operation ID in the dialog
+identifies the receipt in `<agent dir>/keylime/host-artifact-activation/`.
+The service user must own `<agent dir>/keylime`, and group and other users
+must not have write access there. If an older install left it group-writable,
+fix its permissions on the host before retrying.
+
+## Install from the host console
+
+From a host console or other shell that isn't owned by the daemon, run this as
+the service user (not root). This works with the standalone install in
+`~/.local/share/keylime-host` and its systemd user unit or macOS LaunchAgent.
+
+```sh
+"$HOME/.local/share/keylime-host/keylime" host install-artifact "$staged_path" \
+  --target keylime --sha256 "$expected_sha256"
+```
+
+Set `staged_path` to the path shown in Hosts. Get the expected SHA-256 from a
+trusted copy of the exact binary, not from the staged file or its archive.
+Use `--target keylime-omp` for the installed runner instead. The caller picks a
+build for the host's OS and CPU. The command doesn't download artifacts or
+change enrollment, and replaces only the selected executable.
+
+The command checks the bytes, refuses a busy daemon, then saves the old binary
+at the printed `.backup-…` path, atomically replaces it, and restarts the host
+service. Close live sessions and workspace terminals before retrying a busy
+refusal. On success, check **Settings → Hosts** for the reconnected host before
+deleting the backup. To check runner compatibility, run `keylime preflight`
+from the standalone install.
+
+If restart or startup confirmation fails, check `journalctl --user -u
+keylime-host.service` on Linux or `~/Library/Logs/keylime-host.log` on macOS.
+The command doesn't roll back automatically: the new process might already be
+serving work. Before restoring the printed backup over the target, make sure
+the service is stopped and no work is running. Then start it again with the
+same supervisor. If the command was interrupted before replacement, check
+`keylime host status` and use `keylime host resume` if the old daemon is still
+drained and no install is running.
+
+If the installed binary doesn't know `install-artifact` yet, run the command
+from a separate trusted copy of Keylime that supports it, or from a checkout
+on that host with `mise exec -- bun bin/keylime-host.ts install-artifact …`.
+Don't execute the staged file itself.
+
 ## Manual install
 
 ### Copy the binaries
