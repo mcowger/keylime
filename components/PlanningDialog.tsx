@@ -1,7 +1,7 @@
 "use client";
 
 import { Value } from "@sinclair/typebox/value";
-import { Wand2 } from "lucide-react";
+import { Paperclip, Wand2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useDragDrop } from "@/hooks/useDragDrop";
 import {
   PlanningResultSchema,
   type PlanningBoard,
@@ -102,6 +103,7 @@ const imageTypes = [
   "image/gif",
   "image/webp",
 ] as const;
+const isFileDragItem = (item: DataTransferItem) => item.kind === "file";
 
 function PlanningImages({
   label,
@@ -118,11 +120,71 @@ function PlanningImages({
   onChange: (images: DraftImage[]) => void;
   run: (work: () => Promise<void>) => Promise<void>;
 }) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const addFiles = (files: File[]) => {
+    if (disabled || !files.length) return;
+    void run(async () => {
+      const bytes = images.reduce(
+        (sum, image) =>
+          sum + ("bytes" in image ? image.bytes : attachedImageBytes(image)),
+        0,
+      );
+      if (
+        images.length + files.length > MAX_ATTACHED_IMAGES ||
+        bytes + files.reduce((sum, file) => sum + file.size, 0) >
+          MAX_TOTAL_ATTACHED_IMAGE_BYTES
+      )
+        throw new Error("Attach up to 10 images totaling 5 MiB.");
+      const added = await Promise.all(
+        files.map(async (file) => {
+          const mimeType = imageTypes.find((type) => type === file.type);
+          if (!mimeType || !file.size)
+            throw new Error("Choose a PNG, JPEG, GIF or WebP image.");
+          const { promise, resolve, reject } = Promise.withResolvers<string>();
+          const reader = new FileReader();
+          reader.onload = () =>
+            resolve(
+              String(reader.result).slice(
+                String(reader.result).indexOf(",") + 1,
+              ),
+            );
+          reader.onerror = () =>
+            reject(new Error(`Couldn't read ${file.name}.`));
+          reader.readAsDataURL(file);
+          return {
+            name: file.name.slice(0, 255),
+            mimeType,
+            data: await promise,
+          };
+        }),
+      );
+      onChange([...images, ...added]);
+    });
+  };
+  const drop = useDragDrop(addFiles, isFileDragItem);
+
   return (
     <div className="planning-images">
-      <label>
-        {label}
+      <div
+        className="planning-image-drop"
+        data-drag-over={(!disabled && drop.isDragOver) || undefined}
+        onDragEnter={drop.handleDragEnter}
+        onDragOver={drop.handleDragOver}
+        onDragLeave={drop.handleDragLeave}
+        onDrop={drop.handleDrop}
+      >
+        <SystemsButton
+          disabled={disabled}
+          onClick={() => fileInput.current?.click()}
+        >
+          <Paperclip size={13} aria-hidden="true" /> {label}
+          <span className="planning-drop-hint" aria-hidden="true">
+            or drop here
+          </span>
+        </SystemsButton>
         <input
+          ref={fileInput}
+          hidden
           type="file"
           multiple
           accept={imageTypes.join(",")}
@@ -130,51 +192,10 @@ function PlanningImages({
           onChange={(event) => {
             const files = Array.from(event.currentTarget.files ?? []);
             event.currentTarget.value = "";
-            if (!files.length) return;
-            void run(async () => {
-              const bytes = images.reduce(
-                (sum, image) =>
-                  sum +
-                  ("bytes" in image ? image.bytes : attachedImageBytes(image)),
-                0,
-              );
-              if (
-                images.length + files.length > MAX_ATTACHED_IMAGES ||
-                bytes + files.reduce((sum, file) => sum + file.size, 0) >
-                  MAX_TOTAL_ATTACHED_IMAGE_BYTES
-              )
-                throw new Error("Attach up to 10 images totaling 5 MiB.");
-              const added = await Promise.all(
-                files.map(async (file) => {
-                  const mimeType = imageTypes.find(
-                    (type) => type === file.type,
-                  );
-                  if (!mimeType || !file.size)
-                    throw new Error("Choose a PNG, JPEG, GIF or WebP image.");
-                  const { promise, resolve, reject } =
-                    Promise.withResolvers<string>();
-                  const reader = new FileReader();
-                  reader.onload = () =>
-                    resolve(
-                      String(reader.result).slice(
-                        String(reader.result).indexOf(",") + 1,
-                      ),
-                    );
-                  reader.onerror = () =>
-                    reject(new Error(`Couldn't read ${file.name}.`));
-                  reader.readAsDataURL(file);
-                  return {
-                    name: file.name.slice(0, 255),
-                    mimeType,
-                    data: await promise,
-                  };
-                }),
-              );
-              onChange([...images, ...added]);
-            });
+            addFiles(files);
           }}
         />
-      </label>
+      </div>
       {images.length > 0 && (
         <ul className="planning-image-list">
           {images.map((image, index) => {
@@ -307,6 +328,19 @@ export function PlanningPage({
 
   useEffect(() => {
     headingRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    // A file dropped outside an attachment target must not navigate this tab.
+    const preventFileNavigation = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    window.addEventListener("dragover", preventFileNavigation, true);
+    window.addEventListener("drop", preventFileNavigation, true);
+    return () => {
+      window.removeEventListener("dragover", preventFileNavigation, true);
+      window.removeEventListener("drop", preventFileNavigation, true);
+    };
   }, []);
 
   useEffect(() => {
@@ -453,11 +487,17 @@ export function PlanningPage({
           )
         ) : (
           <>
-            <section aria-labelledby={`${heading}-notes`}>
+            <section
+              className="planning-notes"
+              aria-labelledby={`${heading}-notes`}
+            >
               <header>
                 <h2 id={`${heading}-notes`}>Notes</h2>
                 <SystemsButton
                   aria-pressed={preview}
+                  style={
+                    preview ? { background: "var(--bg-selected)" } : undefined
+                  }
                   onClick={() => setPreview(!preview)}
                 >
                   Markdown preview
@@ -474,7 +514,7 @@ export function PlanningPage({
               ) : (
                 <textarea
                   aria-label="Notes (Markdown)"
-                  rows={6}
+                  rows={3}
                   value={notesText}
                   disabled={pending}
                   maxLength={128 * 1024}
@@ -487,23 +527,50 @@ export function PlanningPage({
                   }
                 />
               )}
-              <PlanningImages
-                label="Attach Notes images"
-                target={imageTarget}
-                images={notes?.images ?? board.notesImages ?? []}
-                disabled={pending}
-                run={run}
-                onChange={(images) =>
-                  setNotes({
-                    text: notesText,
-                    revision: notes?.revision ?? board.notesRevision,
-                    images,
-                  })
-                }
-              />
-              <p className="planning-muted">
-                Notes and their images aren't sent to models or agents.
-              </p>
+              <div className="planning-notes-footer">
+                <PlanningImages
+                  label="Attach notes images"
+                  target={imageTarget}
+                  images={notes?.images ?? board.notesImages ?? []}
+                  disabled={pending}
+                  run={run}
+                  onChange={(images) =>
+                    setNotes({
+                      text: notesText,
+                      revision: notes?.revision ?? board.notesRevision,
+                      images,
+                    })
+                  }
+                />
+                <p className="planning-muted">
+                  Notes and their images aren't sent to models or agents.
+                </p>
+              </div>
+              <div className="planning-actions planning-note-save">
+                <SystemsButton
+                  disabled={
+                    pending ||
+                    notesConflict ||
+                    (notesText === board.notes && notes?.images === undefined)
+                  }
+                  onClick={() => {
+                    if (notes)
+                      void save(
+                        {
+                          action: "saveNotes",
+                          notes: notes.text,
+                          images: notes.images?.map((image) =>
+                            "id" in image ? image.id : image,
+                          ),
+                          revision: notes.revision,
+                        },
+                        () => setNotes(undefined),
+                      );
+                  }}
+                >
+                  Save notes
+                </SystemsButton>
+              </div>
               {notesConflict && (
                 <details>
                   <summary>
@@ -532,31 +599,6 @@ export function PlanningPage({
                   </SystemsButton>
                 </details>
               )}
-              <div className="planning-actions">
-                <SystemsButton
-                  disabled={
-                    pending ||
-                    notesConflict ||
-                    (notesText === board.notes && notes?.images === undefined)
-                  }
-                  onClick={() => {
-                    if (notes)
-                      void save(
-                        {
-                          action: "saveNotes",
-                          notes: notes.text,
-                          images: notes.images?.map((image) =>
-                            "id" in image ? image.id : image,
-                          ),
-                          revision: notes.revision,
-                        },
-                        () => setNotes(undefined),
-                      );
-                  }}
-                >
-                  Save notes
-                </SystemsButton>
-              </div>
             </section>
             <section aria-labelledby={`${heading}-tasks`}>
               <header>
@@ -768,9 +810,10 @@ export function PlanningPage({
                                   aria-label={task.brief}
                                 >
                                   <strong>{task.brief}</strong>
-                                  <label>
-                                    Move task
+                                  <div className="planning-actions planning-card-controls">
                                     <select
+                                      className="ui-focus-ring"
+                                      title="Move task"
                                       aria-label={`Move ${task.brief}`}
                                       value={task.status}
                                       disabled={pending || editing || !!review}
@@ -796,16 +839,18 @@ export function PlanningPage({
                                         </option>
                                       ))}
                                     </select>
-                                  </label>
-                                  <div className="planning-actions">
-                                    <SystemsButton
+                                    <button
+                                      type="button"
+                                      className="planning-card-action ui-focus-ring"
                                       disabled={pending || !!edit || !!review}
                                       onClick={() => editTask(task)}
                                     >
                                       Edit
-                                    </SystemsButton>
+                                    </button>
                                     {!launchState && (
-                                      <SystemsButton
+                                      <button
+                                        type="button"
+                                        className="planning-card-action ui-focus-ring"
                                         disabled={
                                           pending ||
                                           !canLaunch ||
@@ -817,9 +862,11 @@ export function PlanningPage({
                                         }
                                       >
                                         Launch
-                                      </SystemsButton>
+                                      </button>
                                     )}
-                                    <SystemsButton
+                                    <button
+                                      type="button"
+                                      className="planning-card-action ui-focus-ring"
                                       disabled={
                                         pending ||
                                         editing ||
@@ -829,15 +876,18 @@ export function PlanningPage({
                                       onClick={() => setTaskToDelete(task)}
                                     >
                                       Delete
-                                    </SystemsButton>
+                                    </button>
                                   </div>
                                   {launchState && (
-                                    <>
-                                      <p role="status">
+                                    <div className="planning-launch">
+                                      <p
+                                        className="planning-muted"
+                                        role="status"
+                                      >
                                         {phases[launchState.phase]}
                                       </p>
                                       {launchState.setup?.kind === "repo" && (
-                                        <p>
+                                        <p className="planning-muted">
                                           Branch:{" "}
                                           <code>
                                             {launchState.setup.branch}
@@ -908,7 +958,7 @@ export function PlanningPage({
                                             </SystemsButton>
                                           )}
                                       </div>
-                                    </>
+                                    </div>
                                   )}
                                 </article>
                               </li>

@@ -10,7 +10,10 @@ function isAttachableDragItem(item: DataTransferItem): boolean {
   );
 }
 
-export function useDragDrop(onDrop: (files: File[]) => void) {
+export function useDragDrop(
+  onDrop: (files: File[]) => void,
+  acceptsItem: (item: DataTransferItem) => boolean = isAttachableDragItem,
+) {
   const [isDragOver, setIsDragOver] = useState(false);
   const counterRef = useRef(0);
 
@@ -31,23 +34,23 @@ export function useDragDrop(onDrop: (files: File[]) => void) {
     };
   }, []);
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    const hasAttachables = Array.from(e.dataTransfer.items).some(
-      isAttachableDragItem,
-    );
-    if (!hasAttachables) return;
-    e.preventDefault();
-    counterRef.current += 1;
-    setIsDragOver(true);
-  }, []);
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      if (!Array.from(e.dataTransfer.items).some(acceptsItem)) return;
+      e.preventDefault();
+      counterRef.current += 1;
+      setIsDragOver(true);
+    },
+    [acceptsItem],
+  );
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    const hasAttachables = Array.from(e.dataTransfer.items).some(
-      isAttachableDragItem,
-    );
-    if (!hasAttachables) return;
-    e.preventDefault();
-  }, []);
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (Array.from(e.dataTransfer.items).some(acceptsItem))
+        e.preventDefault();
+    },
+    [acceptsItem],
+  );
 
   const handleDragLeave = useCallback(() => {
     counterRef.current -= 1;

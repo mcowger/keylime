@@ -302,6 +302,35 @@ for (const mobile of [false, true]) {
   });
 }
 
+test("a missed file drop cannot navigate away from a planning draft", async () => {
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  try {
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+    fireEvent.click(view.getByRole("button", { name: "Open test board" }));
+    const notes = await view.findByRole("textbox", {
+      name: "Notes (Markdown)",
+    });
+    assert.ok(notes instanceof window.HTMLTextAreaElement);
+    fireEvent.change(notes, { target: { value: "Unsaved notes" } });
+
+    const fileDrag = { dataTransfer: { types: ["Files"] } };
+    const textDrag = { dataTransfer: { types: ["text/plain"] } };
+    assert.equal(fireEvent.dragOver(notes, fileDrag), false);
+    assert.equal(fireEvent.drop(notes, fileDrag), false);
+    assert.equal(fireEvent.dragOver(notes, textDrag), true);
+    assert.equal(fireEvent.drop(notes, textDrag), true);
+    assert.equal(notes.value, "Unsaved notes");
+
+    fireEvent.click(view.getByRole("button", { name: "Back to workspace" }));
+    assert.equal(fireEvent.dragOver(window, fileDrag), true);
+    assert.equal(fireEvent.drop(window, fileDrag), true);
+  } finally {
+    cleanup();
+  }
+});
+
 test("pending workspace explorer shows the base project until the session starts", async () => {
   sessionStorage.clear();
   window.history.replaceState(null, "", "/?cwd=%2Frepo");

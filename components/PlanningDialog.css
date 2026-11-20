@@ -8,28 +8,40 @@
 }
 .planning-content {
   box-sizing: border-box;
-  padding: clamp(12px, 3cqi, 32px);
+  padding: 12px clamp(10px, 1.5cqi, 20px);
+  font-size: var(--text-md);
+  line-height: 1.4;
 }
 .planning-content > header {
-  padding-bottom: 12px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
-.planning-content h1 {
-  font-size: 20px;
-  margin: 0;
+.planning-content > header > h1 {
+  font-size: var(--text-lg);
+  font-weight: 600;
 }
-.planning-content h2 {
-  font-size: 16px;
-}
-.planning-content h3 {
-  font-size: 14px;
+.planning-content section > header > h2,
+.planning-column > h3 {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .planning-content header > :first-child {
   overflow-wrap: anywhere;
   min-width: 0;
 }
 .planning-content
-  :is(header, .planning-column, .planning-editor, .planning-card)
+  :is(
+    header,
+    .planning-column,
+    .planning-editor,
+    .planning-card,
+    .planning-launch,
+    .planning-notes-footer,
+    .planning-preview
+  )
   > :is(h1, h2, h3, h4, p) {
   margin-block: 0;
 }
@@ -38,37 +50,70 @@
 }
 .planning-content :is(section, article, form, label, fieldset) {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 .planning-content > * + * {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 .planning-content header,
 .planning-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 .planning-content header {
   justify-content: space-between;
 }
+.planning-content .planning-notes {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.planning-notes > :not(.planning-notes-footer, .planning-note-save) {
+  grid-column: 1 / -1;
+}
+.planning-notes-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.planning-notes-footer > p {
+  font-size: var(--text-sm);
+}
 .planning-brief-heading {
   justify-content: space-between;
 }
-.planning-brief-heading button {
+.planning-brief-heading button,
+.planning-image-drop > button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 .planning-images {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+}
+.planning-image-drop {
+  justify-self: start;
+  border-radius: var(--radius-control);
+}
+.planning-image-drop[data-drag-over] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.planning-drop-hint {
+  color: var(--text-muted);
+}
+@media (pointer: coarse) {
+  .planning-drop-hint {
+    display: none;
+  }
 }
 .planning-image-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -88,8 +133,8 @@
 .planning-content :is(input, textarea, select) {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px;
-  background: var(--bg);
+  padding: 5px 8px;
+  background: var(--bg-panel);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
@@ -97,6 +142,34 @@
 }
 .planning-content textarea {
   resize: vertical;
+}
+.planning-content select {
+  min-height: var(--control-height-sm);
+}
+.planning-content .planning-card-controls select {
+  width: auto;
+  max-width: 100%;
+  padding: 2px 4px;
+  font-size: var(--text-sm);
+}
+.planning-card-action {
+  min-height: var(--control-height-sm);
+  padding: 2px 5px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.planning-card-action:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.planning-card-action:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .planning-columns {
   display: grid;
@@ -108,25 +181,42 @@
 .planning-card,
 .planning-editor,
 .planning-preview {
-  padding: 10px;
-  border: 1px solid var(--border);
+  padding: 8px;
   border-radius: var(--radius-control);
   overflow-wrap: anywhere;
 }
-.planning-column,
+.planning-column {
+  background: var(--bg-subtle);
+}
+.planning-card,
 .planning-editor,
 .planning-preview {
+  border: 1px solid var(--border);
   background: var(--bg-panel);
 }
-.planning-card {
-  background: var(--bg);
+.planning-card > strong {
+  font-weight: 600;
+}
+.planning-launch {
+  display: grid;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.planning-launch .planning-actions:empty {
+  display: none;
+}
+.planning-preview .markdown-body {
+  font-size: inherit;
+  line-height: inherit;
 }
 .planning-column ul {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 .planning-preview pre {
   overflow: auto;
@@ -143,7 +233,7 @@
   overflow-wrap: anywhere;
 }
 .planning-muted {
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 @container planning (max-width: 820px) {
   .planning-columns {
@@ -154,7 +244,9 @@
   .planning-columns {
     grid-template-columns: minmax(0, 1fr);
   }
-  .planning-content :is(input, textarea, select) {
+  .planning-content textarea,
+  .planning-content select,
+  .planning-content .planning-card-controls select {
     font-size: 16px;
   }
 }

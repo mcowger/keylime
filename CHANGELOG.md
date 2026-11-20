@@ -148,6 +148,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Improve uses the task's attached images with a vision-capable planning model
 
 ### Changed
+- Repo and System Notes & Tasks use the workspace's compact typography, with a shorter notes editor and task actions on one row where space allows.
+- Drop image files onto the Notes or task attachment buttons, or click to choose files. Missing the button won't open the file or discard your draft.
 - **New System → Member Repos** uses the same folder picker as **Add repo**, without the clone and launch options.
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.
 - Effort cleanup lists Git-ignored files and directories, like `.env` and local database folders. Removing them requires force confirmation.
@@ -194,6 +196,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Effort cleanup keeps unreadable `AGENTS.md` and `repomap.md` files at the Effort root without failing worktree removal
 - Dismiss exited Effort service output from the terminal tab or Effort details, even if setup failed. Opening a service terminal from a member worktree keeps it selected when the sidebar updates
 - **New System → Member Repos** uses the same folder picker as **Add repo**, without the clone and launch options
+- Repo and System Notes & Tasks use the workspace's compact typography, with a shorter notes editor and task actions on one row where space allows
+- Drop image files onto the Notes or task attachment buttons, or click to choose files. Missing the button won't open the file or discard your draft
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen
