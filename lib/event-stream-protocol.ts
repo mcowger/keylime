@@ -148,10 +148,6 @@ export function parseEventStreamChannel(
       return { kind: "running" };
     case "open-chats":
       return { kind: "open-chats" };
-    case "open-chat":
-      return isBoundedString(channel.sessionId, MAX_ID_LENGTH)
-        ? { kind: "open-chat", sessionId: channel.sessionId }
-        : null;
     case "notifications":
       return isValidNotificationId(channel.clientId)
         ? { kind: "notifications", clientId: channel.clientId }
@@ -170,13 +166,14 @@ export function parseEventStreamChannel(
           }
         : null;
     case "session":
-      return isBoundedString(channel.sessionId, MAX_ID_LENGTH)
-        ? { kind: "session", sessionId: channel.sessionId }
+    case "open-chat":
+    case "commit-plan-progress": {
+      const { hostId = "local", sessionId } = channel;
+      return isBoundedString(sessionId, MAX_ID_LENGTH) &&
+        isBoundedString(hostId, MAX_ID_LENGTH)
+        ? { kind: channel.kind, sessionId, hostId }
         : null;
-    case "commit-plan-progress":
-      return isBoundedString(channel.sessionId, MAX_ID_LENGTH)
-        ? { kind: "commit-plan-progress", sessionId: channel.sessionId }
-        : null;
+    }
     case "file": {
       if (!isBoundedString(channel.path, MAX_PATH_LENGTH)) return null;
       const sessionId = channel.sessionId ?? null;

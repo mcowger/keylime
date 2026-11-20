@@ -455,6 +455,12 @@ after(async () => {
 });
 
 const slash = (value: string) => value.replace(/\\/g, "/");
+function fixtureHost(sessionId: string | null) {
+  if (sessionId === A_ID) return ownerA.hostId;
+  if (sessionId === B_ID || sessionId === UNKNOWN_ID) return ownerB.hostId;
+  return "local";
+}
+
 function fileRequest(
   filePath: string,
   type: string,
@@ -467,7 +473,10 @@ function fileRequest(
     `http://main.test/api/files/${segments.map(encodeURIComponent).join("/")}`,
   );
   url.searchParams.set("type", type);
-  if (sessionId !== null) url.searchParams.set("sessionId", sessionId);
+  if (sessionId !== null) {
+    url.searchParams.set("sessionId", sessionId);
+    url.searchParams.set("hostId", fixtureHost(sessionId));
+  }
   for (const [key, value] of Object.entries(query))
     url.searchParams.set(key, String(value));
   const request = new Request(url, init);
@@ -488,6 +497,10 @@ function projectRequest(
   const url = new URL("http://main.test/api/workspace");
   url.searchParams.set("cwd", machine.project);
   if (sessionId !== null) url.searchParams.set("sessionId", sessionId);
+  url.searchParams.set(
+    "hostId",
+    sessionId === null ? machine.hostId : fixtureHost(sessionId),
+  );
   for (const [key, value] of Object.entries(query))
     url.searchParams.set(key, String(value));
   return route.GET(new Request(url));
@@ -498,7 +511,10 @@ async function upload(
   conflict?: string,
   directory = join(machine.project, "uploads"),
 ) {
-  const resolved = await resolveWorkspaceHost(undefined, machine.id);
+  const resolved = await resolveWorkspaceHost(
+    fixtureHost(machine.id),
+    machine.id,
+  );
   if ("response" in resolved) return resolved.response;
   const uploads = [];
   for (const [name, data] of entries) {
@@ -678,10 +694,22 @@ test("a real live session browses its actual cwd before any lazy transcript or s
       typeof state.sessionFile === "string",
   );
   assert.equal(existsSync(state.sessionFile), false);
-  const read = await fileRequest("fresh.txt", "read", started.realSessionId);
+  const read = await fileRequest(
+    "fresh.txt",
+    "read",
+    started.realSessionId,
+    {},
+    { hostId: ownerA.hostId },
+  );
   assert.equal((await jsonOK(read)).content, "owner-a before transcript");
   const listing = await jsonOK(
-    await fileRequest(cwd, "list", started.realSessionId),
+    await fileRequest(
+      cwd,
+      "list",
+      started.realSessionId,
+      {},
+      { hostId: ownerA.hostId },
+    ),
   );
   assert.ok(
     listing.entries.some((entry) => entry.name === "fresh.txt" && !entry.isDir),
@@ -693,8 +721,8 @@ test("a real live session browses its actual cwd before any lazy transcript or s
     {},
     { cwd: join(central.home, "fresh"), hostId: "local" },
   );
-  assert.equal(mismatch.status, 409);
-  assert.equal((await mismatch.json()).code, "workspace_host_mismatch");
+  assert.equal(mismatch.status, 404);
+  assert.equal((await mismatch.json()).code, "session_not_found");
 });
 
 test("owner directory listings preserve every native name and existing entry DTOs for client-side filtering", async () => {
@@ -965,8 +993,8 @@ test("worker confinement rejects traversal and symlink escapes even with forged 
     {},
     { hostId: "local" },
   );
-  assert.equal(mismatch.status, 409);
-  assert.equal((await mismatch.json()).code, "workspace_host_mismatch");
+  assert.equal(mismatch.status, 404);
+  assert.equal((await mismatch.json()).code, "session_not_found");
   assert.equal(
     (await checkUpload(ownerA, ["write.txt"], join(ownerA.project, "escape")))
       .status,
@@ -1116,7 +1144,7 @@ test("file index and bounded search run in the owner workspace, not a browser-gr
   assert.equal(
     (await projectRequest(indexRoute, central, { hostId: "local" }, A_ID))
       .status,
-    409,
+    404,
   );
   const forgedCwd = await jsonOK(
     await projectRequest(indexRoute, central, {}, A_ID),
@@ -1177,6 +1205,7 @@ test("two native owner watches keep the same logical path separate and detach on
         kind: "file",
         path: "shared.txt",
         sessionId: id,
+        hostId: fixtureHost(id),
       }),
       { ok: true },
     );
@@ -1480,6 +1509,7 @@ async function assertFilesystemRefusal(
       kind: "file",
       path: "shared.txt",
       sessionId: id,
+      hostId: fixtureHost(id),
     });
     assert.equal(watched.ok, false);
     assert.ok(!watched.ok);
@@ -1510,6 +1540,7 @@ test("link loss fails an in-flight owner stream and ends its watch rather than r
       kind: "file",
       path: "shared.txt",
       sessionId: B_ID,
+      hostId: ownerB.hostId,
     }),
     { ok: true },
   );
@@ -1568,6 +1599,6 @@ test("known offline source identities explicitly refuse every filesystem surface
   await assertFilesystemRefusal(B_ID, 503, "host_offline");
 });
 
-test("unknown source absence stays unprovable after owner link loss and refuses with 503", async () => {
+test("an unknown session on a disconnected host has no authoritative inventory", async () => {
   await assertFilesystemRefusal(UNKNOWN_ID, 503, "host_sessions_unavailable");
 });

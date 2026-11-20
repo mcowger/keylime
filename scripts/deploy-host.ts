@@ -306,7 +306,7 @@ async function main(args: string[]) {
   if (
     await runSsh(
       host,
-      `umask 077; exec ${BIN} host login --add --url "$1"`,
+      `umask 077; exec ${BIN} host login --url "$1"`,
       [url.origin],
       `${token}\n`,
     )

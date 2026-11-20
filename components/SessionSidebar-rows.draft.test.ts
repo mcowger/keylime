@@ -4,6 +4,7 @@ import test from "node:test";
 import { stageTestUpload } from "../tests/staged-upload-fixture";
 import React from "react";
 import type { ChatInputHandle } from "./ChatInput";
+import { sessionKey } from "@/lib/session-identity";
 const { act, cleanup, render, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { default: userEvent } = await import("@testing-library/user-event");
@@ -34,7 +35,11 @@ const mark = () => screen.queryByRole("img", { name: "Unsent draft" });
 test("a session row marks unsent composer content and drops the mark once it is gone", () => {
   try {
     // A draft that exists before the row mounts (restored after a reload, a re-expanded project).
-    setDraft("draft-a", { value: "half-written", images: [], files: [] });
+    setDraft(sessionKey("draft-a"), {
+      value: "half-written",
+      images: [],
+      files: [],
+    });
     const { rerender } = render(row("draft-a"));
     assert.equal(
       mark()?.getAttribute("title"),
@@ -44,7 +49,7 @@ test("a session row marks unsent composer content and drops the mark once it is 
     rerender(row("draft-b"));
     assert.equal(mark(), null, "a row follows its own session's draft only");
     act(() =>
-      setDraft("draft-b", {
+      setDraft(sessionKey("draft-b"), {
         value: "",
         images: [],
         files: [],
@@ -52,15 +57,17 @@ test("a session row marks unsent composer content and drops the mark once it is 
       }),
     );
     assert.ok(mark(), "an attachment-only draft counts");
-    act(() => setDraft("draft-b", { value: "", images: [], files: [] }));
+    act(() =>
+      setDraft(sessionKey("draft-b"), { value: "", images: [], files: [] }),
+    );
     assert.equal(
       mark(),
       null,
       "an emptied draft clears the mark, whatever other sessions hold",
     );
   } finally {
-    clearDraft("draft-a");
-    clearDraft("draft-b");
+    clearDraft(sessionKey("draft-a"));
+    clearDraft(sessionKey("draft-b"));
     cleanup();
   }
 });
@@ -83,7 +90,7 @@ test("a mounted session row follows composer typing, attachment-only drafts and 
         row("composer-draft"),
         React.createElement(ChatInput, {
           ref: composer,
-          draftKey: "composer-draft",
+          draftKey: sessionKey("composer-draft"),
           isStreaming: false,
           onAbort() {},
           async onSend(text, _images, uploads) {
@@ -112,7 +119,7 @@ test("a mounted session row follows composer typing, attachment-only drafts and 
     assert.deepEqual(sent, [{ text: "", uploads: [uploadId()] }]);
   } finally {
     cleanup();
-    clearDraft("composer-draft");
+    clearDraft(sessionKey("composer-draft"));
     window.matchMedia = previousMatchMedia;
   }
 });

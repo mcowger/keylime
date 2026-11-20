@@ -258,11 +258,11 @@ test(
     const wrapper = fakeWrapper();
     globalThis.__ompSessions ??= new Map();
     globalThis.__ompSessions.set(
-      sessionId,
+      `local:${sessionId}`,
       wrapper as unknown as AgentSessionWrapper,
     );
     t.after(() => {
-      globalThis.__ompSessions?.delete(sessionId);
+      globalThis.__ompSessions?.delete(`local:${sessionId}`);
     });
     const tab = startWorker();
     tab.send({ op: "open", id: 1, channel: { kind: "session", sessionId } });
@@ -350,11 +350,11 @@ test(
     const wrapper = fakeWrapper();
     globalThis.__ompSessions ??= new Map();
     globalThis.__ompSessions.set(
-      sessionId,
+      `local:${sessionId}`,
       wrapper as unknown as AgentSessionWrapper,
     );
     t.after(() => {
-      globalThis.__ompSessions?.delete(sessionId);
+      globalThis.__ompSessions?.delete(`local:${sessionId}`);
     });
     const tab = startWorker();
     tab.send({ op: "open", id: 1, channel: { kind: "session", sessionId } });

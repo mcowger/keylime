@@ -16,8 +16,8 @@ function timed(receivedAt: number, res: Response): Response {
 /**
  * @apiContract sendAgentCommand
  * @apiUsage Send an RPC command or manage held messages for an existing session.
- * @apiInputs The bounded JSON body needs a nonempty type; advisor=1 selects the advisor spawn flag. For get_state only, optional hostId selects the session host and is not forwarded to omp. Upload proofs belong to the caller's web session and are attached before sending.
- * @apiInvariants Outbox commands are handled by the web outbox, not directly by omp: acceptance is not delivery. Status reconciliation accepts 1 to 32 unique client message IDs. Some background commands do not spawn a process. An explicit get_state host conflicts with a live wrapper on another host and is refused.
+ * @apiInputs The bounded JSON body needs a nonempty type; advisor=1 selects the advisor spawn flag. The optional hostId query selects the host, defaulting to local. Upload proofs belong to the caller's web session and are attached before sending.
+ * @apiInvariants Outbox commands are handled by the web outbox, not directly by omp: acceptance is not delivery. Status reconciliation accepts 1 to 32 unique client message IDs. Some background commands do not spawn a process.
  * @apiEffects Commands may start or replace an idle RPC process, mutate session state, attach files, or queue and dispatch messages; response timing headers are milliseconds since epoch.
  * @apiRecovery On uncertain delivery reconcile client message IDs and inspect session/outbox state before resending; a transport failure does not prove the command was not executed.
  */
@@ -39,10 +39,14 @@ export async function POST(
     // The per-chat advisor choice rides on the query string (never the RPC
     // body, which is forwarded to omp verbatim) and only matters when this
     // request spawns or replaces the session's omp process.
-    const advisor = new URL(req.url).searchParams.get("advisor") === "1";
+    const query = new URL(req.url).searchParams;
+    const advisor = query.get("advisor") === "1";
+    const hostId = query.get("hostId") ?? "local";
     return timed(
       receivedAt,
-      await runAgentCommand(id, body, advisor, requestOwner(req)),
+      await runAgentCommand(id, body, advisor, requestOwner(req), undefined, {
+        hostId,
+      }),
     );
   } catch (error) {
     return timed(receivedAt ?? Date.now(), commandErrorResponse(error));
@@ -53,19 +57,20 @@ export async function POST(
 /**
  * @apiContract getAgentState
  * @apiUsage Inspect the current web-owned RPC wrapper, not a durable session inventory.
- * @apiInputs id identifies the session; no body or query is used.
+ * @apiInputs id identifies the session; optional hostId selects the host, defaulting to local.
  * @apiInvariants A missing or dead wrapper returns running false; an unresponsive wrapper returns recovered true. This live request is not a cached transcript read.
  * @apiEffects A running wrapper receives get_state; no new process is spawned.
  * @apiRecovery For durable or exited state and held messages use session state; retry a read after connectivity or responsiveness recovers.
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
   try {
-    const session = getRpcSession(id);
+    const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
+    const session = getRpcSession(id, hostId);
     if (!session || !session.isAlive()) {
       return Response.json({ running: false });
     }

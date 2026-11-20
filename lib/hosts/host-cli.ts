@@ -1,20 +1,18 @@
 import { createHostControlServer, requestHostControl } from "./host-control";
 import type { HostDaemon } from "./daemon";
 import { runInstallArtifact } from "./install-artifact";
-import { ACTIVATION_WORKER, runManagedArtifactWorker } from "./managed-artifact-activation";
+import {
+  ACTIVATION_WORKER,
+  runManagedArtifactWorker,
+} from "./managed-artifact-activation";
 
-// `keylime host`: link this machine to web servers through ./daemon.
+// `keylime host`: link this machine to its controller through ./daemon.
 // Loaded by Bun's native TypeScript runtime and the compiled binary: no `@/` imports.
 // Tokens are read from stdin, never from argv.
-import {
-  addHostLink,
-  loginHost,
-  readHostLinks,
-  removeHostLink,
-} from "./host-login";
+import { loginHost, readHostLogin, removeHostLink } from "./host-login";
 
 const USAGE =
-  "Usage: keylime host login [--add] --url <server url>   (the host token is read from stdin)\n       keylime host logout --url <server url>\n       keylime host [--allow-http]\n       keylime host status|drain|drain-idle|drain-force|resume\n       keylime host install-artifact --help";
+  "Usage: keylime host login --url <server url>   (the host token is read from stdin)\n       keylime host logout --url <server url>\n       keylime host [--allow-http]\n       keylime host status|drain|drain-idle|drain-force|resume\n       keylime host install-artifact --help";
 
 /** A host token is 43 characters; anything this long is not one. */
 const MAX_TOKEN_LINE_BYTES = 4096;
@@ -48,29 +46,28 @@ function readTokenLine(): Promise<string> {
 
 async function main(argv: string[], signal?: AbortSignal): Promise<number> {
   if (argv[0] === "install-artifact") return runInstallArtifact(argv.slice(1));
-  if (argv[0] === ACTIVATION_WORKER) return runManagedArtifactWorker(argv.slice(1));
+  if (argv[0] === ACTIVATION_WORKER)
+    return runManagedArtifactWorker(argv.slice(1));
   if (argv[0] === "login" || argv[0] === "logout") {
-    const add = argv[0] === "login" && argv.includes("--add");
-    const args = add ? argv.filter((arg) => arg !== "--add") : argv;
     if (
-      args.length !== 3 ||
-      args[1] !== "--url" ||
-      !args[2] ||
-      args[2].startsWith("--") ||
-      argv.length !== (add ? 4 : 3)
+      argv.length !== 3 ||
+      argv[1] !== "--url" ||
+      !argv[2] ||
+      argv[2].startsWith("--")
     ) {
       console.error(USAGE);
       return 2;
     }
-    const url = args[2];
+    const url = argv[2];
     if (argv[0] === "logout") {
       await removeHostLink(url);
       console.log(`Removed the link to ${url}.`);
     } else {
       const link = { url, token: (await readTokenLine()).trim() };
-      if (add) await addHostLink(link);
-      else await loginHost(link);
-      console.log(`Saved. Run \`keylime host\` to link this machine to ${url}.`);
+      await loginHost(link);
+      console.log(
+        `Saved. Run \`keylime host\` to link this machine to ${url}.`,
+      );
     }
     return 0;
   }
@@ -91,7 +88,7 @@ async function main(argv: string[], signal?: AbortSignal): Promise<number> {
     console.error(USAGE);
     return 2;
   }
-  if (readHostLinks().length === 0) {
+  if (!readHostLogin()) {
     console.error(
       "This machine is not linked yet. Start keylime on this machine (it writes the link), or run `keylime host login --url <server url>`.",
     );

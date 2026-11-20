@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import {
   mkdtempSync,
   readFileSync,
@@ -10,7 +9,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
-import { fileURLToPath } from "node:url";
 
 const agentDir = mkdtempSync(join(tmpdir(), "keylime-local-bootstrap-test-"));
 const previous = process.env.PI_CODING_AGENT_DIR;
@@ -30,7 +28,6 @@ const hostJson = join(agentDir, "keylime", "host.json");
 const readLogin = (): {
   url: string;
   token: string;
-  links: Array<{ url: string; token: string }>;
 } => JSON.parse(readFileSync(hostJson, "utf8"));
 
 test("bootstrap writes host.json (0600) with the loopback url and a token the registry accepts as local", async () => {
@@ -41,7 +38,6 @@ test("bootstrap writes host.json (0600) with the loopback url and a token the re
   assert.deepEqual(readLogin(), {
     url: "http://127.0.0.1:30177",
     token,
-    links: [{ url: "http://127.0.0.1:30177", token }],
   });
   assert.equal(statSync(hostJson).mode & 0o777, 0o600);
   assert.equal(hostForToken(token)?.id, "local");
@@ -59,20 +55,13 @@ test("a second call with the same url keeps the token and does not rewrite", asy
   assert.equal(statSync(hostJson).mtimeMs, mtime);
 });
 
-test("staging adds its own url with the same token without moving production", async () => {
+test("bootstrap refuses to replace another loopback controller", async () => {
   const before = readLogin();
-  const { token, written } = await ensureLocalHostLink({
-    url: "http://127.0.0.1:40000",
-  });
-  assert.equal(written, true);
-  assert.deepEqual(readLogin(), {
-    ...before,
-    links: [
-      ...before.links,
-      { url: "http://127.0.0.1:40000", token: before.token },
-    ],
-  });
-  assert.equal(token, before.token);
+  await assert.rejects(
+    ensureLocalHostLink({ url: "http://127.0.0.1:40000" }),
+    /not to this server/,
+  );
+  assert.deepEqual(readLogin(), before);
 });
 
 test("a host.json token the registry does not know is replaced, keeping one local record", async () => {
@@ -90,81 +79,20 @@ test("a host.json token the registry does not know is replaced, keeping one loca
   assert.equal(loadHosts().filter((host) => host.id === "local").length, 1);
 });
 
-test("concurrent first bootstraps share one accepted local token and retain both URLs", async () => {
+test("concurrent first boots share one token", async () => {
   rmSync(hostJson);
-  const urls = ["http://127.0.0.1:30177", "http://127.0.0.1:40000"];
-  const results = await Promise.all(
-    urls.map((url) => ensureLocalHostLink({ url })),
-  );
-  assert.equal(results[0].token, results[1].token);
-  assert.equal(hostForToken(results[0].token)?.id, "local");
-  assert.deepEqual(
-    new Set(readLogin().links.map((link) => link.url)),
-    new Set(urls),
-  );
-});
-
-test(
-  "simultaneous fresh bootstrap processes retain both links with one accepted local token",
-  { timeout: 20_000 },
-  async (t) => {
-    rmSync(hostJson);
-    const module = fileURLToPath(
-      new URL("./local-bootstrap.ts", import.meta.url),
-    );
-    const source = `const { ensureLocalHostLink } = await import(process.env.BOOTSTRAP_MODULE); await ensureLocalHostLink({ url: process.env.BOOTSTRAP_URL });`;
-    const urls = ["http://127.0.0.1:30177", "http://127.0.0.1:40000"];
-    await Promise.all(
-      urls.map((url) => {
-        const child = spawn(process.execPath, ["-e", source], {
-          env: {
-            ...process.env,
-            PI_CODING_AGENT_DIR: agentDir,
-            BOOTSTRAP_MODULE: module,
-            BOOTSTRAP_URL: url,
-          },
-          stdio: ["ignore", "pipe", "pipe"],
-        });
-        t.after(() => child.kill("SIGKILL"));
-        let stderr = "";
-        child.stderr.on("data", (chunk) => {
-          stderr += chunk;
-        });
-        const { promise, resolve, reject } = Promise.withResolvers<void>();
-        child.once("error", reject);
-        child.once("close", (code) =>
-          code === 0
-            ? resolve()
-            : reject(new Error(`bootstrap exited ${code}: ${stderr}`)),
-        );
-        return promise;
-      }),
-    );
-    const { links } = readLogin();
-    assert.deepEqual(new Set(links.map((link) => link.url)), new Set(urls));
-    assert.equal(new Set(links.map((link) => link.token)).size, 1);
-    assert.equal(hostForToken(links[0].token)?.id, "local");
-  },
-);
-
-test("a valid secondary token is reused even if the legacy primary token is stale", async () => {
-  const current = readLogin();
-  writeFileSync(hostJson, JSON.stringify({ ...current, token: "stale" }));
-  const { token, written } = await ensureLocalHostLink({
-    url: "http://127.0.0.1:41000",
-  });
-  assert.equal(hostForToken(token)?.id, "local");
-  assert.equal(token, current.links[0].token);
-  assert.equal(written, true);
-  assert.equal(
-    readLogin().token,
-    "stale",
-    "bootstrap never changes the legacy primary",
-  );
+  const url = "http://127.0.0.1:30177";
+  const [a, b] = await Promise.all([
+    ensureLocalHostLink({ url }),
+    ensureLocalHostLink({ url }),
+  ]);
+  assert.equal(a.token, b.token);
+  assert.equal(hostForToken(a.token)?.id, "local");
+  assert.deepEqual(readLogin(), { url, token: a.token });
 });
 
 test("malformed host.json is left untouched before any local token rotation", async () => {
-  const token = readLogin().links[0].token;
+  const token = readLogin().token;
   writeFileSync(hostJson, "{broken");
   await assert.rejects(ensureLocalHostLink({ url: "http://127.0.0.1:40000" }), {
     name: "HostLoginUnreadableError",

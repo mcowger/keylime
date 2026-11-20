@@ -52,7 +52,7 @@ function sessionsErrorResponse(error: unknown): Response {
 /**
  * @apiContract getSession
  * @apiUsage Read a session's persisted transcript from its owning host, optionally with live agent state.
- * @apiInputs id selects the session; deferThinking and deferMedia defer payloads; includeState requests live wrapper state. tail selects the newest 1–200 display entries, and before plus historyRevision selects an exclusive preceding page.
+ * @apiInputs id selects the session; deferThinking and deferMedia defer payloads; includeState requests live wrapper state. tail selects the newest 1–200 display entries, and before plus historyRevision selects an exclusive preceding page. Optional hostId selects the host; omission selects local.
  * @apiInvariants Tail pages are chronological on the active branch, without overlap. Continuations omit session metadata and navigation tree. historyRevision identifies the file generation; a stale revision or missing active cursor returns 409 session_history_changed. Without tail the full transcript is returned. agent is omitted if its live state request fails. Disk and live state are not an atomic snapshot.
  * @apiEffects Reads host session storage and may send get_state to an existing wrapper; it does not start a process.
  * @apiRecovery On session_history_changed discard partial pages and synchronize again. Fetch agent state separately when omitted; retry reads when the host is available.
@@ -62,8 +62,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
   try {
-    const resolved = await resolveSessionHostOr404(id);
+    const resolved = await resolveSessionHostOr404(id, hostId);
     if ("response" in resolved) return resolved.response;
 
     const searchParams = new URL(req.url).searchParams;
@@ -71,10 +72,26 @@ export async function GET(
     const tailRaw = searchParams.get("tail");
     const before = searchParams.get("before");
     const historyRevision = searchParams.get("historyRevision");
-    if ((tailRaw !== null && (!/^[1-9]\d*$/.test(tailRaw) || Number(tailRaw) > 200)) ||
-        (before !== null && (!tailRaw || !historyRevision || before.length === 0 || before.length > 256)) ||
-        (historyRevision !== null && (before === null || historyRevision.length === 0 || historyRevision.length > 256))) {
-      return Response.json({ code: "invalid_history_page", error: "Invalid session history page parameters" }, { status: 400 });
+    if (
+      (tailRaw !== null &&
+        (!/^[1-9]\d*$/.test(tailRaw) || Number(tailRaw) > 200)) ||
+      (before !== null &&
+        (!tailRaw ||
+          !historyRevision ||
+          before.length === 0 ||
+          before.length > 256)) ||
+      (historyRevision !== null &&
+        (before === null ||
+          historyRevision.length === 0 ||
+          historyRevision.length > 256))
+    ) {
+      return Response.json(
+        {
+          code: "invalid_history_page",
+          error: "Invalid session history page parameters",
+        },
+        { status: 400 },
+      );
     }
     const read = await resolved.host.sessionOps.readSession(id, {
       deferThinking: searchParams.has("deferThinking"),
@@ -91,7 +108,7 @@ export async function GET(
     // callers treat a missing `agent` as "fetch it separately".
     let agent: { running: boolean; state?: unknown } | undefined;
     if (includeState) {
-      const rpc = getRpcSession(id);
+      const rpc = getRpcSession(id, hostId);
       if (rpc?.isAlive()) {
         try {
           agent = {
@@ -121,7 +138,7 @@ export async function GET(
 /**
  * @apiContract renameSession
  * @apiUsage Set a session title on its owning process or persisted file.
- * @apiInputs JSON name must be nonblank; surrounding whitespace is removed. The request is limited to 64 KiB.
+ * @apiInputs JSON name must be nonblank; surrounding whitespace is removed. The request is limited to 64 KiB. Optional hostId selects the host; omission selects local.
  * @apiInvariants A live process owns its file; a busy history edit fences fallback file writes. A new live session can be renamed before its file exists.
  * @apiEffects Sends set_session_name to the live process or updates the host file and invalidates session lists.
  * @apiRecovery Wait for a busy edit to finish; after a lost response read the current title before deciding whether to retry.
@@ -131,6 +148,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
   try {
     const { name } = await parseJsonWithinLimit<{ name?: string }>(
       req,
@@ -147,7 +165,7 @@ export async function PATCH(
     // before the path check because omp does not create the session file until
     // the history holds an assistant message.
     let renamed = false;
-    const rpc = getRpcSession(id);
+    const rpc = getRpcSession(id, hostId);
     if (rpc?.isAlive?.() && typeof rpc.send === "function") {
       try {
         await rpc.send({ type: "set_session_name", name: name.trim() });
@@ -159,11 +177,11 @@ export async function PATCH(
       }
     }
     if (!renamed) {
-      const resolved = await resolveSessionHostOr404(id);
+      const resolved = await resolveSessionHostOr404(id, hostId);
       if ("response" in resolved) return resolved.response;
       // Resolution awaited: an Edit may have started on the current wrapper
       // since the failed native rename. Never bypass its fence with a file write.
-      if (getRpcSession(id)?.isEditingHistory()) {
+      if (getRpcSession(id, hostId)?.isEditingHistory()) {
         throw new WebRpcError(
           "Wait for the history edit to finish",
           "session_busy",
@@ -188,45 +206,46 @@ export async function PATCH(
 /**
  * @apiContract deleteSession
  * @apiUsage Permanently remove an active session from its owning host.
- * @apiInputs id identifies the session; no body is used.
+ * @apiInputs id identifies the session; no body is used. Optional hostId selects the host; omission selects local.
  * @apiInvariants The host must be online; the live child is stopped and flushed before deletion. Live children are excluded from on-disk reparenting because their processes own their files.
  * @apiEffects Deletes the session, updates eligible child references, clears exited state and invalidates the host list; unpinned replacement metadata is cleaned up best-effort.
  * @apiRecovery A lost response may follow deletion; inspect the owning host before retrying. Offline or failed discovery is not evidence of deletion.
  */
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
   try {
-    const resolved = await resolveSessionHostOr404(id);
+    const resolved = await resolveSessionHostOr404(id, hostId);
     if ("response" in resolved) return resolved.response;
     // Await the child's exit before unlinking: omp flushes session state on
     // shutdown and would recreate the file if it were still running.
     // Disposing a child behind a down link would wait for the link to return.
     const offline = hostOfflineResponse(resolved.host);
     if (offline) return offline;
-    const live = getRpcSession(id);
+    const live = getRpcSession(id, hostId);
     if (!live?.hostOwnedLifecycle) await live?.destroyAndWait?.("delete", true);
     // Live children are skipped by the re-parent rewrite: their omp process
     // owns the file and would clobber it on its next flush.
     const result = await resolved.host.sessionOps.deleteSession(
       id,
-      getLiveRpcSessionIds(),
+      getLiveRpcSessionIds(hostId),
     );
     if (!result.ok) return opErrorResponse(result);
     // Upstream retry lineages outlive settled rows to prevent duplicate sends.
     // Once deletion succeeds, discard only this session's unpinned metadata;
     // cleanup failure must not turn a successfully deleted session into an error.
     try {
-      forgetSessionReplacementMappings(id);
+      forgetSessionReplacementMappings(id, hostId);
     } catch (error) {
       console.warn(
         `[api/sessions] could not clear deleted-session retry metadata: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
     invalidateHostSessionList(resolved.host.id);
-    clearExitedRpcSession(id);
+    clearExitedRpcSession(id, hostId);
     return Response.json({ ok: true, ...result.value });
   } catch (error) {
     return sessionsErrorResponse(error);

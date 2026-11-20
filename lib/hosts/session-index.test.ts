@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -18,6 +17,8 @@ import {
 } from "./link-driver.test-helper.ts";
 import type { LinkDriver } from "./link-driver.test-helper.ts";
 import type { HierarchyRequest } from "../project-hierarchy-types.ts";
+import { GET as searchTranscripts } from "../../app/api/sessions/search/route.ts";
+import { FIRST_MESSAGE_WEIGHT } from "../session-search.ts";
 
 type Handlers = Parameters<LinkDriver["serve"]>[0];
 
@@ -70,7 +71,8 @@ function setup(
   const links: LinkDriver[] = [];
   t.after(async () => {
     outbox.closeOutboxStore();
-    await getRpcSession(SHARED)?.destroyAndWait();
+    for (const { id } of links)
+      await getRpcSession(SHARED, id)?.destroyAndWait();
     closeNotificationStore();
     for (const link of links) hub.closeHostLink(link.id);
     Object.assign(hub.linkTimings, defaultTimings);
@@ -212,26 +214,97 @@ function serveQueuedSession(
   return { queued, commands };
 }
 
-test("an id on this machine and a remote host is listed once, as local", async (t) => {
+test("the same session id is listed and resolved separately on local and remote hosts", async (t) => {
+  hub.linkTimings.offlineMs = 30;
   const link = setup(t);
+  let localLists = 0;
+  let remoteLists = 0;
   await link(null, {
     hierarchy: hierarchy("/remote/project", [SHARED]),
-    listSessions: () => [entry(SHARED)],
+    listSessions: () => {
+      localLists += 1;
+      return [entry(SHARED)];
+    },
   });
   const remote = await link("Remote", {
     hierarchy: hierarchy("/remote/project", [SHARED, OTHER]),
-    listSessions: () => [entry(SHARED), entry(OTHER)],
+    listSessions: () => {
+      remoteLists += 1;
+      return [entry(SHARED), entry(OTHER)];
+    },
   });
   const sessions = await index.listSessionsAllHosts();
   assert.deepEqual(
     sessions.map((s) => [s.id, s.hostId]),
     [
       [SHARED, "local"],
+      [SHARED, remote.id],
       [OTHER, remote.id],
     ],
   );
-  assert.equal((await index.hostForSessionId(SHARED))?.id, "local");
-  assert.equal((await index.hostForSessionId(OTHER))?.id, remote.id);
+  index.invalidateHostSessionList("local");
+  index.invalidateHostSessionList(remote.id);
+  localLists = remoteLists = 0;
+  assert.equal((await index.hostForSessionId(SHARED, "local"))?.id, "local");
+  assert.equal(localLists, 1, "local lookup refreshes the selected daemon");
+  assert.equal(remoteLists, 0, "local lookup never queries the remote daemon");
+  localLists = 0;
+  assert.equal(
+    (await index.hostForSessionId(SHARED, remote.id))?.id,
+    remote.id,
+  );
+  assert.equal(remoteLists, 1, "remote lookup refreshes the selected daemon");
+  assert.equal(localLists, 0, "remote lookup never queries the local daemon");
+  assert.equal(await index.hostForSessionId(OTHER, "local"), null);
+  assert.equal((await index.hostForSessionId(OTHER, remote.id))?.id, remote.id);
+  hub.closeHostLink(remote.id);
+  assert.equal((await index.hostForSessionId(SHARED, "local"))?.id, "local");
+  localLists = 0;
+  await assert.rejects(index.hostForSessionId(SHARED, remote.id), {
+    code: "host_offline",
+  });
+  assert.equal(
+    localLists,
+    0,
+    "offline remote lookup never falls back to local",
+  );
+});
+
+test("transcript search scores only the locally registered copy of a shared session id", async (t) => {
+  const link = setup(t, { localSessionId: SHARED });
+  let localSessionIds = [SHARED];
+  await link(null, {
+    hierarchy: () => hierarchy("/local/project", localSessionIds)(),
+    listSessions: () => [entry(SHARED)],
+  });
+  await link("Remote", {
+    hierarchy: hierarchy("/remote/project", [SHARED]),
+    listSessions: () => [entry(SHARED)],
+  });
+  const search = async () => {
+    const response = await searchTranscripts(
+      new Request("http://main.test/app/api/sessions/search?q=hello"),
+      { disableIdleTimeout() {} },
+    );
+    assert.equal(response.status, 200);
+    assert.match(
+      response.headers.get("Content-Type") ?? "",
+      /^application\/x-ndjson\b/,
+    );
+    return (await response.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+  };
+  assert.deepEqual(await search(), [
+    {
+      scores: [
+        { hostId: "local", sessionId: SHARED, score: FIRST_MESSAGE_WEIGHT },
+      ],
+    },
+  ]);
+  localSessionIds = [];
+  assert.deepEqual(await search(), [{ scores: [] }]);
 });
 
 test("this machine's sessions come from its daemon only, never from the files on disk", async (t) => {
@@ -272,7 +345,7 @@ test("this machine's sessions come from its daemon only, never from the files on
   });
 });
 
-test("an id no host lists is gone only once this machine's daemon has answered a list", async (t) => {
+test("a missing local session is authoritative only after the local daemon answers a list", async (t) => {
   const link = setup(t);
   let failing = true;
   await link(null, {
@@ -315,10 +388,10 @@ test("a cold-cache remote session is unavailable, not missing, while only the lo
   assert.equal(
     hub.getHost("local")?.status(),
     "online",
-    "only the remote session owner is offline",
+    "only the selected remote daemon is offline",
   );
   globalThis.__ompHostLists = undefined;
-  const result = await resolveSessionHostOr404(SHARED);
+  const result = await resolveSessionHostOr404(SHARED, remote.id);
   assert.ok("response" in result);
   const { response } = result;
   assert.equal(
@@ -369,26 +442,33 @@ test("a cold-cache outbox message survives main restart and reaches its remote q
     },
     false,
     "owner",
+    { hostId: remote.id },
   );
   assert.equal(response.status, 200, await response.clone().text());
   await until(
-    () => outbox.outboxEntries(SHARED)[0]?.state === "waiting_host",
+    () => outbox.outboxEntries(SHARED, remote.id)[0]?.state === "waiting_host",
     "durable host wait",
   );
   outbox.closeOutboxStore();
   globalThis.__ompHostLists = undefined;
   assert.equal(
-    outbox.outboxEntries(SHARED)[0].message,
+    outbox.outboxEntries(SHARED, remote.id)[0].message,
     "retain my message",
     "the accepted payload survives SQLite reopening",
   );
   const waiting = Promise.withResolvers<void>();
-  const unwatch = outbox.onOutboxChange(SHARED, (entries) => {
-    if (
-      entries.some((entry) => entry.id === id && entry.state === "waiting_host")
-    )
-      waiting.resolve();
-  });
+  const unwatch = outbox.onOutboxChange(
+    SHARED,
+    (entries) => {
+      if (
+        entries.some(
+          (entry) => entry.id === id && entry.state === "waiting_host",
+        )
+      )
+        waiting.resolve();
+    },
+    remote.id,
+  );
   t.after(unwatch);
   outbox.startOutbox();
   await waiting.promise;
@@ -397,7 +477,7 @@ test("a cold-cache outbox message survives main restart and reaches its remote q
     entry(SHARED),
   ]);
   await until(
-    () => outbox.outboxSettlements(SHARED).settledIds.includes(id),
+    () => outbox.outboxSettlements(SHARED, remote.id).settledIds.includes(id),
     "confirmed remote queue handoff",
   );
   assert.deepEqual(queued, ["retain my message"]);
@@ -407,17 +487,18 @@ test("a cold-cache outbox message survives main restart and reaches its remote q
     "recovery never creates a second native submission",
   );
   assert.equal(
-    getRpcSession(SHARED)?.host.id,
+    getRpcSession(SHARED, remote.id)?.host.id,
     remote.id,
-    "the local daemon cannot claim an undiscovered remote session",
+    "the destination daemon owns the recovered queue handoff",
   );
-  assert.deepEqual(outbox.outboxEntries(SHARED), []);
-  const absent = await resolveSessionHostOr404(OTHER);
+  assert.equal(getRpcSession(SHARED, local.id), undefined);
+  assert.deepEqual(outbox.outboxEntries(SHARED, remote.id), []);
+  const absent = await resolveSessionHostOr404(OTHER, remote.id);
   assert.ok("response" in absent);
   assert.equal(
     absent.response.status,
     404,
-    "complete successful host lists still prove genuine absence",
+    "the destination's successful list still proves genuine absence",
   );
   outbox.closeOutboxStore();
   const replay = await outbox.runOutboxCommand(
@@ -431,6 +512,7 @@ test("a cold-cache outbox message survives main restart and reaches its remote q
     },
     false,
     "owner",
+    { hostId: remote.id },
   );
   assert.equal((await replay.json()).data.entry.state, "delivered");
   assert.equal(
@@ -452,7 +534,7 @@ test("a failed remote refresh cannot turn a stale negative list into authoritati
   });
   await index.listSessionsAllHosts();
   failing = true;
-  const unavailable = await resolveSessionHostOr404(SHARED);
+  const unavailable = await resolveSessionHostOr404(SHARED, remote.id);
   assert.ok("response" in unavailable);
   assert.equal(
     unavailable.response.status,
@@ -460,12 +542,12 @@ test("a failed remote refresh cannot turn a stale negative list into authoritati
     "a failed refresh does not prove a missing session was deleted",
   );
   assert.equal(
-    (await index.hostForSessionId(OTHER))?.id,
+    (await index.hostForSessionId(OTHER, remote.id))?.id,
     remote.id,
     "positive cached routing remains usable",
   );
   failing = false;
-  const missing = await resolveSessionHostOr404(SHARED);
+  const missing = await resolveSessionHostOr404(SHARED, remote.id);
   assert.ok("response" in missing);
   assert.equal(missing.response.status, 404);
 });
@@ -488,15 +570,19 @@ test(
     const failedDiscovery = Promise.withResolvers<void>();
     const handedOff = Promise.withResolvers<void>();
     const id = "linked-list-recovery";
-    const unwatch = outbox.onOutboxChange(SHARED, (entries) => {
-      if (
-        requests >= 4 &&
-        entries.some((entry) => entry.id === id && entry.state === "held")
-      )
-        failedDiscovery.resolve();
-      if (outbox.outboxSettlements(SHARED).settledIds.includes(id))
-        handedOff.resolve();
-    });
+    const unwatch = outbox.onOutboxChange(
+      SHARED,
+      (entries) => {
+        if (
+          requests >= 4 &&
+          entries.some((entry) => entry.id === id && entry.state === "held")
+        )
+          failedDiscovery.resolve();
+        if (outbox.outboxSettlements(SHARED, remote.id).settledIds.includes(id))
+          handedOff.resolve();
+      },
+      remote.id,
+    );
     t.after(unwatch);
     outbox.startOutbox();
     const response = await outbox.runOutboxCommand(
@@ -510,6 +596,7 @@ test(
       },
       false,
       "owner",
+      { hostId: remote.id },
     );
     assert.equal(response.status, 200, await response.clone().text());
     await failedDiscovery.promise;
@@ -664,24 +751,6 @@ test("projects list this machine's daemon first, then linked hosts", async (t) =
   );
 });
 
-test("an id on two remote hosts only is listed under the first host by label", async (t) => {
-  const link = setup(t);
-  await link("b-mac", {
-    hierarchy: hierarchy("/remote/project", [SHARED]),
-    listSessions: () => [entry(SHARED)],
-  });
-  const aVm = await link("A-vm", {
-    hierarchy: hierarchy("/remote/project", [SHARED]),
-    listSessions: () => [entry(SHARED)],
-  });
-  const sessions = await index.listSessionsAllHosts();
-  assert.deepEqual(
-    sessions.map((s) => [s.id, s.hostId]),
-    [[SHARED, aVm.id]],
-  );
-  assert.equal((await index.hostForSessionId(SHARED))?.id, aVm.id);
-});
-
 test("an offline host keeps its last list", async (t) => {
   hub.linkTimings.offlineMs = 30;
   const link = setup(t);
@@ -721,20 +790,6 @@ test("malformed remote entries are dropped and keep only known fields", async (t
   assert.deepEqual(JSON.parse(JSON.stringify(sessions)), [
     { ...entry(OTHER), hostId: remote.id },
   ]);
-});
-
-test("fetchMediaFromHosts skips a host whose bytes do not hash to the requested hash", async (t) => {
-  const link = setup(t);
-  const image = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
-  const hash = createHash("sha256").update(image).digest("hex");
-  await link("Liar", {
-    readMedia: () => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9]),
-  });
-  assert.equal(await index.fetchMediaFromHosts(hash), null);
-  await link("Honest", {
-    readMedia: ({ hash: asked }) => (asked === hash ? image : new Uint8Array()),
-  });
-  assert.deepEqual([...(await index.fetchMediaFromHosts(hash))!], [...image]);
 });
 
 test("a route given an unknown hostId answers 404, a host that is not linked 503", async (t) => {
@@ -781,13 +836,15 @@ test("a remote host's session export is always an attachment, even with inline=1
   const link = setup(t);
   // Daemon output is untrusted: inline, this HTML would run on main's origin.
   const html = '<script>fetch("/api/projects")</script>';
-  await link("Hostile", {
+  const remote = await link("Hostile", {
     listSessions: () => [entry(OTHER)],
     exportSession: () => ({ ok: true, value: { html, fileName: "x.html" } }),
   });
   const { GET } = await import("../../app/api/sessions/[id]/export/route.ts");
   const response = await GET(
-    new Request(`http://main.test/api/sessions/${OTHER}/export?inline=1`),
+    new Request(
+      `http://main.test/api/sessions/${OTHER}/export?inline=1&hostId=${remote.id}`,
+    ),
     { params: Promise.resolve({ id: OTHER }) },
   );
   assert.equal(response.status, 200);
@@ -835,7 +892,7 @@ const archiveInfo = (id: string) => ({
   firstMessage: "hi",
   size: 10,
 });
-const addTo = (sessionId: string, id: string) =>
+const addTo = (sessionId: string, id: string, hostId: string) =>
   outbox.runOutboxCommand(
     sessionId,
     {
@@ -847,47 +904,50 @@ const addTo = (sessionId: string, id: string) =>
     },
     false,
     "owner",
+    { hostId },
   );
-const settled = (calls: () => number, count: number) => () =>
-  calls() >= count && !globalThis.__ompOutbox!.busy.has(SHARED);
+const outboxState = (hostId: string) =>
+  globalThis.__keylimeHostOutboxes!.get(hostId)!.state;
+const settled = (calls: () => number, count: number, hostId: string) => () =>
+  calls() >= count && !outboxState(hostId).busy.has(SHARED);
 
 test("a session archived on a linked host keeps its message held, and a message for a gone session is still refused", async (t) => {
   const link = setup(t);
   await link(null, { listSessions: () => [] });
   let archives = [archiveInfo(SHARED)];
   let archiveCalls = 0;
-  await link("Laptop", {
+  const remote = await link("Laptop", {
     listSessions: () => [],
     listArchives: () => {
       archiveCalls += 1;
       return archives;
     },
   });
-  const response = await addTo(SHARED, "remote-archived");
+  const response = await addTo(SHARED, "remote-archived", remote.id);
   assert.equal(response.status, 200, await response.clone().text());
   await until(
-    settled(() => archiveCalls, 2),
+    settled(() => archiveCalls, 2, remote.id),
     "the add and the dispatcher both read the host's archive",
   );
-  const [held] = outbox.outboxEntries(SHARED);
+  const [held] = outbox.outboxEntries(SHARED, remote.id);
   assert.equal(
     held.state,
     "held",
     "archived there, not gone: it waits for a restore instead of failing",
   );
   assert.equal(
-    globalThis.__ompOutbox?.retries?.size ?? 0,
+    outboxState(remote.id).retries?.size ?? 0,
     0,
     "waiting for a restore is not a timed retry",
   );
 
   archives = [];
-  outbox.pumpOutbox(SHARED);
+  outbox.pumpOutbox(SHARED, remote.id);
   await until(
-    () => outbox.outboxEntries(SHARED)[0]?.state === "failed",
-    "failed once no host archives it",
+    () => outbox.outboxEntries(SHARED, remote.id)[0]?.state === "failed",
+    "failed once the destination no longer archives it",
   );
-  const gone = await addTo(SHARED, "remote-gone");
+  const gone = await addTo(SHARED, "remote-gone", remote.id);
   assert.equal(gone.status, 404);
   assert.equal((await gone.json()).code, "session_not_found");
 });
@@ -898,46 +958,46 @@ test("a host that cannot list its archive is never proof the session is gone; a 
   await link(null, { listSessions: () => [] });
   let calls = 0;
   let failure = new Error("archive temporarily unreadable");
-  await link("Flaky", {
+  const remote = await link("Flaky", {
     listSessions: () => [],
     listArchives: () => {
       calls += 1;
       throw failure;
     },
   });
-  const response = await addTo(SHARED, "archive-unknown");
+  const response = await addTo(SHARED, "archive-unknown", remote.id);
   assert.equal(response.status, 200, await response.clone().text());
   await until(
-    settled(() => calls, 2),
+    settled(() => calls, 2, remote.id),
     "the add and the dispatcher both asked the failing host",
   );
   assert.equal(
-    outbox.outboxEntries(SHARED)[0].state,
+    outbox.outboxEntries(SHARED, remote.id)[0].state,
     "held",
     "neither failed nor discarded",
   );
   assert.equal(
-    globalThis.__ompOutbox!.retries!.size,
+    outboxState(remote.id).retries!.size,
     1,
     "a failure that may pass is tried again later",
   );
 
   // As an older daemon answers the op it does not know: it may hold archives it cannot list, so the message is not
   // failed, and nothing changes until that host's next hello, so no timer polls it.
-  for (const timer of globalThis.__ompOutbox!.retries!) clearTimeout(timer);
-  globalThis.__ompOutbox!.retries!.clear();
+  for (const timer of outboxState(remote.id).retries!) clearTimeout(timer);
+  outboxState(remote.id).retries!.clear();
   failure = new HostOpError(501, "unknown_op", "Unknown host op: listArchives");
   calls = 0;
-  outbox.pumpOutbox(SHARED);
+  outbox.pumpOutbox(SHARED, remote.id);
   await until(
-    () => outbox.outboxEntries(SHARED)[0]?.state === "waiting_host",
+    () => outbox.outboxEntries(SHARED, remote.id)[0]?.state === "waiting_host",
     "waits for the host's next hello",
   );
   assert.equal(calls, 1, "asked once");
-  assert.equal(globalThis.__ompOutbox!.retries!.size, 0, "no retry timer");
+  assert.equal(outboxState(remote.id).retries!.size, 0, "no retry timer");
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(calls, 1, "and not asked again");
-  assert.equal(outbox.outboxEntries(SHARED)[0].error, undefined);
+  assert.equal(outbox.outboxEntries(SHARED, remote.id)[0].error, undefined);
 });
 
 test("a restore completing after its RPC timeout wakes only its now-active session through sessions_changed, without another hello", async (t) => {
@@ -972,17 +1032,17 @@ test("a restore completing after its RPC timeout wakes only its now-active sessi
     },
   );
   outbox.startOutbox();
-  assert.equal((await addTo(SHARED, "late-restored")).status, 200);
+  assert.equal((await addTo(SHARED, "late-restored", remote.id)).status, 200);
   await until(
-    settled(() => archiveCalls, 2),
+    settled(() => archiveCalls, 2, remote.id),
     "archived message held",
   );
-  assert.equal((await addTo(OTHER, "still-archived")).status, 200);
+  assert.equal((await addTo(OTHER, "still-archived", remote.id)).status, 200);
   await until(
-    () => !globalThis.__ompOutbox!.busy.has(OTHER),
+    () => !outboxState(remote.id).busy.has(OTHER),
     "unrelated archived message held",
   );
-  assert.equal(globalThis.__ompOutbox?.retries?.size ?? 0, 0);
+  assert.equal(outboxState(remote.id).retries?.size ?? 0, 0);
   const { POST } = await import("../../app/api/sessions/archive/route.ts");
   hub.linkTimings.opTimeoutMs = 100;
   const request = POST(
@@ -1004,12 +1064,15 @@ test("a restore completing after its RPC timeout wakes only its now-active sessi
   Object.assign(hub.linkTimings, defaultTimings);
   finish.resolve();
   await until(
-    () => outbox.outboxSettlements(SHARED).settledIds.includes("late-restored"),
+    () =>
+      outbox
+        .outboxSettlements(SHARED, remote.id)
+        .settledIds.includes("late-restored"),
     "late restore event wakes delivery",
   );
   assert.deepEqual(queued, ["for an archived session"]);
   assert.equal(commands.length, 1);
-  assert.equal(outbox.outboxEntries(OTHER)[0].state, "held");
+  assert.equal(outbox.outboxEntries(OTHER, remote.id)[0].state, "held");
   assert.equal(
     archiveCalls,
     before,
@@ -1052,21 +1115,28 @@ test(
       },
     );
     outbox.startOutbox();
-    assert.equal((await addTo(SHARED, "event-list-race")).status, 200);
+    assert.equal(
+      (await addTo(SHARED, "event-list-race", remote.id)).status,
+      200,
+    );
     await until(
-      settled(() => archiveCalls, 2),
+      settled(() => archiveCalls, 2, remote.id),
       "archived entry held",
     );
     const receipt = Promise.withResolvers<void>();
     t.after(
-      outbox.onOutboxChange(SHARED, () => {
-        if (
-          outbox
-            .outboxSettlements(SHARED)
-            .settledIds.includes("event-list-race")
-        )
-          receipt.resolve();
-      }),
+      outbox.onOutboxChange(
+        SHARED,
+        () => {
+          if (
+            outbox
+              .outboxSettlements(SHARED, remote.id)
+              .settledIds.includes("event-list-race")
+          )
+            receipt.resolve();
+        },
+        remote.id,
+      ),
     );
     phase = "pending";
     await remote.post({ type: "sessions_changed" });
@@ -1074,10 +1144,6 @@ test(
     active = true;
     await remote.post({ type: "sessions_changed" });
     pending.resolve();
-    await until(
-      () => globalThis.__ompOutbox?.retries?.size === 1,
-      "failed list schedules a retry",
-    );
     await receipt.promise;
     assert.equal(commands.length, 1);
   },
@@ -1113,18 +1179,21 @@ test("a restored-session event defers one wake while dispatch is blocked on a st
     pending.resolve();
   });
   outbox.startOutbox();
-  assert.equal((await addTo(SHARED, "busy-restored")).status, 200);
+  assert.equal((await addTo(SHARED, "busy-restored", remote.id)).status, 200);
   await captured.promise;
-  assert.equal(globalThis.__ompOutbox!.busy.has(SHARED), true);
+  assert.equal(outboxState(remote.id).busy.has(SHARED), true);
   active = true; // restore has completed on the daemon, but dispatch still holds the archived snapshot
   await remote.post({ type: "sessions_changed" });
   await until(
-    () => globalThis.__ompOutbox!.wakes!.has(SHARED),
+    () => outboxState(remote.id).wakes!.has(SHARED),
     "event records a wake for the busy dispatcher",
   );
   pending.resolve();
   await until(
-    () => outbox.outboxSettlements(SHARED).settledIds.includes("busy-restored"),
+    () =>
+      outbox
+        .outboxSettlements(SHARED, remote.id)
+        .settledIds.includes("busy-restored"),
     "claim release consumes the deferred wake",
   );
   assert.equal(
@@ -1133,11 +1202,11 @@ test("a restored-session event defers one wake while dispatch is blocked on a st
     "exactly one delivery, without another event or hello",
   );
   assert.equal(
-    globalThis.__ompOutbox?.retries?.size ?? 0,
+    outboxState(remote.id).retries?.size ?? 0,
     0,
     "no retry timer wakes it",
   );
-  assert.equal(globalThis.__ompOutbox!.wakes!.has(SHARED), false);
+  assert.equal(outboxState(remote.id).wakes!.has(SHARED), false);
 });
 
 test("failed session-change listings keep at most one retry per host, and a successful event cancels it", async (t) => {
@@ -1161,28 +1230,31 @@ test("failed session-change listings keep at most one retry per host, and a succ
     },
   });
   outbox.startOutbox();
-  assert.equal((await addTo(SHARED, "retry-coalesced")).status, 200);
+  assert.equal((await addTo(SHARED, "retry-coalesced", remote.id)).status, 200);
   await until(
-    settled(() => archives, 2),
+    settled(() => archives, 2, remote.id),
     "archived entry held",
   );
   eventMode = true;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     await remote.post({ type: "sessions_changed" });
     await until(
-      () =>
-        eventLists === attempt && globalThis.__ompOutbox?.retries?.size === 1,
-      "one retry for this host after each failure",
+      () => eventLists === attempt,
+      "one listing for each host event",
     );
   }
   failing = false;
   await remote.post({ type: "sessions_changed" });
-  await until(
-    () => eventLists === 4 && globalThis.__ompOutbox!.retries!.size === 0,
-    "successful listing cancels the outstanding retry",
+  await until(() => eventLists === 4, "the successful event is listed");
+  // Real loopback RPC remains live while the retry's wall-clock deadline passes.
+  await Bun.sleep(outbox.RETRY_MS + 50);
+  assert.equal(
+    eventLists,
+    4,
+    "the successful event cancels the scheduled retry",
   );
   assert.equal(
-    outbox.outboxEntries(SHARED)[0].state,
+    outbox.outboxEntries(SHARED, remote.id)[0].state,
     "held",
     "still archived, so no dispatch",
   );
@@ -1223,27 +1295,34 @@ for (const event of [false, true]) {
       });
       const receipt = Promise.withResolvers<void>();
       t.after(
-        outbox.onOutboxChange(SHARED, (entries) => {
-          assert.ok(
-            entries.every((entry) => entry.state !== "failed"),
-            "a restore must never turn the unsent intent into Not sent",
-          );
-          if (
-            outbox
-              .outboxSettlements(SHARED)
-              .settledIds.includes("restore-between-reads")
-          )
-            receipt.resolve();
-        }),
+        outbox.onOutboxChange(
+          SHARED,
+          (entries) => {
+            assert.ok(
+              entries.every((entry) => entry.state !== "failed"),
+              "a restore must never turn the unsent intent into Not sent",
+            );
+            if (
+              outbox
+                .outboxSettlements(SHARED, remote.id)
+                .settledIds.includes("restore-between-reads")
+            )
+              receipt.resolve();
+          },
+          remote.id,
+        ),
       );
       outbox.startOutbox();
-      assert.equal((await addTo(SHARED, "restore-between-reads")).status, 200);
+      assert.equal(
+        (await addTo(SHARED, "restore-between-reads", remote.id)).status,
+        200,
+      );
       await captured.promise;
       active = true; // restoring moved the session out of its archive before archiveState answered
       if (event) {
         await remote.post({ type: "sessions_changed" });
         await until(
-          () => globalThis.__ompOutbox!.wakes!.has(SHARED),
+          () => outboxState(remote.id).wakes!.has(SHARED),
           "active listing defers its wake",
         );
       }
@@ -1256,7 +1335,7 @@ for (const event of [false, true]) {
       );
       if (event)
         assert.equal(
-          globalThis.__ompOutbox?.retries?.size ?? 0,
+          outboxState(remote.id).retries?.size ?? 0,
           0,
           "deferred wake needs no retry timer",
         );
@@ -1314,9 +1393,12 @@ test(
       },
     );
     outbox.startOutbox();
-    assert.equal((await addTo(SHARED, "captured-intent")).status, 200);
+    assert.equal(
+      (await addTo(SHARED, "captured-intent", remote.id)).status,
+      200,
+    );
     await until(
-      settled(() => archiveCalls, 2),
+      settled(() => archiveCalls, 2, remote.id),
       "initial archived intent held",
     );
     const archiveModule = new URL("../omp/archive.ts", import.meta.url).href;
@@ -1356,19 +1438,19 @@ test(
         "original archive name is no longer listed",
       );
       assert.equal(existsSync(transcript), false, "session is not active yet");
-      outbox.pumpOutbox(SHARED);
+      outbox.pumpOutbox(SHARED, remote.id);
       await until(
-        settled(() => archiveCalls, 3),
+        settled(() => archiveCalls, 3, remote.id),
         "dispatcher finishes discovery during capture",
       );
       assert.equal(
-        outbox.outboxEntries(SHARED)[0].state,
+        outbox.outboxEntries(SHARED, remote.id)[0].state,
         "held",
         "private capture is an archive, not permanent absence",
       );
       assert.equal(commands.length, 0);
       assert.equal(
-        globalThis.__ompOutbox?.retries?.size ?? 0,
+        outboxState(remote.id).retries?.size ?? 0,
         0,
         "capture discovery requires no timer polling",
       );
@@ -1380,7 +1462,7 @@ test(
       await until(
         () =>
           outbox
-            .outboxSettlements(SHARED)
+            .outboxSettlements(SHARED, remote.id)
             .settledIds.includes("captured-intent"),
         "publication event delivers held intent",
       );
@@ -1396,7 +1478,7 @@ test(
 );
 
 for (const unavailable of [false, true]) {
-  test(`outbox admission rechecks active ownership when restore finishes between its initial 404 and archive read (${unavailable ? "unavailable discovery" : "active discovery"})`, async (t) => {
+  test(`outbox admission rechecks the selected host when restore finishes between its initial 404 and archive read (${unavailable ? "unavailable discovery" : "active discovery"})`, async (t) => {
     const { existsSync } = await import("node:fs");
     const { gzipSync } = await import("node:zlib");
     const { listArchivedSessionInfos, restoreArchivedSession } =
@@ -1462,15 +1544,15 @@ for (const unavailable of [false, true]) {
       },
     );
     outbox.startOutbox();
-    const response = await addTo(SHARED, "admission-raced-restore");
+    const response = await addTo(SHARED, "admission-raced-restore", remote.id);
     assert.equal(response.status, 200, await response.clone().text());
     assert.equal(restored, true);
     if (unavailable) {
       await until(
-        () => !globalThis.__ompOutbox!.busy.has(SHARED),
+        () => !outboxState(remote.id).busy.has(SHARED),
         "uncertain discovery leaves the accepted intent held",
       );
-      assert.equal(outbox.outboxEntries(SHARED)[0].state, "held");
+      assert.equal(outbox.outboxEntries(SHARED, remote.id)[0].state, "held");
       assert.equal(commands.length, 0);
       failing = false;
       await remote.post({ type: "sessions_changed" });
@@ -1478,7 +1560,7 @@ for (const unavailable of [false, true]) {
     await until(
       () =>
         outbox
-          .outboxSettlements(SHARED)
+          .outboxSettlements(SHARED, remote.id)
           .settledIds.includes("admission-raced-restore"),
       "accepted intent reaches the restored session",
     );

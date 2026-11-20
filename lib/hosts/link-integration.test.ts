@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { once } from "node:events";
 import { Database } from "bun:sqlite";
 import {
   existsSync,
@@ -21,7 +20,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { POST as startShipRequest } from "../../app/api/ship/route.ts";
 import { POST as stopShipRequest } from "../../app/api/ship/monitor/stop/route.ts";
-import { insertShipMonitorGrant } from "../message-outbox.ts";
 import type { ChildProcess } from "node:child_process";
 import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
@@ -92,14 +90,10 @@ process.env.PI_CODING_AGENT_DIR = mainAgentDir;
 const linkRoute = await import("../../app/api/hosts/link/route.ts");
 const hub = await import("./hub.ts");
 const { createHost, revokeHost } = await import("./registry.ts");
-const {
-  AgentSessionWrapper,
-  getRpcSession,
-  resumeInterruptedSessions,
-  startRpcSession,
-} = await import("../rpc-manager.ts");
+const { AgentSessionWrapper, getRpcSession, startRpcSession } =
+  await import("../rpc-manager.ts");
 const { RESUME_PROMPT } = await import("./host-resume.ts");
-const { saveWebServerSettings } = await import("../web-settings.ts");
+const { setRemoteHostSettings } = await import("./hub.ts");
 const { closeNotificationStore } = await import("../notification-store.ts");
 
 function writeFakeOmp(file: string, source: string) {
@@ -466,7 +460,6 @@ async function restartWeb({
   globalThis.__ompSessions = undefined;
   globalThis.__ompStartLocks = undefined;
   globalThis.__ompExitedSessions = undefined;
-  globalThis.__ompResumeTracker = undefined;
 }
 
 function waitFor(predicate: () => unknown, what: string, timeoutMs = 20_000) {
@@ -541,7 +534,6 @@ esac
   assert.deepEqual(JSON.parse(readFileSync(saved, "utf8")), {
     url,
     token,
-    links: [{ url, token }],
   });
   assert.ok(!login.stdout.includes(token) && !login.stderr.includes(token));
 
@@ -595,144 +587,6 @@ after(async () => {
   if (previousOmpBin === undefined) delete process.env.KEYLIME_OMP_BIN;
   else process.env.KEYLIME_OMP_BIN = previousOmpBin;
   rmSync(scratch, { recursive: true, force: true });
-});
-
-test("two cold links launch runners with host-local configuration and credentials", async (t) => {
-  const root = join(scratch, "cold-start");
-  mkdirSync(root, { mode: 0o700 });
-  const coldLog = join(root, "omp.log");
-  const laptop = join(root, "laptop");
-  const laptopAgent = join(laptop, ".omp", "agent");
-  const skillDir = join(".agents", "skills", "link-test");
-  const skillPath = join(skillDir, "SKILL.md");
-  const localSettings = "# Keep these local bytes\ndefaultModel: local-model\n";
-  const localWebSettings = `${JSON.stringify({
-    agentEnv: {
-      LINK_TEST_MARKER: "local",
-      OPENAI_API_KEY: "test-laptop-provider-key",
-    },
-  })}\n`;
-  const localSkill = "# Local skill\n";
-  mkdirSync(join(laptopAgent, "keylime"), { recursive: true });
-  mkdirSync(join(laptopAgent, "sessions", "-project"), { recursive: true });
-  mkdirSync(join(laptop, skillDir), { recursive: true });
-  writeFileSync(join(laptopAgent, "config.yml"), localSettings);
-  const localWebSettingsFile = join(laptopAgent, "keylime-settings.json");
-  writeFileSync(localWebSettingsFile, localWebSettings);
-  writeFileSync(join(laptop, skillPath), localSkill);
-
-  const children: ChildProcess[] = [];
-  t.after(async () => {
-    for (const child of children.reverse()) {
-      if (!child.pid || child.exitCode !== null || child.signalCode !== null) continue;
-      const exited = once(child, "exit");
-      child.kill("SIGKILL");
-      await exited;
-    }
-  });
-  const links = await Promise.all(
-    ["alpha", "beta"].map(async (marker) => {
-      const home = join(root, marker);
-      const agentDir = join(home, ".omp", "agent");
-      const project = join(laptop, marker);
-      mkdirSync(project, { recursive: true });
-      mkdirSync(agentDir, { recursive: true });
-      mkdirSync(join(home, skillDir), { recursive: true });
-      writeFileSync(
-        join(agentDir, "config.yml"),
-        `defaultModel: ${marker}-model\n`,
-      );
-      writeFileSync(join(home, skillPath), `# ${marker} skill\n`);
-      const fixture = new URL(
-        "./link-integration-server.fixture.ts",
-        import.meta.url,
-      );
-      const web = spawn(
-        process.execPath,
-        [fileURLToPath(fixture), project, marker],
-        {
-          env: {
-            ...process.env,
-            HOME: home,
-            PI_CODING_AGENT_DIR: agentDir,
-            OMP_CODING_AGENT_DIR: agentDir,
-          },
-          stdio: ["ignore", "inherit", "inherit", "ipc"],
-        },
-      );
-      children.push(web);
-      const signal = AbortSignal.timeout(10_000);
-      const [login] = await Promise.race([
-        once(web, "message", { signal }) as Promise<[{ url: string; token: string }]>,
-        once(web, "exit", { signal }).then(([code]) => {
-          throw new Error(`${marker} fixture exited before startup: ${code}`);
-        }),
-      ]);
-      return { marker, login };
-    }),
-  );
-  // Neither server fixture serves broker or mirror endpoints.
-  writeFileSync(
-    join(laptopAgent, "keylime", "host.json"),
-    JSON.stringify({ ...links[0].login, links: links.map(({ login }) => login) }),
-    { mode: 0o600 },
-  );
-  const daemonEnv = { ...process.env };
-  delete daemonEnv.OMP_AUTH_BROKER_URL;
-  delete daemonEnv.OMP_AUTH_BROKER_TOKEN;
-  const coldDaemon = spawn(process.execPath, [hostBin], {
-    env: {
-      ...daemonEnv,
-      HOME: laptop,
-      PI_CODING_AGENT_DIR: laptopAgent,
-      OMP_CODING_AGENT_DIR: laptopAgent,
-      KEYLIME_HOST_SOCKET: join(root, "host.sock"),
-      LINK_TEST_LOG_FILE: coldLog,
-    },
-    stdio: ["ignore", "inherit", "inherit"],
-  });
-  children.push(coldDaemon);
-
-  await Promise.all(
-    links.map(async ({ marker, login }) => {
-      const launch = await fetch(`${login.url}/launch`, {
-        method: "POST",
-        signal: AbortSignal.timeout(4_000),
-      });
-      const body = await launch.text();
-      assert.ok(launch.ok, `${marker} launch: ${body}`);
-      const { sessionId } = JSON.parse(body) as { sessionId: string };
-      const entry = ompLog(coldLog).find(
-        (entry) => entry.kind === "start" && entry.sessionId === sessionId,
-      );
-      assert.ok(
-        entry?.config,
-        `${marker} runner recorded its config before hello`,
-      );
-      assert.equal(entry.hasBrokerEnv, false);
-      assert.deepEqual(entry.config, {
-        agentDir: laptopAgent,
-        home: laptop,
-        settings: localSettings,
-        skill: localSkill,
-        marker: "local",
-        usesHostProviderKey: true,
-      });
-
-      const response = await fetch(`${login.url}/api/hosts`);
-      assert.equal(response.status, 200);
-      const snapshot = (await response.json()) as {
-        hosts: { label: string }[];
-      };
-      assert.equal("masterConfigError" in snapshot, false);
-      assert.ok(snapshot.hosts.some((row) => row.label === marker));
-      for (const row of snapshot.hosts)
-        assert.equal("clusterConfig" in row, false);
-    }),
-  );
-  assert.equal(readFileSync(join(laptopAgent, "config.yml"), "utf8"), localSettings);
-  assert.equal(readFileSync(localWebSettingsFile, "utf8"), localWebSettings);
-  assert.equal(readFileSync(join(laptop, skillPath), "utf8"), localSkill);
 });
 
 test("the linked host reports itself and lists its sessions", async () => {
@@ -866,18 +720,16 @@ test("a remote session streams a reply with no frame lost or duplicated across l
   // The last cut can end the socket that brought agent_end; until the daemon redials, ops fail host_offline.
   await waitFor(linked, "the daemon to relink");
   assert.equal(
-    getRpcSession(realSessionId),
+    getRpcSession(realSessionId, hostId),
     session,
     "the shared channel stays open after relinking",
   );
 });
 
 test("a restarted web server adopts its running omp children, resumed or new: each pid streams on with no gap or duplicate, no kill reaches the daemon, nothing resumes them", async (t) => {
-  saveWebServerSettings({ autoResumeSessions: true });
   const adopt = AgentSessionWrapper.prototype.adopt;
   t.after(() => {
     AgentSessionWrapper.prototype.adopt = adopt;
-    saveWebServerSettings({ autoResumeSessions: false });
   });
   const remote = host();
   // A resumed session, and a new one (no --resume) in its first reply: it names itself only in
@@ -951,12 +803,13 @@ test("a restarted web server adopts its running omp children, resumed or new: ea
     return adopt.call(this, replay);
   };
   await restartWeb();
-  // As instrumentation does when the new server starts.
-  await resumeInterruptedSessions();
   for (const run of runs) writeFileSync(slowGo(run.id), "");
-  await waitFor(() => ids.every((id) => getRpcSession(id)), "the adoptions");
+  await waitFor(
+    () => ids.every((id) => getRpcSession(id, hostId)),
+    "the adoptions",
+  );
   for (const run of runs) {
-    const events = adopted.get(getRpcSession(run.id)!);
+    const events = adopted.get(getRpcSession(run.id, hostId)!);
     assert.ok(events);
     await waitFor(
       () => events.some((event) => event.type === "agent_end"),
@@ -1027,10 +880,10 @@ test("a run waiting on an ask shows the dialog again after a web restart, and th
 
   const killsBefore = seen.kills.length;
   await restartWeb();
-  await waitFor(() => getRpcSession(ASK_ID), "the adoption");
+  await waitFor(() => getRpcSession(ASK_ID, hostId), "the adoption");
   // A tab opening the session after the restart.
   const events: AgentEvent[] = [];
-  const adopted = getRpcSession(ASK_ID);
+  const adopted = getRpcSession(ASK_ID, hostId);
   assert.ok(adopted);
   adopted.onEvent((event) => events.push(event));
   assert.equal(
@@ -1081,7 +934,7 @@ test("a run waiting on an ask shows the dialog again after a web restart, and th
   assert.deepEqual(
     seen.kills
       .slice(killsBefore)
-      .filter((ch) => ch === transportOf(getRpcSession(ASK_ID)!).ch),
+      .filter((ch) => ch === transportOf(getRpcSession(ASK_ID, hostId)!).ch),
     [],
     "no kill reached the asking child",
   );
@@ -1157,8 +1010,8 @@ test("a stopping web server sends nothing more and takes nothing in: a closing t
     "the stopping server applied none of it",
   );
 
-  await waitFor(() => getRpcSession(TOOL_ID), "the adoption");
-  const next = getRpcSession(TOOL_ID);
+  await waitFor(() => getRpcSession(TOOL_ID, hostId), "the adoption");
+  const next = getRpcSession(TOOL_ID, hostId);
   assert.ok(next);
   const events = adopted.get(next);
   assert.ok(events);
@@ -1205,10 +1058,9 @@ test("a stopping web server sends nothing more and takes nothing in: a closing t
 test("a request omp opens while the web server stops reaches the next server once: one dialog, one agent tool result", async (t) => {
   const adopt = AgentSessionWrapper.prototype.adopt;
   // A shared host routes an agent tool call only to a server that registered the tool.
-  saveWebServerSettings({ agentToolsEnabled: true });
+  await setRemoteHostSettings(hostId, { agentToolsEnabled: true });
   t.after(() => {
     AgentSessionWrapper.prototype.adopt = adopt;
-    saveWebServerSettings({ agentToolsEnabled: false });
   });
   const { session } = await startRpcSession(
     LATE_ID,
@@ -1251,8 +1103,8 @@ test("a request omp opens while the web server stops reaches the next server onc
     },
   });
 
-  await waitFor(() => getRpcSession(LATE_ID), "the adoption");
-  const events = adopted.get(getRpcSession(LATE_ID)!);
+  await waitFor(() => getRpcSession(LATE_ID, hostId), "the adoption");
+  const events = adopted.get(getRpcSession(LATE_ID, hostId)!);
   assert.ok(events);
   const results = () =>
     ompLog().filter(
@@ -1316,289 +1168,6 @@ test("a daemon that stops reading is paced, not closed: the hub sends its outbox
     Array.from({ length: count }, (_, i) => i + 1),
   );
   assert.deepEqual([...sockets], [socket], "no redial");
-});
-
-async function shipTestTick(worktree?: {
-  project: string;
-  path: string;
-  sessionId: string;
-}) {
-  const requestId = randomUUID();
-  let reply: { requestId: string; error?: string } | undefined;
-  const received = (message: typeof reply) => {
-    if (message?.requestId === requestId) reply = message;
-  };
-  daemon.on("message", received);
-  try {
-    daemon.send({ requestId, worktree });
-    await waitFor(() => reply, "daemon's Ship tick to finish");
-    assert.equal(reply?.error, undefined);
-  } finally {
-    daemon.off("message", received);
-  }
-}
-
-test("Ship offers only to its initiating server, retries a lost receipt, and never retargets to a replacement token", async (t) => {
-  const id = randomUUID(),
-    sessionId = randomUUID();
-  const project = realpathSync(daemonHome) + "/ship-repo";
-  const path = realpathSync(daemonHome) + "/ship-worktree";
-  execFileSync("git", ["init", "-q", project]);
-  execFileSync("git", [
-    "-C",
-    project,
-    "-c",
-    "user.name=Test",
-    "-c",
-    "user.email=test@example.invalid",
-    "commit",
-    "--allow-empty",
-    "-qm",
-    "base",
-  ]);
-  execFileSync("git", [
-    "-C",
-    project,
-    "worktree",
-    "add",
-    "-qb",
-    "feature",
-    path,
-  ]);
-  const registration = await host().workspaceOps.hierarchy({
-    action: "registerProject",
-    path: project,
-  });
-  assert.ok(registration.ok);
-  writeSession("2026-02-01_ship.jsonl", sessionId, ["ship context"], path);
-  host().invalidateSessionLists();
-  await shipTestTick({ project, path, sessionId });
-
-  type PeerData = { token: string };
-  let peer: Bun.ServerWebSocket<PeerData> | undefined;
-  let peerAck = 0,
-    peerInvalidations = 0;
-  const peerOffers: unknown[] = [];
-  const other = Bun.serve<PeerData>({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(req, server) {
-      if (req.headers.get("authorization") !== "Bearer other-token")
-        return new Response(null, { status: 401 });
-      if (server.upgrade(req, { data: { token: "other-token" } })) return;
-      return new Response(null, { status: 426 });
-    },
-    websocket: {
-      message(ws, data) {
-        assert.equal(typeof data, "string");
-        for (const line of String(data).split("\n").filter(Boolean)) {
-          const frame = JSON.parse(line);
-          if (frame.type === "hello") {
-            peer = ws;
-            ws.send(
-              JSON.stringify({
-                type: "welcome",
-                v: LINK_PROTOCOL_VERSION,
-                hostId: "peer",
-              }),
-            );
-          } else if (frame.type === "ack") {
-            peerAck = frame.ack;
-          } else if (frame.seq !== undefined) {
-            if (frame.type === "ship_pr_digest") peerOffers.push(frame);
-            if (frame.type === "sessions_changed") peerInvalidations++;
-            ws.send(JSON.stringify({ type: "ack", ack: frame.seq }));
-          }
-        }
-      },
-    },
-  });
-  const loginFile = join(daemonAgentDir, "keylime", "host.json");
-  const secondary = {
-    url: `http://127.0.0.1:${other.port}`,
-    token: "other-token",
-  };
-  const configure = (primary = primaryLogin, withPeer = true) =>
-    writeFileSync(
-      loginFile,
-      JSON.stringify({
-        ...primary,
-        links: withPeer ? [primary, secondary] : [primary],
-      }),
-    );
-  const replacement = createHost("Replacement token");
-  t.after(() => {
-    faults.loseShipReceipt = false;
-    configure(primaryLogin, false);
-    other.stop(true);
-    revokeHost(replacement.host.id);
-  });
-  configure();
-  await waitFor(() => peer, "second configured server to link");
-
-  const prFile = join(daemonAgentDir, "keylime", "ship", "prs.json");
-  mkdirSync(join(prFile, ".."), { recursive: true });
-  const url = "https://github.com/test/repo/pull/42";
-  const monitorId = randomUUID();
-  insertShipMonitorGrant({
-    monitorId,
-    hostId,
-    credential: createHash("sha256").update(primaryLogin.token).digest("hex"),
-    sessionId,
-    projectPath: project,
-    path,
-  });
-  const feedback = [
-    { kind: "conversation", id: 123 },
-    { kind: "inline", id: 234 },
-    { kind: "review", id: 345 },
-  ];
-  const owner = createHash("sha256")
-    .update(
-      JSON.stringify([
-        "keylime-ship-server-v1",
-        primaryLogin.url,
-        primaryLogin.token,
-      ]),
-    )
-    .digest("hex");
-  const record = {
-    projectPath: project,
-    path,
-    base: "main",
-    generation: randomUUID(),
-    pr: { url, number: 42, state: "open", cleanup: false },
-    monitor: {
-      id: monitorId,
-      owner,
-      sessionId,
-      requestedAt: Date.now(),
-      seen: [],
-      pending: [
-        {
-          id,
-          monitorId,
-          sessionId,
-          prUrl: url,
-          feedback,
-          omitted: 0,
-          createdAt: Date.now(),
-        },
-      ],
-    },
-  };
-  const monitor = () => JSON.parse(readFileSync(prFile, "utf8"))[path].monitor;
-  writeFileSync(prFile, JSON.stringify({ [path]: record }));
-
-  const poll = async () => {
-    const previous = peerInvalidations;
-    await shipTestTick();
-    await waitFor(
-      () => peerInvalidations > previous,
-      "invalidation on the second server after the poll",
-    );
-    assert.deepEqual(
-      peerOffers,
-      [],
-      "list invalidations are shared, not the digest",
-    );
-  };
-  faults.loseShipReceipt = true;
-  await poll();
-  await waitFor(
-    () => shipReceipts.includes(id),
-    "durable application receipt generated (but lost)",
-  );
-  assert.deepEqual(
-    shipOffers.filter((offer) => offer.id === id),
-    [{ hostId, id }],
-  );
-  const database = new Database(join(mainAgentDir, "keylime", "outbox.db"), {
-    readonly: true,
-  });
-  t.after(() => database.close());
-  const entry = () =>
-    database
-      .query(
-        "SELECT source_host_id, mode, state, error FROM entries WHERE id = ?",
-      )
-      .get(id) as {
-      source_host_id: string;
-      mode: string;
-      state: string;
-      error: string | null;
-    } | null;
-  await waitFor(
-    () => ["delivered", "failed"].includes(entry()?.state ?? ""),
-    "the single digest outbox handoff to finish",
-  );
-  assert.deepEqual(entry(), {
-    source_host_id: hostId,
-    mode: "followUp",
-    state: "delivered",
-    error: null,
-  });
-  assert.equal(
-    monitor().pending[0].id,
-    id,
-    "transport acknowledgement does not retire the digest",
-  );
-  peer!.send(JSON.stringify({ type: "ship_pr_digest_receipt", seq: 1, id }));
-  await waitFor(
-    () => peerAck >= 1,
-    "transport ACK for a receipt offered by the wrong owner",
-  );
-  assert.equal(monitor().pending[0].id, id);
-
-  configure({ url: primaryLogin.url, token: replacement.token });
-  await waitFor(
-    () => hub.getHost(replacement.host.id)?.status() === "online",
-    "replacement token on same URL to link",
-  );
-  await poll();
-  assert.deepEqual(
-    shipOffers.filter((offer) => offer.id === id),
-    [{ hostId, id }],
-  );
-  assert.equal(monitor().pending[0].id, id);
-
-  // Reset the receiving hub so its original downlink receipt is not replayed; the new receipt must follow the retry.
-  await restartWeb({ whileStopping: async () => configure() });
-  await waitFor(
-    () => hub.getHost(hostId)?.status() === "online",
-    "original authenticated owner to reconnect",
-  );
-  faults.loseShipReceipt = false;
-  await poll();
-  await waitFor(
-    () => monitor()?.pending.length === 0,
-    "new durable receipt for the same digest ID",
-  );
-  assert.deepEqual(
-    shipOffers.filter((offer) => offer.id === id),
-    [
-      { hostId, id },
-      { hostId, id },
-    ],
-  );
-  const delivered = ompLog().flatMap((event) => {
-    const text = event.command?.args?.message;
-    return event.sessionId === sessionId &&
-      text?.includes(`${url}#issuecomment-123`)
-      ? [text]
-      : [];
-  });
-  assert.equal(delivered.length, 1);
-  assert.ok(delivered[0].includes(`${url}#discussion_r234`));
-  assert.ok(delivered[0].includes(`${url}#pullrequestreview-345`));
-
-  const archived = await host().sessionOps.archiveSession(sessionId);
-  assert.ok(archived.ok);
-  assert.equal(
-    monitor(),
-    undefined,
-    "successful archive removes the watch immediately",
-  );
 });
 
 test("Ship digest admission requires a server grant and never falls back to another host", async (t) => {
@@ -1734,7 +1303,8 @@ test("Ship digest admission requires a server grant and never falls back to anot
   const wrongSession = sendDigest({ sessionId: randomUUID() });
   const wrongPr = sendDigest({ prUrl: "https://github.com/test/repo/pull/43" });
   const id = sendDigest();
-  const database = new Database(join(mainAgentDir, "keylime", "outbox.db"), {
+  const digestStore = `outbox-host-${createHash("sha256").update(source.id).digest("hex")}.db`;
+  const database = new Database(join(mainAgentDir, "keylime", digestStore), {
     readonly: true,
   });
   t.after(() => database.close());

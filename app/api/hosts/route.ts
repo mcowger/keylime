@@ -1,19 +1,15 @@
-import { isClusterMember, leaveCluster } from "@/lib/hosts/cluster";
 import {
   closeHostLink,
   hostsSnapshot,
   listHosts,
   notifyHostsChange,
 } from "@/lib/hosts/hub";
-import { loadPools, savePools, type HostPool } from "@/lib/hosts/pools";
 import {
   createHost,
   HostRegistryUnreadableError,
-  readHosts,
   revokeHost,
   UnknownHostError,
   updateHost,
-  type HostRecord,
 } from "@/lib/hosts/registry";
 import { isRecord } from "@/lib/type-guards";
 
@@ -22,11 +18,6 @@ const noStore = { "cache-control": "no-store" };
 
 const fail = (error: string, status: number) =>
   Response.json({ error }, { status, headers: noStore });
-const poolStorageFailure = () =>
-  fail(
-    "The pool registry (keylime/pools.json) cannot be read or written; fix it before changing pools",
-    503,
-  );
 
 function hasOnlyKeys(
   value: unknown,
@@ -84,105 +75,15 @@ function requestOrigin(req: Request): string {
 
 /**
  * @apiContract getHosts
- * @apiUsage Load the linked-host snapshot and pool configuration for host management.
+ * @apiUsage Load the linked-host snapshot for host management.
  * @apiInputs No request parameters.
- * @apiInvariants Responses are not cached; pool storage must be readable.
- * @apiEffects Reads the host snapshot and pool registry.
- * @apiRecovery A 503 requires repairing the pool registry before retrying.
+ * @apiInvariants Responses are not cached and do not contain enrollment tokens.
+ * @apiEffects Reads the host snapshot.
+ * @apiRecovery Refresh the snapshot if host status changes.
  */
 export function GET() {
-  let pools: HostPool[];
-  try {
-    pools = loadPools();
-  } catch {
-    return poolStorageFailure();
-  }
   const { hosts } = hostsSnapshot();
-  return Response.json({ hosts, pools }, { headers: noStore });
-}
-
-/**
- * @apiContract putHosts
- * @apiUsage Replace the complete pool registry.
- * @apiInputs JSON object with a pools array of pool, member and project configurations.
- * @apiInvariants Members must reference known hosts; pool configurations are validated before persistence.
- * @apiEffects Saves pools and notifies listeners.
- * @apiRecovery Correct invalid configurations on 400; repair unreadable or unwritable registries on 503.
- */
-export async function PUT(req: Request) {
-  const body = await readBody(req);
-  if (!hasOnlyKeys(body, ["pools"]) || !Array.isArray(body.pools))
-    return fail("pools must be an array", 400);
-  let hosts: HostRecord[];
-  try {
-    hosts = readHosts();
-  } catch (error) {
-    return failFor(error);
-  }
-  const knownHosts = new Set(["local", ...hosts.map((host) => host.id)]);
-  for (const pool of body.pools) {
-    if (
-      !hasOnlyKeys(pool, ["id", "label", "enabled", "members", "projects"]) ||
-      !Array.isArray(pool.members) ||
-      !Array.isArray(pool.projects)
-    )
-      return fail("Invalid pool configuration", 400);
-    for (const member of pool.members) {
-      if (
-        !hasOnlyKeys(member, [
-          "hostId",
-          "projectsRoot",
-          "provisioned",
-          "draining",
-        ]) ||
-        typeof member.hostId !== "string" ||
-        !knownHosts.has(member.hostId)
-      )
-        return fail("Invalid or unknown pool member", 400);
-    }
-    for (const project of pool.projects) {
-      if (
-        !hasOnlyKeys(project, [
-          "id",
-          "name",
-          "origin",
-          "defaultRef",
-          "clonePaths",
-          "addedAt",
-          "hidden",
-          "alias",
-          "sortOrder",
-          "pinOrder",
-          "launchConfig",
-        ]) ||
-        (project.launchConfig !== undefined &&
-          !hasOnlyKeys(project.launchConfig, [
-            "profile",
-            "advisor",
-            "extraArgs",
-          ]))
-      ) {
-        return fail("Invalid pool project configuration", 400);
-      }
-    }
-  }
-  // Don't overwrite an existing registry that cannot be read.
-  try {
-    loadPools();
-  } catch {
-    return poolStorageFailure();
-  }
-  const after = body.pools as HostPool[];
-  try {
-    savePools(after);
-  } catch (error) {
-    // Core validation precedes persistence; filesystem errors carry an errno code.
-    if (isRecord(error) && typeof error.code === "string")
-      return poolStorageFailure();
-    return fail("Invalid pool configuration", 400);
-  }
-  notifyHostsChange();
-  return Response.json({ pools: after }, { headers: noStore });
+  return Response.json({ hosts }, { headers: noStore });
 }
 
 /**
@@ -219,15 +120,14 @@ export async function POST(req: Request) {
 
 /**
  * @apiContract patchHosts
- * @apiUsage Rename one host or pool without replacing the registry.
- * @apiInputs JSON host id and label, or poolId and label.
+ * @apiUsage Rename one host.
+ * @apiInputs JSON host id and label.
  * @apiInvariants An empty local label resets its name.
  * @apiEffects Persists the name and notifies listeners.
- * @apiRecovery Correct invalid input, use an existing host or pool, or repair unavailable registry storage.
+ * @apiRecovery Correct invalid input, use an existing host, or repair unavailable registry storage.
  */
 export async function PATCH(req: Request) {
   const body = await readBody(req);
-  if (body && body.poolId !== undefined) return renamePool(body);
   if (!body || typeof body.id !== "string" || !body.id)
     return fail("id is required", 400);
   const isLocal = body.id === "local";
@@ -255,42 +155,11 @@ export async function PATCH(req: Request) {
   }
 }
 
-/** `{ poolId, label }`: renames one pool (the cluster) without replacing the registry the way PUT does. */
-function renamePool(body: Record<string, unknown>) {
-  if (
-    !hasOnlyKeys(body, ["poolId", "label"]) ||
-    typeof body.poolId !== "string"
-  )
-    return fail("poolId and label are required", 400);
-  const label = parseLabel(body.label);
-  if (!label)
-    return fail(
-      `label must be a non-empty string of at most ${MAX_LABEL_LENGTH} characters`,
-      400,
-    );
-  let pools: HostPool[];
-  try {
-    pools = loadPools();
-  } catch {
-    return poolStorageFailure();
-  }
-  const pool = pools.find((candidate) => candidate.id === body.poolId);
-  if (!pool) return fail("Unknown pool", 404);
-  pool.label = label;
-  try {
-    savePools(pools);
-  } catch {
-    return poolStorageFailure();
-  }
-  notifyHostsChange();
-  return Response.json({ pools }, { headers: noStore });
-}
-
 /**
  * @apiContract deleteHosts
  * @apiUsage Revoke a linked host by id.
  * @apiInputs The id query parameter identifies the remote host; local cannot be revoked.
- * @apiInvariants A cluster member leaves before its host record is revoked; an unreadable host registry prevents pool changes.
+ * @apiInvariants The registry record is removed before the live link is closed.
  * @apiEffects Removes the record, closes its link and notifies listeners; future daemon reconnects are unauthorized.
  * @apiRecovery Supply a known remote id or repair registry storage before retrying.
  */
@@ -298,19 +167,6 @@ export async function DELETE(req: Request) {
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return fail("id is required", 400);
   if (id === "local") return fail("This machine cannot be revoked", 400);
-  // An unreadable registry fails before the pools change: no member is removed while its record and link remain.
-  try {
-    readHosts();
-  } catch (error) {
-    return failFor(error);
-  }
-  // A member leaves the cluster first: once its record is gone, no row is left to remove it there.
-  try {
-    const pools = loadPools();
-    if (isClusterMember(pools, id)) savePools(leaveCluster(pools, id));
-  } catch {
-    return poolStorageFailure();
-  }
   try {
     // Registry first: with the record gone a daemon that redials gets 401 instead of reconnecting.
     if (!revokeHost(id)) return fail("Unknown host", 404);

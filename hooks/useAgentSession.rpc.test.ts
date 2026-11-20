@@ -1,3 +1,4 @@
+import { sessionKey, sessionUrl } from "@/lib/session-identity";
 import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
@@ -46,11 +47,35 @@ interface FakeWorkerPort {
 }
 
 type WorkerRequest =
-  | { op: "open"; id: number; channel: { kind: string; sessionId: string } }
+  | {
+      op: "open";
+      id: number;
+      channel: { kind: string; sessionId: string; hostId?: string };
+    }
   | { op: "close"; id: number }
-  | { op: "cmd"; n: number; sessionId: string; advisor?: boolean; body: string }
+  | {
+      op: "cmd";
+      n: number;
+      sessionId: string;
+      hostId?: string;
+      advisor?: boolean;
+      body: string;
+    }
   | { op: "outbox_add"; n: number; entry: LocalOutboxEntry }
-  | { op: "outbox_drop"; n: number; id: string };
+  | {
+      op: "outbox_drop";
+      n: number;
+      id: string;
+      sessionId: string;
+      hostId: string;
+    }
+  | {
+      op: "outbox_reconcile";
+      n: number;
+      confirmedIds: string[];
+      sessionId: string;
+      hostId: string;
+    };
 
 /** One stream the hook opened through lib/event-stream.ts, as the worker sees it. */
 class FakeStream {
@@ -59,14 +84,14 @@ class FakeStream {
   static CLOSED = 2;
   port: FakeWorkerPort;
   id: number;
-  channel: { kind: string; sessionId: string };
+  channel: { kind: string; sessionId: string; hostId?: string };
   readyState: number;
   closedByCaller: boolean;
   running?: boolean;
   constructor(
     port: FakeWorkerPort,
     id: number,
-    channel: { kind: string; sessionId: string },
+    channel: { kind: string; sessionId: string; hostId?: string },
   ) {
     this.port = port;
     this.id = id;
@@ -181,11 +206,23 @@ class FakeSharedWorker {
           };
           if (world.outboxCommit) world.outboxCommit(commit);
           else commit();
+        } else if (message.op === "outbox_reconcile") {
+          world.outbox = world.outbox.filter(
+            (entry) =>
+              entry.hostId !== message.hostId ||
+              entry.sessionId !== message.sessionId ||
+              !message.confirmedIds.includes(entry.id),
+          );
+          this.port.onmessage?.({ data: { outbox: [...world.outbox] } });
+          this.port.onmessage?.({ data: { outboxReconciled: message.n } });
         } else if (message.op === "outbox_drop") {
           const commit = (error?: string) => {
             if (!error) {
               world.outbox = world.outbox.filter(
-                (entry) => entry.id !== message.id,
+                (entry) =>
+                  entry.id !== message.id ||
+                  entry.sessionId !== message.sessionId ||
+                  entry.hostId !== message.hostId,
               );
               this.port.onmessage?.({
                 data: {
@@ -212,12 +249,21 @@ class FakeSharedWorker {
 /** A command over the session socket: `world.socketAnswer` may answer it as the worker would (e.g. transport_lost), else the agent route does. */
 async function answerCommand(
   port: FakeWorkerPort,
-  { n, sessionId, advisor, body }: Extract<WorkerRequest, { op: "cmd" }>,
+  {
+    n,
+    sessionId,
+    hostId,
+    advisor,
+    body,
+  }: Extract<WorkerRequest, { op: "cmd" }>,
 ) {
   let answer = await world.socketAnswer?.(JSON.parse(body));
   if (!answer) {
     const res = await fetchStub(
-      `/api/agent/${encodeURIComponent(sessionId)}${advisor ? "?advisor=1" : ""}`,
+      sessionUrl(
+        `/api/agent/${encodeURIComponent(sessionId)}${advisor ? "?advisor=1" : ""}`,
+        hostId,
+      ),
       { method: "POST", body },
     );
     answer = { status: res.status, body: await res.json() };
@@ -848,6 +894,74 @@ test("model refresh replaces the catalog and ignores an older GET", async () => 
   assert.equal(w.latest.modelsLoading, false);
 });
 
+test("switching model hosts clears the catalog and fences an in-flight refresh", async () => {
+  resetWorld();
+  world.models = {
+    models: { "example:old": "Old" },
+    modelList: [{ id: "old", provider: "example", name: "Old" }],
+    defaultModel: { provider: "example", modelId: "old" },
+  };
+  const oldPost = Promise.withResolvers<HeldResponse>();
+  const newGet = Promise.withResolvers<HeldResponse>();
+  world.holds.push(
+    {
+      match: (method, url) =>
+        method === "POST" && url.startsWith("/api/models?hostId=first"),
+      produce: () => oldPost.promise,
+    },
+    {
+      match: (method, url) =>
+        method === "GET" && url.startsWith("/api/models?hostId=second"),
+      produce: () => newGet.promise,
+    },
+  );
+  const { result, rerender } = ownRoot(
+    renderHook(
+      (hostId: string) =>
+        useAgentSession({
+          session: null,
+          newSessionCwd: "/workspace",
+          newSessionHostId: hostId,
+        }),
+      { initialProps: "first", wrapper: TestRoot },
+    ),
+  );
+  await settle();
+  assert.deepEqual(
+    result.current.modelList.map((model) => model.id),
+    ["old"],
+  );
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.refreshModels();
+  });
+  rerender("second");
+  await settle();
+  assert.equal(result.current.modelList.length, 0);
+  assert.equal(result.current.modelsRefreshing, false);
+  assert.equal(result.current.modelsLoading, true);
+  await act(async () => {
+    newGet.resolve({
+      value: {
+        models: { "example:new": "New" },
+        modelList: [{ id: "new", provider: "example", name: "New" }],
+        defaultModel: { provider: "example", modelId: "new" },
+      },
+    });
+    await newGet.promise;
+  });
+  await act(async () => {
+    oldPost.resolve({ value: world.models });
+    await pending;
+  });
+  assert.deepEqual(
+    result.current.modelList.map((model) => model.id),
+    ["new"],
+  );
+  assert.equal(callsTo("POST", "/api/models?hostId=first").length, 1);
+  assert.equal(callsTo("GET", "/api/models?hostId=second").length, 1);
+});
+
 test("model refresh reports failures and keeps the previous snapshot for retry", async () => {
   resetWorld();
   primeSession("models-error", [userMsg("u0", "q")]);
@@ -1104,7 +1218,6 @@ function serveManagedWorkspace() {
     if (url.pathname === "/api/sessions")
       return jsonResponse(200, {
         sessions,
-        runningSessionIds: [],
         runningSessions: [],
       });
     if (url.pathname === "/api/hierarchy")
@@ -1229,7 +1342,11 @@ async function startRun(
   });
   const es = lastEs();
   assert.ok(es, "an event stream must have been opened");
-  assert.deepEqual(es.channel, { kind: "session", sessionId: sid });
+  assert.deepEqual(es.channel, {
+    kind: "session",
+    sessionId: sid,
+    hostId: "local",
+  });
   await act(async () => {
     es.open(); // the dispatcher sees the session observed → prompt POST fires
     assert.deepEqual(await sendPromise, { status: "accepted" });
@@ -1375,7 +1492,7 @@ test("upload continuity: an uploaded file reaches held outbox intent after a rea
   resetWorld();
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "proof-upload-remount";
-  t.after(() => clearDraft(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   primeSession(sid, [userMsg("u0", "before")]);
   world.outboxHold = true;
   world.holds.push(
@@ -1415,10 +1532,10 @@ test("upload continuity: an uploaded file reaches held outbox intent after a rea
     ]);
   });
   await until(
-    () => getDraft(sid)?.uploads?.length === 1,
+    () => getDraft(sessionKey(sid))?.uploads?.length === 1,
     "the completed file must reach the draft",
   );
-  const id = getDraft(sid)!.uploads![0].id;
+  const id = getDraft(sessionKey(sid))!.uploads![0].id;
   await act(() => first.unmount());
   const second = await mount();
   assert.ok(
@@ -1439,7 +1556,7 @@ test("upload continuity: an uploaded file reaches held outbox intent after a rea
     "the durable intent retains completion authority, not just the chip",
   );
   assert.equal(
-    getDraft(sid),
+    getDraft(sessionKey(sid)),
     null,
     "the stored intent consumes the unchanged draft",
   );
@@ -1461,7 +1578,7 @@ for (const [preference, mode] of [
     const { setDraft, getDraft, clearDraft } =
       await import("@/lib/draft-store");
     const sid = `proof-queue-${mode}`;
-    t.after(() => clearDraft(sid));
+    t.after(() => clearDraft(sessionKey(sid)));
     primeSession(sid, [userMsg("u0", "before")]);
     world.agents.set(sid, {
       running: true,
@@ -1469,7 +1586,7 @@ for (const [preference, mode] of [
     });
     world.outboxHold = true;
     localStorage.setItem("keylime:submit-during-run", preference);
-    setDraft(sid, {
+    setDraft(sessionKey(sid), {
       value: "with my file",
       images: [],
       files: [],
@@ -1509,7 +1626,7 @@ for (const [preference, mode] of [
       "queue-upload": "queue-completion-proof",
     });
     assert.equal(
-      getDraft(sid),
+      getDraft(sessionKey(sid)),
       null,
       "the real composer clears only after its intent is stored",
     );
@@ -1520,10 +1637,10 @@ test("a `!` message with an uploaded text attachment is held as a prompt, never 
   resetWorld();
   const { setDraft, getDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "bang-text-attachment";
-  t.after(() => clearDraft(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   primeSession(sid, [userMsg("u0", "before")]);
   world.outboxHold = true;
-  setDraft(sid, {
+  setDraft(sessionKey(sid), {
     value: "!touch /tmp/keylime-never-run",
     images: [],
     files: [],
@@ -1566,7 +1683,7 @@ test("a `!` message with an uploaded text attachment is held as a prompt, never 
     "neither the typed text nor the attachment reaches the shell",
   );
   assert.equal(
-    getDraft(sid),
+    getDraft(sessionKey(sid)),
     null,
     "the stored prompt consumes the unchanged draft",
   );
@@ -1578,7 +1695,7 @@ test("editing and resending a queued bang-prefixed prompt never runs its inline 
   const sid = "queued-bang-prompt";
   const message =
     "!!explain this\n\nAttached file: notes.txt\n```text\necho attachment-content\n```";
-  t.after(() => clearDraft(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   primeSession(sid, [userMsg("u0", "before")]);
   world.agents.set(sid, {
     running: true,
@@ -1651,7 +1768,7 @@ test("removing the last recovered image clears prompt-only mode for fresh shell 
   resetWorld();
   const { clearDraft } = await import("@/lib/draft-store");
   const sid = "cleared-image-prompt";
-  t.after(() => clearDraft(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   primeSession(sid, [userMsg("u0", "before")]);
   world.agents.set(sid, {
     running: true,
@@ -1969,7 +2086,7 @@ test("a promotion answered after navigation does not notify the new session", as
 test("Stop withdraws pending queued messages into the session draft before aborting", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   resetWorld();
-  clearDraft("abort-withdraw");
+  clearDraft(sessionKey("abort-withdraw"));
   primeSession("abort-withdraw", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-withdraw", "hello agent");
   await act(() =>
@@ -2008,18 +2125,18 @@ test("Stop withdraws pending queued messages into the session draft before abort
     "the queue is withdrawn before the abort lands",
   );
   assert.equal(
-    getDraft("abort-withdraw")?.value,
+    getDraft(sessionKey("abort-withdraw"))?.value,
     "my steer\n\nmy follow-up",
     "a message the model already took stays out of the draft",
   );
   assert.deepEqual(w.latest.notices, []);
-  clearDraft("abort-withdraw");
+  clearDraft(sessionKey("abort-withdraw"));
 });
 
 test("a slow withdrawal does not hold Stop, and its late answer still recovers the text", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   resetWorld();
-  clearDraft("abort-slow");
+  clearDraft(sessionKey("abort-slow"));
   primeSession("abort-slow", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-slow", "hello agent");
   await act(() =>
@@ -2048,14 +2165,14 @@ test("a slow withdrawal does not hold Stop, and its late answer still recovers t
     release({ value: { success: true, data: { removed: true } } });
     await stop;
   });
-  assert.equal(getDraft("abort-slow")?.value, "slow steer");
-  clearDraft("abort-slow");
+  assert.equal(getDraft(sessionKey("abort-slow"))?.value, "slow steer");
+  clearDraft(sessionKey("abort-slow"));
 });
 
 test("Stop saves confirmed text early and still restores the queue in order", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   resetWorld();
-  clearDraft("abort-mixed");
+  clearDraft(sessionKey("abort-mixed"));
   primeSession("abort-mixed", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-mixed", "hello agent");
   await act(() =>
@@ -2091,7 +2208,7 @@ test("Stop saves confirmed text early and still restores the queue in order", as
   });
   await sleep(1700);
   assert.equal(
-    getDraft("abort-mixed")?.value,
+    getDraft(sessionKey("abort-mixed"))?.value,
     "second",
     "confirmed text is saved before the stalled request settles",
   );
@@ -2100,17 +2217,17 @@ test("Stop saves confirmed text early and still restores the queue in order", as
     await stop;
   });
   assert.equal(
-    getDraft("abort-mixed")?.value,
+    getDraft(sessionKey("abort-mixed"))?.value,
     "first\n\nsecond",
     "a late confirmation keeps queue order",
   );
-  clearDraft("abort-mixed");
+  clearDraft(sessionKey("abort-mixed"));
 });
 
 test("Stop withdraws a follow-up that a concurrent promotion already moved to steering", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   resetWorld();
-  clearDraft("abort-promoted");
+  clearDraft(sessionKey("abort-promoted"));
   primeSession("abort-promoted", [userMsg("u0", "loaded question")]);
   const { w, es } = await startRun("abort-promoted", "hello agent");
   await act(() =>
@@ -2135,14 +2252,14 @@ test("Stop withdraws a follow-up that a concurrent promotion already moved to st
   assert.ok(
     commands.lastIndexOf("remove_queued_message") < commands.indexOf("abort"),
   );
-  assert.equal(getDraft("abort-promoted")?.value, "promoted");
+  assert.equal(getDraft(sessionKey("abort-promoted"))?.value, "promoted");
   assert.deepEqual(
     world.calls
       .filter((c) => c.body?.type === "remove_queued_message")
       .map((c) => c.body?.queue),
     ["followUp", "steering"],
   );
-  clearDraft("abort-promoted");
+  clearDraft(sessionKey("abort-promoted"));
 });
 
 test("a steering message the model already took is not looked for among follow-ups", async () => {
@@ -3267,7 +3384,10 @@ test("a run started elsewhere keeps its error visible while an older branch is s
   await act(async () => {
     world.runningStreams.at(-1)!.deliver({
       type: "message",
-      data: JSON.stringify({ type: "running", runningSessionIds: ["s1"] }),
+      data: JSON.stringify({
+        type: "running",
+        runningSessions: [{ id: "s1", hostId: "local" }],
+      }),
     });
     await settle();
     lastEs().open();
@@ -3341,7 +3461,7 @@ for (const ending of ["message_end", "turn_end", "agent_end", "recovery"]) {
     );
     await act(async () => {
       appendEntry("s1", reply);
-      publishSessionsChanged(["s1"]);
+      publishSessionsChanged([sessionKey("s1")]);
     });
     await settle();
     assert.deepEqual(
@@ -3450,7 +3570,7 @@ test("a queued error notice is removed when its message appears without removing
   });
   await act(async () => {
     appendEntry("s1", reply);
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle(30);
   assert.ok(
@@ -3496,7 +3616,7 @@ for (const order of ["frame before message", "frame after message"]) {
     );
     await act(async () => {
       appendEntry("s1", reply);
-      publishSessionsChanged(["s1"]);
+      publishSessionsChanged([sessionKey("s1")]);
     });
     await settle();
     assert.deepEqual(
@@ -3545,7 +3665,7 @@ for (const change of ["new run", "historical branch"]) {
     }
     await act(async () => {
       appendEntry("s1", reply);
-      publishSessionsChanged(["s1"]);
+      publishSessionsChanged([sessionKey("s1")]);
     });
     await settle();
     assert.deepEqual(
@@ -4622,6 +4742,43 @@ test("fatal SSE error mid-run reconnects after 1s and the new stream delivers ev
   );
 });
 
+test("a remote chat ignores local and other-host running frames for the same ID", async () => {
+  resetWorld();
+  const sid = "shared-id";
+  const hostId = "remote-chat";
+  primeSession(sid, [userMsg("u0", "question")]);
+  const w = await mountSession(sid, undefined, {
+    session: { ...sessionInfo(sid), hostId },
+  });
+  assert.ok(
+    callsTo("GET", `/api/sessions/${sid}/state?hostId=${hostId}`).length,
+  );
+  assert.equal(world.esInstances.length, 0);
+  world.agents.set(sid, { running: true, state: { isStreaming: true } });
+  const source = world.runningStreams.at(-1)!;
+  const frame = (data: Record<string, unknown>) =>
+    source.deliver({
+      type: "message",
+      data: JSON.stringify({ type: "running", ...data }),
+    });
+  await act(async () => {
+    frame({ runningSessionIds: [sid] });
+    frame({ runningSessions: [{ id: sid, hostId: "other-host" }] });
+    await settle();
+  });
+  assert.equal(world.esInstances.length, 0);
+  await act(async () => {
+    frame({ runningSessions: [{ id: sid, hostId }] });
+    await settle();
+  });
+  assert.deepEqual(lastEs().channel, {
+    kind: "session",
+    sessionId: sid,
+    hostId,
+  });
+  assert.equal(w.latest.agentRunning, true);
+});
+
 test("a chat with no stream attaches when the running channel reports its session", async () => {
   resetWorld();
   primeSession("started-elsewhere", [userMsg("u0", "q")]);
@@ -4645,7 +4802,10 @@ test("a chat with no stream attaches when the running channel reports its sessio
   await act(async () => {
     running.deliver({
       type: "message",
-      data: JSON.stringify({ type: "running", runningSessionIds: ["other"] }),
+      data: JSON.stringify({
+        type: "running",
+        runningSessions: [{ id: "other", hostId: "local" }],
+      }),
     });
     await settle();
   });
@@ -4659,7 +4819,7 @@ test("a chat with no stream attaches when the running channel reports its sessio
       type: "message",
       data: JSON.stringify({
         type: "running",
-        runningSessionIds: ["started-elsewhere"],
+        runningSessions: [{ id: "started-elsewhere", hostId: "local" }],
       }),
     });
     await settle();
@@ -4692,7 +4852,7 @@ test("a running attachment applies compaction before its observer opens", async 
       type: "message",
       data: JSON.stringify({
         type: "running",
-        runningSessionIds: ["compacting-elsewhere"],
+        runningSessions: [{ id: "compacting-elsewhere", hostId: "local" }],
       }),
     });
     await settle();
@@ -4732,7 +4892,10 @@ test("compaction attached from another tab settles without replacing a historica
   await act(async () => {
     world.runningStreams.at(-1)!.deliver({
       type: "message",
-      data: JSON.stringify({ type: "running", runningSessionIds: [sid] }),
+      data: JSON.stringify({
+        type: "running",
+        runningSessions: [{ id: sid, hostId: "local" }],
+      }),
     });
     await settle();
     lastEs().open();
@@ -4748,7 +4911,7 @@ test("compaction attached from another tab settles without replacing a historica
   await act(async () => {
     world.runningStreams.at(-1)!.deliver({
       type: "message",
-      data: JSON.stringify({ type: "running", runningSessionIds: [] }),
+      data: JSON.stringify({ type: "running", runningSessions: [] }),
     });
     t.mock.timers.tick(15_000);
     await settle();
@@ -4772,7 +4935,10 @@ test("a refused compact command cannot unlock compaction attached from another t
   await act(async () => {
     world.runningStreams.at(-1)!.deliver({
       type: "message",
-      data: JSON.stringify({ type: "running", runningSessionIds: [sid] }),
+      data: JSON.stringify({
+        type: "running",
+        runningSessions: [{ id: sid, hostId: "local" }],
+      }),
     });
     await settle();
   });
@@ -4807,7 +4973,10 @@ test("an idle chat reconciles auto-compaction when its completion event is lost"
   await act(async () => {
     world.runningStreams.at(-1)!.deliver({
       type: "message",
-      data: JSON.stringify({ type: "running", runningSessionIds: [sid] }),
+      data: JSON.stringify({
+        type: "running",
+        runningSessions: [{ id: sid, hostId: "local" }],
+      }),
     });
     await settle();
     lastEs().open();
@@ -4890,7 +5059,7 @@ test("matching running frames received during an idle lookup trigger one fresh l
     type: "message",
     data: JSON.stringify({
       type: "running",
-      runningSessionIds: ["late-start"],
+      runningSessions: [{ id: "late-start", hostId: "local" }],
     }),
   };
   const gets = callsTo("GET", "/api/agent/late-start").length;
@@ -4928,7 +5097,7 @@ test("an idle running lookup without a newer matching frame is not retried", asy
       type: "message",
       data: JSON.stringify({
         type: "running",
-        runningSessionIds: ["still-idle"],
+        runningSessions: [{ id: "still-idle", hostId: "local" }],
       }),
     });
     await settle();
@@ -4974,7 +5143,7 @@ test("a delayed running lookup cannot take ownership of a locally started shell"
       type: "message",
       data: JSON.stringify({
         type: "running",
-        runningSessionIds: ["late-own-shell"],
+        runningSessions: [{ id: "late-own-shell", hostId: "local" }],
       }),
     });
     await Promise.resolve();
@@ -5045,7 +5214,10 @@ for (const stopped of [false, true]) {
     await act(async () => {
       world.runningStreams.at(-1)!.deliver({
         type: "message",
-        data: JSON.stringify({ type: "running", runningSessionIds: [sid] }),
+        data: JSON.stringify({
+          type: "running",
+          runningSessions: [{ id: sid, hostId: "local" }],
+        }),
       });
       await Promise.resolve();
     });
@@ -5106,7 +5278,7 @@ test("a delayed running lookup cannot attach after a newer send went to the outb
       type: "message",
       data: JSON.stringify({
         type: "running",
-        runningSessionIds: ["held-new-prompt"],
+        runningSessions: [{ id: "held-new-prompt", hostId: "local" }],
       }),
     });
     await Promise.resolve();
@@ -5151,7 +5323,7 @@ test("a delayed running lookup cannot replace a side question's readiness wait",
       type: "message",
       data: JSON.stringify({
         type: "running",
-        runningSessionIds: ["late-btw"],
+        runningSessions: [{ id: "late-btw", hostId: "local" }],
       }),
     });
     await Promise.resolve();
@@ -5197,7 +5369,10 @@ test("a running frame never touches a chat that already has its stream", async (
   await act(async () => {
     world.runningStreams.at(-1)!.deliver({
       type: "message",
-      data: JSON.stringify({ type: "running", runningSessionIds: ["s1"] }),
+      data: JSON.stringify({
+        type: "running",
+        runningSessions: [{ id: "s1", hostId: "local" }],
+      }),
     });
     await settle();
   });
@@ -5249,7 +5424,7 @@ test("a running frame leaves a shell command this idle chat runs to the chat", a
       type: "message",
       data: JSON.stringify({
         type: "running",
-        runningSessionIds: ["own-shell"],
+        runningSessions: [{ id: "own-shell", hostId: "local" }],
       }),
     });
     await settle();
@@ -5275,7 +5450,10 @@ async function deliverRunning(ids: string[]) {
   await act(async () => {
     world.runningStreams.at(-1)!.deliver({
       type: "message",
-      data: JSON.stringify({ type: "running", runningSessionIds: ids }),
+      data: JSON.stringify({
+        type: "running",
+        runningSessions: ids.map((id) => ({ id, hostId: "local" })),
+      }),
     });
     await Promise.resolve();
   });
@@ -6979,11 +7157,11 @@ test("wrapper-observed response missed by SSE survives terminal recovery before 
   );
   appendEntry("s1", answer);
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.deepEqual(
@@ -7200,7 +7378,7 @@ test("a terminal event fences a held busy snapshot and does not revive streaming
     ),
   );
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
     saveSession("s1", [
       userMsg("u0", "q"),
@@ -7225,7 +7403,7 @@ test("a replacement prompt fences held history and keeps its optimistic user unt
     syncSnapshot("s1", liveSnapshot("s1", 2, assistantMsg("a1", "old run"))),
   );
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
     const interrupt = w.latest.handleInterruptAndReply("new prompt");
     await sleep(20);
@@ -7251,7 +7429,7 @@ test("a replacement prompt fences held history and keeps its optimistic user unt
   );
   await act(async () => {
     appendEntry("s1", userMsg("native", "new prompt (expanded by native)"));
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.equal(
@@ -7292,7 +7470,7 @@ test("branch navigation fences held catch-up and preserves the selected pre-comp
   });
   await settle();
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     window.dispatchEvent(new Event("online"));
   });
   await settle();
@@ -7327,7 +7505,7 @@ test("file-only catch-up drains pages, deduplicates IDs, and keeps identical mes
     205,
   );
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.deepEqual(
@@ -7346,7 +7524,7 @@ test("file-only catch-up drains pages, deduplicates IDs, and keeps identical mes
     ["summary", "new-tip"],
   );
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["summary", "new-tip"]);
@@ -7364,7 +7542,7 @@ test("failed idle catch-up preserves history and cursor for the next online trig
     produce: async () => ({ status: 503, value: {} }),
   });
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["e0"]);
@@ -7398,7 +7576,7 @@ test("file notification after delayed native persistence catches up even with SS
   );
   await act(async () => {
     appendEntry("s1", assistantMsg("a1", "saved later"));
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.equal(es.closedByCaller, false);
@@ -7419,7 +7597,7 @@ test("wrapper epoch changes reject an old HTTP snapshot and hydrate the replacem
     ),
   );
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
     world.live.set("s1", {
       ...liveSnapshot("s1", 1, assistantMsg("new", "replacement wrapper")),
@@ -7648,7 +7826,7 @@ test("forking carries the advisor choice to the child's next native command", as
   });
   assert.deepEqual(forked, ["advisor-child"]);
   assert.equal(
-    localStorage.getItem("omp-advisor-enabled:advisor-child"),
+    localStorage.getItem("omp-advisor-enabled:local:advisor-child"),
     "true",
   );
   const { sendAgentCommand } = await import("@/lib/agent-client");
@@ -7684,8 +7862,11 @@ test("an edit-and-resend fork puts the branched prompt into the child's composer
     await act(async () => {
       await w.latest.handleFork("u0", editPrompt);
     });
-    assert.equal(getDraft(child)?.value, editPrompt ? "retry this" : undefined);
-    clearDraft(child);
+    assert.equal(
+      getDraft(sessionKey(child))?.value,
+      editPrompt ? "retry this" : undefined,
+    );
+    clearDraft(sessionKey(child));
     w.unmount();
   }
 });
@@ -8239,7 +8420,9 @@ async function mountEditableSession(
     changeLeaf = handler;
   };
   function Chat() {
-    const [value, setValue] = React.useState(() => getDraft(sid)?.value ?? "");
+    const [value, setValue] = React.useState(
+      () => getDraft(sessionKey(sid))?.value ?? "",
+    );
     React.useImperativeHandle(
       chatInputRef,
       () =>
@@ -8251,7 +8434,7 @@ async function mountEditableSession(
       [],
     );
     React.useEffect(() => {
-      setDraft(sid, { value, images: [], files: [] });
+      setDraft(sessionKey(sid), { value, images: [], files: [] });
     }, [value]);
     const hook = useAgentSession({
       session,
@@ -8344,7 +8527,11 @@ async function mountObservedEditableSession(
   const w = await mountEditableSession(sid, options);
   const stream = lastEs();
   assert.ok(stream, "the mounted hook must attach an idle history observer");
-  assert.deepEqual(stream.channel, { kind: "session", sessionId: sid });
+  assert.deepEqual(stream.channel, {
+    kind: "session",
+    sessionId: sid,
+    hostId: "local",
+  });
   await act(async () => {
     stream.open();
   });
@@ -8363,16 +8550,16 @@ for (const order of [
       await import("@/lib/draft-store");
     const sid = `edit-move-${order.startsWith("identity") ? "early" : "late"}`;
     const target = `${sid}-owned`;
-    for (const id of [sid, target]) clearDraft(id);
+    for (const id of [sid, target]) clearDraft(sessionKey(id));
     t.after(() => {
-      clearDraft(sid);
-      clearDraft(target);
+      clearDraft(sessionKey(sid));
+      clearDraft(sessionKey(target));
     });
     const images = [{ data: "AAAA", mimeType: "image/png" }];
     const uploads = [
       { id: "context-upload", name: "context.txt", size: 21, hostId: "local" },
     ];
-    setDraft(sid, { value: "", images, files: [], uploads });
+    setDraft(sessionKey(sid), { value: "", images, files: [], uploads });
     const native = primeEditableHistory(sid);
     native.moveTo = target;
     const original = structuredClone(world.sessions.get(sid));
@@ -8453,7 +8640,7 @@ for (const order of [
       new URL(window.location.href).searchParams.get("session"),
       target,
     );
-    assert.deepEqual(getDraft(target), {
+    assert.deepEqual(getDraft(sessionKey(target)), {
       value: "U2-original",
       images,
       files: [],
@@ -8461,7 +8648,7 @@ for (const order of [
       promptOnly: true,
     });
     assert.equal(
-      getDraft(sid),
+      getDraft(sessionKey(sid)),
       null,
       "the draft moves rather than remaining on the abandoned branch",
     );
@@ -8593,8 +8780,8 @@ test("relocation merges existing target attachments and preserves typing added w
   const sid = "edit-move-new-typing",
     target = `${sid}-owned`;
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(target);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(target));
   });
   const sourceImage = { data: "AAAA", mimeType: "image/png" };
   const targetImage = { data: "BBBB", mimeType: "image/webp" };
@@ -8610,13 +8797,13 @@ test("relocation merges existing target attachments and preserves typing added w
     size: 6,
     hostId: "local",
   };
-  setDraft(sid, {
+  setDraft(sessionKey(sid), {
     value: "initial source draft",
     images: [sourceImage],
     files: [],
     uploads: [sourceUpload],
   });
-  setDraft(target, {
+  setDraft(sessionKey(target), {
     value: "existing target draft",
     images: [targetImage],
     files: [],
@@ -8675,7 +8862,7 @@ test("relocation merges existing target attachments and preserves typing added w
     ]);
   });
   await until(
-    () => getDraft(sid)?.uploads?.length === 2,
+    () => getDraft(sessionKey(sid))?.uploads?.length === 2,
     "upload completion during the reload must join the moved draft",
   );
   await act(async () => {
@@ -8685,7 +8872,7 @@ test("relocation merges existing target attachments and preserves typing added w
     () => w.selectedId === target,
     "the confirmed move must transition its composer",
   );
-  const draft = getDraft(target);
+  const draft = getDraft(sessionKey(target));
   assert.equal(draft?.value, "new source typing\n\nexisting target draft");
   assert.deepEqual(draft?.images, [sourceImage, targetImage]);
   assert.deepEqual(draft?.files, []);
@@ -8702,7 +8889,7 @@ test("relocation merges existing target attachments and preserves typing added w
     (w.view.getByRole("textbox") as HTMLTextAreaElement).value,
     "new source typing\n\nexisting target draft",
   );
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
 });
 
 test("relocation keeps the source and existing target finished uploads", async (t) => {
@@ -8711,8 +8898,8 @@ test("relocation keeps the source and existing target finished uploads", async (
   const sid = "edit-move-uploads",
     target = `${sid}-owned`;
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(target);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(target));
   });
   const sourceUpload = {
     id: "up-source",
@@ -8726,8 +8913,13 @@ test("relocation keeps the source and existing target finished uploads", async (
     size: 20,
     hostId: "local",
   };
-  setDraft(sid, { value: "", images: [], files: [], uploads: [sourceUpload] });
-  setDraft(target, {
+  setDraft(sessionKey(sid), {
+    value: "",
+    images: [],
+    files: [],
+    uploads: [sourceUpload],
+  });
+  setDraft(sessionKey(target), {
     value: "Existing target text",
     images: [],
     files: [],
@@ -8745,12 +8937,12 @@ test("relocation keeps the source and existing target finished uploads", async (
   await settle();
   // The composer re-persists the merged list in its own order.
   assert.deepEqual(
-    getDraft(target)
+    getDraft(sessionKey(target))
       ?.uploads?.map((upload) => upload.id)
       .sort(),
     [sourceUpload.id, targetUpload.id],
   );
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
 });
 
 test("upload continuity: confirmed identity move retains proof through composer persistence and outbox submission", async (t) => {
@@ -8759,8 +8951,8 @@ test("upload continuity: confirmed identity move retains proof through composer 
   const sid = "proof-edit-move",
     target = `${sid}-owned`;
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(target);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(target));
   });
   const upload = {
     id: "moved-upload",
@@ -8769,7 +8961,12 @@ test("upload continuity: confirmed identity move retains proof through composer 
     hostId: "local",
     proof: "moved-completion-proof",
   };
-  setDraft(sid, { value: "", images: [], files: [], uploads: [upload] });
+  setDraft(sessionKey(sid), {
+    value: "",
+    images: [],
+    files: [],
+    uploads: [upload],
+  });
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
@@ -8781,11 +8978,11 @@ test("upload continuity: confirmed identity move retains proof through composer 
   );
   await settle();
   assert.deepEqual(
-    getDraft(target)?.uploads,
+    getDraft(sessionKey(target))?.uploads,
     [upload],
     "the live composer must preserve proof when rewriting its moved draft",
   );
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
   world.outboxHold = true;
   await act(async () => {
     fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" });
@@ -8807,8 +9004,8 @@ test("relocation merges an upload both drafts hold once", async (t) => {
   const sid = "edit-move-shared-upload",
     target = `${sid}-owned`;
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(target);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(target));
   });
   const shared = {
     id: "up-shared",
@@ -8822,8 +9019,13 @@ test("relocation merges an upload both drafts hold once", async (t) => {
     size: 20,
     hostId: "local",
   };
-  setDraft(sid, { value: "", images: [], files: [], uploads: [shared] });
-  setDraft(target, {
+  setDraft(sessionKey(sid), {
+    value: "",
+    images: [],
+    files: [],
+    uploads: [shared],
+  });
+  setDraft(sessionKey(target), {
     value: "Existing target text",
     images: [],
     files: [],
@@ -8836,8 +9038,8 @@ test("relocation merges an upload both drafts hold once", async (t) => {
   const persistedUploads: { id: string }[][] = [];
   t.after(
     subscribeDrafts(() => {
-      if (getDraft(sid) === null)
-        persistedUploads.push(getDraft(target)?.uploads ?? []);
+      if (getDraft(sessionKey(sid)) === null)
+        persistedUploads.push(getDraft(sessionKey(target))?.uploads ?? []);
     }),
   );
   await confirmEdit(w.view, w.editButton());
@@ -8847,13 +9049,15 @@ test("relocation merges an upload both drafts hold once", async (t) => {
   );
   await settle();
   assert.deepEqual(
-    getDraft(target)
+    getDraft(sessionKey(target))
       ?.uploads?.map((upload) => upload.id)
       .sort(),
     [shared.id, targetOnly.id],
   );
   assert.equal(
-    getDraft(target)?.uploads?.find((upload) => upload.id === shared.id)?.name,
+    getDraft(sessionKey(target))?.uploads?.find(
+      (upload) => upload.id === shared.id,
+    )?.name,
     shared.name,
     "the source occurrence wins",
   );
@@ -8865,7 +9069,7 @@ test("relocation merges an upload both drafts hold once", async (t) => {
       "no persisted snapshot contains the shared id twice",
     );
   }
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
 });
 
 test("relocation adopts existing target text without prefilling over it", async (t) => {
@@ -8874,8 +9078,8 @@ test("relocation adopts existing target text without prefilling over it", async 
   const sid = "edit-move-target-text",
     target = `${sid}-owned`;
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(target);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(target));
   });
   const sourceImage = { data: "AAAA", mimeType: "image/png" };
   const targetFile = {
@@ -8884,8 +9088,8 @@ test("relocation adopts existing target text without prefilling over it", async 
     content: "Target context",
     size: 14,
   };
-  setDraft(sid, { value: "", images: [sourceImage], files: [] });
-  setDraft(target, {
+  setDraft(sessionKey(sid), { value: "", images: [sourceImage], files: [] });
+  setDraft(sessionKey(target), {
     value: "Existing target text",
     images: [],
     files: [targetFile],
@@ -8912,12 +9116,12 @@ test("relocation adopts existing target text without prefilling over it", async 
     "Existing target text",
     "Edit prefill must not replace existing target content",
   );
-  assert.deepEqual(getDraft(target), {
+  assert.deepEqual(getDraft(sessionKey(target)), {
     value: "Existing target text",
     images: [sourceImage],
     files: [targetFile],
   });
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
 });
 
 // The model prompt may have carried images or inline files that Edit cannot restore; its text starting with `!!` must
@@ -8935,8 +9139,8 @@ test("same-ID Edit of a `!!` model prompt resends it as a held prompt, never a s
   resetWorld();
   const { clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-bang-same";
-  clearDraft(sid);
-  t.after(() => clearDraft(sid));
+  clearDraft(sessionKey(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   const native = primeEditableHistory(sid, bangHistory);
   world.outboxHold = true;
   const w = await mountMovableChat(sid);
@@ -8965,8 +9169,8 @@ test("same-ID Edit leaves a typed `!!` draft alone and still runs it as a shell 
   resetWorld();
   const { setDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-bang-same-typed";
-  setDraft(sid, { value: "!!typed shell", images: [], files: [] });
-  t.after(() => clearDraft(sid));
+  setDraft(sessionKey(sid), { value: "!!typed shell", images: [], files: [] });
+  t.after(() => clearDraft(sessionKey(sid)));
   const native = primeEditableHistory(sid, bangHistory);
   world.outboxHold = true;
   const w = await mountMovableChat(sid);
@@ -9001,10 +9205,10 @@ test("moved-ID Edit of a `!!` model prompt resends it as a held prompt, never a 
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-bang-move",
     target = `${sid}-owned`;
-  for (const id of [sid, target]) clearDraft(id);
+  for (const id of [sid, target]) clearDraft(sessionKey(id));
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(target);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(target));
   });
   const native = primeEditableHistory(sid, bangHistory);
   native.moveTo = target;
@@ -9021,7 +9225,7 @@ test("moved-ID Edit of a `!!` model prompt resends it as a held prompt, never a 
     "!!model text",
   );
   assert.equal(
-    getDraft(target)?.promptOnly,
+    getDraft(sessionKey(target))?.promptOnly,
     true,
     "the prefill is marked as model input",
   );
@@ -9045,12 +9249,16 @@ test("moved-ID Edit keeps an existing target `!!` draft as shell input, not prom
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-bang-move-typed",
     target = `${sid}-owned`;
-  for (const id of [sid, target]) clearDraft(id);
+  for (const id of [sid, target]) clearDraft(sessionKey(id));
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(target);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(target));
   });
-  setDraft(target, { value: "!!target shell", images: [], files: [] });
+  setDraft(sessionKey(target), {
+    value: "!!target shell",
+    images: [],
+    files: [],
+  });
   const native = primeEditableHistory(sid, bangHistory);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
@@ -9066,7 +9274,7 @@ test("moved-ID Edit keeps an existing target `!!` draft as shell input, not prom
     "!!target shell",
     "Edit must not prefill over existing target text",
   );
-  assert.notEqual(getDraft(target)?.promptOnly, true);
+  assert.notEqual(getDraft(sessionKey(target))?.promptOnly, true);
   world.outboxHold = true;
   await act(async () => {
     fireEvent.keyDown(w.view.getByRole("textbox"), { key: "Enter" });
@@ -9108,14 +9316,14 @@ test("relocation at draft capacity preserves every unrelated draft and its attac
       },
     ] satisfies [string, unknown];
   });
-  clearDraft(target);
+  clearDraft(sessionKey(target));
   t.after(() => {
     for (const id of [sid, target, ...unrelated.map(([id]) => id)])
-      clearDraft(id);
+      clearDraft(sessionKey(id));
   });
   // Fill all 50 slots with the source newer than every unrelated draft.
   // This also removes any in-memory drafts left by earlier tests.
-  for (const [id, draft] of unrelated) setDraft(id, draft);
+  for (const [id, draft] of unrelated) setDraft(sessionKey(id), draft);
   const source = {
     value: "",
     images: [{ data: png, mimeType: "image/png" }],
@@ -9128,7 +9336,7 @@ test("relocation at draft capacity preserves every unrelated draft and its attac
       },
     ],
   };
-  setDraft(sid, source);
+  setDraft(sessionKey(sid), source);
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
@@ -9142,15 +9350,15 @@ test("relocation at draft capacity preserves every unrelated draft and its attac
   await settle();
   assert.equal(w.view.getByRole("textbox"), composer);
   assert.equal(composer.value, "U2-original");
-  assert.deepEqual(getDraft(target), {
+  assert.deepEqual(getDraft(sessionKey(target)), {
     ...source,
     value: "U2-original",
     promptOnly: true,
   });
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
   for (const [id, draft] of unrelated) {
     assert.deepEqual(
-      getDraft(id),
+      getDraft(sessionKey(id)),
       draft,
       `relocation must preserve ${id}, including its attachments`,
     );
@@ -9167,7 +9375,7 @@ test("relocation at draft capacity preserves every unrelated draft and its attac
     "the oldest unrelated conversation still restores its unsent text",
   );
   assert.deepEqual(
-    getDraft(oldestId),
+    getDraft(sessionKey(oldestId)),
     oldestDraft,
     "restoring the oldest composer keeps both attachment payloads",
   );
@@ -9182,10 +9390,10 @@ for (const phase of ["HTTP response", "target reload"]) {
       target = `${sid}-owned`,
       other = `${sid}-other`;
     t.after(() => {
-      for (const id of [sid, target, other]) clearDraft(id);
+      for (const id of [sid, target, other]) clearDraft(sessionKey(id));
     });
-    setDraft(sid, { value: "origin draft", images: [], files: [] });
-    setDraft(other, {
+    setDraft(sessionKey(sid), { value: "origin draft", images: [], files: [] });
+    setDraft(sessionKey(other), {
       value: "other user's navigation draft",
       images: [],
       files: [],
@@ -9249,9 +9457,12 @@ for (const phase of ["HTTP response", "target reload"]) {
       other,
     );
     assert.equal(selectedComposer.value, "other user's navigation draft");
-    assert.equal(getDraft(other)?.value, "other user's navigation draft");
-    assert.equal(getDraft(sid)?.value, "origin draft");
-    assert.equal(getDraft(target), null);
+    assert.equal(
+      getDraft(sessionKey(other))?.value,
+      "other user's navigation draft",
+    );
+    assert.equal(getDraft(sessionKey(sid))?.value, "origin draft");
+    assert.equal(getDraft(sessionKey(target)), null);
   });
 }
 
@@ -9269,8 +9480,8 @@ test("a moved conversation whose reload fails preserves attachments without pref
   const sid = "edit-move-load-failed",
     target = `${sid}-owned`;
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(target);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(target));
   });
   const draft = {
     value: "",
@@ -9284,7 +9495,7 @@ test("a moved conversation whose reload fails preserves attachments without pref
       },
     ],
   };
-  setDraft(sid, draft);
+  setDraft(sessionKey(sid), draft);
   const native = primeEditableHistory(sid);
   native.moveTo = target;
   await attachEditableWrapper(t, native);
@@ -9309,7 +9520,7 @@ test("a moved conversation whose reload fails preserves attachments without pref
     "",
     "an unconfirmed history load must not prefill the original prompt",
   );
-  assert.deepEqual(getDraft(target), draft);
+  assert.deepEqual(getDraft(sessionKey(target)), draft);
   assert.ok(w.view.getByText(translate("agentSession.commandFailed")));
 });
 
@@ -9317,7 +9528,7 @@ test("observed edit-time persistence errors preserve the real composer and compl
   resetWorld();
   const { getDraft, setDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-native-disk-error";
-  t.after(() => clearDraft(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   const draft = {
     value: "keep unsent text",
     images: [{ data: "AAAA", mimeType: "image/png" }],
@@ -9330,7 +9541,7 @@ test("observed edit-time persistence errors preserve the real composer and compl
       },
     ],
   };
-  setDraft(sid, draft);
+  setDraft(sessionKey(sid), draft);
   const native = primeEditableHistory(sid);
   native.editOutcome = "persistence-error";
   const original = structuredClone(world.sessions.get(sid));
@@ -9348,7 +9559,7 @@ test("observed edit-time persistence errors preserve the real composer and compl
   assert.equal(w.selectedId, sid);
   assert.equal(w.view.getByRole("textbox"), composer);
   assert.equal(composer.value, draft.value);
-  assert.deepEqual(getDraft(sid), draft);
+  assert.deepEqual(getDraft(sessionKey(sid)), draft);
   assert.deepEqual(world.sessions.get(sid), original);
   assert.equal(
     (w.editButton() as HTMLButtonElement).disabled,
@@ -9361,8 +9572,8 @@ test("Edit rewinds and resends in the same persisted session while retaining the
   resetWorld();
   const { clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-same-session";
-  clearDraft(sid);
-  t.after(() => clearDraft(sid));
+  clearDraft(sessionKey(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   const native = primeEditableHistory(sid);
   const originalEntries = native.entries;
   const original = world.sessions.get(sid);
@@ -9536,8 +9747,8 @@ for (const order of ["HTTP first", "SSE first"]) {
     resetWorld();
     const { clearDraft } = await import("@/lib/draft-store");
     const sid = `edit-echo-branch-${order === "HTTP first" ? "http" : "sse"}`;
-    clearDraft(sid);
-    t.after(() => clearDraft(sid));
+    clearDraft(sessionKey(sid));
+    t.after(() => clearDraft(sessionKey(sid)));
     const native = primeEditableHistory(sid);
     const original = structuredClone(world.sessions.get(sid));
     const { w, stream } = await mountObservedEditableSession(sid);
@@ -9596,7 +9807,7 @@ for (const order of ["HTTP first", "SSE first"]) {
     assert.equal(world.sessions.get(sid).leafId, ownLeafId);
     // A subsequent normal refresh must retain the same catch-up selection.
     await act(async () => {
-      publishSessionsChanged([sid]);
+      publishSessionsChanged([sessionKey(sid)]);
     });
     await settle();
     assert.equal(w.latest.activeLeafId, original.leafId);
@@ -9639,8 +9850,8 @@ test("an HTTP-first Edit echo cannot reset the next replacement prompt", async (
     await t.test(phase, async (t) => {
       resetWorld();
       const sid = `edit-echo-send-${phase === "streaming" ? "live" : "pending"}`;
-      clearDraft(sid);
-      t.after(() => clearDraft(sid));
+      clearDraft(sessionKey(sid));
+      t.after(() => clearDraft(sessionKey(sid)));
       const native = primeEditableHistory(sid);
       const original = structuredClone(world.sessions.get(sid));
       const { w, stream: observer } = await mountObservedEditableSession(sid);
@@ -9778,8 +9989,8 @@ test("history notifications received during an unsuccessful Edit remain effectiv
     await t.test(outcome, async (t) => {
       resetWorld();
       const sid = `edit-external-during-${outcome}`;
-      clearDraft(sid);
-      t.after(() => clearDraft(sid));
+      clearDraft(sessionKey(sid));
+      t.after(() => clearDraft(sessionKey(sid)));
       const native = primeEditableHistory(sid);
       const original = structuredClone(world.sessions.get(sid));
       const { w, stream } = await mountObservedEditableSession(sid);
@@ -9883,8 +10094,12 @@ test("cancelled and failed Edits preserve history selection and draft, then rele
     await t.test(outcome, async (t) => {
       resetWorld();
       const sid = `edit-${outcome}`;
-      setDraft(sid, { value: "keep my draft", images: [], files: [] });
-      t.after(() => clearDraft(sid));
+      setDraft(sessionKey(sid), {
+        value: "keep my draft",
+        images: [],
+        files: [],
+      });
+      t.after(() => clearDraft(sessionKey(sid)));
       const native = primeEditableHistory(sid);
       native.editOutcome = outcome;
       const original = structuredClone(world.sessions.get(sid));
@@ -9913,7 +10128,7 @@ test("cancelled and failed Edits preserve history selection and draft, then rele
         (w.view.getByRole("textbox") as HTMLTextAreaElement).value,
         "keep my draft",
       );
-      assert.equal(getDraft(sid)?.value, "keep my draft");
+      assert.equal(getDraft(sessionKey(sid))?.value, "keep my draft");
       assert.deepEqual(
         w.latest.notices.map((notice: { type: string }) => notice.type),
         outcome === "error" ? ["error"] : [],
@@ -9935,7 +10150,7 @@ test("cancelled and failed Edits preserve history selection and draft, then rele
         "keep my draft",
         "successful insertIfEmpty must not overwrite existing text",
       );
-      assert.equal(getDraft(sid)?.value, "keep my draft");
+      assert.equal(getDraft(sessionKey(sid))?.value, "keep my draft");
       assert.deepEqual([...world.sessions.keys()], [sid]);
       assert.equal(
         world.calls.some(
@@ -9954,10 +10169,10 @@ test("an Edit completed after unmount cannot fill the current composer or change
   const { clearDraft } = await import("@/lib/draft-store");
   const sid = "edit-abandoned";
   const currentSid = "edit-current-view";
-  for (const id of [sid, currentSid]) clearDraft(id);
+  for (const id of [sid, currentSid]) clearDraft(sessionKey(id));
   t.after(() => {
-    clearDraft(sid);
-    clearDraft(currentSid);
+    clearDraft(sessionKey(sid));
+    clearDraft(sessionKey(currentSid));
   });
   const native = primeEditableHistory(sid);
   const currentNative = primeEditableHistory(currentSid, [
@@ -10044,7 +10259,7 @@ test("catch-up metadata cannot overwrite a newer live todo snapshot during a run
   ] as unknown as typeof response.context.todoPhases;
   const release = holdNextSync("s1", response);
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
     es.emit({ type: "todo_reminder" });
     await sleep(20);
@@ -10090,7 +10305,7 @@ test("a late full branch context cannot replace a newer incremental history comm
       messages: [...branch.messages, assistantMsg("new", "new branch answer")],
       entryIds: ["b1", "b2"],
     });
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["b1", "b2"]);
@@ -10192,7 +10407,7 @@ for (const selected of ["active", "branch", "pre-compaction"]) {
               ? w.changeLeaf("branch")
               : w.latest.togglePreCompactionHistory();
         await sleep(20);
-        publishSessionsChanged(["s1"]);
+        publishSessionsChanged([sessionKey("s1")]);
       });
       await settle();
       assert.ok(
@@ -10244,7 +10459,7 @@ for (const selected of ["active", "branch", "pre-compaction"]) {
       if (selected === "active") world.sessions.set("s1", newer);
       else world.views.set(`s1:branch:${selected === "pre-compaction"}`, newer);
       await act(async () => {
-        publishSessionsChanged(["s1"]);
+        publishSessionsChanged([sessionKey("s1")]);
         if (order !== "page two fails") releasePage();
       });
       await settle();
@@ -10406,7 +10621,7 @@ test("a same-text queued delivery shows live and commits only when its distinct 
   );
   await act(async () => {
     appendEntry("s1", delivered);
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2"]);
@@ -10450,11 +10665,11 @@ test("file triggers coalesce while a sync is held and rerun to recover later per
   const release = holdNextSync("s1", syncSnapshot("s1"));
   const before = callsTo("GET", "/api/sessions/s1/context?").length;
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
     appendEntry("s1", assistantMsg("a2", "later saved answer"));
-    publishSessionsChanged(["s1"]);
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
+    publishSessionsChanged([sessionKey("s1")]);
     release();
   });
   await settle();
@@ -10485,7 +10700,7 @@ for (const persistBeforeReply of [true, false]) {
       assistantMsg("a1", "first saved answer"),
     ]);
     await act(async () => {
-      publishSessionsChanged(["s1"]);
+      publishSessionsChanged([sessionKey("s1")]);
     });
     await settle();
     assert.deepEqual(w.latest.entryIds, ["e0", "e1", "e2"]);
@@ -10534,7 +10749,7 @@ for (const persistBeforeReply of [true, false]) {
       );
       await act(async () => {
         appendEntry("s1", concurrent);
-        publishSessionsChanged(["s1"]);
+        publishSessionsChanged([sessionKey("s1")]);
       });
       await settle();
     }
@@ -10657,7 +10872,7 @@ test("an unrelated newer notice does not prevent recovering a held partial and t
   world.streams.set("s1", snapshot.cursor);
   const release = holdNextSync("s1", syncSnapshot("s1", snapshot));
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
     es.emit({
       type: "notice",
@@ -10712,7 +10927,7 @@ test("selective hydration preserves newer queued tokens and per-tool progress wh
   world.streams.set("s1", snapshot.cursor);
   const release = holdNextSync("s1", syncSnapshot("s1", snapshot));
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
     es.emit({
       type: "tool_execution_start",
@@ -11011,7 +11226,7 @@ test("HTTP discovery of a new wrapper replaces an old still-open stream before h
     },
   ]);
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   const replacement = lastEs();
@@ -11154,7 +11369,7 @@ test("newer tool progress does not block hydration of a missed assistant partial
   world.streams.set("s1", snapshot.cursor);
   const release = holdNextSync("s1", syncSnapshot("s1", snapshot));
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
     es.emit({
       type: "tool_execution_start",
@@ -11285,7 +11500,7 @@ test("idle file-only catch-up updates persisted model, thinking and data context
     thinkingLevel: "off",
   });
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.equal(w.latest.displayModel?.modelId, "external-model");
@@ -11321,7 +11536,7 @@ test("file metadata refresh preserves an active RPC model and thinking choice", 
     thinkingLevel: "low",
   });
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.equal(w.latest.agentRunning, true);
@@ -11344,7 +11559,7 @@ test("a held file snapshot cannot roll back a newer RPC model choice", async () 
   const w = await mountSession("s1");
   const release = holdNextSync("s1", syncSnapshot("s1"));
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
     await sleep(20);
   });
   world.agents.set("s1", {
@@ -11673,7 +11888,7 @@ test("idle catch-up cannot overwrite a pending thinking command", async () => {
     await sleep(20);
   });
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   assert.equal(w.latest.thinkingLevel, "high");
@@ -11695,7 +11910,7 @@ test("failed cold-read reconnects never issue process-starting registrations", a
     isPromptRunning: false,
   });
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   const source = lastEs();
@@ -11722,7 +11937,7 @@ test("unmount before replacement open cannot restore stale wrapper registrations
     cursor: { streamId: "replacement", sequence: 1 },
   });
   await act(async () => {
-    publishSessionsChanged(["s1"]);
+    publishSessionsChanged([sessionKey("s1")]);
   });
   await settle();
   const replacement = lastEs();
@@ -11803,7 +12018,7 @@ test("a vanished session's permanent outbox refusal remains a failed held bubble
 test("Stop takes queued input back through omp in one step, including a steer the snapshot missed", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   resetWorld();
-  clearDraft("abort-atomic");
+  clearDraft(sessionKey("abort-atomic"));
   primeSession("abort-atomic", [userMsg("u0", "loaded question")]);
   const { w } = await startRun("abort-atomic", "hello agent");
   world.abortRestoreQueue = {
@@ -11836,16 +12051,16 @@ test("Stop takes queued input back through omp in one step, including a steer th
   );
   assert.equal(commands.includes("remove_queued_message"), false);
   assert.equal(
-    getDraft("abort-atomic")?.value,
+    getDraft(sessionKey("abort-atomic"))?.value,
     "steer the snapshot missed\n\n[Image]\n\nlater follow-up",
     "only an image-only message's label is dropped",
   );
-  assert.deepEqual(getDraft("abort-atomic")?.images, [
+  assert.deepEqual(getDraft(sessionKey("abort-atomic"))?.images, [
     { data: "x", mimeType: "image/png" },
     { data: "y", mimeType: "image/webp" },
   ]);
   assert.deepEqual(w.latest.notices, []);
-  clearDraft("abort-atomic");
+  clearDraft(sessionKey("abort-atomic"));
 });
 
 const isAtomicStop: HeldRequest["match"] = (method, _url, body) =>
@@ -11854,7 +12069,7 @@ const isAtomicStop: HeldRequest["match"] = (method, _url, body) =>
 test("a failed atomic Stop is retried once and restores what omp still held", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   resetWorld();
-  clearDraft("abort-atomic-retry");
+  clearDraft(sessionKey("abort-atomic-retry"));
   primeSession("abort-atomic-retry", [userMsg("u0", "loaded question")]);
   const { w } = await startRun("abort-atomic-retry", "hello agent");
   world.holds.push({
@@ -11878,9 +12093,9 @@ test("a failed atomic Stop is retried once and restores what omp still held", as
     "a failure is not mistaken for an omp without the command",
   );
   assert.equal(commands.includes("remove_queued_message"), false);
-  assert.equal(getDraft("abort-atomic-retry")?.value, "retry me");
+  assert.equal(getDraft(sessionKey("abort-atomic-retry"))?.value, "retry me");
   assert.deepEqual(w.latest.notices, []);
-  clearDraft("abort-atomic-retry");
+  clearDraft(sessionKey("abort-atomic-retry"));
 });
 
 test("an atomic Stop whose texts were lost with a failed response warns", async () => {
@@ -11966,7 +12181,7 @@ test("a failed atomic Stop never retries into a run started after the click", as
 test("overlapping Stops share one atomic withdrawal; an image-only entry does not come back as text", async () => {
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   resetWorld();
-  clearDraft("abort-atomic-twice");
+  clearDraft(sessionKey("abort-atomic-twice"));
   primeSession("abort-atomic-twice", [userMsg("u0", "loaded question")]);
   const { w } = await startRun("abort-atomic-twice", "hello agent");
   world.abortRestoreQueue = {
@@ -11988,8 +12203,8 @@ test("overlapping Stops share one atomic withdrawal; an image-only entry does no
       .length,
     1,
   );
-  assert.equal(getDraft("abort-atomic-twice")?.value, "words");
-  clearDraft("abort-atomic-twice");
+  assert.equal(getDraft(sessionKey("abort-atomic-twice"))?.value, "words");
+  clearDraft(sessionKey("abort-atomic-twice"));
 });
 
 test("a fresh chat's first prompt attaches one event stream instead of an observer plus its own", async () => {
@@ -12135,7 +12350,10 @@ test("a first prompt rejected after promotion identifies the real-session recove
     receipt = await sending;
   });
   assert.deepEqual(promoted, [sid]);
-  assert.deepEqual(receipt, { status: "rejected", recoveryKey: sid });
+  assert.deepEqual(receipt, {
+    status: "rejected",
+    recoveryKey: sessionKey(sid),
+  });
   assert.equal(w.latest.agentRunning, false);
 });
 
@@ -12345,11 +12563,25 @@ for (const modelId of [undefined, "worker-model"] as const) {
       defaultModel: { provider: "web", modelId: "web-model" },
     };
     world.respond = (method, url, body) => {
+      if (url.startsWith("/api/models?hostId=h1&"))
+        return jsonResponse(200, {
+          models: {
+            "worker:worker-default": "Worker default",
+            "worker:worker-model": "Worker model",
+          },
+          modelList: [
+            {
+              id: "worker-default",
+              provider: "worker",
+              name: "Worker default",
+            },
+            { id: "worker-model", provider: "worker", name: "Worker model" },
+          ],
+          defaultModel: { provider: "worker", modelId: "worker-default" },
+        });
       if (method !== "POST" || url !== "/api/agent/new") return null;
-      if (body?.provider === "web")
-        return jsonResponse(409, { error: "Model not available on worker" });
-      assert.equal(body?.provider, modelId ? "worker" : undefined);
-      assert.equal(body?.modelId, modelId);
+      assert.equal(body?.provider, "worker");
+      assert.equal(body?.modelId, modelId ?? "worker-default");
       return jsonResponse(200, {
         success: true,
         sessionId: "remote-model-session",
@@ -12361,12 +12593,20 @@ for (const modelId of [undefined, "worker-model"] as const) {
       newSessionCwd: "/remote/work",
       newSessionHostId: "h1",
     });
-    await act(async () => { await w.latest.refreshModels(); });
-    assert.ok(w.latest.modelList.some((model) => model.id === "web-model"));
-    assert.equal(w.latest.displayModel, null);
+    await act(async () => {
+      await w.latest.refreshModels();
+    });
+    assert.deepEqual(
+      w.latest.modelList.map((model) => model.id),
+      ["worker-default", "worker-model"],
+    );
+    assert.deepEqual(w.latest.displayModel, {
+      provider: "worker",
+      modelId: "worker-default",
+    });
     if (modelId) await act(() => w.latest.handleModelChange("worker", modelId));
     await act(async () => {
-      assert.equal(await w.latest.resolveUploadHost(), "h1");
+      await w.latest.handleFastModeChange(true);
     });
     assert.equal(w.latest.sessionIdRef.current, "remote-model-session");
   });
@@ -12488,7 +12728,7 @@ test("late global skills cannot replace a newly created session's command roster
     await sleep(0);
   });
   await act(async () => {
-    await w.latest.resolveUploadHost();
+    await w.latest.handleFastModeChange(true);
   });
   await act(async () => {
     w.latest.handleAgentEventRef.current?.({
@@ -12507,672 +12747,6 @@ test("late global skills cannot replace a newly created session's command roster
     { name: "project", description: "Project", source: "skill" },
   ]);
   w.unmount();
-});
-
-test("a lost pooled creation response retries the original identity and frozen initialization, then adopts its owner", async () => {
-  resetWorld();
-  const creationId = "e740daaa-78c7-46ae-9985-409064653f01";
-  const journal = new Map();
-  let loseResponse = true;
-  const create = async () => {
-    const request = callsTo("POST", "/api/agent/new").at(-1)!.body!;
-    if (!journal.has(request.creationId)) {
-      journal.set(request.creationId, {
-        sessionId: "pooled-original",
-        hostId: "h2",
-        cwd: "/worker-2/worktrees/original",
-      });
-      primeSession("pooled-original", []);
-    }
-    if (loseResponse) {
-      loseResponse = false;
-      throw new TypeError("Response lost after creation");
-    }
-    return {
-      value: { success: true, ...journal.get(request.creationId), data: {} },
-    };
-  };
-  world.holds.push(
-    {
-      match: (method, url) => method === "POST" && url === "/api/agent/new",
-      produce: create,
-    },
-    {
-      match: (method, url) => method === "POST" && url === "/api/agent/new",
-      produce: create,
-    },
-  );
-  const promoted: Parameters<
-    NonNullable<UseAgentSessionOptions["onSessionCreated"]>
-  >[0][] = [];
-  const w = await mountSession(null, undefined, {
-    newSessionCwd: "/diagnostic/representative",
-    newSessionHostId: "h1",
-    newSessionCreationId: creationId,
-    newSessionPoolId: "workers",
-    newSessionProjectId: "app",
-    onSessionCreated: (session) => promoted.push(session),
-  });
-  await act(async () => {
-    await w.latest.resolveUploadHost().catch(() => undefined);
-  });
-  await act(async () => {
-    await w.latest.handleModelChange("anthropic", "changed-after-loss");
-    await w.latest.handleThinkingLevelChange("high");
-    await w.latest.handleToolPresetChange("none");
-    w.latest.handleAdvisorChange(true);
-  });
-  await act(async () => {
-    await w.latest.resolveUploadHost();
-  });
-  let sending!: Promise<PromptSubmissionResult>;
-  await act(async () => {
-    sending = w.latest.handleSend("first prompt");
-    await sleep(30);
-  });
-  let receipt!: PromptSubmissionResult;
-  await act(async () => {
-    lastEs()?.open();
-    receipt = await sending;
-  });
-  w.unmount();
-  const requests = callsTo("POST", "/api/agent/new").map((call) => call.body!);
-  assert.equal(requests.length, 2);
-  assert.equal(requests[0].creationId, creationId);
-  assert.equal(requests[0].poolId, "workers");
-  assert.equal(requests[0].projectId, "app");
-  assert.equal(
-    "cwd" in requests[0],
-    false,
-    "a representative checkout is not a creation target",
-  );
-  assert.equal("hostId" in requests[0], false);
-  assert.deepEqual(
-    requests[1],
-    requests[0],
-    "a retry must not change an already-journaled initialization",
-  );
-  assert.equal(
-    requests[1].type,
-    "ensure_session",
-    "the first prompt uses the owner route, not a changed creation intent",
-  );
-  assert.equal(journal.size, 1);
-  assert.equal(receipt.status, "accepted");
-  assert.deepEqual(
-    promoted.map(({ id, hostId, cwd, poolId, projectId }) => ({
-      id,
-      hostId,
-      cwd,
-      poolId,
-      projectId,
-    })),
-    [
-      {
-        id: "pooled-original",
-        hostId: "h2",
-        cwd: "/worker-2/worktrees/original",
-        poolId: "workers",
-        projectId: "app",
-      },
-    ],
-  );
-  assert.equal(
-    callsTo("POST", "/api/agent/pooled-original").filter(
-      (call) => call.body?.type === "prompt",
-    ).length,
-    1,
-  );
-});
-
-test("pooled creation uncertainty with a known id adopts the owner without resending the initial command", async (t) => {
-  captureFailure(
-    t,
-    "Failed to send message:",
-    "The initialization answer was lost",
-  );
-  resetWorld();
-  const owner = {
-    sessionId: "uncertain-owner",
-    hostId: "h2",
-    cwd: "/worker-2/worktrees/uncertain",
-  };
-  primeSession(owner.sessionId, []);
-  world.holds.push({
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({
-      status: 503,
-      value: {
-        ...owner,
-        error: "The initialization answer was lost",
-        code: "pool_delivery_unknown",
-        delivery: "unknown",
-      },
-    }),
-  });
-  const promoted: Parameters<
-    NonNullable<UseAgentSessionOptions["onSessionCreated"]>
-  >[0][] = [];
-  const w = await mountSession(null, undefined, {
-    newSessionCwd: "/diagnostic/representative",
-    newSessionHostId: "h1",
-    newSessionCreationId: "9eaaed5b-773b-419a-b03e-9b07866623a1",
-    newSessionPoolId: "workers",
-    newSessionProjectId: "app",
-    onSessionCreated: (session) => promoted.push(session),
-  });
-  let first!: PromptSubmissionResult;
-  await act(async () => {
-    first = await w.latest.handleSend("do not resend automatically");
-    await sleep(30);
-  });
-  assert.equal(first.status, "rejected");
-  assert.equal(w.latest.sessionIdRef.current, owner.sessionId);
-  assert.equal(
-    callsTo("POST", `/api/agent/${owner.sessionId}`).filter(
-      (call) => call.body?.type === "prompt",
-    ).length,
-    0,
-  );
-  let retry!: Promise<PromptSubmissionResult>;
-  let retryResult!: PromptSubmissionResult;
-  await act(async () => {
-    retry = w.latest.handleSend("explicit retry");
-    await sleep(30);
-  });
-  await act(async () => {
-    lastEs()?.open();
-    retryResult = await retry;
-  });
-  w.unmount();
-  assert.equal(retryResult.status, "accepted");
-  assert.equal(
-    callsTo("POST", "/api/agent/new").length,
-    1,
-    "a known owner is never placed again",
-  );
-  assert.deepEqual(
-    promoted.map(({ hostId, cwd }) => ({ hostId, cwd })),
-    [{ hostId: "h2", cwd: owner.cwd }],
-  );
-  assert.deepEqual(
-    callsTo("POST", `/api/agent/${owner.sessionId}`)
-      .filter((call) => call.body?.type === "prompt")
-      .map((call) => call.body?.message),
-    ["explicit retry"],
-  );
-});
-
-test("a pooled session whose owner is offline never creates on another target", async (t) => {
-  captureFailure(t, "Failed to send message:", "Owner is offline");
-  resetWorld();
-  world.holds.push({
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({
-      status: 503,
-      value: {
-        sessionId: "offline-pool-owner",
-        hostId: "h2",
-        cwd: "/worker-2/worktrees/offline",
-        error: "Owner is offline",
-        code: "host_offline",
-        delivery: "refused",
-      },
-    }),
-  });
-  const w = await mountSession(null, undefined, {
-    newSessionCwd: "/diagnostic/representative",
-    newSessionHostId: "h1",
-    newSessionCreationId: "3af9fe09-0719-4942-b105-755ed9b0c5ec",
-    newSessionPoolId: "workers",
-    newSessionProjectId: "app",
-  });
-  await act(async () => {
-    await w.latest.handleSend("first");
-  });
-  world.holds.push({
-    match: (method, url, body) =>
-      method === "POST" &&
-      url.includes("/api/agent/offline-pool-owner") &&
-      body?.type === "prompt",
-    produce: async () => ({
-      status: 503,
-      value: {
-        error: "Owner is offline",
-        code: "host_offline",
-        hostOffline: true,
-        delivery: "refused",
-      },
-    }),
-  });
-  let retry!: Promise<PromptSubmissionResult>;
-  let retryResult!: PromptSubmissionResult;
-  await act(async () => {
-    retry = w.latest.handleSend("retry");
-    await sleep(30);
-  });
-  await act(async () => {
-    lastEs()?.open();
-    retryResult = await retry;
-  });
-  w.unmount();
-  assert.equal(retryResult.status, "rejected");
-  assert.equal(w.latest.sessionIdRef.current, "offline-pool-owner");
-  assert.equal(callsTo("POST", "/api/agent/new").length, 1);
-});
-
-test("choosing a different logical project starts a distinct creation intent without a representative path", async () => {
-  resetWorld();
-  const ids = [
-    "a0f374af-d4cd-4ce0-8d24-e417fa5ad60c",
-    "b2317aee-c4a0-411e-bd6e-49837012ae96",
-  ];
-  for (const [index, projectId] of ["app", "other-app"].entries()) {
-    world.holds.push({
-      match: (method, url) => method === "POST" && url === "/api/agent/new",
-      produce: async () => ({
-        status: 503,
-        value: { error: "No capacity", code: "pool_unavailable" },
-      }),
-    });
-    const w = await mountSession(null, undefined, {
-      newSessionCwd: null,
-      newSessionCreationId: ids[index],
-      newSessionPoolId: "workers",
-      newSessionProjectId: projectId,
-    });
-    await act(async () => {
-      await w.latest.resolveUploadHost().catch(() => undefined);
-    });
-    w.unmount();
-  }
-  assert.deepEqual(
-    callsTo("POST", "/api/agent/new").map(({ body }) => ({
-      creationId: body?.creationId,
-      poolId: body?.poolId,
-      projectId: body?.projectId,
-    })),
-    [
-      { creationId: ids[0], poolId: "workers", projectId: "app" },
-      { creationId: ids[1], poolId: "workers", projectId: "other-app" },
-    ],
-  );
-});
-
-test("reopening a pending pooled composer reuses its frozen creation body instead of new defaults", async () => {
-  resetWorld();
-  const creationId = "183df38f-688a-4b72-b8e7-0d6dc95407e9";
-  const target = {
-    newSessionCwd: null,
-    newSessionCreationId: creationId,
-    newSessionPoolId: "workers",
-    newSessionProjectId: "app",
-  };
-  let initialization;
-  world.holds.push({
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => {
-      throw new TypeError("Response lost after creation");
-    },
-  });
-  const first = await mountSession(null, undefined, {
-    ...target,
-    onNewSessionInitialization: (body) => {
-      initialization = body;
-    },
-  });
-  await act(async () => {
-    await first.latest.handleModelChange("anthropic", "original-model");
-  });
-  await act(async () => {
-    await first.latest.resolveUploadHost().catch(() => undefined);
-  });
-  first.unmount();
-  world.holds.push({
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({
-      value: {
-        success: true,
-        sessionId: "reopened-original",
-        hostId: "h2",
-        cwd: "/worker-2/original",
-        data: {},
-      },
-    }),
-  });
-  const reopened = await mountSession(null, undefined, {
-    ...target,
-    newSessionInitialization: initialization,
-  });
-  await act(async () => {
-    await reopened.latest.resolveUploadHost();
-  });
-  const requests = callsTo("POST", "/api/agent/new").map(({ body }) => body);
-  assert.deepEqual(
-    requests[1],
-    requests[0],
-    "navigation must not change the already-used creation intent",
-  );
-  assert.equal(reopened.latest.sessionIdRef.current, "reopened-original");
-  assert.equal(
-    callsTo("POST", "/api/agent/reopened-original").some(
-      ({ body }) => body?.type === "prompt",
-    ),
-    false,
-  );
-  reopened.unmount();
-});
-
-test("resolving a pooled file owner preserves the live composer until its first command sends the completed upload", async (t) => {
-  resetWorld();
-  const sid = "pooled-upload-first-command";
-  const file = new File(
-    [new Uint8Array([80, 75, 0, 0, 1, 2])],
-    "before-first-prompt.zip",
-    { type: "application/zip" },
-  );
-  primeSession(sid, []);
-  let releaseCreation!: () => void;
-  let releaseUpload!: () => void;
-  t.after(() => {
-    releaseCreation?.();
-    releaseUpload?.();
-  });
-  world.holds.push(
-    {
-      match: (method, url) => method === "POST" && url === "/api/agent/new",
-      produce: () =>
-        new Promise((resolve) => {
-          releaseCreation = () =>
-            resolve({
-              value: {
-                success: true,
-                sessionId: sid,
-                hostId: "h2",
-                cwd: "/worker-2/owned",
-                data: {},
-              },
-            });
-        }),
-    },
-    {
-      match: (method, url) =>
-        method === "PUT" && url.startsWith("/api/uploads/"),
-      produce: () =>
-        new Promise((resolve) => {
-          releaseUpload = () =>
-            resolve({ value: { received: file.size, done: true } });
-        }),
-    },
-  );
-  world.respond = (method, url) =>
-    url === "/api/uploads" && method === "POST"
-      ? jsonResponse(200, { received: 0 })
-      : null;
-  const chatInputRef =
-    React.createRef<
-      NonNullable<
-        NonNullable<
-          React.ComponentProps<typeof ChatWindow>["chatInputRef"]
-        >["current"]
-      >
-    >();
-  const promoted: Parameters<
-    NonNullable<React.ComponentProps<typeof ChatWindow>["onSessionCreated"]>
-  >[0][] = [];
-  function Shell() {
-    const [session, setSession] = React.useState<
-      (typeof promoted)[number] | null
-    >(null);
-    return React.createElement(ChatWindow, {
-      session,
-      newSessionCwd: null,
-      chatInputRef,
-      ...(!session
-        ? {
-            newSessionPoolId: "workers",
-            newSessionProjectId: "app",
-            newSessionCreationId: "4c9dbe74-5d07-46b6-aa7b-87bf6ad55761",
-          }
-        : {}),
-      onSessionCreated(created) {
-        promoted.push(created);
-        setSession(created);
-      },
-    });
-  }
-  const view = ownRoot(
-    render(React.createElement(Shell), { wrapper: TestRoot }),
-  );
-  await settle();
-  const composer = view.getByRole("textbox") as HTMLTextAreaElement;
-  await act(async () => {
-    fireEvent.change(composer, {
-      target: { value: "Keep this draft with its upload" },
-    });
-    chatInputRef.current!.addFiles([file]);
-    await sleep(30);
-  });
-  assert.equal(callsTo("POST", "/api/agent/new").length, 1);
-  await act(async () => {
-    releaseCreation();
-    await sleep(50);
-  });
-  assert.equal(
-    view.getByRole("textbox") === composer,
-    true,
-    "resolving ownership is not a view transition",
-  );
-  assert.equal(composer.value, "Keep this draft with its upload");
-  assert.equal(view.queryAllByText(file.name).length, 1);
-  assert.deepEqual(
-    promoted,
-    [],
-    "the owner is retained without promoting before the first command",
-  );
-  await until(() => releaseUpload, "the owned upload starts");
-  const upload = callsTo("POST", "/api/uploads")[0].body;
-  assert.ok(upload);
-  assert.equal(upload.host, "h2");
-  assert.equal(callsTo("DELETE", "/api/uploads/").length, 0);
-  await act(async () => {
-    lastEs()?.open();
-    releaseUpload();
-    await sleep(50);
-  });
-  assert.equal(composer.value, "Keep this draft with its upload");
-  await act(async () => {
-    fireEvent.click(
-      view.getByRole("button", { name: translate("chatInput.send") }),
-    );
-    await sleep(50);
-    lastEs()?.open();
-  });
-  await until(
-    () =>
-      callsTo("POST", `/api/agent/${sid}`).some(
-        ({ body }) => body?.type === "prompt",
-      ),
-    "the first prompt reaches its retained owner",
-  );
-  const promptCall = callsTo("POST", `/api/agent/${sid}`).find(
-    ({ body }) => body?.type === "prompt",
-  );
-  assert.ok(promptCall?.body);
-  const prompt = promptCall.body;
-  assert.equal(prompt.message, "Keep this draft with its upload");
-  assert.deepEqual(prompt.uploads, [upload.id]);
-  assert.deepEqual(
-    promoted.map(({ id, hostId }) => ({ id, hostId })),
-    [{ id: sid, hostId: "h2" }],
-  );
-  assert.equal(callsTo("POST", "/api/agent/new").length, 1);
-  view.unmount();
-});
-
-test("nonprompt pooled placement failures are visible once", async () => {
-  resetWorld();
-  toastCalls.length = 0;
-  const error =
-    "Repository authentication failed on the worker. Configure access to git@example.invalid:app.git.";
-  let release!: () => void;
-  world.holds.push({
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: () =>
-      new Promise((resolve) => {
-        release = () =>
-          resolve({
-            status: 503,
-            value: { error, code: "pool_preparation_failed" },
-          });
-      }),
-  });
-  const chatInputRef = React.createRef<ChatInputHandle>();
-  const view = ownRoot(
-    render(
-      React.createElement(ChatWindow, {
-        session: null,
-        chatInputRef,
-        newSessionCwd: null,
-        newSessionPoolId: "workers",
-        newSessionProjectId: "app",
-        newSessionCreationId: "49ad40e2-ed0d-497a-a7aa-5bc20751395e",
-      }),
-      { wrapper: TestRoot },
-    ),
-  );
-  await settle();
-  await act(async () => {
-    chatInputRef.current!.addFiles([
-      new File([new Uint8Array([80, 75, 0, 0])], "placement.zip", {
-        type: "application/zip",
-      }),
-    ]);
-    await sleep(30);
-  });
-  await act(async () => {
-    release();
-    await sleep(30);
-  });
-  assert.equal(
-    callsTo("POST", "/api/agent/new").length,
-    1,
-    "the lazy consumer starts one attempt",
-  );
-  const visibleErrors =
-    view.queryAllByText(error, { exact: false }).length +
-    toastCalls.filter((call) => String(call[1]).includes(error)).length;
-  assert.equal(
-    visibleErrors,
-    1,
-    "the actionable server failure is displayed once, not only logged or swallowed",
-  );
-  assert.equal(
-    callsTo("POST", "/api/agent/").some(
-      ({ url, body }) => url !== "/api/agent/new" && body?.type === "prompt",
-    ),
-    false,
-  );
-  view.unmount();
-});
-
-test("known-ID upload uncertainty retains the pending composer and retries the bound owner without another placement", async () => {
-  resetWorld();
-  const sid = "known-upload-owner";
-  const file = new File(
-    [new Uint8Array([80, 75, 0, 0])],
-    "uncertain-upload.zip",
-    { type: "application/zip" },
-  );
-  world.holds.push({
-    match: (method, url) => method === "POST" && url === "/api/agent/new",
-    produce: async () => ({
-      status: 503,
-      value: {
-        sessionId: sid,
-        hostId: "h2",
-        cwd: "/worker-2/known",
-        delivery: "unknown",
-        code: "pool_delivery_unknown",
-        error:
-          "The initialization answer was lost; inspect the retained owner.",
-      },
-    }),
-  });
-  world.respond = (method, url) =>
-    url === "/api/uploads" && method === "POST"
-      ? jsonResponse(200, { received: 0 })
-      : method === "PUT" && url.startsWith("/api/uploads/")
-        ? jsonResponse(200, { received: file.size, done: true })
-        : null;
-  const inputRef =
-    React.createRef<
-      NonNullable<
-        NonNullable<
-          React.ComponentProps<typeof ChatWindow>["chatInputRef"]
-        >["current"]
-      >
-    >();
-  const promoted: Parameters<
-    NonNullable<React.ComponentProps<typeof ChatWindow>["onSessionCreated"]>
-  >[0][] = [];
-  function Shell() {
-    const [session, setSession] = React.useState<
-      (typeof promoted)[number] | null
-    >(null);
-    return React.createElement(ChatWindow, {
-      session,
-      newSessionCwd: null,
-      chatInputRef: inputRef,
-      ...(!session
-        ? {
-            newSessionPoolId: "workers",
-            newSessionProjectId: "app",
-            newSessionCreationId: "080bc04b-0806-4f4d-ae4e-a354608d9cc0",
-          }
-        : {}),
-      onSessionCreated(created) {
-        promoted.push(created);
-        setSession(created);
-      },
-    });
-  }
-  const view = ownRoot(
-    render(React.createElement(Shell), { wrapper: TestRoot }),
-  );
-  await settle();
-  const composer = view.getByRole("textbox") as HTMLTextAreaElement;
-  await act(async () => {
-    fireEvent.change(composer, {
-      target: { value: "Keep the uncertain owner's draft" },
-    });
-    inputRef.current!.addFiles([file]);
-    await sleep(50);
-  });
-  assert.equal(view.getByRole("textbox") === composer, true);
-  assert.equal(composer.value, "Keep the uncertain owner's draft");
-  assert.ok(view.queryByText(file.name));
-  assert.deepEqual(promoted, []);
-  assert.equal(callsTo("POST", "/api/uploads").length, 0);
-  await act(async () => {
-    fireEvent.click(
-      view.getByRole("button", { name: translate("chatInput.uploadRetry") }),
-    );
-    await sleep(50);
-  });
-  await until(
-    () => callsTo("POST", "/api/uploads").length === 1,
-    "the explicit upload retry uses its retained owner",
-  );
-  assert.equal(callsTo("POST", "/api/uploads")[0].body?.host, "h2");
-  assert.equal(callsTo("POST", "/api/agent/new").length, 1);
-  assert.equal(
-    callsTo("POST", `/api/agent/${sid}`).some(
-      ({ body }) => body?.type === "prompt",
-    ),
-    false,
-  );
-  view.unmount();
 });
 
 async function searchSidebar(view: RenderResult, query: string) {
@@ -13238,7 +12812,6 @@ test("workspace warns about a background crash until its chat is closed or remov
   const publishExit = async (at: number, refreshSessionList = false) => {
     const frame = JSON.stringify({
       type: "running",
-      runningSessionIds: [],
       runningSessions: [],
       exitedSessions: [
         { id: "mac", cwd: "/shared", at, code: 1, signal: null, detail: "" },
@@ -13708,8 +13281,8 @@ test("an unknown delivery outcome stays in the server outbox as failed and never
   resetWorld();
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "remote-maybe";
-  clearDraft(sid);
-  t.after(() => clearDraft(sid));
+  clearDraft(sessionKey(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   toastCalls.length = 0;
   world.outboxHold = true;
   const w = await mountSession(sid);
@@ -13735,7 +13308,7 @@ test("an unknown delivery outcome stays in the server outbox as failed and never
   assert.equal(w.latest.heldMessages[0].state, "failed");
   assert.equal(w.latest.heldMessages[0].mayHaveBeenSent, true);
   assert.equal(w.latest.agentRunning, false);
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
   assert.deepEqual(toastCalls, []);
   assert.deepEqual(w.latest.notices, []);
 });
@@ -13942,7 +13515,7 @@ test("a `!` command during a run runs at once and its held-back output shows unt
     const before = world.sessions.get("midrun-bash").messages;
     saveSession("midrun-bash", [...before, run(1)]);
     await act(async () => {
-      publishSessionsChanged(["midrun-bash"]);
+      publishSessionsChanged([sessionKey("midrun-bash")]);
     });
     await settle();
     assert.equal(
@@ -13959,7 +13532,7 @@ test("a `!` command during a run runs at once and its held-back output shows unt
     // omp writes it when a later prompt starts, stamped after everything before it.
     saveSession("midrun-bash", [...before, run(1), run(5)]);
     await act(async () => {
-      publishSessionsChanged(["midrun-bash"]);
+      publishSessionsChanged([sessionKey("midrun-bash")]);
     });
     await settle();
     assert.deepEqual(w.latest.deferredBash, []);
@@ -13967,7 +13540,7 @@ test("a `!` command during a run runs at once and its held-back output shows unt
     // Compaction drops it from the context: the shown output must not come back.
     saveSession("midrun-bash", [userMsg("u0", "q")]);
     await act(async () => {
-      publishSessionsChanged(["midrun-bash"]);
+      publishSessionsChanged([sessionKey("midrun-bash")]);
     });
     await settle();
     assert.equal(
@@ -14015,7 +13588,7 @@ test("two held runs of the same `!` command each wait for their own recorded run
     const before = world.sessions.get("midrun-twice").messages;
     saveSession("midrun-twice", [...before, run(5)]);
     await act(async () => {
-      publishSessionsChanged(["midrun-twice"]);
+      publishSessionsChanged([sessionKey("midrun-twice")]);
     });
     await settle();
     assert.equal(
@@ -14026,7 +13599,7 @@ test("two held runs of the same `!` command each wait for their own recorded run
 
     saveSession("midrun-twice", [...before, run(5), run(6)]);
     await act(async () => {
-      publishSessionsChanged(["midrun-twice"]);
+      publishSessionsChanged([sessionKey("midrun-twice")]);
     });
     await settle();
     assert.deepEqual(w.latest.deferredBash, []);
@@ -14535,7 +14108,9 @@ test("a delivered native worker receipt preserves the original intent before a l
     error: "host unavailable",
   });
   await act(() => {
-    workerPort!.onmessage!({ data: { outboxStored: entry } });
+    workerPort!.onmessage!({
+      data: { outboxStored: { ...entry, hostId: "local" } },
+    });
     workerPort!.onmessage!({ data: { outbox: [] } });
   });
   assert.equal(
@@ -14598,7 +14173,9 @@ test("an uncorrelated receipt from an older OMP retires its row at once, as befo
     createdAt: 2,
   };
   await act(() => {
-    workerPort!.onmessage!({ data: { outboxStored: entry } });
+    workerPort!.onmessage!({
+      data: { outboxStored: { ...entry, hostId: "local" } },
+    });
     workerPort!.onmessage!({ data: { outbox: [] } });
   });
   await settle();
@@ -15105,7 +14682,7 @@ for (const catchUp of ["unchanged history", "HTTP failure"]) {
           nativeSettledIds: [entry.id],
         }),
       );
-      await act(() => publishSessionsChanged([sid]));
+      await act(() => publishSessionsChanged([sessionKey(sid)]));
       await settle();
       assert.deepEqual(w.latest.entryIds, ["e0"]);
       assert.equal(
@@ -15233,7 +14810,7 @@ for (const catchUp of ["unchanged history", "HTTP failure"]) {
         );
       }
       appendEntry(sid, displayed);
-      await act(() => publishSessionsChanged([sid]));
+      await act(() => publishSessionsChanged([sessionKey(sid)]));
       await settle();
       assert.equal(
         w.latest.messages.filter(
@@ -15506,10 +15083,19 @@ test("correlated native queue snapshots replace only their exact handoff IDs and
       settledIds: ["queued", "same-text-unresolved"],
       nativeSettledIds: ["queued", "same-text-unresolved"],
     });
-    workerPort!.onmessage!({ data: { outboxStored: entries[0] } });
+    workerPort!.onmessage!({
+      data: { outboxStored: { ...entries[0], hostId: "local" } },
+    });
     workerPort!.onmessage!({
       data: {
-        outbox: [{ ...entries[0], scope: "test-scope", state: "sending" }],
+        outbox: [
+          {
+            ...entries[0],
+            hostId: "local",
+            scope: "test-scope",
+            state: "sending",
+          },
+        ],
       },
     });
   });
@@ -15649,8 +15235,8 @@ test("a 409 deleting a dispatched outbox message shows a notice and keeps the bu
   resetWorld();
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "outbox-remove-race";
-  clearDraft(sid);
-  t.after(() => clearDraft(sid));
+  clearDraft(sessionKey(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   primeSession(sid, [userMsg("u0", "before")]);
   const w = await mountSession(sid);
   await act(async () => {
@@ -15676,7 +15262,7 @@ test("a 409 deleting a dispatched outbox message shows a notice and keeps the bu
   await act(async () => {
     await w.latest.deleteHeldMessage(entry.id);
   });
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
   assert.equal(w.latest.notices.length, 1);
   assert.equal(w.latest.notices[0].type, "error");
   assert.match(w.latest.notices[0].message, /outbox_dispatched/);
@@ -15706,7 +15292,11 @@ test("mounting a session with an outbox snapshot subscribes without starting omp
     }),
   });
   const w = await mountSession(sid);
-  assert.deepEqual(lastEs()?.channel, { kind: "session", sessionId: sid });
+  assert.deepEqual(lastEs()?.channel, {
+    kind: "session",
+    sessionId: sid,
+    hostId: "local",
+  });
   assert.deepEqual(w.latest.heldMessages, [{ ...entry, local: false }]);
   await act(() => lastEs().deliver({ type: "open" }));
   assert.deepEqual(
@@ -15730,15 +15320,20 @@ test("an outbox stored ACK survives an older empty channel snapshot until its id
     state: "held",
     createdAt: 1,
   };
-  await act(() => workerPort!.onmessage!({ data: { outboxStored: entry } }));
-  assert.deepEqual(w.latest.heldMessages, [{ ...entry, local: false }]);
+  const acknowledgment = { ...entry, hostId: "local" };
+  await act(() =>
+    workerPort!.onmessage!({ data: { outboxStored: acknowledgment } }),
+  );
+  assert.deepEqual(w.latest.heldMessages, [
+    { ...acknowledgment, local: false },
+  ]);
   const es = lastEs();
   await act(() =>
     es.emit({ type: "outbox_update", entries: [], settledIds: [] }),
   );
   assert.deepEqual(
     w.latest.heldMessages,
-    [{ ...entry, local: false }],
+    [{ ...acknowledgment, local: false }],
     "an empty snapshot that never saw this id cannot retire its ACK bridge",
   );
   await act(() =>
@@ -15795,9 +15390,15 @@ test("a stored ACK arriving after delivering and removal snapshots cannot resurr
   assert.deepEqual(w.latest.heldMessages, []);
   await act(() => {
     workerPort!.onmessage!({
-      data: { outbox: [{ ...entry, scope: "test-scope", state: "sending" }] },
+      data: {
+        outbox: [
+          { ...entry, hostId: "local", scope: "test-scope", state: "sending" },
+        ],
+      },
     });
-    workerPort!.onmessage!({ data: { outboxStored: entry } });
+    workerPort!.onmessage!({
+      data: { outboxStored: { ...entry, hostId: "local" } },
+    });
   });
   assert.deepEqual(
     w.latest.heldMessages,
@@ -15847,7 +15448,16 @@ for (const source of ["state", "channel"]) {
     }
     await act(() =>
       workerPort!.onmessage!({
-        data: { outbox: [{ ...entry, scope: "test-scope", state: "sending" }] },
+        data: {
+          outbox: [
+            {
+              ...entry,
+              hostId: "local",
+              scope: "test-scope",
+              state: "sending",
+            },
+          ],
+        },
       }),
     );
     assert.deepEqual(
@@ -15855,7 +15465,11 @@ for (const source of ["state", "channel"]) {
       [],
       "the settled browser copy must never appear",
     );
-    await act(() => workerPort!.onmessage!({ data: { outboxStored: entry } }));
+    await act(() =>
+      workerPort!.onmessage!({
+        data: { outboxStored: { ...entry, hostId: "local" } },
+      }),
+    );
     assert.deepEqual(
       w.latest.heldMessages,
       [],
@@ -15970,7 +15584,21 @@ test("offline history and state 503s still hydrate held messages and scope while
   resetWorld();
   const sid = "outbox-offline-history";
   primeSession(sid, [userMsg("u0", "saved history")]);
-  world.contextUnavailable = true;
+  const hostId = "h1";
+  const stateUrl = sessionUrl(`/api/sessions/${sid}/state`, hostId);
+  let historyOffline = true;
+  world.respond = (method, raw) => {
+    const url = new URL(raw, "http://localhost");
+    if (
+      historyOffline &&
+      method === "GET" &&
+      url.pathname === `/api/sessions/${sid}` &&
+      url.searchParams.get("hostId") === hostId
+    ) {
+      return jsonResponse(503, {});
+    }
+    return null;
+  };
   world.outboxHold = true;
   const entry = {
     id: "offline-server-held",
@@ -15981,8 +15609,7 @@ test("offline history and state 503s still hydrate held messages and scope while
     createdAt: 1,
   };
   world.holds.push({
-    match: (method, url) =>
-      method === "GET" && url === `/api/sessions/${sid}/state`,
+    match: (method, url) => method === "GET" && url === stateUrl,
     produce: async () => ({
       status: 503,
       value: {
@@ -15997,7 +15624,7 @@ test("offline history and state 503s still hydrate held messages and scope while
   const view = ownRoot(
     render(
       React.createElement(ChatWindow, {
-        session: { ...sessionInfo(sid), hostId: "h1" },
+        session: { ...sessionInfo(sid), hostId },
         newSessionCwd: null,
         hostStatus: "offline",
         hostLabel: "Build box",
@@ -16007,7 +15634,7 @@ test("offline history and state 503s still hydrate held messages and scope while
   );
   await settle();
   assert.equal(
-    callsTo("GET", `/api/sessions/${sid}/state`).length,
+    callsTo("GET", stateUrl).length,
     1,
     "outbox hydration is independent of failed history",
   );
@@ -16031,10 +15658,14 @@ test("offline history and state 503s still hydrate held messages and scope while
     await sleep(20);
   });
   assert.equal((composer as HTMLTextAreaElement).value, "");
-  assert.equal(
-    world.outbox[0]?.scope,
-    "offline-scope",
-    "the failing state response still supplies authorization scope",
+  assert.deepEqual(
+    [
+      world.outbox[0]?.hostId,
+      world.outbox[0]?.sessionId,
+      world.outbox[0]?.scope,
+    ],
+    [hostId, sid, "offline-scope"],
+    "the failing state response still supplies authorization scope for this pair",
   );
   assert.equal(
     view.container.querySelectorAll("[data-held-message]").length,
@@ -16046,10 +15677,9 @@ test("offline history and state 503s still hydrate held messages and scope while
     ),
     false,
   );
-  world.contextUnavailable = false;
+  historyOffline = false;
   world.holds.push({
-    match: (method, url) =>
-      method === "GET" && url === `/api/sessions/${sid}/state`,
+    match: (method, url) => method === "GET" && url === stateUrl,
     produce: async () => ({
       value: { running: false, outbox: [entry], outboxScope: "offline-scope" },
     }),
@@ -16094,8 +15724,8 @@ for (const changed of [false, true]) {
     resetWorld();
     const { getDraft, clearDraft } = await import("@/lib/draft-store");
     const sid = `outbox-pending-remount-${changed ? "changed" : "unchanged"}`;
-    clearDraft(sid);
-    t.after(() => clearDraft(sid));
+    clearDraft(sessionKey(sid));
+    t.after(() => clearDraft(sessionKey(sid)));
     primeSession(sid, [userMsg("u0", "before")]);
     world.outboxHold = true;
     let commit: (() => void) | null = null;
@@ -16166,7 +15796,7 @@ for (const changed of [false, true]) {
         ]);
       });
       await until(
-        () => getDraft(sid)?.uploads?.length === 1,
+        () => getDraft(sessionKey(sid))?.uploads?.length === 1,
         "the remounted composer's new attachment must finish uploading",
       );
     }
@@ -16193,12 +15823,18 @@ for (const changed of [false, true]) {
       "a committed submission must not look unsent or erase a newer draft",
     );
     if (changed) {
-      assert.equal(getDraft(sid)?.value, "newer unsent draft");
-      assert.equal(getDraft(sid)?.uploads?.[0]?.name, "new-context.txt");
-      assert.equal(getDraft(sid)?.uploads?.[0]?.proof, "remount-proof");
+      assert.equal(getDraft(sessionKey(sid))?.value, "newer unsent draft");
+      assert.equal(
+        getDraft(sessionKey(sid))?.uploads?.[0]?.name,
+        "new-context.txt",
+      );
+      assert.equal(
+        getDraft(sessionKey(sid))?.uploads?.[0]?.proof,
+        "remount-proof",
+      );
       assert.ok(second.getByText("new-context.txt"));
     } else {
-      assert.equal(getDraft(sid), null);
+      assert.equal(getDraft(sessionKey(sid)), null);
     }
   });
 }
@@ -16207,8 +15843,8 @@ test("deleting a server-held message sends one plain outbox_remove per click bur
   resetWorld();
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "outbox-delete-upload";
-  clearDraft(sid);
-  t.after(() => clearDraft(sid));
+  clearDraft(sessionKey(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   primeSession(sid, [userMsg("u0", "before")]);
   const entry = {
     id: "delete-with-upload",
@@ -16246,7 +15882,7 @@ test("deleting a server-held message sends one plain outbox_remove per click bur
       .map((call) => call.body),
     [{ type: "outbox_remove", id: entry.id }],
   );
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
   assert.deepEqual(w.latest.notices, []);
 });
 
@@ -16510,6 +16146,7 @@ test("retry preserves local upload proofs, advisor and lineage until the replace
   const root: LocalOutboxEntry = {
     id: "retry-root",
     sessionId: sid,
+    hostId: "local",
     scope: "test-scope",
     advisor: true,
     mode: "followUp",
@@ -16554,13 +16191,14 @@ test("a failed durable browser deletion keeps the held message and shows a notic
   resetWorld();
   const { getDraft, clearDraft } = await import("@/lib/draft-store");
   const sid = "outbox-local-delete-fails";
-  clearDraft(sid);
-  t.after(() => clearDraft(sid));
+  clearDraft(sessionKey(sid));
+  t.after(() => clearDraft(sessionKey(sid)));
   primeSession(sid, [userMsg("u0", "before")]);
   const w = await mountSession(sid);
   const entry: LocalOutboxEntry = {
     id: "local-delete-fails",
     sessionId: sid,
+    hostId: "local",
     scope: "test-scope",
     mode: "prompt",
     message: "still held",
@@ -16573,7 +16211,7 @@ test("a failed durable browser deletion keeps the held message and shows a notic
   await act(async () => {
     await w.latest.deleteHeldMessage(entry.id);
   });
-  assert.equal(getDraft(sid), null);
+  assert.equal(getDraft(sessionKey(sid)), null);
   assert.equal(w.latest.heldMessages[0].id, entry.id);
   assert.equal(w.latest.notices[0].type, "error");
   assert.match(w.latest.notices[0].message, /IndexedDB deletion failed/);
@@ -16609,6 +16247,7 @@ test("dismissing an uncertain bridge deletes the browser copy the worker still h
   // The server settled the id before the worker saw its outbox_add receipt: the worker still holds, and would retry, its copy.
   const copy: LocalOutboxEntry = {
     ...entry,
+    hostId: "local",
     scope: "test-scope",
     state: "sending",
   };

@@ -28,7 +28,7 @@ const primary = {
 const staging = { url: "http://127.0.0.1:40000", token: "staging-token" };
 const other = { url: "https://other.example", token: "other-token" };
 // Import after installing the isolated agent directory.
-const { addHostLink, loginHost, readHostLinks, readHostLogin, removeHostLink } =
+const { loginHost, readHostLogin, removeHostLink } =
   await import("./host-login.ts");
 const saved = () => JSON.parse(readFileSync(file, "utf8"));
 const seed = (value: unknown) => writeFileSync(file, JSON.stringify(value));
@@ -42,86 +42,18 @@ after(() => {
   rmSync(agentDir, { recursive: true, force: true });
 });
 
-test("legacy login reads one normalized link without changing the legacy reader", () => {
-  assert.deepEqual(readHostLinks(), []);
-  seed({ ...primary, url: `${primary.url}///` });
-  assert.deepEqual(readHostLinks(), [primary]);
-  assert.deepEqual(readHostLogin(), { ...primary, url: `${primary.url}///` });
-});
-
-test("explicit empty links never falls back to the legacy primary", async () => {
-  seed({ ...primary, links: [] });
-  assert.deepEqual(readHostLinks(), []);
-  await removeHostLink(primary.url);
-  assert.deepEqual(saved(), { ...primary, links: [] });
-});
-
-test("add upserts only its URL and preserves root and entry metadata", async () => {
-  seed({
-    ...primary,
-    note: { keep: true },
-    links: [
-      { ...primary, label: "production" },
-      { ...staging, label: "staging" },
-    ],
-  });
-  await addHostLink({ url: `${staging.url}/`, token: " new-token \n" });
-  assert.deepEqual(saved(), {
-    ...primary,
-    note: { keep: true },
-    links: [
-      { ...primary, label: "production" },
-      { ...staging, token: "new-token", label: "staging" },
-    ],
-  });
-  assert.equal(existsSync(lock), false);
+test("login replaces the controller, preserving unrelated config", async () => {
+  assert.equal(readHostLogin(), null);
+  seed({ ...primary, note: "keep" });
+  await loginHost({ ...staging, url: `${staging.url}///` });
+  assert.deepEqual(readHostLogin(), staging);
+  assert.deepEqual(saved(), { ...staging, note: "keep" });
   assert.equal(statSync(file).mode & 0o777, 0o600);
-});
-
-test("first add establishes the legacy primary and remove never deletes it", async () => {
-  await addHostLink(primary);
-  await addHostLink(staging);
-  await removeHostLink(`${staging.url}/`);
-  assert.deepEqual(saved(), { ...primary, links: [primary] });
   await removeHostLink(primary.url);
-  assert.deepEqual(saved(), { ...primary, links: [] });
-  assert.deepEqual(readHostLinks(), []);
-});
-
-test("login replaces the primary link but retains secondary links and unknown keys", async () => {
-  seed({ ...primary, note: "keep", links: [primary, staging] });
-  await loginHost(other);
-  assert.deepEqual(readHostLogin(), other);
-  assert.deepEqual(saved(), {
-    ...other,
-    note: "keep",
-    links: [staging, other],
-  });
-});
-
-test("login updating the same primary URL preserves its entry metadata", async () => {
-  seed({ ...primary, links: [{ ...primary, label: "production" }, staging] });
-  await loginHost({ ...primary, token: "rotated" });
-  assert.deepEqual(saved(), {
-    ...primary,
-    token: "rotated",
-    links: [{ ...primary, token: "rotated", label: "production" }, staging],
-  });
-});
-
-test("add rotating the legacy primary's token updates the top-level pair that v6 daemons read", async () => {
-  seed({ ...primary, links: [primary, staging] });
-  await addHostLink({ ...primary, token: "rotated" });
-  assert.deepEqual(saved(), {
-    ...primary,
-    token: "rotated",
-    links: [{ ...primary, token: "rotated" }, staging],
-  });
-  seed({ ...primary, url: `${primary.url}/`, links: [primary, staging] });
-  await addHostLink({ ...primary, token: "again" });
-  assert.deepEqual(readHostLogin(), { ...primary, token: "again" });
-  await addHostLink({ ...staging, token: "other" });
-  assert.deepEqual(readHostLogin(), { ...primary, token: "again" });
+  assert.deepEqual(readHostLogin(), staging);
+  await removeHostLink(staging.url);
+  assert.equal(readHostLogin(), null);
+  assert.deepEqual(saved(), { note: "keep" });
 });
 
 test("malformed or unreadable configuration is never silently replaced", async () => {
@@ -134,10 +66,8 @@ test("malformed or unreadable configuration is never silently replaced", async (
     '{"url":123,"token":"keep"}',
   ]) {
     writeFileSync(file, contents);
-    assert.throws(() => readHostLinks(), { name: "HostLoginUnreadableError" });
-    assert.equal(readHostLogin(), null);
+    assert.throws(() => readHostLogin(), { name: "HostLoginUnreadableError" });
     for (const mutate of [
-      () => addHostLink(staging),
       () => loginHost(staging),
       () => removeHostLink(primary.url),
     ]) {
@@ -148,7 +78,7 @@ test("malformed or unreadable configuration is never silently replaced", async (
   }
   rmSync(file);
   mkdirSync(file);
-  await assert.rejects(addHostLink(staging), {
+  await assert.rejects(loginHost(staging), {
     name: "HostLoginUnreadableError",
   });
   assert.equal(statSync(file).isDirectory(), true);
@@ -157,7 +87,7 @@ test("malformed or unreadable configuration is never silently replaced", async (
 test("invalid inputs fail before changing saved credentials", async () => {
   seed(primary);
   await assert.rejects(
-    addHostLink({ url: "file:///tmp/server", token: "token" }),
+    loginHost({ url: "file:///tmp/server", token: "token" }),
     /https/,
   );
   await assert.rejects(loginHost({ url: primary.url, token: " \n " }), /empty/);
@@ -178,8 +108,8 @@ test("a lock with a proven exited owner is recovered, even when freshly written"
   writeFileSync(lock, JSON.stringify({ pid: await exitedChildPid() }), {
     mode: 0o600,
   });
-  await addHostLink(staging);
-  assert.deepEqual(saved(), { ...primary, links: [primary, staging] });
+  await loginHost(staging);
+  assert.deepEqual(saved(), staging);
   assert.equal(existsSync(lock), false);
 });
 
@@ -192,12 +122,12 @@ test(
       mutex = `${lock}.recover`;
     writeFileSync(lock, stale, { mode: 0o600 });
     writeFileSync(mutex, JSON.stringify({ pid: process.pid }), { mode: 0o600 });
-    const mutation = addHostLink(staging);
+    const mutation = loginHost(staging);
     await sleep(300);
     assert.equal(readFileSync(lock, "utf8"), stale);
     rmSync(mutex);
     await mutation;
-    assert.deepEqual(saved(), { ...primary, links: [primary, staging] });
+    assert.deepEqual(saved(), staging);
     assert.equal(existsSync(mutex), false);
   },
 );
@@ -211,8 +141,8 @@ test(
       mutex = `${lock}.recover`;
     writeFileSync(lock, dead, { mode: 0o600 });
     writeFileSync(mutex, dead, { mode: 0o600 });
-    await addHostLink(staging);
-    assert.deepEqual(saved(), { ...primary, links: [primary, staging] });
+    await loginHost(staging);
+    assert.deepEqual(saved(), staging);
     assert.equal(existsSync(lock), false);
     assert.equal(existsSync(mutex), false);
   },
@@ -226,7 +156,7 @@ test(
     const owner = JSON.stringify({ pid: process.pid });
     writeFileSync(lock, owner, { mode: 0o600 });
     const start = Date.now();
-    const mutation = addHostLink(staging);
+    const mutation = loginHost(staging);
     await sleep(25);
     assert.ok(
       Date.now() - start < 1_000,
@@ -247,7 +177,7 @@ test(
   async () => {
     writeFileSync(lock, "{incomplete");
     await assert.rejects(
-      addHostLink(staging),
+      loginHost(staging),
       /lock.*timed out|timed out.*lock/i,
     );
     assert.equal(readFileSync(lock, "utf8"), "{incomplete");
@@ -280,35 +210,19 @@ function writer(t: test.TestContext, args: string[], token: string) {
 }
 
 test(
-  "concurrent child writers retain both links and the legacy primary",
+  "concurrent child writers leave one complete credential pair",
   { timeout: 20_000 },
   async (t) => {
-    seed(primary);
-    await Promise.all([
-      writer(t, ["--add", "--url", staging.url], staging.token),
-      writer(t, ["--add", "--url", other.url], other.token),
-    ]);
-    assert.deepEqual(readHostLogin(), primary);
-    assert.deepEqual(
-      new Map(readHostLinks().map((link) => [link.url, link.token])),
-      new Map([primary, staging, other].map((link) => [link.url, link.token])),
+    const candidates = [staging, other];
+    await Promise.all(
+      candidates.map(({ url, token }) => writer(t, ["--url", url], token)),
     );
-  },
-);
-
-test(
-  "legacy login and concurrent add retain the additional entry",
-  { timeout: 20_000 },
-  async (t) => {
-    seed(primary);
-    await Promise.all([
-      writer(t, ["--url", other.url], other.token),
-      writer(t, ["--add", "--url", staging.url], staging.token),
-    ]);
-    assert.deepEqual(readHostLogin(), other);
-    assert.deepEqual(
-      new Map(readHostLinks().map((link) => [link.url, link.token])),
-      new Map([staging, other].map((link) => [link.url, link.token])),
+    const login = readHostLogin();
+    assert.ok(
+      candidates.some(
+        ({ url, token }) => url === login?.url && token === login.token,
+      ),
     );
+    assert.deepEqual(saved(), login);
   },
 );

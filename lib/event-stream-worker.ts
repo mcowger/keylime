@@ -13,20 +13,20 @@
 // it in node:vm with fake browser globals.
 //
 // It also owns the browser's message outbox (docs/specs/2026-11-04-message-outbox-design.md O2): IndexedDB
-// `keylime-outbox`, sent as `outbox_add` agent commands until the server has stored each (lib/service-worker.ts reads it too).
+// `keylime-outbox-host-scoped`, sent as `outbox_add` agent commands until the server stores each (also read by the service worker).
 //
 // Tab -> worker:  { op: "open", id, channel } | { op: "close", id }
 //                 { op: "lock", name }  (tab holds this Web Lock while alive)
 //                 { op: "bye" }         (pagehide: drop this tab's streams)
 //                 { op: "wake", reason, visible, clientId }  (reason: init | visible | hidden | online | network)
-//                 { op: "cmd", n, req, sessionId, advisor, body, type }  (an agent command; body: its JSON text, type: its type)
+//                 { op: "cmd", n, req, sessionId, hostId, advisor, body, type }  (an agent command; body: its JSON text, type: its type)
 //                 { op: "metric", sample }  (a transport sample of the tab's: tagged, buffered and POSTed here)
 //                 { op: "upload", id, host, name, type, blob }  (a file to upload over the link; blob: the File)
 //                 { op: "up_pause", id }  (stop this tab's upload; keep the host's staged bytes for Retry)
 //                 { op: "up_abort", id, host }  (the tab removed it: the host deletes what it staged; kept until delivered)
 //                 { op: "diag", n }  (the connection diagnostics panel's poll)
 //                 { op: "outbox_add", n, entry }  (a message for the outbox: a LocalOutboxEntry without state/error)
-//                 { op: "outbox_drop", n, id }  (remove a "failed" entry; the tab waits for its committed deletion)
+//                 { op: "outbox_drop", n, id, sessionId, hostId }  (remove a "failed" entry; the tab waits for committed deletion)
 // Worker -> tab:  { id, type: "open" }
 //                 { id, type: "message", data }   (raw JSON string)
 //                 { id, type: "error", readyState: 0 | 2 }  (EventSource semantics)
@@ -79,6 +79,12 @@ import { MAX_AGENT_COMMAND_REQUEST_BYTES } from "./image-attachments";
 import { diagnosticStats } from "./transport-stats";
 import { isRecord } from "./type-guards";
 import { UPLOAD_STALL_MS, UPLOAD_WINDOW_BYTES } from "./upload-limits";
+import { sessionKey, sessionUrl } from "./session-identity";
+import {
+  BROWSER_OUTBOX_DB,
+  BROWSER_OUTBOX_KEY_PATH,
+  groupBrowserOutbox,
+} from "./browser-outbox";
 
 const CONNECTING = 0;
 const OPEN = 1;
@@ -201,6 +207,7 @@ interface Command {
   body: string;
   type: string;
   session: string;
+  hostId: string;
   advisor: boolean;
   /** In the link's sender (it goes out when the window has room). */
   queued: boolean;
@@ -559,7 +566,7 @@ function applyMode(): void {
   }
   for (const command of [...pending.values()]) {
     if (command.sent) continue;
-    link.sender.drop(`cmd:${command.session}`);
+    link.sender.drop(`cmd:${sessionKey(command.session, command.hostId)}`);
     settle(command, { cmd: command.n, http: true });
   }
   ensureSource();
@@ -1090,18 +1097,12 @@ function apply(
       typeof head.rid === "string" ? pending.get(head.rid) : undefined;
     if (!command) return;
     const at = Number(head.at);
-    const entry = logFrame(linkConn, command.session, data.length, at, now);
+    const owner = sessionKey(command.session, command.hostId);
+    const entry = logFrame(linkConn, owner, data.length, at, now);
     const clock = currentClock(now);
     const behind =
       clock && Number.isFinite(at)
-        ? behindFrames(
-            linkConn.largeFrames,
-            command.session,
-            at,
-            now,
-            clock,
-            entry,
-          ).other
+        ? behindFrames(linkConn.largeFrames, owner, at, now, clock, entry).other
         : null;
     settle(
       command,
@@ -1155,7 +1156,7 @@ function onAck(ack: number): void {
  * Resumed: the server kept the link; both sides resend what the other has not applied, and the tabs see nothing. Not
  * resumed (the link expired, overflowed, or the server restarted): a resync. Both directions start over, every stream
  * subscribes again (CONNECTING, then the channel's fresh snapshot), and sent commands go again only where they cannot
- * run twice: idempotent ones, or ones the same server's (session, rid) dedupe still remembers (spec B5).
+ * run twice: idempotent ones, or ones the same server's (host, session, rid) dedupe still remembers (spec B5).
  */
 function onWelcome(welcome: DownHead): void {
   const now = Date.now();
@@ -1290,6 +1291,7 @@ function queueCommand(client: Client, message: Record<string, unknown>): void {
     // From the tab, which built the body: the worker never parses it.
     type: typeof message.type === "string" ? message.type : "",
     session: String(message.sessionId),
+    hostId: typeof message.hostId === "string" ? message.hostId : "local",
     advisor: message.advisor === true,
     queued: false,
     sent: false,
@@ -1321,7 +1323,11 @@ function queueCommand(client: Client, message: Record<string, unknown>): void {
   let other = 0;
   for (const earlier of pending.values()) {
     if (earlier.sent && earlier.seq <= link.ackedUp) continue;
-    if (earlier.session === command.session) same += earlier.body.length;
+    if (
+      earlier.session === command.session &&
+      earlier.hostId === command.hostId
+    )
+      same += earlier.body.length;
     else other += earlier.body.length;
   }
   command.behindSameBytes = Math.min(same, command.behindBytes);
@@ -1332,12 +1338,12 @@ function queueCommand(client: Client, message: Record<string, unknown>): void {
   ensureLink();
 }
 
-/** Into the sender (a resend keeps its rid): the server's (session, rid) dedupe answers a repeat. */
+/** Into the sender (a resend keeps its rid): the server's (host, session, rid) dedupe answers a repeat. */
 function sendCommand(command: Command): void {
   command.queued = true;
   queueUp(
-    `cmd:${command.session}`,
-    `{"type":"cmd","rid":${JSON.stringify(command.rid)},"session":${JSON.stringify(command.session)},"advisor":${command.advisor},"command":${command.body}}`,
+    `cmd:${sessionKey(command.session, command.hostId)}`,
+    `{"type":"cmd","rid":${JSON.stringify(command.rid)},"session":${JSON.stringify(command.session)},"hostId":${JSON.stringify(command.hostId)},"advisor":${command.advisor},"command":${command.body}}`,
     command.rid,
   );
 }
@@ -1812,7 +1818,10 @@ function deliver(
 ): void {
   const { channel } = subscription;
   const gotAt = Date.now();
-  const owner = channel.kind === "session" ? channel.sessionId : "app";
+  const owner =
+    channel.kind === "session"
+      ? sessionKey(channel.sessionId, channel.hostId)
+      : "app";
   const entry = logFrame(conn, owner, data.length, at, gotAt);
   endReconnect(conn, gotAt);
   if (Number.isFinite(at)) {
@@ -1912,7 +1921,10 @@ function recordTabSample(sample: Sample): void {
       clock &&
       behindFrames(
         sseConn.largeFrames,
-        String(sample.session),
+        sessionKey(
+          String(sample.session),
+          typeof sample.hostId === "string" ? sample.hostId : "local",
+        ),
         Number(sample.repliedAt),
         Number(sample.gotAt),
         clock,
@@ -2129,8 +2141,15 @@ function diagnostics(): ConnectionDiagnostics {
 // IndexedDB before the tab's composer clears, then goes as `outbox_add` over the current transport until the server
 // has stored it. Each session's entries go one at a time, oldest first: the server queues them in arrival order. ----
 
-const OUTBOX_DB = "keylime-outbox";
 const OUTBOX_STORE = "entries";
+
+function outboxKey({
+  hostId,
+  sessionId,
+  id,
+}: Pick<LocalOutboxEntry, "hostId" | "sessionId" | "id">): string {
+  return JSON.stringify([hostId, sessionId, id]);
+}
 /** The server keeps delivered ids 8 days: an older entry is never sent again, or a resend could deliver it twice. */
 const OUTBOX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 // Adapted from keylime 13d8eb21095f: retries retain upload proofs for delivery, but lineage compares only server-visible upload IDs; proofs must never enter receipts.
@@ -2249,9 +2268,11 @@ function openOutboxDb(): Promise<IDBDatabase | null> {
     const factory = scope.indexedDB;
     if (!factory) return resolve(null);
     try {
-      const request = factory.open(OUTBOX_DB, 1);
+      const request = factory.open(BROWSER_OUTBOX_DB, 1);
       request.onupgradeneeded = () =>
-        request.result.createObjectStore(OUTBOX_STORE, { keyPath: "id" });
+        request.result.createObjectStore(OUTBOX_STORE, {
+          keyPath: BROWSER_OUTBOX_KEY_PATH,
+        });
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => resolve(null);
     } catch {
@@ -2297,13 +2318,12 @@ function readOutboxForSend(
           () => resolve(null);
       request.onsuccess = () => {
         entries = request.result as LocalOutboxEntry[];
-        const byId = new Map(
-          entries.map((entry) => [entry.id, entry] as const),
-        );
+        const groups = groupBrowserOutbox(entries);
         for (let index = 0; index < entries.length; index++) {
           const entry = entries[index];
           if (entry.state !== "sending" || entry.replaces === undefined)
             continue;
+          const byId = groups.get(sessionKey(entry.sessionId, entry.hostId))!;
           const root = replacementRoot(entry, byId);
           if (root === null || root === entry.replaces) continue;
           const normalized = { ...entry, replaces: root };
@@ -2322,16 +2342,19 @@ function readOutboxForSend(
 async function loadOutbox(db: IDBDatabase | null): Promise<boolean> {
   const stored = await readOutbox(db);
   if (!stored) return false;
-  for (const entry of stored)
-    outboxItems.set(entry.id, {
+  const sessions = new Map<string, LocalOutboxEntry>();
+  for (const entry of stored) {
+    sessions.set(sessionKey(entry.sessionId, entry.hostId), entry);
+    outboxItems.set(outboxKey(entry), {
       entry,
       inFlight: false,
       retryTimer: undefined,
       retryMs: RECONNECT_MIN_MS,
     });
+  }
   await Promise.all(
-    [...new Set(stored.map((entry) => entry.sessionId))].map((sessionId) =>
-      sendOutbox(sessionId),
+    Array.from(sessions.values(), ({ sessionId, hostId }) =>
+      sendOutbox(sessionId, hostId),
     ),
   );
   return true;
@@ -2394,6 +2417,10 @@ function tellOutbox(client: Client, always: boolean): void {
 }
 
 function addOutbox(client: Client, n: number, entry: LocalOutboxEntry): void {
+  if (typeof entry?.hostId !== "string" || !entry.hostId) {
+    post(client, { outboxAdded: n, error: "The message is missing its host." });
+    return;
+  }
   void ensureOutboxReady().then(async (loaded) => {
     const item: OutboxItem = {
       entry: { ...entry, state: "sending" },
@@ -2408,7 +2435,12 @@ function addOutbox(client: Client, n: number, entry: LocalOutboxEntry): void {
       (await writeOutbox((store) => {
         const request = store.getAll();
         request.onsuccess = () => {
-          const entries = request.result as LocalOutboxEntry[];
+          const all = request.result as LocalOutboxEntry[];
+          const entries = all.filter(
+            (saved) =>
+              saved.hostId === entry.hostId &&
+              saved.sessionId === entry.sessionId,
+          );
           const byId = new Map(
             entries.map((saved) => [saved.id, saved] as const),
           );
@@ -2451,7 +2483,7 @@ function addOutbox(client: Client, n: number, entry: LocalOutboxEntry): void {
             ...normalized,
             state: "sending",
             enqueueOrder:
-              entries.reduce(
+              all.reduce(
                 (max, row) => Math.max(max, row.enqueueOrder ?? 0),
                 0,
               ) + 1,
@@ -2469,8 +2501,8 @@ function addOutbox(client: Client, n: number, entry: LocalOutboxEntry): void {
       return;
     }
     if (reused) {
-      if (!outboxItems.has(reused.id))
-        outboxItems.set(reused.id, {
+      if (!outboxItems.has(outboxKey(reused)))
+        outboxItems.set(outboxKey(reused), {
           entry: reused,
           inFlight: false,
           retryTimer: undefined,
@@ -2480,26 +2512,35 @@ function addOutbox(client: Client, n: number, entry: LocalOutboxEntry): void {
       broadcastOutbox();
       post(client, { outboxAdded: n });
       // A peer may commit and exit before sending; replaying the existing ID remains idempotent.
-      sendOutbox(reused.sessionId);
+      sendOutbox(reused.sessionId, reused.hostId);
       return;
     }
     // Committed: the entry is accepted whatever follows, or a resend from the composer would duplicate it under a new id.
-    outboxItems.set(item.entry.id, item);
+    outboxItems.set(outboxKey(item.entry), item);
     // Include earlier entries from every worker before the tab can clear its composer or run pagehide keepalives; a failed
     // read only delays the send (sendOutbox reads again before any network attempt).
     await refreshOutbox();
     broadcastOutbox();
     post(client, { outboxAdded: n });
-    sendOutbox(item.entry.sessionId);
+    sendOutbox(item.entry.sessionId, item.entry.hostId);
   });
 }
 
-function dropOutbox(client: Client, n: number, id: string): void {
+function dropOutbox(
+  client: Client,
+  n: number,
+  sessionId: string,
+  id: string,
+  hostId: string,
+): void {
+  const key = outboxKey({ hostId, sessionId, id });
   void ensureOutboxReady().then(async (loaded) => {
-    const item = outboxItems.get(id);
-    outboxDropping.add(id);
-    const removed = loaded && (await writeOutbox((store) => store.delete(id)));
-    outboxDropping.delete(id);
+    const item = outboxItems.get(key);
+    outboxDropping.add(key);
+    const removed =
+      loaded &&
+      (await writeOutbox((store) => store.delete([hostId, sessionId, id])));
+    outboxDropping.delete(key);
     if (!removed) {
       post(client, {
         outboxDropped: n,
@@ -2508,10 +2549,10 @@ function dropOutbox(client: Client, n: number, id: string): void {
       return;
     }
     clearTimeout(item?.retryTimer);
-    outboxItems.delete(id);
+    outboxItems.delete(key);
     post(client, { outboxDropped: n });
     broadcastOutbox();
-    if (item) sendOutbox(item.entry.sessionId);
+    sendOutbox(sessionId, hostId);
   });
 }
 /** Server identity snapshots can prove a browser's local copy was accepted even when its POST reply was lost. */
@@ -2519,6 +2560,7 @@ function reconcileOutbox(
   client: Client,
   n: number,
   sessionId: string,
+  hostId: string,
   value: unknown,
 ): void {
   void ensureOutboxReady().then(async (loaded) => {
@@ -2538,7 +2580,9 @@ function reconcileOutbox(
     const committed = await writeOutbox((store) => {
       const request = store.getAll();
       request.onsuccess = () => {
-        const entries = request.result as LocalOutboxEntry[];
+        const entries = (request.result as LocalOutboxEntry[]).filter(
+          (entry) => entry.hostId === hostId && entry.sessionId === sessionId,
+        );
         const byId = new Map(
           entries.map((entry) => [entry.id, entry] as const),
         );
@@ -2546,7 +2590,7 @@ function reconcileOutbox(
           if (entry.sessionId !== sessionId || !confirmed.has(entry.id))
             continue;
           removedIds.add(entry.id);
-          store.delete(entry.id);
+          store.delete([hostId, sessionId, entry.id]);
           if (entry.replaces === undefined) continue;
           const root = replacementRoot(entry, byId);
           if (root === null) continue;
@@ -2573,7 +2617,7 @@ function reconcileOutbox(
             )
               continue;
             removedIds.add(candidate.id);
-            store.delete(candidate.id);
+            store.delete([hostId, sessionId, candidate.id]);
           }
         }
       };
@@ -2586,13 +2630,14 @@ function reconcileOutbox(
       return;
     }
     for (const id of removedIds) {
-      clearTimeout(outboxItems.get(id)?.retryTimer);
-      outboxItems.delete(id);
+      const key = outboxKey({ hostId, sessionId, id });
+      clearTimeout(outboxItems.get(key)?.retryTimer);
+      outboxItems.delete(key);
     }
     await refreshOutbox();
     broadcastOutbox();
     post(client, { outboxReconciled: n });
-    if (removedIds.size > 0) sendOutbox(sessionId);
+    if (removedIds.size > 0) sendOutbox(sessionId, hostId);
   });
 }
 
@@ -2603,7 +2648,7 @@ async function refreshOutbox(): Promise<boolean | null> {
     outboxPartial = true;
     return null;
   }
-  const ids = new Set(entries.map((entry) => entry.id));
+  const ids = new Set(entries.map(outboxKey));
   // Back to a complete view: the tabs hear it even when no entry changed.
   let changed = outboxPartial;
   outboxPartial = false;
@@ -2614,9 +2659,10 @@ async function refreshOutbox(): Promise<boolean | null> {
     changed = true;
   }
   for (const entry of entries) {
-    const item = outboxItems.get(entry.id);
+    const key = outboxKey(entry);
+    const item = outboxItems.get(key);
     if (!item) {
-      outboxItems.set(entry.id, {
+      outboxItems.set(key, {
         entry,
         inFlight: false,
         retryTimer: undefined,
@@ -2636,38 +2682,39 @@ async function refreshOutbox(): Promise<boolean | null> {
 }
 
 /** Every attempt reads the shared store: dedicated workers and old/new SharedWorkers must agree on the session head. */
-async function sendOutbox(sessionId: string): Promise<void> {
-  if (outboxReading.has(sessionId)) return;
-  outboxReading.add(sessionId);
+async function sendOutbox(sessionId: string, hostId: string): Promise<void> {
+  const key = sessionKey(sessionId, hostId);
+  if (outboxReading.has(key)) return;
+  outboxReading.add(key);
   const changed = await refreshOutbox();
-  outboxReading.delete(sessionId);
+  outboxReading.delete(key);
   if (changed === null) {
-    const retry = outboxReadRetry.get(sessionId) ?? {
+    const retry = outboxReadRetry.get(key) ?? {
       timer: undefined,
       ms: RECONNECT_MIN_MS,
     };
-    outboxReadRetry.set(sessionId, retry);
+    outboxReadRetry.set(key, retry);
     if (retry.timer !== undefined) return;
     retry.timer = setTimeout(() => {
       retry.timer = undefined;
-      sendOutbox(sessionId);
+      sendOutbox(sessionId, hostId);
     }, retry.ms);
     retry.ms = Math.min(retry.ms * 2, RECONNECT_MAX_MS);
     return;
   }
-  clearTimeout(outboxReadRetry.get(sessionId)?.timer);
-  outboxReadRetry.delete(sessionId);
+  clearTimeout(outboxReadRetry.get(key)?.timer);
+  outboxReadRetry.delete(key);
   if (changed) broadcastOutbox();
-  const entries = outboxList();
-  const head = entries.find(
-    (entry) => entry.sessionId === sessionId && entry.state === "sending",
+  const entries = outboxList().filter(
+    (entry) => entry.hostId === hostId && entry.sessionId === sessionId,
   );
-  const item = head && outboxItems.get(head.id);
+  const head = entries.find((entry) => entry.state === "sending");
+  const item = head && outboxItems.get(outboxKey(head));
   if (
     !item ||
     item.inFlight ||
     item.retryTimer !== undefined ||
-    outboxDropping.has(item.entry.id)
+    outboxDropping.has(outboxKey(item.entry))
   )
     return;
   if (
@@ -2725,7 +2772,10 @@ async function sendOutbox(sessionId: string): Promise<void> {
       // A half-open POST must not block this session forever; include the body read and allow 2 KB/s for its uplink.
       withDeadline(40_000 + Math.ceil(body.length / 2), async (signal) => {
         const response = await fetch(
-          `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
+          sessionUrl(
+            `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
+            hostId,
+          ),
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -2752,6 +2802,7 @@ async function sendOutbox(sessionId: string): Promise<void> {
       n: 0,
       req,
       sessionId,
+      hostId,
       advisor: advisor === true,
       body,
       type: "outbox_add",
@@ -2760,7 +2811,10 @@ async function sendOutbox(sessionId: string): Promise<void> {
 }
 
 /** A transport success is not a storage receipt (a sign-in page can also answer 200). */
-function acceptedOutboxEntry(body: unknown, id: string): unknown {
+function acceptedOutboxEntry(
+  body: unknown,
+  { id, hostId }: LocalOutboxEntry,
+): unknown {
   const reply = body as {
     success?: unknown;
     data?: { entry?: Record<string, unknown> };
@@ -2770,6 +2824,7 @@ function acceptedOutboxEntry(body: unknown, id: string): unknown {
     entry?.id === id &&
     typeof entry.sessionId === "string" &&
     entry.sessionId.length > 0 &&
+    entry.hostId === hostId &&
     ["prompt", "followUp", "steer"].includes(entry.mode as string) &&
     ["held", "waiting_host", "delivering", "failed", "delivered"].includes(
       entry.state as string,
@@ -2812,10 +2867,10 @@ async function outboxAnswer(
   status: number,
   body: unknown,
 ): Promise<void> {
-  const { id, sessionId, replaces } = item.entry;
-  if (outboxItems.get(id) !== item) return;
+  const { id, sessionId, hostId, replaces } = item.entry;
+  if (outboxItems.get(outboxKey(item.entry)) !== item) return;
   const reply = (body ?? {}) as { error?: unknown };
-  const accepted = acceptedOutboxEntry(body, id);
+  const accepted = acceptedOutboxEntry(body, item.entry);
   if (status >= 200 && status < 300 && !accepted) status = 0;
   if (status >= 200 && status < 300) {
     // Commit the accepted ID and only server-confirmed or locally proven retry lineage together.
@@ -2831,7 +2886,9 @@ async function outboxAnswer(
       !(await writeOutbox((store) => {
         const request = store.getAll();
         request.onsuccess = () => {
-          const entries = request.result as LocalOutboxEntry[];
+          const entries = (request.result as LocalOutboxEntry[]).filter(
+            (entry) => entry.hostId === hostId && entry.sessionId === sessionId,
+          );
           const byId = new Map(
             entries.map((entry) => [entry.id, entry] as const),
           );
@@ -2854,7 +2911,7 @@ async function outboxAnswer(
             if (entry.sessionId !== sessionId) continue;
             if (entry.id === id) {
               removedIds.add(entry.id);
-              store.delete(entry.id);
+              store.delete([hostId, sessionId, entry.id]);
               continue;
             }
             if (
@@ -2865,15 +2922,16 @@ async function outboxAnswer(
             )
               continue;
             removedIds.add(entry.id);
-            store.delete(entry.id);
+            store.delete([hostId, sessionId, entry.id]);
           }
         };
       }))
     )
       return outboxAnswer(item, 0, null);
     for (const removedId of removedIds) {
-      clearTimeout(outboxItems.get(removedId)?.retryTimer);
-      outboxItems.delete(removedId);
+      const key = outboxKey({ hostId, sessionId, id: removedId });
+      clearTimeout(outboxItems.get(key)?.retryTimer);
+      outboxItems.delete(key);
     }
     const stored =
       isRecord(accepted) &&
@@ -2890,6 +2948,7 @@ async function outboxAnswer(
     const representedRoot = confirmedReplaces ?? localReplaces;
     for (const client of clients)
       post(client, {
+        outboxSessionId: sessionId,
         outboxStored:
           representedRoot && isRecord(stored)
             ? { ...stored, replaces: representedRoot }
@@ -2905,7 +2964,7 @@ async function outboxAnswer(
     item.inFlight = false;
     item.retryTimer = setTimeout(() => {
       item.retryTimer = undefined;
-      sendOutbox(sessionId);
+      sendOutbox(sessionId, hostId);
     }, item.retryMs);
     item.retryMs = Math.min(item.retryMs * 2, RECONNECT_MAX_MS);
     return;
@@ -2916,18 +2975,19 @@ async function outboxAnswer(
     );
   }
   broadcastOutbox();
-  sendOutbox(sessionId);
+  sendOutbox(sessionId, hostId);
 }
 
 /** Final: "failed" until a tab drops it, and the session's next entry goes. Written only over a row still "sending" in
  * the same transaction: another worker (or the service worker) may have had a 200 and deleted it meanwhile. */
 async function failOutbox(item: OutboxItem, error: string): Promise<void> {
   item.inFlight = true;
-  const { id, sessionId } = item.entry;
+  const { id, sessionId, hostId } = item.entry;
+  const key = outboxKey(item.entry);
   const failed: LocalOutboxEntry = { ...item.entry, state: "failed", error };
   const read: { stored?: LocalOutboxEntry } = {};
   const committed = await writeOutbox((store) => {
-    const request = store.get(id);
+    const request = store.get([hostId, sessionId, id]);
     request.onsuccess = () => {
       read.stored = request.result as LocalOutboxEntry | undefined;
       if (read.stored?.state === "sending") store.put(failed);
@@ -2935,13 +2995,13 @@ async function failOutbox(item: OutboxItem, error: string): Promise<void> {
   });
   if (!committed) return outboxAnswer(item, 0, null);
   item.inFlight = false;
-  if (outboxItems.get(id) !== item) return;
+  if (outboxItems.get(key) !== item) return;
   if (!read.stored) {
     clearTimeout(item.retryTimer);
-    outboxItems.delete(id);
+    outboxItems.delete(key);
   } else item.entry = read.stored.state === "sending" ? failed : read.stored;
   broadcastOutbox();
-  sendOutbox(sessionId);
+  sendOutbox(sessionId, hostId);
 }
 
 /** The network or the page is back: every waiting entry goes again now, from the shortest delay. */
@@ -2952,7 +3012,7 @@ function retryOutbox(): void {
     item.retryMs = RECONNECT_MIN_MS;
   }
   for (const item of [...outboxItems.values()])
-    sendOutbox(item.entry.sessionId);
+    sendOutbox(item.entry.sessionId, item.entry.hostId);
 }
 
 function attach(port: Port): void {
@@ -3018,13 +3078,20 @@ function attach(port: Port): void {
         addOutbox(client, Number(data.n), data.entry as LocalOutboxEntry);
         break;
       case "outbox_drop":
-        dropOutbox(client, Number(data.n), String(data.id));
+        dropOutbox(
+          client,
+          Number(data.n),
+          String(data.sessionId),
+          String(data.id),
+          String(data.hostId),
+        );
         break;
       case "outbox_reconcile":
         reconcileOutbox(
           client,
           Number(data.n),
           typeof data.sessionId === "string" ? data.sessionId : "",
+          typeof data.hostId === "string" ? data.hostId : "",
           data.confirmedIds,
         );
         break;

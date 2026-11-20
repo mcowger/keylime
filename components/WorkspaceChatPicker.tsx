@@ -5,6 +5,7 @@ import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { LOCAL_HOST_ID } from "@/lib/project-ordering";
 import type { SessionInfo } from "@/lib/types";
 import { temporarySessionTitle } from "@/lib/session-title";
+import { sessionKey } from "@/lib/session-identity";
 
 export function WorkspaceChatPicker({
   hostId,
@@ -102,7 +103,7 @@ export function WorkspaceChatPicker({
 
   const filtered = sessions.filter(
     (session) =>
-      !openSessionIds.includes(session.id) &&
+      !openSessionIds.includes(sessionKey(session.id, session.hostId)) &&
       `${session.name ?? ""} ${session.firstMessage ?? ""}`
         .toLowerCase()
         .includes(query.toLowerCase()),
@@ -134,7 +135,11 @@ export function WorkspaceChatPicker({
             key={session.id}
             onClick={() => onSelect(session)}
           >
-            {session.name || (session.messageCount ? temporarySessionTitle(session.firstMessage) : null) || "Untitled chat"}
+            {session.name ||
+              (session.messageCount
+                ? temporarySessionTitle(session.firstMessage)
+                : null) ||
+              "Untitled chat"}
           </button>
         ))
       )}

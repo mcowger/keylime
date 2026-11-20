@@ -10,6 +10,7 @@ import { comparableProjectPath } from "@/lib/comparable-path";
 import { LOCAL_HOST_ID } from "@/lib/project-ordering";
 import { closeTerminal } from "@/lib/terminal-client";
 import type { SessionInfo } from "@/lib/types";
+import { sessionKey } from "@/lib/session-identity";
 import type { SystemsAction } from "./SystemsHost";
 import {
   SystemsButton,
@@ -74,7 +75,7 @@ export function EffortSavedChats({
     if (
       (session.hostId ?? LOCAL_HOST_ID) !== host ||
       !owned.has(session.id) ||
-      openSessionIds.includes(session.id)
+      openSessionIds.includes(sessionKey(session.id, session.hostId))
     )
       return false;
     if (!target) return true;

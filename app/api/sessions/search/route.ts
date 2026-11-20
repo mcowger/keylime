@@ -1,5 +1,8 @@
 import { searchSessions } from "@/lib/session-content-search";
-import { listSessionsAllHosts } from "@/lib/hosts/session-index";
+import { registeredHostSessionIds } from "@/lib/hosts/session-index";
+import { LOCAL_HOST_ID } from "@/lib/hosts/registry";
+import { apiErrorResponse } from "@/lib/api-utils";
+import type { TranscriptSearchBatch } from "@/lib/api-contracts/http-sessions";
 
 const MAX_QUERY_LENGTH = 500;
 
@@ -9,8 +12,8 @@ const MAX_QUERY_LENGTH = 500;
 /**
  * @apiContract searchSessions
  * @apiUsage Stream session content search scores as newline-delimited JSON batches.
- * @apiInputs q defaults to empty and is limited to 500 characters; each line contains a scores object keyed by session ID.
- * @apiInvariants The allowed session IDs are captured from the cross-host list before scanning; even empty batches are emitted. Local transcript scoring includes submitted skill prompts, not expanded instructions. This is a pull-driven scan, not a resumable cursor or an atomic snapshot.
+ * @apiInputs q defaults to empty and is limited to 500 characters; each line contains scores with hostId, sessionId and score.
+ * @apiInvariants Scores cover only registered sessions on the web host. Even empty batches are emitted. Local scoring includes submitted skill prompts, not expanded instructions. This is a pull-driven scan, not a resumable cursor or atomic snapshot.
  * @apiEffects Scans session content as the client reads; response is no-store and proxy buffering is disabled.
  * @apiRecovery Closing the stream stops after the current batch; restart the search from the beginning after disconnect and replace accumulated results as appropriate.
  */
@@ -25,22 +28,28 @@ export async function GET(
       { status: 400 },
     );
   }
-  const allowed = new Set(
-    (await listSessionsAllHosts()).map((session) => session.id),
-  );
+  let allowed: Set<string>;
+  try {
+    allowed = await registeredHostSessionIds(LOCAL_HOST_ID);
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
   const batches = searchSessions(q);
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     // Pull-driven: the scan only advances while the client keeps reading.
     async pull(controller) {
       const next = await batches.next();
-      if (next.done) controller.close();
-      else
-        controller.enqueue(
-          encoder.encode(
-            `${JSON.stringify({ scores: Object.fromEntries(Object.entries(next.value).filter(([id]) => allowed.has(id))) })}\n`,
-          ),
-        );
+      if (next.done) {
+        controller.close();
+        return;
+      }
+      const batch: TranscriptSearchBatch = { scores: [] };
+      for (const [sessionId, score] of Object.entries(next.value)) {
+        if (allowed.has(sessionId))
+          batch.scores.push({ hostId: LOCAL_HOST_ID, sessionId, score });
+      }
+      controller.enqueue(encoder.encode(`${JSON.stringify(batch)}\n`));
     },
     async cancel() {
       await batches.return(undefined);

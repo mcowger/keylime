@@ -11,8 +11,8 @@ import {
   getSessionsDir,
   sessionLocalRoot,
 } from "../lib/omp/paths";
+import { saveHostSettings } from "../lib/web-settings";
 import type { ShipPr } from "../lib/workspace-ship-types";
-import { saveWebServerSettings } from "../lib/web-settings";
 
 // Invoked only by the dev launcher, before the host starts and caches its hierarchy.
 const root = process.env.KEYLIME_UI_FIXTURE_ROOT;
@@ -629,7 +629,7 @@ for (const owner of [
     listSystems,
   );
 }
-saveWebServerSettings({ uploadRetentionDays: 14, agentToolsEnabled: true });
+saveHostSettings({ uploadRetentionDays: 14, agentToolsEnabled: true });
 console.log(
   "[dev] UI fixtures seeded: Atlas Repo and System, planning boards, field-notes (4 saved conversations)",
 );

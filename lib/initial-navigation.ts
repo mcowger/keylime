@@ -8,12 +8,12 @@ export function getInitialNavigation(
   searchParams: Pick<URLSearchParams, "get">,
 ): InitialNavigation {
   const requestedCwd = searchParams.get("cwd")?.trim() || null;
+  const sessionId = requestedCwd ? null : searchParams.get("session");
+  const hostId = searchParams.get("hostId") || undefined;
 
   return {
     requestedCwd,
-    sessionId: requestedCwd ? null : searchParams.get("session"),
-    ...(requestedCwd && searchParams.get("hostId") !== null
-      ? { hostId: searchParams.get("hostId")! }
-      : {}),
+    sessionId,
+    ...((requestedCwd || sessionId) && hostId ? { hostId } : {}),
   };
 }

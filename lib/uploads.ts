@@ -165,7 +165,8 @@ function completionIdentity(proof: string): string {
 export function snapshotOutboxUploads(
   ids: string[],
   owner: string,
-  proofs?: unknown,
+  proofs: unknown,
+  hostId: string,
 ): OutboxUploadReceipt[] {
   if (
     proofs !== undefined &&
@@ -185,8 +186,9 @@ export function snapshotOutboxUploads(
     );
   }
   return ids.map((id) => {
-    const upload = uploads().get(id);
-    const stored = completedUpload(id);
+    const cached = uploads().get(id);
+    const upload = cached?.hostId === hostId ? cached : undefined;
+    const stored = completedUpload(id, hostId);
     const actualOwner = stored?.owner ?? upload?.owner;
     if (!actualOwner) throw missing();
     if (upload?.stagingArtifact) throw artifactDestinationConflict();
@@ -261,7 +263,7 @@ function sameUpload(
     upload.completionKey !== receipt.completionKey
   )
     return false;
-  const current = completedUpload(receipt.id);
+  const current = completedUpload(receipt.id, receipt.hostId);
   // Consumed rows may be absent, but a later completion never inherits an earlier operation's authority.
   return (
     !current ||
@@ -281,7 +283,7 @@ export function restoreOutboxUploads(
   for (const receipt of receipts) {
     const { id, hostId, name, size, type, attached, completionKey } = receipt;
     const originalOwner = receipt.owner ?? owner;
-    const current = completedUpload(id);
+    const current = completedUpload(id, hostId);
     if (
       current &&
       (current.owner !== originalOwner ||
@@ -393,7 +395,7 @@ function onHostEvent(hostId: string, ack: UploadAck | null): void {
     return;
   if (ack.error) {
     map.delete(ack.id);
-    const stored = completedUpload(ack.id);
+    const stored = completedUpload(ack.id, hostId);
     if (
       stored &&
       sameUpload(
@@ -407,7 +409,7 @@ function onHostEvent(hostId: string, ack: UploadAck | null): void {
         stored.owner,
       )
     ) {
-      forgetCompletedUpload(ack.id, stored);
+      forgetCompletedUpload(ack.id, stored, hostId);
     }
     dropUploadFrames(hostId, ack.id);
     // A daemon's status is untrusted: Response.json throws on one outside 200-599.
@@ -512,7 +514,7 @@ export async function startUpload(
   if (!getHost(hostId))
     throw new UploadError(404, "host_not_found", "Unknown host");
   const map = uploads();
-  const stored = completedUpload(id);
+  const stored = completedUpload(id, hostId);
   if (stored) {
     if (stored.owner !== owner)
       throw new UploadError(
@@ -533,7 +535,7 @@ export async function startUpload(
       owner,
     );
   }
-  if (!stored && outboxUsesUpload(id))
+  if (!stored && outboxUsesUpload(id, hostId))
     throw new UploadError(
       409,
       "upload_id_conflict",
@@ -624,7 +626,7 @@ export async function startUpload(
   let proof: string | undefined;
   if (upload.attempt === attempt) {
     if (stored && (!result.done || result.received !== size)) {
-      forgetCompletedUpload(id, stored);
+      forgetCompletedUpload(id, stored, hostId);
       map.delete(id);
       throw missing();
     }
@@ -640,7 +642,7 @@ export async function startUpload(
       }
     }
   } else if (stored && result.done && result.received === size) {
-    const current = completedUpload(id);
+    const current = completedUpload(id, hostId);
     if (
       current?.proof &&
       current.proof === stored.proof &&
@@ -814,7 +816,8 @@ export async function abortUpload(
   hostId?: string,
 ): Promise<void> {
   const map = uploads();
-  const stored = completedUpload(id);
+  const target = hostId ?? map.get(id)?.hostId ?? "local";
+  const stored = completedUpload(id, target);
   if (stored) {
     if (stored.owner !== owner) return;
     restoreOutboxUploads(
@@ -832,9 +835,9 @@ export async function abortUpload(
   }
   const upload = map.get(id);
   if (upload) {
-    if (upload.owner !== owner) return;
+    if (upload.owner !== owner || upload.hostId !== target) return;
     map.delete(id);
-    forgetCompletedUpload(id);
+    forgetCompletedUpload(id, undefined, target);
     dropUploadFrames(upload.hostId, id);
     return deliverAbort(upload.hostId, id);
   }
@@ -858,12 +861,13 @@ const PROMPT_TYPES: Record<string, true> = {
 export function takeUploads(
   command: Record<string, unknown>,
   owner: string,
-  trusted?: OutboxUploadReceipt[],
+  trusted: OutboxUploadReceipt[] | undefined,
+  hostId: string,
 ): { ids: string[]; receipts: OutboxUploadReceipt[] } | null {
   const proofs = command.uploadProofs;
   delete command.uploadProofs;
   if (!Object.hasOwn(command, "uploads")) {
-    if (proofs !== undefined) snapshotOutboxUploads([], owner, proofs);
+    if (proofs !== undefined) snapshotOutboxUploads([], owner, proofs, hostId);
     return null;
   }
   const ids = command.uploads;
@@ -892,8 +896,9 @@ export function takeUploads(
     );
   }
   const receipts =
-    trusted ?? snapshotOutboxUploads(ids as string[], owner, proofs);
+    trusted ?? snapshotOutboxUploads(ids as string[], owner, proofs, hostId);
   if (
+    receipts.some((receipt) => receipt.hostId !== hostId) ||
     receipts.length !== ids.length ||
     !ids.every((id) => receipts.some((receipt) => receipt.id === id))
   )
@@ -1049,7 +1054,9 @@ export function forgetUploads(
           : upload.owner !== expectedOwner))
     )
       continue;
-    const stored = completedUpload(id);
+    const hostId = receipt?.hostId ?? upload?.hostId;
+    if (!hostId) continue;
+    const stored = completedUpload(id, hostId);
     if (
       stored &&
       (stored.owner !== expectedOwner ||
@@ -1060,7 +1067,7 @@ export function forgetUploads(
     )
       continue;
     if (upload) uploads().delete(id);
-    if (stored) forgetCompletedUpload(id, stored);
+    if (stored) forgetCompletedUpload(id, stored, hostId);
   }
 }
 
@@ -1092,7 +1099,7 @@ export async function stageHostArtifact(
     upload.attached ||
     upload.attaching ||
     upload.workspace ||
-    outboxUsesUpload(id)
+    outboxUsesUpload(id, hostId)
   )
     throw new UploadError(
       409,
@@ -1109,7 +1116,7 @@ export async function stageHostArtifact(
         "The host did not send a valid artifact staging result",
       );
     if (map.get(id) === upload) {
-      forgetCompletedUpload(id);
+      forgetCompletedUpload(id, undefined, hostId);
       map.delete(id);
     }
     return staged;

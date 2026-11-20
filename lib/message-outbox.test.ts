@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { sessionKey } from "./session-identity";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -52,7 +53,8 @@ const { closeNotificationStore } = await import("./notification-store.ts");
 const { isLinkUp } = await import("./hosts/host.ts");
 const { HostOpError } = await import("./hosts/link-protocol.ts");
 const hub = await import("./hosts/hub.ts");
-const { linkHost, until } = await import("./hosts/link-driver.test-helper.ts");
+const { linkHost, linkLocalHost, linkLocalDaemon, until } =
+  await import("./hosts/link-driver.test-helper.ts");
 
 after(() => {
   hub.flushLinkSamples();
@@ -66,7 +68,7 @@ after(() => {
 // Every session in this file lives on one fake host whose link the tests switch.
 let hostStatus: HostStatus = "online";
 const host = {
-  id: "outbox-test-host",
+  id: "local",
   label: "Test host",
   status: () => hostStatus,
   sessionOps: {
@@ -207,19 +209,25 @@ function wrapper(
     },
     async destroyAndWait() {},
   };
-  globalThis.__ompSessions!.set(sessionId, self as unknown as SessionWrapper);
+  globalThis.__ompSessions!.set(
+    sessionKey(sessionId, host.id),
+    self as unknown as SessionWrapper,
+  );
   return self;
 }
 
 const command = async (
   sessionId: string,
   body: { type: string; [key: string]: unknown },
+  hostId = host.id,
 ) => {
   const scopeResponse = await runAgentCommand(
     sessionId,
     { type: "outbox_scope" },
     false,
     "owner",
+    undefined,
+    { hostId },
   );
   const scope = (await scopeResponse.json()).data?.scope;
   return runAgentCommand(
@@ -227,6 +235,8 @@ const command = async (
     body.type === "outbox_add" ? { scope, ...body } : body,
     false,
     "owner",
+    undefined,
+    { hostId },
   );
 };
 const add = async (
@@ -236,9 +246,9 @@ const add = async (
   mode = "prompt",
 ) =>
   (await command(sessionId, { type: "outbox_add", id, mode, message })).json();
-const states = (sessionId: string) =>
+const states = (sessionId: string, hostId = host.id) =>
   outbox
-    .outboxEntries(sessionId)
+    .outboxEntries(sessionId, hostId)
     .map((entry) => `${entry.message}:${entry.state}`);
 
 /** The session channel's frames, as one connection's sink receives them. */
@@ -256,7 +266,11 @@ async function watchChannel(sessionId: string) {
   };
   const connection = new EventStreamConnection(undefined, sink);
   assert.deepEqual(
-    await connection.subscribe("s1", { kind: "session", sessionId }),
+    await connection.subscribe("s1", {
+      kind: "session",
+      sessionId,
+      hostId: host.id,
+    }),
     { ok: true },
   );
   const kinds = () =>
@@ -273,7 +287,7 @@ test("retry replacement is atomic and distinct copies deduplicate across restart
   const sid = "retry-atomic";
   wrapper(sid);
   await add(sid, "retry-root", "same intent");
-  const database = globalThis.__ompOutboxStore!.db;
+  const database = globalThis.__keylimeHostOutboxes!.get(host.id)!.store!.db;
   database
     .prepare("UPDATE entries SET state = 'failed' WHERE id = ?")
     .run("retry-root");
@@ -301,10 +315,10 @@ test("retry replacement is atomic and distinct copies deduplicate across restart
   const sibling = await retry("retry-sibling");
   assert.equal((await sibling.json()).data.entry.state, "delivered");
   assert.deepEqual(
-    outbox.outboxEntries(sid).map((entry) => entry.id),
+    outbox.outboxEntries(sid, host.id).map((entry) => entry.id),
     ["retry-winner"],
   );
-  const reopened = globalThis.__ompOutboxStore!.db;
+  const reopened = globalThis.__keylimeHostOutboxes!.get(host.id)!.store!.db;
   reopened
     .prepare("UPDATE entries SET done_at = ? WHERE id = ?")
     .run(Date.now() - outbox.KEEP_DELIVERED_MS - 1, "retry-root");
@@ -321,7 +335,7 @@ test("retry replacement is atomic and distinct copies deduplicate across restart
       .get("retry-root")!.replacement_id,
     "retry-winner",
   );
-  outbox.forgetSessionReplacementMappings(sid);
+  outbox.forgetSessionReplacementMappings(sid, host.id);
   assert.equal(
     reopened.prepare("SELECT id FROM entries WHERE id = ?").get("retry-root"),
     null,
@@ -334,7 +348,7 @@ test("retry transfers only the exact accepted upload generation and rejects inva
   const uploadId = crypto.randomUUID();
   const proof = outbox.saveCompletedUpload("owner", {
     id: uploadId,
-    hostId: "host",
+    hostId: host.id,
     name: "file.txt",
     size: 4,
     type: "text/plain",
@@ -347,7 +361,7 @@ test("retry transfers only the exact accepted upload generation and rejects inva
     message: "file",
     uploads: [uploadId],
   });
-  const database = globalThis.__ompOutboxStore!.db;
+  const database = globalThis.__keylimeHostOutboxes!.get(host.id)!.store!.db;
   database
     .prepare("UPDATE entries SET state = 'failed' WHERE id = ?")
     .run("proof-root");
@@ -367,6 +381,8 @@ test("retry transfers only the exact accepted upload generation and rejects inva
         { ...body, uploadProofs: { [uploadId]: "A".repeat(43) } },
         false,
         "other-owner",
+        undefined,
+        { hostId: host.id },
       )
     ).status,
     404,
@@ -386,6 +402,8 @@ test("retry transfers only the exact accepted upload generation and rejects inva
         { ...body, uploadProofs: { [uploadId]: proof } },
         true,
         "other-owner",
+        undefined,
+        { hostId: host.id },
       )
     ).status,
     409,
@@ -394,14 +412,25 @@ test("retry transfers only the exact accepted upload generation and rejects inva
     .prepare("UPDATE completed_uploads SET proof = ? WHERE id = ?")
     .run("B".repeat(43), uploadId);
   assert.equal(
-    (await runAgentCommand(sid, body, false, "other-owner")).status,
+    (
+      await runAgentCommand(sid, body, false, "other-owner", undefined, {
+        hostId: host.id,
+      })
+    ).status,
     404,
     "a changed completion generation cannot be reused",
   );
   database
     .prepare("UPDATE completed_uploads SET proof = ? WHERE id = ?")
     .run(proof, uploadId);
-  const accepted = await runAgentCommand(sid, body, false, "other-owner");
+  const accepted = await runAgentCommand(
+    sid,
+    body,
+    false,
+    "other-owner",
+    undefined,
+    { hostId: host.id },
+  );
   assert.equal(accepted.status, 200);
   assert.equal((await accepted.json()).data.entry.replaces, "proof-root");
   assert.equal(
@@ -431,7 +460,7 @@ test("outbox_add stores an id once, across a restart; a removed id is answered a
 
   // A web-server restart: a new store handle and dispatcher.
   outbox.closeOutboxStore();
-  globalThis.__ompOutbox = undefined;
+  outbox.closeOutboxStore();
   assert.deepEqual(states(sid), ["hello:waiting_host"]);
 
   assert.equal(
@@ -479,10 +508,10 @@ test("a refused saved profile keeps an existing-session message as definitely un
   });
   await add(sid, "invalid-profile-message", message);
   await until(
-    () => outbox.outboxEntries(sid)[0]?.state === "failed",
+    () => outbox.outboxEntries(sid, host.id)[0]?.state === "failed",
     "the profile refusal",
   );
-  const entry = outbox.outboxEntries(sid)[0];
+  const entry = outbox.outboxEntries(sid, host.id)[0];
   assert.equal(entry.message, message);
   assert.equal(entry.error, reason);
   assert.notEqual(entry.mayHaveBeenSent, true);
@@ -509,7 +538,8 @@ test(
     });
     await add(sid, "state-timeout-message", "while streaming", "followUp");
     await until(
-      () => reads === 1 && outbox.outboxEntries(sid)[0]?.state === "held",
+      () =>
+        reads === 1 && outbox.outboxEntries(sid, host.id)[0]?.state === "held",
       "the timed-out read",
     );
     await sleep(outbox.RETRY_MS);
@@ -525,7 +555,7 @@ for (const code of ["session_state_timeout", "session_busy"]) {
     hostStatus = "online";
     const sid = `foreign-claim-${code}`;
     const id = `${sid}-message`;
-    const db = globalThis.__ompOutboxStore!.db;
+    const db = globalThis.__keylimeHostOutboxes!.get(host.id)!.store!.db;
     let refusing = false;
     const { promise: refusalRead, resolve: foreignClaim } =
       Promise.withResolvers<number>();
@@ -559,7 +589,8 @@ for (const code of ["session_state_timeout", "session_busy"]) {
     );
     // The preflight attempt holds the session until its outcome is applied.
     await until(
-      () => !globalThis.__ompOutbox!.busy.has(sid),
+      () =>
+        !globalThis.__keylimeHostOutboxes!.get(host.id)!.state!.busy.has(sid),
       "the refused attempt settles",
     );
     assert.deepEqual(
@@ -603,25 +634,27 @@ for (const transient of [true, false]) {
     assert.ok(refuse);
     refuse();
     await until(
-      () => !globalThis.__ompOutbox!.busy.has(sid),
+      () =>
+        !globalThis.__keylimeHostOutboxes!.get(host.id)!.state!.busy.has(sid),
       "deleted preparation settlement",
     );
     assert.equal(
       globalThis
-        .__ompOutboxStore!.db.query<{ state: string }, [string]>(
+        .__keylimeHostOutboxes!.get(host.id)!
+        .store!.db.query<{ state: string }, [string]>(
           "SELECT state, message FROM entries WHERE id = ?",
         )
         .get(sid)!.state,
       "delivered",
     );
-    assert.deepEqual(outbox.outboxEntries(sid), []);
-    assert.ok(outbox.outboxSettlements(sid).settledIds.includes(sid));
+    assert.deepEqual(outbox.outboxEntries(sid, host.id), []);
+    assert.ok(outbox.outboxSettlements(sid, host.id).settledIds.includes(sid));
     assert.equal(
-      globalThis.__ompOutbox!.retries?.size ?? 0,
+      globalThis.__keylimeHostOutboxes!.get(host.id)!.state!.retries?.size ?? 0,
       0,
       "a deleted entry schedules no retry",
     );
-    outbox.pumpOutbox(sid);
+    outbox.pumpOutbox(sid, host.id);
     assert.deepEqual(
       w.sent,
       [],
@@ -696,7 +729,7 @@ test("with its host offline an entry waits, and goes on the next host link", asy
   assert.deepEqual(w.sent, []);
 
   hostStatus = "online";
-  const link = await linkHost("Outbox test host");
+  const link = await linkLocalHost();
   await until(() => states(sid).length === 0, "delivery after the hello");
   assert.deepEqual(
     (w.sent as NativeCommand[]).map((sent) => sent.message),
@@ -744,10 +777,10 @@ test("an idle prompt leaves after omp's echo, on every channel after the echo fr
   );
   assert.equal(
     globalThis
-      .__ompOutboxStore!.db.query<
-        { previous_entry_ids: string | null },
-        [string]
-      >("SELECT previous_entry_ids FROM entries WHERE id = ?")
+      .__keylimeHostOutboxes!.get(host.id)!
+      .store!.db.query<{ previous_entry_ids: string | null }, [string]>(
+        "SELECT previous_entry_ids FROM entries WHERE id = ?",
+      )
       .get("e1")!.previous_entry_ids,
     null,
     "baseline cleared on hand-off",
@@ -820,14 +853,14 @@ test("a lost reply fails as may-have-been-sent and is never resent, even on a ho
     () => w.sent.length === 3 && states(sid).length === 2,
     "all three dispatched",
   );
-  const [lost, refused] = outbox.outboxEntries(sid);
+  const [lost, refused] = outbox.outboxEntries(sid, host.id);
   assert.equal(lost.state, "failed");
   assert.equal(lost.mayHaveBeenSent, true);
   assert.equal(refused.state, "failed");
   assert.equal(refused.error, "Message too long");
   assert.equal(refused.mayHaveBeenSent, undefined);
   // What a host's hello does: the host link replays an undelivered line itself, so the outbox never sends it again.
-  outbox.pumpOutbox(sid);
+  outbox.pumpOutbox(sid, host.id);
   await sleep(20);
   assert.equal(w.sent.length, 3, "a failed entry is never resent by itself");
   assert.equal(
@@ -855,7 +888,8 @@ test("uncertain failures never disappear on same-text snapshots, new echoes, or 
   });
   assert.deepEqual(states(sid), ["replayed:failed"]);
   globalThis
-    .__ompOutboxStore!.db.prepare(
+    .__keylimeHostOutboxes!.get(host.id)!
+    .store!.db.prepare(
       "UPDATE entries SET message = '', uploads = ? WHERE id = ?",
     )
     .run(JSON.stringify(["b2037f01-2565-4536-8ca7-c18b34e5cd53"]), "l1");
@@ -897,7 +931,7 @@ test("an idle prompt whose omp exits before showing it fails as may-have-been-se
   w.isAlive = () => false;
   w.emit({ type: "agent_end", isTerminal: true, messages: [] });
   await until(() => states(sid)[0] === "boom:failed", "the failure");
-  assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
+  assert.equal(outbox.outboxEntries(sid, host.id)[0].mayHaveBeenSent, true);
 });
 
 test("an idle prompt that omp refuses before showing it fails with omp's message", async () => {
@@ -910,7 +944,7 @@ test("an idle prompt that omp refuses before showing it fails with omp's message
   await add(sid, "p1", "go");
   await until(() => states(sid)[0] === "go:failed", "the failure");
   assert.equal(
-    outbox.outboxEntries(sid)[0].error,
+    outbox.outboxEntries(sid, host.id)[0].error,
     "usage reserve is fail-closed",
   );
 });
@@ -918,7 +952,7 @@ test("an idle prompt that omp refuses before showing it fails with omp's message
 test("a session with held entries and no omp is watched, and the channel attaches to the wrapper once it starts", async () => {
   hostStatus = "online";
   const sid = "01a0e6b0-d916-7610-8343-f4a766ba0099";
-  globalThis.__ompSessions!.delete(sid);
+  globalThis.__ompSessions!.delete(sessionKey(sid, host.id));
   // No wrapper and no host has listed this machine's sessions yet: held anyway (resolve answers 503).
   await add(sid, "c1", "wake up");
   await until(
@@ -928,7 +962,7 @@ test("a session with held entries and no omp is watched, and the channel attache
   const channel = await watchChannel(sid);
   assert.deepEqual(channel.kinds(), ["outbox:waiting_host"]);
   const w = wrapper(sid);
-  outbox.pumpOutbox(sid);
+  outbox.pumpOutbox(sid, host.id);
   await until(() => w.sent.length === 1, "the prompt");
   w.emitFor(w.sent[0], {
     type: "message_end",
@@ -954,6 +988,8 @@ test("scope is stable across cookie owners; missing, changed credentials and a c
           { type: "outbox_scope" },
           false,
           owner,
+          undefined,
+          { hostId: host.id },
         )
       ).json()
     ).data?.scope;
@@ -971,6 +1007,8 @@ test("scope is stable across cookie owners; missing, changed credentials and a c
     body,
     false,
     "cookie1",
+    undefined,
+    { hostId: host.id },
   );
   assert.equal(missing.status, 409);
   assert.equal((await missing.json()).code, "outbox_scope_changed");
@@ -985,6 +1023,8 @@ test("scope is stable across cookie owners; missing, changed credentials and a c
           { ...body, scope: first },
           false,
           "cookie1",
+          undefined,
+          { hostId: host.id },
         )
       ).status,
       409,
@@ -1010,6 +1050,8 @@ test("scope is stable across cookie owners; missing, changed credentials and a c
           { ...body, scope: first },
           false,
           "cookie1",
+          undefined,
+          { hostId: host.id },
         )
       ).status,
       409,
@@ -1017,7 +1059,7 @@ test("scope is stable across cookie owners; missing, changed credentials and a c
   } finally {
     pinWebAuthSecretForTests();
   }
-  assert.deepEqual(outbox.outboxEntries("scope-session"), []);
+  assert.deepEqual(outbox.outboxEntries("scope-session", host.id), []);
 });
 
 test("oversized outbox messages are refused before storage with the prompt request cap", async () => {
@@ -1030,7 +1072,7 @@ test("oversized outbox messages are refused before storage with the prompt reque
     message: "x".repeat(8 * 1024 * 1024),
   });
   assert.equal(response.status, 413);
-  assert.deepEqual(outbox.outboxEntries("s-size"), []);
+  assert.deepEqual(outbox.outboxEntries("s-size", host.id), []);
 });
 
 test("upload completion precedes any outbox_add; its receipt and the held entry survive separate server restarts", async () => {
@@ -1051,6 +1093,11 @@ test("upload completion precedes any outbox_add; its receipt and the held entry 
   });
   const w = wrapper(sid, { running: true });
   w.host = { ...host, id: link.id };
+  globalThis.__ompSessions!.delete(sessionKey(sid, host.id));
+  globalThis.__ompSessions!.set(
+    sessionKey(sid, link.id),
+    w as unknown as SessionWrapper,
+  );
   w.sessionFile = "/session.jsonl";
   w.withPendingCommand = (callback) => callback();
   const uploads = await import("./uploads.ts");
@@ -1066,27 +1113,33 @@ test("upload completion precedes any outbox_add; its receipt and the held entry 
   // The browser committed its upload ids, but /outbox_add never reached the server before it restarted.
   outbox.closeOutboxStore();
   globalThis.__ompUploads = undefined;
-  await command(sid, {
-    type: "outbox_add",
-    id: "upload1",
-    mode: "followUp",
-    message: "read it",
-    uploads: [uploadId],
-  });
+  await command(
+    sid,
+    {
+      type: "outbox_add",
+      id: "upload1",
+      mode: "followUp",
+      message: "read it",
+      uploads: [uploadId],
+    },
+    link.id,
+  );
   await until(
-    () => states(sid)[0] === "read it:waiting_host",
+    () => states(sid, link.id)[0] === "read it:waiting_host",
     "the offline host",
   );
   outbox.closeOutboxStore();
   globalThis.__ompUploads = undefined;
   hostStatus = "online";
-  outbox.pumpOutbox(sid);
+  outbox.pumpOutbox(sid, link.id);
   await until(
-    () => states(sid).length === 0 || states(sid)[0] === "read it:failed",
+    () =>
+      states(sid, link.id).length === 0 ||
+      states(sid, link.id)[0] === "read it:failed",
     "the dispatch",
   );
   assert.deepEqual(
-    states(sid),
+    states(sid, link.id),
     [],
     "receipt metadata survives, not upload_missing after the restart",
   );
@@ -1096,12 +1149,12 @@ test("upload completion precedes any outbox_add; its receipt and the held entry 
     /read it\n\nAttached files[\s\S]*local:\/\/uploads\/file.txt/,
   );
   assert.equal(
-    globalThis.__ompUploads!.has(uploadId),
+    globalThis.__ompUploads!.has(sessionKey(uploadId, link.id)),
     false,
     "existing successful send forgets the receipt",
   );
   assert.equal(
-    outbox.completedUpload(uploadId),
+    outbox.completedUpload(uploadId, link.id),
     null,
     "successful send removes the durable completion receipt too",
   );
@@ -1135,7 +1188,10 @@ test("two aliases of one wrapper share FIFO dispatch, snapshots and settlement",
   const oldId = "alias-old",
     newId = "alias-new";
   const w = wrapper(oldId, { running: true, reply: () => null });
-  globalThis.__ompSessions!.set(newId, w as unknown as SessionWrapper);
+  globalThis.__ompSessions!.set(
+    sessionKey(newId, host.id),
+    w as unknown as SessionWrapper,
+  );
   await add(oldId, "alias1", "older", "followUp");
   await add(newId, "alias2", "newer", "followUp");
   await until(() => w.sent.length === 1, "first alias send");
@@ -1147,7 +1203,7 @@ test("two aliases of one wrapper share FIFO dispatch, snapshots and settlement",
   );
   assert.deepEqual(
     outbox
-      .outboxEntries(newId)
+      .outboxEntries(newId, host.id)
       .map(({ message, sessionId }) => [message, sessionId]),
     [
       ["older", newId],
@@ -1186,7 +1242,10 @@ test("an existing channel rebinds to a replacement wrapper across native aliases
   const channel = await watchChannel(oldId);
   a.isAlive = () => false;
   const b = wrapper(newId);
-  globalThis.__ompSessions!.set(oldId, b as unknown as SessionWrapper);
+  globalThis.__ompSessions!.set(
+    sessionKey(oldId, host.id),
+    b as unknown as SessionWrapper,
+  );
   await add(newId, "rebind1", "replacement");
   await until(() => b.sent.length === 1, "replacement wrapper send");
   const before = channel.frames.length;
@@ -1219,7 +1278,10 @@ test("the active outbox UTF-8 budget is atomic and shared by aliases; Delete fre
   const sid = "s-budget",
     alias = "s-budget-alias";
   const w = wrapper(sid);
-  globalThis.__ompSessions!.set(alias, w as unknown as SessionWrapper);
+  globalThis.__ompSessions!.set(
+    sessionKey(alias, host.id),
+    w as unknown as SessionWrapper,
+  );
   const message = "é".repeat(2 * 1024 * 1024); // 4 MiB UTF-8, only 2 Mi UTF-16 code units
   for (let n = 0; n < 3; n++)
     assert.equal(
@@ -1238,13 +1300,13 @@ test("the active outbox UTF-8 budget is atomic and shared by aliases; Delete fre
   assert.equal(full.status, 429);
   assert.equal((await full.json()).code, "outbox_full");
   assert.equal(
-    outbox.outboxEntries(alias).length,
+    outbox.outboxEntries(alias, host.id).length,
     3,
     "refusal did not store or truncate the payload",
   );
   await command(alias, { type: "outbox_remove", id: "budget0" });
   assert.equal((await command(alias, fourth)).status, 200);
-  assert.equal(outbox.outboxEntries(alias).length, 3);
+  assert.equal(outbox.outboxEntries(alias, host.id).length, 3);
 });
 
 test("starting a second instance leaves a live process's dispatch claim alone", async () => {
@@ -1255,20 +1317,18 @@ test("starting a second instance leaves a live process's dispatch claim alone", 
   await until(() => w.sent.length === 1, "the claim");
   // The parent really is alive, unlike an orphaned server's pid.
   globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE entries SET dispatch_pid = ? WHERE id = ?",
-    )
+    .__keylimeHostOutboxes!.get(host.id)!
+    .store!.db.prepare("UPDATE entries SET dispatch_pid = ? WHERE id = ?")
     .run(process.ppid, "other1");
-  globalThis.__ompOutbox = undefined;
+  outbox.closeOutboxStore();
   outbox.startOutbox();
   assert.deepEqual(states(sid), ["owned elsewhere:delivering"]);
-  outbox.pumpOutbox(sid);
+  outbox.pumpOutbox(sid, host.id);
   assert.equal(w.sent.length, 1, "no second dispatch");
   // Let the next test's simulated restart recover this fixture too.
   globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE entries SET dispatch_pid = ? WHERE id = ?",
-    )
+    .__keylimeHostOutboxes!.get(host.id)!
+    .store!.db.prepare("UPDATE entries SET dispatch_pid = ? WHERE id = ?")
     .run(process.pid, "other1");
 });
 
@@ -1283,19 +1343,23 @@ test("native keepOldId migration survives restart and accepts the original old-s
     "held native message",
   );
   oldWrapper.sessionId = newId;
-  globalThis.__ompSessions!.set(newId, oldWrapper as unknown as SessionWrapper); // native keepOldId, not a branch/switch
+  globalThis.__ompSessions!.set(
+    sessionKey(newId, host.id),
+    oldWrapper as unknown as SessionWrapper,
+  ); // native keepOldId, not a branch/switch
   await add(newId, "native-entry2", "second moved message", "followUp");
   assert.equal(
     globalThis
-      .__ompOutboxStore!.db.query<{ session_id: string }, [string]>(
+      .__keylimeHostOutboxes!.get(host.id)!
+      .store!.db.query<{ session_id: string }, [string]>(
         "SELECT session_id FROM entries WHERE id = ?",
       )
       .get("native-entry")!.session_id,
     newId,
   );
   outbox.closeOutboxStore();
-  globalThis.__ompSessions!.delete(oldId);
-  globalThis.__ompSessions!.delete(newId);
+  globalThis.__ompSessions!.delete(sessionKey(oldId, host.id));
+  globalThis.__ompSessions!.delete(sessionKey(newId, host.id));
   const current = wrapper(newId, { running: true });
   const repeated = await (
     await command(oldId, {
@@ -1322,7 +1386,7 @@ test("native keepOldId migration survives restart and accepts the original old-s
     409,
   );
   hostStatus = "online";
-  outbox.pumpOutbox(newId);
+  outbox.pumpOutbox(newId, host.id);
   await until(() => states(newId).length === 0, "canonical dispatch");
   assert.deepEqual(
     current.sent.map(({ message }) => message),
@@ -1341,17 +1405,21 @@ test("ordinary branch/switch that drops the old registry key never migrates its 
     () => states(oldId)[0] === "stay in original:waiting_host",
     "held original",
   );
-  globalThis.__ompSessions!.delete(oldId);
+  globalThis.__ompSessions!.delete(sessionKey(oldId, host.id));
   w.sessionId = newId;
-  globalThis.__ompSessions!.set(newId, w as unknown as SessionWrapper);
+  globalThis.__ompSessions!.set(
+    sessionKey(newId, host.id),
+    w as unknown as SessionWrapper,
+  );
   await add(newId, "branch-new-entry", "new branch", "followUp");
   assert.deepEqual(
-    outbox.outboxEntries(newId).map(({ message }) => message),
+    outbox.outboxEntries(newId, host.id).map(({ message }) => message),
     ["new branch"],
   );
   assert.equal(
     globalThis
-      .__ompOutboxStore!.db.query<{ session_id: string }, [string]>(
+      .__keylimeHostOutboxes!.get(host.id)!
+      .store!.db.query<{ session_id: string }, [string]>(
         "SELECT session_id FROM entries WHERE id = ?",
       )
       .get("branch-old-entry")!.session_id,
@@ -1372,31 +1440,29 @@ test(
     await add(sid, "orphan1", "uncertain", "followUp");
     await until(() => w.sent.length === 1, "in-flight command");
     globalThis
-      .__ompOutboxStore!.db.prepare(
-        "UPDATE entries SET dispatch_pid = ? WHERE id = ?",
-      )
+      .__keylimeHostOutboxes!.get(host.id)!
+      .store!.db.prepare("UPDATE entries SET dispatch_pid = ? WHERE id = ?")
       .run(process.ppid, "orphan1");
-    globalThis.__ompOutbox = undefined;
+    outbox.closeOutboxStore();
     outbox.startOutbox();
     assert.equal(
-      outbox.outboxEntries(sid)[0].state,
+      outbox.outboxEntries(sid, host.id)[0].state,
       "delivering",
       "owner was live at startup",
     );
     const channel = await watchChannel(sid);
     globalThis
-      .__ompOutboxStore!.db.prepare(
-        "UPDATE entries SET dispatch_pid = ? WHERE id = ?",
-      )
+      .__keylimeHostOutboxes!.get(host.id)!
+      .store!.db.prepare("UPDATE entries SET dispatch_pid = ? WHERE id = ?")
       .run(2147483647, "orphan1");
     for (
       let n = 0;
-      n < 80 && outbox.outboxEntries(sid)[0].state !== "failed";
+      n < 80 && outbox.outboxEntries(sid, host.id)[0].state !== "failed";
       n++
     )
       await sleep(100);
-    assert.equal(outbox.outboxEntries(sid)[0].state, "failed");
-    assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
+    assert.equal(outbox.outboxEntries(sid, host.id)[0].state, "failed");
+    assert.equal(outbox.outboxEntries(sid, host.id)[0].mayHaveBeenSent, true);
     assert.equal(
       w.sent.length,
       1,
@@ -1419,9 +1485,9 @@ test("an entry in flight when the server stopped fails as may-have-been-sent at 
   await add(sid, "r1", "in flight", "followUp");
   await until(() => w.sent.length === 1, "the send");
   outbox.closeOutboxStore();
-  globalThis.__ompOutbox = undefined;
+  outbox.closeOutboxStore();
   outbox.startOutbox();
-  const [entry] = outbox.outboxEntries(sid);
+  const [entry] = outbox.outboxEntries(sid, host.id);
   assert.equal(entry.state, "failed");
   assert.equal(entry.mayHaveBeenSent, true);
 });
@@ -1460,7 +1526,7 @@ test("a host lost during the predispatch transcript read waits rather than faili
     assert.deepEqual(states(sid), ["survive:waiting_host"]);
     assert.equal(w.sent.length, 0);
     w.host.sessionOps.readContext = host.sessionOps.readContext;
-    outbox.pumpOutbox(sid);
+    outbox.pumpOutbox(sid, host.id);
     await until(() => w.sent.length === 1, "delivery after link recovery");
     w.emitFor(w.sent[0], {
       type: "message_end",
@@ -1604,17 +1670,19 @@ test(
     );
     // Unreadable stored receipts make preparation throw before the entry is claimed.
     globalThis
-      .__ompOutboxStore!.db.prepare(
+      .__keylimeHostOutboxes!.get(host.id)!
+      .store!.db.prepare(
         "UPDATE entries SET upload_receipts = '{' WHERE id = 'pre-claim'",
       )
       .run();
     hostStatus = "online";
-    outbox.pumpOutbox(sid);
+    outbox.pumpOutbox(sid, host.id);
     await sleep(50);
     assert.deepEqual(w.sent, []);
-    assert.notEqual(outbox.outboxEntries(sid)[0].state, "failed");
+    assert.notEqual(outbox.outboxEntries(sid, host.id)[0].state, "failed");
     globalThis
-      .__ompOutboxStore!.db.prepare(
+      .__keylimeHostOutboxes!.get(host.id)!
+      .store!.db.prepare(
         "UPDATE entries SET upload_receipts = NULL WHERE id = 'pre-claim'",
       )
       .run();
@@ -1658,7 +1726,10 @@ test(
         "not sent: held for a retry",
       );
       assert.deepEqual(w.sent, []);
-      assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, undefined);
+      assert.equal(
+        outbox.outboxEntries(sid, host.id)[0].mayHaveBeenSent,
+        undefined,
+      );
       w.isAlive = () => true;
       await sleep(outbox.RETRY_MS);
       await until(() => w.sent.length === 1, "the retry sends it once");
@@ -1689,7 +1760,7 @@ test(
       host.sessionOps.readContext = readContext;
       const gate = Promise.withResolvers<void>();
       release = gate.resolve;
-      globalThis.__ompSendFences!.set(sid, gate.promise);
+      globalThis.__ompSendFences!.set(sessionKey(sid, host.id), gate.promise);
       return { ok: true, value: { entryIds: ["before-dispatch"] } };
     };
     try {
@@ -1704,7 +1775,7 @@ test(
       );
       w.isAlive = () => false;
       w.emit({ type: "process_exit", code: 1, signal: null });
-      globalThis.__ompSendFences.delete(sid);
+      globalThis.__ompSendFences.delete(sessionKey(sid, host.id));
       assert.ok(release);
       release();
       await until(
@@ -1712,7 +1783,10 @@ test(
         "not sent: held for a retry",
       );
       assert.deepEqual(w.sent, []);
-      assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, undefined);
+      assert.equal(
+        outbox.outboxEntries(sid, host.id)[0].mayHaveBeenSent,
+        undefined,
+      );
       w.isAlive = () => true;
       await sleep(outbox.RETRY_MS);
       await until(() => w.sent.length === 1, "the retry sends it once");
@@ -1723,7 +1797,7 @@ test(
       await until(() => states(sid).length === 0, "delivered");
     } finally {
       host.sessionOps.readContext = readContext;
-      globalThis.__ompSendFences.delete(sid);
+      globalThis.__ompSendFences.delete(sessionKey(sid, host.id));
       (release as (() => void) | undefined)?.();
     }
   },
@@ -1741,7 +1815,7 @@ test("a host outage inside the command path, before the native write, waits for 
     host.sessionOps.readContext = readContext;
     const gate = Promise.withResolvers<void>();
     release = gate.resolve;
-    globalThis.__ompSendFences!.set(sid, gate.promise);
+    globalThis.__ompSendFences!.set(sessionKey(sid, host.id), gate.promise);
     return { ok: true, value: { entryIds: ["before-dispatch"] } };
   };
   const send = w.send;
@@ -1754,7 +1828,7 @@ test("a host outage inside the command path, before the native write, waits for 
   try {
     await add(sid, "outage", "never written");
     await until(() => release, "claimed and handed to the command path");
-    globalThis.__ompSendFences.delete(sid);
+    globalThis.__ompSendFences.delete(sessionKey(sid, host.id));
     assert.ok(release);
     release();
     await until(
@@ -1762,10 +1836,13 @@ test("a host outage inside the command path, before the native write, waits for 
       "waits for the host",
     );
     assert.deepEqual(w.sent, []);
-    assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, undefined);
+    assert.equal(
+      outbox.outboxEntries(sid, host.id)[0].mayHaveBeenSent,
+      undefined,
+    );
   } finally {
     host.sessionOps.readContext = readContext;
-    globalThis.__ompSendFences.delete(sid);
+    globalThis.__ompSendFences.delete(sessionKey(sid, host.id));
     (release as (() => void) | undefined)?.();
     w.send = send;
   }
@@ -1795,7 +1872,7 @@ test("a refusal that is a 404 but not a missing session fails the entry, even wh
       "the refusal fails the entry",
     );
     assert.equal(
-      outbox.outboxEntries(sid)[0].error,
+      outbox.outboxEntries(sid, host.id)[0].error,
       "The upload is gone: attach the file again",
     );
     assert.deepEqual(w.sent, []);
@@ -1832,6 +1909,7 @@ test("a daemon's session_not_found because the session was archived between the 
       Buffer.from(`${JSON.stringify(header)}\n${JSON.stringify(message)}\n`),
     ),
   );
+  await linkLocalDaemon();
   const w = wrapper(sid);
   const readContext = host.sessionOps.readContext;
   let opens = 0;
@@ -1848,7 +1926,9 @@ test("a daemon's session_not_found because the session was archived between the 
     await add(sid, "archived-race", "wait for the restore");
     // Earlier tests leave other sessions' deliveries pending for good, so only this session's claim is awaited.
     await until(
-      () => opens === 1 && !globalThis.__ompOutbox!.busy.has(sid),
+      () =>
+        opens === 1 &&
+        !globalThis.__keylimeHostOutboxes!.get(host.id)!.state!.busy.has(sid),
       "the refusal is classified",
     );
     assert.equal(
@@ -1861,5 +1941,6 @@ test("a daemon's session_not_found because the session was archived between the 
     assert.deepEqual(w.sent, []);
   } finally {
     host.sessionOps.readContext = readContext;
+    hub.closeHostLink("local");
   }
 });

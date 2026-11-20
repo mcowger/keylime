@@ -8,7 +8,11 @@ const {
   renderNotification,
 } = await import("./notification-events.ts");
 
-const session = { sessionId: "s1", sessionName: "Refactor auth" };
+const session = {
+  hostId: "remote",
+  sessionId: "s1",
+  sessionName: "Refactor auth",
+};
 
 function run(frames: Record<string, unknown>[]) {
   const detect = createNotificationDetector();
@@ -35,9 +39,7 @@ test("completion fires when the session settles, not per prompt or per subagent"
     },
     { type: "session_settled" },
   ]);
-  assert.deepEqual(events, [
-    { sessionId: "s1", sessionName: "Refactor auth", type: "completed" },
-  ]);
+  assert.deepEqual(events, [{ ...session, type: "completed" }]);
 });
 
 test("local slash commands and aborted runs do not notify", () => {
@@ -254,16 +256,27 @@ test("rendered notifications open their session and clip long details", () => {
   const rendered = renderNotification(
     {
       type: "error",
+      hostId: "host#2",
       sessionId: "a b",
       sessionName: null,
       detail: "x".repeat(500),
     },
     t,
   );
-  assert.equal(rendered.url, "/?session=a%20b");
+  assert.equal(rendered.url, "/?session=a+b&hostId=host%232");
   assert.equal(rendered.title, "notifications.untitledSession");
-  assert.equal(rendered.tag, "a b:error");
+  assert.equal(rendered.tag, '["host#2","a b","error"]');
   assert.ok(rendered.body.length < 260, rendered.body);
+});
+
+test("legacy notifications render without a conversation click target", () => {
+  const rendered = renderNotification(
+    { type: "error", sessionId: "same-id", sessionName: "Original" },
+    (key) => key,
+  );
+  assert.equal(rendered.title, "Original");
+  assert.equal(rendered.url, "/");
+  assert.equal(rendered.tag, "same-id:error");
 });
 
 test("a pasted overlong session name is clipped so push payloads stay small", () => {

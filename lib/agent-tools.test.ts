@@ -1,88 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type {
-  AgentToolContext,
-  AgentToolCreateSessionInput,
-  AgentToolDeliverInput,
-  AgentToolHost,
-  AgentToolSessionOps,
-} from "./agent-tools.ts";
-import { isRecord } from "./type-guards.ts";
-
-// Isolate registries and notifications from the user's agent directory.
-const agentScratch = realpathSync(
-  mkdtempSync(join(tmpdir(), "omp-agent-placement-")),
-);
-const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-process.env.PI_CODING_AGENT_DIR = agentScratch;
-test.after(async () => {
-  (await import("./hosts/hub.ts")).flushLinkSamples();
-  (await import("./notification-store.ts")).closeNotificationStore();
-  if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
-  else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-  rmSync(agentScratch, { recursive: true, force: true });
-});
-
-const {
+import {
   AGENT_TOOL_DEFINITIONS,
   AGENT_TOOL_NAMES,
   AgentToolGuard,
   executeAgentTool,
   formatAttributedMessage,
-} = await import("./agent-tools.ts");
+  type AgentToolContext,
+  type AgentToolCreateSessionInput,
+  type AgentToolDeliverInput,
+  type AgentToolSessionOps,
+} from "./agent-tools.ts";
+import { isRecord } from "./type-guards.ts";
 
 function fakeOps(overrides: Partial<AgentToolSessionOps> = {}) {
   const calls: {
-    list: number;
+    list: string[];
     create: AgentToolCreateSessionInput[];
     deliver: AgentToolDeliverInput[];
-    hostLookups: string[];
-  } = { list: 0, create: [], deliver: [], hostLookups: [] };
+  } = { list: [], create: [], deliver: [] };
   return {
     calls,
-    async listSessions() {
-      calls.list += 1;
-      return [
-        {
-          id: "target-1",
-          name: "Release",
-          cwd: "/tmp/release",
-          running: false,
-          hostId: "local",
-        },
-      ];
+    async listSessions(sourceHostId: string) {
+      calls.list.push(sourceHostId);
+      return sourceHostId === "local"
+        ? [
+            {
+              id: "target-1",
+              name: "Release",
+              cwd: "/tmp/release",
+              running: false,
+              host: "Desk",
+            },
+          ]
+        : [
+            {
+              id: "build-target",
+              cwd: "/srv/app",
+              running: true,
+              host: "build-box",
+            },
+          ];
     },
-    listHosts() {
-      return [
-        {
-          id: "local",
-          label: "This machine",
-          online: true,
-        },
-        {
-          id: "h-build",
-          label: "build-box",
-          online: true,
-        },
-        { id: "h-gpu", label: "gpu-box", online: false },
-        { id: "h-ci", label: "ci-box", online: true },
-      ];
-    },
-    async createSession(
-      input: AgentToolCreateSessionInput,
-      authorize: (host: AgentToolHost) => Promise<boolean>,
-    ) {
-      const host = this.listHosts().find(
-        (candidate) => candidate.id === input.hostId,
-      );
-      assert.ok(host);
-      if (!(await authorize(host)))
-        throw new Error(
-          `The user declined to start a session on ${host.label}.`,
-        );
+    async createSession(input: AgentToolCreateSessionInput) {
       calls.create.push(input);
       return { sessionId: "new-1" };
     },
@@ -96,18 +56,6 @@ function fakeOps(overrides: Partial<AgentToolSessionOps> = {}) {
         responseText: null,
       };
     },
-    async sessionHostId(sessionId: string) {
-      calls.hostLookups.push(sessionId);
-      return (
-        (
-          {
-            "target-1": "local",
-            "ci-target": "h-ci",
-            "build-target": "h-build",
-          } as Record<string, string>
-        )[sessionId] ?? null
-      );
-    },
     ...overrides,
   };
 }
@@ -119,9 +67,6 @@ const ctx = (overrides: Partial<AgentToolContext> = {}): AgentToolContext => ({
   sourceHostId: "local",
   enabled: true,
   guard: new AgentToolGuard(),
-  confirm: async () => {
-    throw new Error("no confirm expected");
-  },
   ...overrides,
 });
 
@@ -137,14 +82,13 @@ test("agent tool definitions cover the three cross-session tools (#275)", () => 
     "send_to_session",
   ]);
   const send = AGENT_TOOL_DEFINITIONS.find((t) => t.name === "send_to_session");
-  const create = AGENT_TOOL_DEFINITIONS.find((t) => t.name === "new_session");
-  assert.ok(create);
   assert.ok(send);
-  assert.ok(isRecord(create.parameters.properties));
-  assert.ok(isRecord(create.parameters.properties.host));
   assert.ok(isRecord(send.parameters.properties));
   assert.ok(isRecord(send.parameters.properties.delivery));
-  assert.equal(create.parameters.properties.host.type, "string");
+  for (const { parameters } of AGENT_TOOL_DEFINITIONS) {
+    assert.ok(isRecord(parameters.properties));
+    assert.ok(!("host" in parameters.properties));
+  }
   assert.deepEqual(send.parameters.required, ["sessionId", "message"]);
   assert.deepEqual(send.parameters.properties.delivery.enum, [
     "prompt",
@@ -171,34 +115,38 @@ test("agent tools refuse every call while the Settings gate is off (#275)", asyn
   );
 });
 
-test("list_sessions names each session's host by label", async () => {
-  const ops = fakeOps({
-    async listSessions() {
-      return [
-        {
-          id: "target-1",
-          name: "Release",
-          cwd: "/tmp/release",
-          running: false,
-          hostId: "local",
-        },
-        { id: "remote-1", cwd: "/srv/app", running: true, hostId: "h-build" },
-      ];
-    },
-  });
-  const result = await executeAgentTool("list_sessions", {}, ops, ctx());
-  assert.deepEqual(result, {
+test("list_sessions requests only the calling host's sessions", async () => {
+  const ops = fakeOps();
+  assert.deepEqual(await executeAgentTool("list_sessions", {}, ops, ctx()), {
     sessions: [
       {
         id: "target-1",
         name: "Release",
         cwd: "/tmp/release",
         running: false,
-        host: "This machine",
+        host: "Desk",
       },
-      { id: "remote-1", cwd: "/srv/app", running: true, host: "build-box" },
     ],
   });
+  assert.deepEqual(
+    await executeAgentTool(
+      "list_sessions",
+      {},
+      ops,
+      ctx({ sourceHostId: "h-build" }),
+    ),
+    {
+      sessions: [
+        {
+          id: "build-target",
+          cwd: "/srv/app",
+          running: true,
+          host: "build-box",
+        },
+      ],
+    },
+  );
+  assert.deepEqual(ops.calls.list, ["local", "h-build"]);
 });
 
 test("new_session defaults cwd, attributes the prompt, and splits provider/model (#275)", async () => {
@@ -269,6 +217,7 @@ test("send_to_session attributes, defaults to prompt, and passes wait through (#
   );
   assert.equal(ops.calls.deliver.length, 1);
   const input = ops.calls.deliver[0];
+  assert.equal(input.sourceHostId, "local");
   assert.equal(
     input.message,
     "[From session source-1 via keylime agent tools]: The build passed",
@@ -400,258 +349,67 @@ test("rate limit caps a source at 20 agent tool calls per minute (#275)", async 
   );
 });
 
-test("new_session on a remote host asks the user first", async () => {
+test("agent tools reject an explicit host before invoking any operation", async () => {
   const ops = fakeOps();
-  const titles: string[] = [];
-  const result = await executeAgentTool(
-    "new_session",
-    { host: "Build-Box", cwd: "/srv/app" },
-    ops,
-    ctx({
-      confirm: async (title) => {
-        titles.push(title);
-        return true;
-      },
-    }),
-  );
-  assert.deepEqual(result, { sessionId: "new-1" });
-  assert.deepEqual(titles, ["Start a session on build-box in /srv/app?"]);
+  for (const [tool, args] of [
+    ["list_sessions", {}],
+    ["new_session", { cwd: "/tmp/source" }],
+    ["send_to_session", { sessionId: "target-1", message: "hi" }],
+  ] as const) {
+    for (const host of ["local", "h-build", null, undefined]) {
+      await assert.rejects(
+        () => executeAgentTool(tool, { ...args, host }, ops, ctx()),
+        /do not accept a "host" argument/,
+      );
+    }
+  }
+  assert.deepEqual(ops.calls, { list: [], create: [], deliver: [] });
+});
+
+test("new_session pins remote creation to the caller and preserves shared workspace intent", async () => {
+  const ops = fakeOps();
+  const source = ctx({ sourceHostId: "h-build", sourceCwd: "/srv/app" });
+  await executeAgentTool("new_session", { shareWorkspace: true }, ops, source);
   assert.equal(ops.calls.create[0].hostId, "h-build");
   assert.equal(ops.calls.create[0].cwd, "/srv/app");
-});
-
-test("new_session declined by the user creates nothing", async () => {
-  const ops = fakeOps();
+  assert.equal(ops.calls.create[0].shareWorkspace, true);
   await assert.rejects(
     () =>
       executeAgentTool(
         "new_session",
-        { host: "h-build", cwd: "/srv/app" },
+        { shareWorkspace: true, cwd: "/srv/other" },
         ops,
-        ctx({ confirm: async () => false }),
+        source,
       ),
-    /declined/,
+    /requires the calling session's directory/,
   );
-  assert.equal(ops.calls.create.length, 0);
+  assert.equal(ops.calls.create.length, 1);
+  await executeAgentTool("new_session", { cwd: "/srv/other" }, ops, source);
+  assert.equal(ops.calls.create[1].hostId, "h-build");
+  assert.equal(ops.calls.create[1].cwd, "/srv/other");
+  assert.equal(ops.calls.create[1].shareWorkspace, false);
 });
 
-test("new_session refuses unknown and offline hosts", async () => {
+test("send_to_session forwards the caller's host to target lookup and delivery", async () => {
   const ops = fakeOps();
-  await assert.rejects(
-    () => executeAgentTool("new_session", { host: "nowhere" }, ops, ctx()),
-    /Known hosts: This machine, build-box, gpu-box, ci-box/,
-  );
-  await assert.rejects(
-    () => executeAgentTool("new_session", { host: "GPU-box" }, ops, ctx()),
-    { message: /^gpu-box is offline/ },
-  );
-  assert.equal(ops.calls.create.length, 0);
-});
-
-test("new_session refuses a label two hosts share and names their ids; an id still resolves", async () => {
-  const hosts = [
-    { id: "local", label: "This machine", online: true },
-    { id: "h-a", label: "laptop", online: true },
-    { id: "h-b", label: "Laptop", online: true },
-  ];
-  const ops = fakeOps({ listHosts: () => hosts });
-  await assert.rejects(
-    () =>
-      executeAgentTool(
-        "new_session",
-        { host: "laptop", cwd: "/srv/app" },
-        ops,
-        ctx(),
-      ),
-    { message: /"laptop" matches more than one host \(ids: h-a, h-b\)/ },
-  );
-  assert.equal(ops.calls.create.length, 0);
-  await executeAgentTool(
-    "new_session",
-    { host: "h-b", cwd: "/srv/app" },
-    ops,
-    ctx({ confirm: async () => true }),
-  );
-  assert.equal(ops.calls.create[0].hostId, "h-b");
-});
-
-test("new_session without a host, or with local / This machine, starts here without asking", async () => {
-  const ops = fakeOps();
-  await executeAgentTool("new_session", {}, ops, ctx());
-  await executeAgentTool("new_session", { host: "local" }, ops, ctx());
-  await executeAgentTool("new_session", { host: "this machine" }, ops, ctx());
+  for (const sourceHostId of ["local", "h-build"]) {
+    await executeAgentTool(
+      "send_to_session",
+      { sessionId: "target-1", message: "hi" },
+      ops,
+      ctx({ sourceHostId }),
+    );
+  }
   assert.deepEqual(
-    ops.calls.create.map((input) => input.hostId),
-    ["local", "local", "local"],
+    ops.calls.deliver.map(({ sourceHostId, sessionId }) => [
+      sourceHostId,
+      sessionId,
+    ]),
+    [
+      ["local", "target-1"],
+      ["h-build", "target-1"],
+    ],
   );
-});
-
-test('a renamed this machine resolves by its custom label, `local` and "This machine", and list_sessions names it', async () => {
-  const listHosts = () => [
-    { id: "local", label: "Desk", online: true },
-    { id: "h-ci", label: "ci-box", online: true },
-  ];
-  const ops = fakeOps({ listHosts });
-  for (const host of ["Desk", "local", "This machine"])
-    await executeAgentTool("new_session", { host }, ops, ctx());
-  assert.deepEqual(
-    ops.calls.create.map((input) => input.hostId),
-    ["local", "local", "local"],
-  );
-  const listed = await executeAgentTool("list_sessions", {}, ops, ctx());
-  assert.ok(isRecord(listed));
-  assert.ok(Array.isArray(listed.sessions));
-  assert.deepEqual(
-    listed.sessions.map((s: unknown) => {
-      assert.ok(isRecord(s));
-      return s.host;
-    }),
-    ["Desk"],
-  );
-  await assert.rejects(
-    () => executeAgentTool("new_session", { host: "nowhere" }, ops, ctx()),
-    /Known hosts: Desk, ci-box/,
-  );
-});
-
-/** A confirm that records each title and answers `answer`. */
-const asking =
-  (titles: string[], answer = true) =>
-  async (title: string) => {
-    titles.push(title);
-    return answer;
-  };
-
-test("a remote caller's new_session defaults to its own host and asks first", async () => {
-  const ops = fakeOps();
-  const titles: string[] = [];
-  await executeAgentTool(
-    "new_session",
-    {},
-    ops,
-    ctx({
-      sourceHostId: "h-build",
-      sourceCwd: "/srv/app",
-      confirm: asking(titles),
-    }),
-  );
-  assert.deepEqual(titles, ["Start a session on build-box in /srv/app?"]);
-  assert.deepEqual(
-    [ops.calls.create[0].hostId, ops.calls.create[0].cwd],
-    ["h-build", "/srv/app"],
-  );
-});
-
-test("a remote caller starting a session on this machine is always asked", async () => {
-  const ops = fakeOps();
-  const titles: string[] = [];
-  await assert.rejects(
-    () =>
-      executeAgentTool(
-        "new_session",
-        { host: "local", cwd: "/home/me" },
-        ops,
-        ctx({ sourceHostId: "h-ci", confirm: asking(titles, false) }),
-      ),
-    /declined/,
-  );
-  assert.deepEqual(titles, ["Start a session on This machine in /home/me?"]);
-  assert.equal(ops.calls.create.length, 0);
-});
-
-test("a remote caller starting a session on another linked host asks first", async () => {
-  const ops = fakeOps();
-  const titles: string[] = [];
-  await executeAgentTool(
-    "new_session",
-    { host: "build-box", cwd: "/srv/app" },
-    ops,
-    ctx({ sourceHostId: "h-ci", confirm: asking(titles) }),
-  );
-  assert.deepEqual(titles, ["Start a session on build-box in /srv/app?"]);
-  await executeAgentTool(
-    "new_session",
-    { host: "ci-box", cwd: "/srv/ci" },
-    ops,
-    ctx({ sourceHostId: "h-build", confirm: asking(titles) }),
-  );
-  assert.deepEqual(titles, [
-    "Start a session on build-box in /srv/app?",
-    "Start a session on ci-box in /srv/ci?",
-  ]);
-  assert.deepEqual(
-    ops.calls.create.map((input) => input.hostId),
-    ["h-build", "h-ci"],
-  );
-});
-
-test("a remote caller's send_to_session to a session on this machine asks first", async () => {
-  const ops = fakeOps();
-  const titles: string[] = [];
-  await assert.rejects(
-    () =>
-      executeAgentTool(
-        "send_to_session",
-        { sessionId: "target-1", message: "rm -rf ~" },
-        ops,
-        ctx({ sourceHostId: "h-ci", confirm: asking(titles, false) }),
-      ),
-    /declined/,
-  );
-  assert.deepEqual(titles, [
-    "Send a message from a session on ci-box to session target-1 on This machine?",
-  ]);
-  assert.equal(ops.calls.deliver.length, 0);
-  await executeAgentTool(
-    "send_to_session",
-    { sessionId: "target-1", message: "hi" },
-    ops,
-    ctx({ sourceHostId: "h-ci", confirm: asking([]) }),
-  );
-  assert.equal(ops.calls.deliver.length, 1);
-});
-
-test("a remote caller's send_to_session asks only when crossing hosts", async () => {
-  const ops = fakeOps();
-  await executeAgentTool(
-    "send_to_session",
-    { sessionId: "build-target", message: "hi" },
-    ops,
-    ctx({ sourceHostId: "h-build" }),
-  );
-  const titles: string[] = [];
-  await executeAgentTool(
-    "send_to_session",
-    { sessionId: "ci-target", message: "hi" },
-    ops,
-    ctx({ sourceHostId: "h-build", confirm: asking(titles) }),
-  );
-  assert.deepEqual(titles, [
-    "Send a message from a session on build-box to session ci-target on ci-box?",
-  ]);
-  assert.equal(ops.calls.deliver.length, 2);
-  await assert.rejects(
-    () =>
-      executeAgentTool(
-        "send_to_session",
-        { sessionId: "nowhere", message: "hi" },
-        ops,
-        ctx({ sourceHostId: "h-build" }),
-      ),
-    /Session not found/,
-  );
-});
-
-test("a local caller's send_to_session neither looks up the target's host nor asks", async () => {
-  const ops = fakeOps();
-  await executeAgentTool(
-    "send_to_session",
-    { sessionId: "build-target", message: "hi" },
-    ops,
-    ctx(),
-  );
-  assert.deepEqual(ops.calls.hostLookups, []);
-  assert.equal(ops.calls.deliver.length, 1);
 });
 
 test("unknown agent tools are rejected (#275)", async () => {

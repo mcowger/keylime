@@ -66,10 +66,10 @@ const lookalike = (id: string) =>
   session(mainAgentDir(), h.root, id, {
     "note.md": "main's lookalike bytes\n",
   });
-const resolve = (id: string, uri: string) =>
-  fetch(
-    `${h.url}/api/sessions/${id}/local-file?uri=${encodeURIComponent(uri)}`,
-  );
+const resolve = (hostId: string, id: string, uri: string) => {
+  const query = new URLSearchParams({ hostId, uri });
+  return fetch(`${h.url}/api/sessions/${id}/local-file?${query}`);
+};
 const json = async (response: Response) => ({
   status: response.status,
   ...(await response.json()),
@@ -83,12 +83,12 @@ test("a local:// file is resolved and read on the host that owns the session, no
   const decoy = lookalike(id);
   await owner.host.invalidateSessionLists();
 
-  const answer = await json(await resolve(id, "local://note.md"));
+  const answer = await json(await resolve(owner.id, id, "local://note.md"));
   assert.equal(answer.status, 200, JSON.stringify(answer));
   assert.equal(answer.path, join(mine.local, "note.md"));
   assert.notEqual(answer.path, join(decoy.local, "note.md"));
 
-  // The tab's reads follow the session to the same host, named or not.
+  // The tab reads from the same explicitly selected host.
   const read = await h.file(owner.id, answer.path, "read", { sessionId: id });
   assert.deepEqual(await read.json(), {
     content: "owner bytes\n",
@@ -109,14 +109,20 @@ test("a local:// file is resolved and read on the host that owns the session, no
     ).size,
     12,
   );
-  const unnamed = await fetch(
-    `${h.url}/api/files/${encodeURIComponent(answer.path)}?type=read&sessionId=${id}`,
+  // Another host does not look for this session on the owner.
+  const wrongResolver = await json(
+    await resolve(other.id, id, "local://note.md"),
   );
-  assert.equal((await unnamed.json()).content, "owner bytes\n");
-  // Another host is not the session's: it never answers for it.
-  assert.equal(
-    (await h.file(other.id, answer.path, "read", { sessionId: id })).status,
-    409,
+  assert.deepEqual(
+    [wrongResolver.status, wrongResolver.code],
+    [404, "session_not_found"],
+  );
+  const wrongHost = await json(
+    await h.file(other.id, answer.path, "read", { sessionId: id }),
+  );
+  assert.deepEqual(
+    [wrongHost.status, wrongHost.code],
+    [404, "session_not_found"],
   );
 });
 
@@ -131,8 +137,8 @@ test("two sessions of one host name only their own files", async () => {
   });
   await owner.host.invalidateSessionLists();
 
-  const px = (await json(await resolve(x, "local://note.md"))).path;
-  const py = (await json(await resolve(y, "local://note.md"))).path;
+  const px = (await json(await resolve(owner.id, x, "local://note.md"))).path;
+  const py = (await json(await resolve(owner.id, y, "local://note.md"))).path;
   assert.deepEqual(
     [px, py],
     [join(sx.local, "note.md"), join(sy.local, "note.md")],
@@ -148,7 +154,7 @@ test("two sessions of one host name only their own files", async () => {
   );
   // Another session's root is not selectable by name from this one's local://.
   assert.equal(
-    (await json(await resolve(x, "local://../note.md"))).code,
+    (await json(await resolve(owner.id, x, "local://../note.md"))).code,
     "invalid_local_uri",
   );
 });
@@ -161,7 +167,7 @@ test("this machine's own session is resolved by its daemon process too", async (
   const decoy = lookalike(id);
   await local.host.invalidateSessionLists();
 
-  const answer = await json(await resolve(id, "local://note.md"));
+  const answer = await json(await resolve(local.id, id, "local://note.md"));
   assert.equal(answer.status, 200, JSON.stringify(answer));
   assert.equal(answer.path, join(mine.local, "note.md"));
   assert.notEqual(answer.path, join(decoy.local, "note.md"));
@@ -184,7 +190,7 @@ test("the daemon's answers for a missing file, a directory, a bad URL and an unk
   await owner.host.invalidateSessionLists();
 
   const code = async (id: string, uri: string) => {
-    const body = await json(await resolve(id, uri));
+    const body = await json(await resolve(owner.id, id, uri));
     return [body.status, body.code];
   };
   assert.deepEqual(await code(id, "local://absent.md"), [
@@ -223,7 +229,9 @@ test("a link out of the artifact directory and a link to the credential store ar
   symlinkSync(outside, join(mine.local, "link-out.md"));
   await owner.host.invalidateSessionLists();
 
-  const escaped = await json(await resolve(id, "local://link-out.md"));
+  const escaped = await json(
+    await resolve(owner.id, id, "local://link-out.md"),
+  );
   assert.deepEqual([escaped.status, escaped.code], [403, "access_denied"]);
   assert.equal(
     (
@@ -240,7 +248,9 @@ test("a link out of the artifact directory and a link to the credential store ar
   symlinkSync(owner.agentDir, linked.local, "dir");
   writeFileSync(join(owner.agentDir, "agent.db"), "api keys\n");
   await owner.host.invalidateSessionLists();
-  const secret = await json(await resolve(linked.id, "local://agent.db"));
+  const secret = await json(
+    await resolve(owner.id, linked.id, "local://agent.db"),
+  );
   assert.deepEqual([secret.status, secret.code], [403, "access_denied"]);
   assert.equal(
     (
@@ -260,7 +270,7 @@ test("a daemon without resolveLocalFile is refused, never answered from main's l
   const older = await linkHost("Old daemon");
   older.serve({ listSessions: () => [listedSession(id)] });
   try {
-    const answer = await json(await resolve(id, "local://note.md"));
+    const answer = await json(await resolve(older.id, id, "local://note.md"));
     assert.deepEqual(
       [answer.status, answer.code],
       [501, "workspace_unsupported"],
@@ -299,9 +309,9 @@ test("artifact confinement distinguishes a POSIX backslash root from its slash-s
   writeFileSync(join(outside, "private.md"), "outside bytes\n");
   symlinkSync(join(outside, "private.md"), join(mine.local, "escape.md"));
   await owner.host.invalidateSessionLists();
-  const escaped = await json(await resolve(id, "local://escape.md"));
+  const escaped = await json(await resolve(owner.id, id, "local://escape.md"));
   assert.deepEqual([escaped.status, escaped.code], [403, "access_denied"]);
-  const own = await json(await resolve(id, "local://note.md"));
+  const own = await json(await resolve(owner.id, id, "local://note.md"));
   assert.equal(own.path, join(mine.local, "note.md"));
   assert.equal(
     (await (await h.file(owner.id, own.path, "read", { sessionId: id })).json())
@@ -347,7 +357,9 @@ test("an untrusted daemon cannot resolve an artifact to a relative workspace fil
     resolveLocalFile: () => ({ ok: true, value: { path: "relative.md" } }),
   });
   try {
-    const response = await json(await resolve(id, "local://note.md"));
+    const response = await json(
+      await resolve(daemon.id, id, "local://note.md"),
+    );
     assert.deepEqual(
       [response.status, response.code],
       [502, "host_bad_result"],

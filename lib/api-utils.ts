@@ -13,15 +13,19 @@ const SESSION_NOT_FOUND = {
   code: "session_not_found",
 } as const;
 
-/** Resolve a session id to the host holding its file: a live session's own host first, then the
- * hosts' lists. A 404 JSON response only when absence is confirmed across all hosts; otherwise 503. */
+/** Resolve a session on the named host; an omitted host selects this machine. */
 export async function resolveSessionHostOr404(
   id: string,
+  hostId = LOCAL_HOST_ID,
 ): Promise<{ host: Host } | { response: Response }> {
-  const live = getRpcSession(id);
+  if (!isValidSessionId(id))
+    return { response: Response.json(SESSION_NOT_FOUND, { status: 404 }) };
+  const resolved = resolveHostOrError(hostId);
+  if ("response" in resolved) return resolved;
+  const live = getRpcSession(id, hostId);
   if (live?.isAlive()) return { host: live.host };
   try {
-    const host = await hostForSessionId(id);
+    const host = await hostForSessionId(id, hostId);
     return host
       ? { host }
       : { response: Response.json(SESSION_NOT_FOUND, { status: 404 }) };
@@ -97,25 +101,16 @@ export async function resolveWorkspaceHost(
   }
   if (!isValidSessionId(sessionId))
     return { response: Response.json(SESSION_NOT_FOUND, { status: 404 }) };
-  const live = getRpcSession(sessionId);
+  const target = resolveHostOrError(hostId);
+  if ("response" in target) return target;
+  const live = getRpcSession(sessionId, target.host.id);
   const running = live?.isAlive() ? live : undefined;
   const session = running
     ? { host: running.host }
-    : await resolveSessionHostOr404(sessionId);
+    : await resolveSessionHostOr404(sessionId, target.host.id);
   if ("response" in session) return session;
   const offline = hostOfflineResponse(session.host);
   if (offline) return { response: offline };
-  if (hostId !== undefined && hostId !== session.host.id) {
-    return {
-      response: Response.json(
-        {
-          error: "The session belongs to another host",
-          code: "workspace_host_mismatch",
-        },
-        { status: 409 },
-      ),
-    };
-  }
   const effectiveId = followAlias && running ? running.sessionId : sessionId;
   const cwd =
     (running?.sessionId === effectiveId ? running.cwd : undefined) ??

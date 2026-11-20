@@ -10,7 +10,7 @@ import {
 } from "@/lib/omp/archive";
 import { HostOpError } from "@/lib/hosts/link-protocol";
 import { getHost, listHosts } from "@/lib/hosts/hub";
-import { isLinkUp } from "@/lib/hosts/host";
+import { isLinkUp, type Host } from "@/lib/hosts/host";
 import {
   invalidateHostSessionList,
   invalidateLocalSessionLists,
@@ -25,13 +25,13 @@ import {
   type HeldRestore,
 } from "@/lib/archive-restore-lock";
 
-/** A registered host is offline, so restore cannot prove the session is not active there. */
+/** The target host lost its link during the strict inventory check. */
 class RestoreHostOfflineError extends HostOpError {
   constructor(readonly host: string) {
     super(
       503,
       "host_offline",
-      `${host} is offline; restoring an archive needs every registered host online to check the session is not active there`,
+      `${host} is offline; the archive was not restored`,
     );
   }
 }
@@ -55,11 +55,6 @@ async function confirmRestoreStopped(held: HeldRestore): Promise<void> {
     throw blocked(
       "That host is no longer registered, and unregistering does not stop its daemon, so the session stays blocked.",
     );
-  // A row an earlier build wrote names no process, so no answer can be matched to it.
-  if (held.instance === null)
-    throw blocked(
-      "The claim was recorded without the daemon process that took it, so nothing can confirm that process stopped.",
-    );
   let reason: string | null;
   try {
     const fence = await host.sessionOps.restoreFence(held.claim);
@@ -74,70 +69,61 @@ async function confirmRestoreStopped(held: HeldRestore): Promise<void> {
   if (reason) throw blocked(reason);
 }
 
-async function activeSessionHosts(sessionId: string): Promise<string[]> {
-  const hosts = [
-    getHost(LOCAL_HOST_ID),
-    ...listHosts().map((row) => getHost(row.id)),
-  ];
+async function targetHasActiveSession(
+  host: Host,
+  sessionId: string,
+): Promise<boolean> {
   const ensureLinked = () => {
-    for (const host of hosts) {
-      // Removed mid-check: not offline, but its sessions were not read either.
-      if (!host)
-        throw new HostOpError(
-          503,
-          "host_sessions_unavailable",
-          "A host was removed while checking active sessions; the archive was not restored",
-        );
-      if (!isLinkUp(host.status()))
-        throw new RestoreHostOfflineError(host.label);
-    }
+    if (!isLinkUp(host.status())) throw new RestoreHostOfflineError(host.label);
   };
   ensureLinked();
-  const lists = await Promise.all(
-    hosts.map(async (host) => {
-      try {
-        // This separate op cannot be silently ignored by an older daemon as an unknown optional argument. It either returns
-        // a complete fresh inventory or fails; the sidebar's best-effort lists and caches are not absence evidence.
-        return {
-          hostId: host!.id,
-          sessions: await host!.sessionOps.listSessionIdsForRestore(),
-        };
-      } catch {
-        ensureLinked();
-        throw new HostOpError(
-          503,
-          "host_sessions_unavailable",
-          "Could not read every host's active sessions; the archive was not restored",
-        );
-      }
-    }),
-  );
+  let sessions: string[];
+  try {
+    // The sidebar's best-effort lists and caches are not absence evidence.
+    sessions = await host.sessionOps.listSessionIdsForRestore();
+  } catch {
+    ensureLinked();
+    throw new HostOpError(
+      503,
+      "host_sessions_unavailable",
+      "Could not read the target host's active sessions; the archive was not restored",
+    );
+  }
   ensureLinked();
-  return lists
-    .filter(({ sessions }) => sessions.includes(sessionId))
-    .map(({ hostId }) => hostId);
+  return sessions.includes(sessionId);
 }
 
 /** Each linked host's archive; a host that is offline or cannot answer (an older daemon) is listed in `unavailableHosts`. */
-async function linkedHostArchives(): Promise<{
+async function linkedHostArchives(hostId: string | null): Promise<{
   archives: ArchivedSessionInfo[];
   unavailableHosts: { id: string; label: string }[];
 }> {
   const results = await Promise.all(
-    listHosts().map(async (row) => {
-      const host = isLinkUp(row.status) ? getHost(row.id) : null;
-      if (!host)
-        return { archives: [], unavailable: { id: row.id, label: row.label } };
-      try {
-        const archives = await host.sessionOps.listArchives();
-        return {
-          archives: archives.map((archive) => ({ ...archive, hostId: row.id })),
-          unavailable: null,
-        };
-      } catch {
-        return { archives: [], unavailable: { id: row.id, label: row.label } };
-      }
-    }),
+    listHosts()
+      .filter((row) => hostId === null || row.id === hostId)
+      .map(async (row) => {
+        const host = isLinkUp(row.status) ? getHost(row.id) : null;
+        if (!host)
+          return {
+            archives: [],
+            unavailable: { id: row.id, label: row.label },
+          };
+        try {
+          const archives = await host.sessionOps.listArchives();
+          return {
+            archives: archives.map((archive) => ({
+              ...archive,
+              hostId: row.id,
+            })),
+            unavailable: null,
+          };
+        } catch {
+          return {
+            archives: [],
+            unavailable: { id: row.id, label: row.label },
+          };
+        }
+      }),
   );
   return {
     archives: results.flatMap((result) => result.archives),
@@ -150,16 +136,21 @@ async function linkedHostArchives(): Promise<{
 /**
  * @apiContract listSessionArchives
  * @apiUsage Discover archives across the local and registered linked hosts.
- * @apiInputs No request body or query is used.
+ * @apiInputs Optional hostId limits discovery to one host.
  * @apiInvariants Results are sorted newest archivedAt first and tagged with hostId; unavailableHosts identifies hosts whose archives could not be listed. Pending restores remain discovery evidence, not restore targets.
  * @apiEffects Reads archive inventories without starting sessions; the response is no-store.
  * @apiRecovery An absent archive on an unavailable host is not proven absent; reconnect or repair that host and list again before acting on absence.
  */
-export async function GET() {
+export async function GET(request?: Request) {
   try {
+    const hostId = request
+      ? new URL(request.url).searchParams.get("hostId")
+      : null;
     const [local, linked] = await Promise.allSettled([
-      listArchivedSessionInfos(),
-      linkedHostArchives(),
+      hostId === null || hostId === LOCAL_HOST_ID
+        ? listArchivedSessionInfos()
+        : Promise.resolve([]),
+      linkedHostArchives(hostId),
     ]);
     if (linked.status === "rejected") throw linked.reason;
     // Local corruption/unreadability is one host's failure, just like a linked daemon that cannot list its archive. Keep the
@@ -189,9 +180,9 @@ export async function GET() {
  * @apiContract restoreSessionArchive
  * @apiUsage Restore a discovered archive to its original owning host.
  * @apiInputs JSON key identifies an archive on hostId; omitted hostId selects the local host, while blank or null host IDs are invalid.
- * @apiInvariants Pending archives cannot be restored. A serialized session claim requires fresh active-session inventories from every registered host and rejects any active duplicate. Remote restores reserve a daemon-specific token; an uncertain claim remains held until that same daemon fences it and confirms it stopped.
- * @apiEffects Restores the native session and artifacts, invalidates session lists and pumps held outbox messages. A remote restore can continue after a lost connection or server restart.
- * @apiRecovery Do not assume a timeout or replacement daemon proves failure: inspect the owning restore and resolve archive_restore_unconfirmed before retrying. If the original daemon cannot be fenced, operator recovery is required; unavailable hosts prevent the conflict check.
+ * @apiInvariants Pending archives cannot be restored. Claims are scoped to hostId and session UUID. A fresh inventory must show no active copy on the target; other hosts are not checked. An uncertain remote claim remains held until the daemon process that reserved it fences it and confirms it stopped.
+ * @apiEffects Restores the native session and artifacts, invalidates session lists and pumps held outbox messages on the target. A remote restore can continue after a lost connection or server restart.
+ * @apiRecovery Do not assume a timeout or replacement daemon proves failure. Resolve archive_restore_unconfirmed before retrying. If the original daemon cannot be fenced, operator recovery is required. If the target inventory is unavailable, reconnect or repair the target.
  */
 export async function POST(req: Request) {
   try {
@@ -245,20 +236,15 @@ export async function POST(req: Request) {
       );
     }
     return await withArchiveRestoreLock(
+      hostId,
       archive.id,
       async (claim) => {
-        const conflicts = await activeSessionHosts(archive.id);
-        const foreign = conflicts.find((id) => id !== hostId);
-        if (foreign) {
-          return Response.json(
-            {
-              error: `Session ${archive.id} is already active on another host (${foreign}); the archive was not restored`,
-              code: "session_host_conflict",
-            },
-            { status: 409 },
-          );
-        }
-        if (conflicts.length) {
+        if (
+          await targetHasActiveSession(
+            host ?? getHost(LOCAL_HOST_ID),
+            archive.id,
+          )
+        ) {
           return Response.json(
             {
               error: `Session ${archive.id} is already active on this host; the archive was not restored`,
@@ -273,7 +259,7 @@ export async function POST(req: Request) {
           const reserved = await host.sessionOps.restoreReserve(claim.token);
           if (!reserved.ok) return opErrorResponse(reserved);
           // Held before the restore leaves: the claim must outlive a timeout, a lost link and this process, as the daemon keeps restoring.
-          claim.hold(hostId, reserved.value.instance);
+          claim.hold(reserved.value.instance);
           let result;
           try {
             result = await host.sessionOps.restoreArchive(
@@ -304,7 +290,7 @@ export async function POST(req: Request) {
           claim.release();
           if (!result.ok) return opErrorResponse(result);
           invalidateHostSessionList(hostId);
-          pumpOutbox(result.value.sessionId);
+          pumpOutbox(result.value.sessionId, hostId);
           return Response.json({ ok: true, sessionId: result.value.sessionId });
         }
         const sessionId = await restoreArchivedSession(
@@ -316,7 +302,7 @@ export async function POST(req: Request) {
         invalidateSessionListCache();
         invalidateLocalSessionLists();
         // Messages held while it was archived go now (spec O6).
-        pumpOutbox(sessionId);
+        pumpOutbox(sessionId, hostId);
         return Response.json({ ok: true, sessionId });
       },
       confirmRestoreStopped,

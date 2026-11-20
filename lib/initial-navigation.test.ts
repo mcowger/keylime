@@ -48,3 +48,11 @@ test("a URL workspace retains its host instead of validating the same path local
   assert.equal(result.hostId, "remote-host");
   assert.equal(result.requestedCwd, "/projects/remote");
 });
+
+test("preserves the owning host on a session deep link", async () => {
+  const { getInitialNavigation } = await loadSubject();
+  assert.deepEqual(
+    getInitialNavigation(new URLSearchParams("session=saved&hostId=remote")),
+    { requestedCwd: null, sessionId: "saved", hostId: "remote" },
+  );
+});

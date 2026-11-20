@@ -352,9 +352,26 @@ export const ModelsDataSchema = Type.Object(
   },
   {
     description:
-      "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode.",
+      "Daemon model-cache projection from omp, including resolved default and optional runtime error.",
   },
 );
+
+export const HostModelsSchema = Type.Composite(
+  [
+    ModelsDataSchema,
+    Type.Object({
+      anthropicSlowMode: Type.Boolean({
+        description:
+          "Whether Claude low-priority mode is configured on the selected daemon.",
+      }),
+    }),
+  ],
+  {
+    description:
+      "The selected daemon's model catalog and current slow-mode preference.",
+  },
+);
+export type HostModels = Static<typeof HostModelsSchema>;
 
 export type ModelThinkingConfig = Static<typeof ModelThinkingConfigSchema>;
 export const ModelThinkingConfigSchema = Type.Intersect(
@@ -866,33 +883,46 @@ export const NativeSettingsSchema = Type.Object(
 );
 
 /** Server-wide settings are shared across browsers and do not include browser-local preferences. */
-export const WebServerSettingsSchema = Type.Object(
+export const HostSettingsSchema = Type.Object(
   {
     autoResumeSessions: Type.Boolean({
-      description: "Resume sessions interrupted by server shutdown.",
+      description: "Resume sessions interrupted on this daemon.",
     }),
     agentToolsEnabled: Type.Boolean({
-      description: "Enable server-side cross-session agent tools.",
+      description: "Enable cross-session agent tools on this daemon.",
     }),
-    agentEnv: Type.Record(Type.String(), Type.String(), {
-      description:
-        "Validated environment variables for child agents; reserved names are rejected or filtered.",
-    }),
-    browserTransport: Type.Union([Type.Literal("sse"), Type.Literal("ws")], {
-      description:
-        "Server-selected browser event transport, shared across connected clients.",
-    }),
-    uploadRetentionDays: Type.Union([Type.Number(), Type.Null()], {
-      description:
-        "Days to retain sent uploads; null retains them indefinitely.",
-    }),
+    uploadRetentionDays: Type.Union(
+      [Type.Integer({ minimum: 1, maximum: 3650 }), Type.Null()],
+      {
+        description:
+          "Days to retain sent uploads; null retains them indefinitely.",
+      },
+    ),
   },
   {
     description:
-      "Persisted web-server settings shared by clients, separate from browser-local preferences.",
+      "Operator-editable policy for one daemon. Never includes environment variables.",
+    additionalProperties: false,
   },
 );
-export type WebServerSettings = Static<typeof WebServerSettingsSchema>;
+export type HostSettings = Static<typeof HostSettingsSchema>;
+export const HostSettingsPatchSchema = Type.Partial(HostSettingsSchema, {
+  description: "Patch one daemon's policy, preserving omitted fields.",
+});
+export type HostSettingsPatch = Static<typeof HostSettingsPatchSchema>;
+
+export const BrowserSettingsSchema = Type.Object(
+  {
+    browserTransport: Type.Union([Type.Literal("sse"), Type.Literal("ws")], {
+      description: "Browser event transport selected by the web server.",
+    }),
+  },
+  {
+    description: "Web-server browser settings, separate from daemon policy.",
+    additionalProperties: false,
+  },
+);
+export type BrowserSettings = Static<typeof BrowserSettingsSchema>;
 
 export const McpLiveStatusSchema = Type.Union(
   [

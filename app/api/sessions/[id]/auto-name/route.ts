@@ -29,23 +29,24 @@ import {
 /**
  * @apiContract autoNameSession
  * @apiUsage Generate a session title or fall back to an existing or first-message-derived title.
- * @apiInputs id selects the session; no request body is used.
+ * @apiInputs id selects the session; no request body is used. Optional hostId selects the host; omission selects local.
  * @apiInvariants generated distinguishes native generation from fallback; usage is null. No user message and no existing title yields a conflict; a history edit fences fallback writes.
  * @apiEffects May start an RPC process and invoke native title generation; a derived fallback is persisted and synced to a live process best-effort.
  * @apiRecovery Wait for a busy session; after an uncertain response read its current title before requesting another generation.
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
 
   try {
     // This runs before the path check because omp does not create the session
     // file until the history holds an assistant message.
-    let rpc = getRpcSession(id);
+    let rpc = getRpcSession(id, hostId);
     if (!rpc?.isAlive?.()) {
-      const resolved = await resolveSessionHostOr404(id);
+      const resolved = await resolveSessionHostOr404(id, hostId);
       if ("response" in resolved) return resolved.response;
       try {
         const target = await sessionSpawnTarget(id, resolved.host);
@@ -93,7 +94,7 @@ export async function POST(
       }
     }
 
-    const resolved = await resolveSessionHostOr404(id);
+    const resolved = await resolveSessionHostOr404(id, hostId);
     if ("response" in resolved) return resolved.response;
     const { sessionOps } = resolved.host;
 
@@ -121,7 +122,7 @@ export async function POST(
     }
 
     // Title generation/path resolution yielded; Edit may now own this session.
-    if (getRpcSession(id)?.isEditingHistory()) {
+    if (getRpcSession(id, hostId)?.isEditingHistory()) {
       return Response.json(
         { error: "Wait for the history edit to finish", code: "session_busy" },
         { status: 409 },

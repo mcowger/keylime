@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import fs, {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { sessionKey } from "./session-identity";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after, afterEach, beforeEach } from "node:test";
@@ -69,14 +77,18 @@ type FixtureTransport = {
 
 const root = mkdtempSync(join(tmpdir(), "omp-outbox-review-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+// Load the server modules only after selecting this file's isolated agent directory.
 process.env.PI_CODING_AGENT_DIR = root;
 const outbox = await import("./message-outbox.ts");
 const { runAgentCommand } = await import("./agent-command.ts");
 const { startRpcSession, subscribeHostToolCalls } =
   await import("./rpc-manager.ts");
 const { EventStreamConnection } = await import("./event-stream-hub.ts");
-const { until } = await import("./hosts/link-driver.test-helper.ts");
-const { saveWebServerSettings } = await import("./web-settings.ts");
+const { linkHost, linkLocalHost, until } =
+  await import("./hosts/link-driver.test-helper.ts");
+const { closeHostLink } = await import("./hosts/hub.ts");
+const { loadHostSettings, saveHostSettings } =
+  await import("./web-settings.ts");
 const { closeNotificationStore } = await import("./notification-store.ts");
 const wrappers: AgentSessionWrapper[] = [];
 let fixture = 0;
@@ -104,12 +116,14 @@ async function add(
   id: string,
   message = "held",
   mode: "prompt" | "steer" | "followUp" = "prompt",
+  hostId = "local",
 ) {
   return outbox.runOutboxCommand(
     sessionId,
     { type: "outbox_add", scope: outbox.outboxScope(), id, message, mode },
     false,
     "owner",
+    { hostId },
   );
 }
 
@@ -290,8 +304,9 @@ async function liveSession(
     return transport;
   };
   const host = {
-    id: "review-fixture-host",
+    id: "local",
     label: "Review fixture",
+    getSettings: async () => loadHostSettings(),
     status: () => "online",
     onStatus: () => () => {},
     spawnRpc: async (request: SpawnRequest) => ({
@@ -351,11 +366,11 @@ test(
       });
       transport.answer(sent);
       await until(
-        () => outbox.outboxEntries(sid).length === 0,
+        () => outbox.outboxEntries(sid, "local").length === 0,
         "text-matched hand-off",
       );
       assert.deepEqual(
-        outbox.outboxSettlements(sid),
+        outbox.outboxSettlements(sid, "local"),
         { settledIds: [sid] },
         "no native settlement for the browser to wait on",
       );
@@ -381,11 +396,11 @@ test("only the exact command ID settles a transformed native echo, never another
     });
     await sleep(10);
     assert.equal(
-      outbox.outboxEntries(sid)[0]?.state,
+      outbox.outboxEntries(sid, "local")[0]?.state,
       "delivering",
       "text equality cannot donate another command's echo",
     );
-    assert.deepEqual(outbox.outboxSettlements(sid).settledIds, []);
+    assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, []);
   }
   transport.emitFor(sent, {
     type: "message_end",
@@ -393,10 +408,12 @@ test("only the exact command ID settles a transformed native echo, never another
   });
   transport.answer(sent);
   await until(
-    () => outbox.outboxEntries(sid).length === 0,
+    () => outbox.outboxEntries(sid, "local").length === 0,
     "exact ID native replacement",
   );
-  assert.deepEqual(outbox.outboxSettlements(sid).settledIds, ["exact-echo-id"]);
+  assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, [
+    "exact-echo-id",
+  ]);
 });
 
 test("exact queue IDs disambiguate identical texts without donating uncorrelated queue growth", async () => {
@@ -432,8 +449,8 @@ test("exact queue IDs disambiguate identical texts without donating uncorrelated
       ...metadata,
     });
     await sleep(10);
-    assert.equal(outbox.outboxEntries(sid)[0]?.state, "delivering");
-    assert.deepEqual(outbox.outboxSettlements(sid).settledIds, []);
+    assert.equal(outbox.outboxEntries(sid, "local")[0]?.state, "delivering");
+    assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, []);
   }
   transport.emitFor(sent, {
     type: "queue_update",
@@ -442,10 +459,10 @@ test("exact queue IDs disambiguate identical texts without donating uncorrelated
   });
   transport.answer(sent);
   await until(
-    () => outbox.outboxEntries(sid).length === 0,
+    () => outbox.outboxEntries(sid, "local").length === 0,
     "exact queue slot replacement",
   );
-  assert.deepEqual(outbox.outboxSettlements(sid).settledIds, [
+  assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, [
     "exact-queue-id",
   ]);
 });
@@ -468,7 +485,11 @@ async function channel(sessionId: string) {
     close() {},
   });
   assert.deepEqual(
-    await connection.subscribe("s1", { kind: "session", sessionId }),
+    await connection.subscribe("s1", {
+      kind: "session",
+      sessionId,
+      hostId: "local",
+    }),
     { ok: true },
   );
   return { frames, close: () => connection.close() };
@@ -492,6 +513,8 @@ async function ambiguousSession(
     { type: "prompt", message: "same" },
     false,
     "another-client",
+    undefined,
+    { hostId: "local" },
   );
   await until(
     () => transport.pendingMessages.length === 1,
@@ -510,10 +533,10 @@ async function ambiguousSession(
   });
   transport.answer(transport.pendingMessages[1]);
   await until(
-    () => outbox.outboxEntries(sid)[0]?.state === "failed",
+    () => outbox.outboxEntries(sid, "local")[0]?.state === "failed",
     "retained ambiguous row",
   );
-  assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
+  assert.equal(outbox.outboxEntries(sid, "local")[0].mayHaveBeenSent, true);
   transport.emit({ type: "agent_end", isTerminal: true });
   return fixture;
 }
@@ -525,20 +548,43 @@ test("commit plan progress observers do not intercept cross-session host tools",
   const frames: { type: string }[] = [];
   const connection = new EventStreamConnection(undefined, {
     heartbeatMs: 60_000,
-    write(name, _at, data) { if (name === "s1") frames.push(JSON.parse(data)); return true; },
+    write(name, _at, data) {
+      if (name === "s1") frames.push(JSON.parse(data));
+      return true;
+    },
     backpressured: () => false,
     heartbeat: () => true,
     close() {},
   });
   t.after(() => connection.close());
-  assert.deepEqual(await connection.subscribe("s1", { kind: "commit-plan-progress", sessionId: sid }), { ok: true });
-  const calls: Parameters<Parameters<typeof subscribeHostToolCalls>[0]>[0][] = [];
+  assert.deepEqual(
+    await connection.subscribe("s1", {
+      kind: "commit-plan-progress",
+      sessionId: sid,
+      hostId: "local",
+    }),
+    { ok: true },
+  );
+  const calls: Parameters<Parameters<typeof subscribeHostToolCalls>[0]>[0][] =
+    [];
   const leave = subscribeHostToolCalls((call) => calls.push(call));
   t.after(leave);
-  transport.emit({ type: "commit_plan_progress", requestId: "plan", message: "Inspecting" });
-  transport.emit({ type: "host_tool_call", id: "background-call", toolName: "open_url", arguments: { url: "https://example.test" } });
+  transport.emit({
+    type: "commit_plan_progress",
+    requestId: "plan",
+    message: "Inspecting",
+  });
+  transport.emit({
+    type: "host_tool_call",
+    id: "background-call",
+    toolName: "open_url",
+    arguments: { url: "https://example.test" },
+  });
   assert.ok(frames.some((frame) => frame.type === "commit_plan_progress"));
-  assert.equal(frames.some((frame) => frame.type === "host_tool_call"), false);
+  assert.equal(
+    frames.some((frame) => frame.type === "host_tool_call"),
+    false,
+  );
   assert.ok(calls[0] && "id" in calls[0] && calls[0].id === "background-call");
 });
 
@@ -569,7 +615,7 @@ test("a held handoff observer leaves registered browser tools to another app tab
       toolName: "open_url",
       arguments: { url: "https://example.test" },
       cwd: root,
-      hostId: "review-fixture-host",
+      hostId: "local",
     },
   ]);
   const handled = await runAgentCommand(
@@ -581,6 +627,8 @@ test("a held handoff observer leaves registered browser tools to another app tab
     },
     false,
     "owner",
+    undefined,
+    { hostId: "local" },
   );
   assert.equal(handled.status, 200);
   transport.answer(transport.pendingMessages[0]);
@@ -590,7 +638,10 @@ test("a held handoff observer leaves registered browser tools to another app tab
     followUp: ["later"],
   });
   await until(
-    () => outbox.outboxSettlements(sid).settledIds.includes("browser-held"),
+    () =>
+      outbox
+        .outboxSettlements(sid, "local")
+        .settledIds.includes("browser-held"),
     "native queue handoff",
   );
   assert.deepEqual(
@@ -677,6 +728,8 @@ test("a prior prompt's asynchronous error cannot mark a newly queued held messag
           { type: "prompt", message: "earlier" },
           false,
           "owner",
+          undefined,
+          { hostId: "local" },
         );
         await until(
           () => transport.pendingMessages.length === 1,
@@ -725,16 +778,18 @@ test("a prior prompt's asynchronous error cannot mark a newly queued held messag
         });
         await until(
           () =>
-            outbox.outboxSettlements(sid).settledIds.includes(id) ||
-            outbox.outboxEntries(sid)[0]?.state === "failed",
+            outbox.outboxSettlements(sid, "local").settledIds.includes(id) ||
+            outbox.outboxEntries(sid, "local")[0]?.state === "failed",
           "persisted handoff outcome",
         );
         assert.deepEqual(
-          outbox.outboxEntries(sid),
+          outbox.outboxEntries(sid, "local"),
           [],
           `${mode}/${failure} retires only the genuinely queued held row`,
         );
-        assert.ok(outbox.outboxSettlements(sid).settledIds.includes(id));
+        assert.ok(
+          outbox.outboxSettlements(sid, "local").settledIds.includes(id),
+        );
         assert.deepEqual(
           (
             (await session.send({ type: "get_state" })) as {
@@ -786,15 +841,15 @@ test("a held message's own native rejection stays Not sent and child loss stays 
         transport.exit(1, null);
       }
       await until(
-        () => outbox.outboxEntries(sid)[0]?.state === "failed",
+        () => outbox.outboxEntries(sid, "local")[0]?.state === "failed",
         "own failure retained",
       );
-      const entry = outbox.outboxEntries(sid)[0];
+      const entry = outbox.outboxEntries(sid, "local")[0];
       assert.equal(entry.mayHaveBeenSent === true, outcome === "child-exit");
       if (outcome === "rejected")
         assert.equal(entry.error, "own native refusal");
       assert.equal(
-        outbox.outboxSettlements(sid).settledIds.includes(sid),
+        outbox.outboxSettlements(sid, "local").settledIds.includes(sid),
         false,
       );
       assert.equal(
@@ -825,7 +880,7 @@ test("a native ownership move persists held and failed routing before any furthe
     error: "Native refusal",
   });
   await until(
-    () => outbox.outboxEntries(oldId)[0]?.state === "failed",
+    () => outbox.outboxEntries(oldId, "local")[0]?.state === "failed",
     "retained failed row",
   );
   host.status = () => "offline";
@@ -833,7 +888,7 @@ test("a native ownership move persists held and failed routing before any furthe
   await until(
     () =>
       outbox
-        .outboxEntries(oldId)
+        .outboxEntries(oldId, "local")
         .some(
           (entry) => entry.id === "move-held" && entry.state === "waiting_host",
         ),
@@ -848,9 +903,10 @@ test("a native ownership move persists held and failed routing before any furthe
     message: "Session moved to a new file",
   });
   await until(() => session.sessionId === newId, "confirmed native identity");
-  assert.ok(globalThis.__ompOutboxStore);
-  const rows = globalThis.__ompOutboxStore.db
-    .prepare(
+  assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+  const rows = globalThis
+    .__keylimeHostOutboxes!.get("local")!
+    .store!.db.prepare(
       "SELECT id, session_id, source_session_id FROM entries ORDER BY rowid",
     )
     .all();
@@ -865,7 +921,7 @@ test("a native ownership move persists held and failed routing before any furthe
   await session.destroyAndWait();
   outbox.closeOutboxStore();
   assert.deepEqual(
-    outbox.outboxEntries(newId).map(({ id }) => id),
+    outbox.outboxEntries(newId, "local").map(({ id }) => id),
     ["move-failed", "move-held"],
     "canonical routing survives wrapper disposal and store reopening",
   );
@@ -926,9 +982,11 @@ test("a later idle message lifts a settled child's taint and goes to the same ch
   transport.answer(sent);
   await until(
     () =>
-      outbox.outboxSettlements(sid).settledIds.includes("after-idle-settle") ||
       outbox
-        .outboxEntries(sid)
+        .outboxSettlements(sid, "local")
+        .settledIds.includes("after-idle-settle") ||
+      outbox
+        .outboxEntries(sid, "local")
         .some(
           (entry) =>
             entry.id === "after-idle-settle" && entry.state === "failed",
@@ -936,12 +994,14 @@ test("a later idle message lifts a settled child's taint and goes to the same ch
     "new message handoff",
   );
   assert.ok(
-    outbox.outboxSettlements(sid).settledIds.includes("after-idle-settle"),
+    outbox
+      .outboxSettlements(sid, "local")
+      .settledIds.includes("after-idle-settle"),
     "settled from its own echo",
   );
   assert.deepEqual(
     outbox
-      .outboxEntries(sid)
+      .outboxEntries(sid, "local")
       .map((entry) => [entry.id, entry.state, entry.mayHaveBeenSent]),
     [[`${sid}-uncertain`, "failed", true]],
   );
@@ -972,8 +1032,8 @@ test("active, queued, async, unsupported or offline native work keeps the taint,
     if (shape === "offline") {
       await until(
         () =>
-          outbox.outboxEntries(sid).find((entry) => entry.id === id)?.state ===
-          "waiting_host",
+          outbox.outboxEntries(sid, "local").find((entry) => entry.id === id)
+            ?.state === "waiting_host",
         "offline held message",
       );
     } else {
@@ -984,8 +1044,16 @@ test("active, queued, async, unsupported or offline native work keeps the taint,
       if (shape === "active") {
         assert.equal(transport.pendingMessages[2].type, "steer");
         assert.equal(
-          (await runAgentCommand(sid, { type: "abort" }, false, "owner"))
-            .status,
+          (
+            await runAgentCommand(
+              sid,
+              { type: "abort" },
+              false,
+              "owner",
+              undefined,
+              { hostId: "local" },
+            )
+          ).status,
           200,
           "Stop never waits for the run or replacement proof",
         );
@@ -993,8 +1061,8 @@ test("active, queued, async, unsupported or offline native work keeps the taint,
       transport.answer(transport.pendingMessages[2]);
       await until(
         () =>
-          outbox.outboxEntries(sid).find((entry) => entry.id === id)?.state ===
-          "failed",
+          outbox.outboxEntries(sid, "local").find((entry) => entry.id === id)
+            ?.state === "failed",
         "conservative current outcome",
       );
     }
@@ -1006,8 +1074,9 @@ test("active, queued, async, unsupported or offline native work keeps the taint,
     assert.equal(transport.endInputs, 0, shape);
     assert.equal(transports.length, 1, shape);
     assert.equal(
-      outbox.outboxEntries(sid).find((entry) => entry.id === `${sid}-uncertain`)
-        ?.state,
+      outbox
+        .outboxEntries(sid, "local")
+        .find((entry) => entry.id === `${sid}-uncertain`)?.state,
       "failed",
     );
   }
@@ -1056,8 +1125,8 @@ test("a run or preparation starting while the settle read is in flight keeps the
     transport.answer(transport.pendingMessages[2]);
     await until(
       () =>
-        outbox.outboxEntries(sid).find((entry) => entry.id === id)?.state ===
-        "failed",
+        outbox.outboxEntries(sid, "local").find((entry) => entry.id === id)
+          ?.state === "failed",
       "conservative later outcome",
     );
     assert.equal(transport.endInputs, 0, race);
@@ -1068,6 +1137,8 @@ test("a run or preparation starting while the settle read is in flight keeps the
         { type: "abort" },
         false,
         "owner",
+        undefined,
+        { hostId: "local" },
       );
       assert.equal(stop.status, 200, JSON.stringify(await stop.json()));
     } else {
@@ -1106,7 +1177,14 @@ test("another pending native control reply keeps the taint, and the settle read 
     };
     let control;
     if (phase === "before") {
-      control = runAgentCommand(sid, { type: "get_commands" }, false, "owner");
+      control = runAgentCommand(
+        sid,
+        { type: "get_commands" },
+        false,
+        "owner",
+        undefined,
+        { hostId: "local" },
+      );
       await until(
         () => heldControl !== undefined,
         "earlier native control write",
@@ -1115,7 +1193,14 @@ test("another pending native control reply keeps the taint, and the settle read 
     await add(sid, `${sid}-later`, "later unique input");
     if (phase === "preflight") {
       await until(() => heldState !== undefined, "settle read in flight");
-      control = runAgentCommand(sid, { type: "get_commands" }, false, "owner");
+      control = runAgentCommand(
+        sid,
+        { type: "get_commands" },
+        false,
+        "owner",
+        undefined,
+        { hostId: "local" },
+      );
       await until(
         () => heldControl !== undefined,
         "control admitted during the settle read",
@@ -1137,8 +1222,9 @@ test("another pending native control reply keeps the taint, and the settle read 
       transport.answer(transport.pendingMessages[2]);
       await until(
         () =>
-          outbox.outboxEntries(sid).find((entry) => entry.id === `${sid}-later`)
-            ?.state === "failed",
+          outbox
+            .outboxEntries(sid, "local")
+            .find((entry) => entry.id === `${sid}-later`)?.state === "failed",
         "conservative later outcome",
       );
     } finally {
@@ -1174,11 +1260,13 @@ test("another pending native control reply keeps the taint, and the settle read 
     });
     transport.answer(sent);
     await until(
-      () => outbox.outboxSettlements(sid).settledIds.includes(nextId),
+      () => outbox.outboxSettlements(sid, "local").settledIds.includes(nextId),
       "message handoff after control completion",
     );
     assert.deepEqual(
-      outbox.outboxEntries(sid).map((entry) => [entry.id, entry.state]),
+      outbox
+        .outboxEntries(sid, "local")
+        .map((entry) => [entry.id, entry.state]),
       [
         [`${sid}-uncertain`, "failed"],
         [`${sid}-later`, "failed"],
@@ -1229,9 +1317,11 @@ test("a message sent while a settlement's read is in flight joins that read and 
   transport.answer(sent);
   await until(
     () =>
-      outbox.outboxSettlements(sid).settledIds.includes("during-settle-read") ||
       outbox
-        .outboxEntries(sid)
+        .outboxSettlements(sid, "local")
+        .settledIds.includes("during-settle-read") ||
+      outbox
+        .outboxEntries(sid, "local")
         .some(
           (entry) =>
             entry.id === "during-settle-read" && entry.state === "failed",
@@ -1239,12 +1329,14 @@ test("a message sent while a settlement's read is in flight joins that read and 
     "joined message outcome",
   );
   assert.ok(
-    outbox.outboxSettlements(sid).settledIds.includes("during-settle-read"),
+    outbox
+      .outboxSettlements(sid, "local")
+      .settledIds.includes("during-settle-read"),
     "delivered, not failed",
   );
   assert.deepEqual(
     outbox
-      .outboxEntries(sid)
+      .outboxEntries(sid, "local")
       .map((entry) => [entry.id, entry.state, entry.mayHaveBeenSent]),
     [[`${sid}-uncertain`, "failed", true]],
   );
@@ -1275,7 +1367,7 @@ test("a failed settle read leaves the unsent message held for a retry", async (t
   });
   await sleep(20);
   const entry = outbox
-    .outboxEntries(sid)
+    .outboxEntries(sid, "local")
     .find((item) => item.id === "after-failed-read");
   assert.ok(entry);
   assert.equal(
@@ -1285,7 +1377,7 @@ test("a failed settle read leaves the unsent message held for a retry", async (t
   );
   assert.equal(transport.pendingMessages.length, 2);
   assert.equal(session.hasPendingMessageCommands(), true);
-  outbox.pumpOutbox(sid);
+  outbox.pumpOutbox(sid, "local");
   await until(() => transport.pendingMessages.length === 3, "retried dispatch");
   transport.emit({
     type: "message_end",
@@ -1294,23 +1386,24 @@ test("a failed settle read leaves the unsent message held for a retry", async (t
   transport.answer(transport.pendingMessages[2]);
   await until(
     () =>
-      outbox.outboxSettlements(sid).settledIds.includes("after-failed-read"),
+      outbox
+        .outboxSettlements(sid, "local")
+        .settledIds.includes("after-failed-read"),
     "retried message handoff",
   );
   assert.deepEqual(
-    outbox.outboxEntries(sid).map((item) => [item.id, item.state]),
+    outbox.outboxEntries(sid, "local").map((item) => [item.id, item.state]),
     [[`${sid}-uncertain`, "failed"]],
   );
 });
 
-test("a settle read keeps the taint for compaction, another session, a peer admission or an admission completed during it", async () => {
-  for (const shape of ["compacting", "moved", "peer", "admission", "settled"]) {
+test("a settle read keeps the taint for compaction, another session or an admission completed during it", async () => {
+  for (const shape of ["compacting", "moved", "admission", "settled"]) {
     const sid = `settle-read-${shape}`;
     const { session, transport } = await ambiguousSession(sid);
     const hold = holdState(transport);
     const read = session.clearMessageProofTaintIfSettled();
     await until(() => hold.command !== undefined, "settle read in flight");
-    if (shape === "peer") transport.emit({ type: "peer_message_command" });
     if (shape === "admission") {
       const builtin = session.send({ type: "prompt", message: "/model" });
       await until(
@@ -1349,6 +1442,8 @@ test(
       { type: "prompt", message: "PR update 1" },
       false,
       "pr-watcher",
+      undefined,
+      { hostId: "local" },
     );
     await until(
       () => transport.pendingMessages.length === 1,
@@ -1362,6 +1457,8 @@ test(
       { type: "follow_up", message: "PR update 2" },
       false,
       "pr-watcher",
+      undefined,
+      { hostId: "local" },
     );
     await until(
       () => transport.pendingMessages.length === 2,
@@ -1391,10 +1488,10 @@ test(
       message: { role: "user", content: "user during run" },
     });
     await until(
-      () => outbox.outboxEntries(sid)[0]?.state === "failed",
+      () => outbox.outboxEntries(sid, "local")[0]?.state === "failed",
       "ambiguous run-time outcome",
     );
-    assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
+    assert.equal(outbox.outboxEntries(sid, "local")[0].mayHaveBeenSent, true);
 
     transport.emit({ type: "agent_end", isTerminal: true });
     transport.emit({ type: "session_settled" });
@@ -1421,21 +1518,25 @@ test(
     transport.answer(sent);
     await until(
       () =>
-        outbox.outboxSettlements(sid).settledIds.includes("after-settle") ||
         outbox
-          .outboxEntries(sid)
+          .outboxSettlements(sid, "local")
+          .settledIds.includes("after-settle") ||
+        outbox
+          .outboxEntries(sid, "local")
           .some(
             (entry) => entry.id === "after-settle" && entry.state === "failed",
           ),
       "next run-time outcome",
     );
     assert.ok(
-      outbox.outboxSettlements(sid).settledIds.includes("after-settle"),
+      outbox
+        .outboxSettlements(sid, "local")
+        .settledIds.includes("after-settle"),
       "retired from its own echo",
     );
     assert.deepEqual(
       outbox
-        .outboxEntries(sid)
+        .outboxEntries(sid, "local")
         .map((entry) => [entry.id, entry.state, entry.mayHaveBeenSent]),
       [["during-run", "failed", true]],
       "the uncertain row stays uncertain",
@@ -1477,10 +1578,10 @@ test("a shared daemon child's taint lifts at settlement and the next message is 
   await until(
     () =>
       outbox
-        .outboxSettlements(sid)
+        .outboxSettlements(sid, "local")
         .settledIds.includes("shared-after-settle") ||
       outbox
-        .outboxEntries(sid)
+        .outboxEntries(sid, "local")
         .some(
           (entry) =>
             entry.id === "shared-after-settle" && entry.state === "failed",
@@ -1488,12 +1589,14 @@ test("a shared daemon child's taint lifts at settlement and the next message is 
     "shared child outcome",
   );
   assert.ok(
-    outbox.outboxSettlements(sid).settledIds.includes("shared-after-settle"),
+    outbox
+      .outboxSettlements(sid, "local")
+      .settledIds.includes("shared-after-settle"),
     "retired from its own echo",
   );
   assert.deepEqual(
     outbox
-      .outboxEntries(sid)
+      .outboxEntries(sid, "local")
       .map((entry) => [entry.id, entry.state, entry.mayHaveBeenSent]),
     [[`${sid}-uncertain`, "failed", true]],
   );
@@ -1523,6 +1626,8 @@ test("an uncontended direct message completed during transcript preparation refr
     { type: "prompt", message: "external" },
     false,
     "another-client",
+    undefined,
+    { hostId: "local" },
   );
   await until(
     () => transport.pendingMessages.length === 1,
@@ -1551,7 +1656,7 @@ test("an uncontended direct message completed during transcript preparation refr
     "the completed direct prompt's active run changes native delivery mode",
   );
   const prepared = outbox
-    .outboxEntries(sid)
+    .outboxEntries(sid, "local")
     .find((entry) => entry.id === "prepared-current");
   assert.ok(prepared);
   assert.equal(
@@ -1567,11 +1672,13 @@ test("an uncontended direct message completed during transcript preparation refr
   transport.answer(transport.pendingMessages[1]);
   await until(
     () =>
-      outbox.outboxSettlements(sid).settledIds.includes("prepared-current") ||
-      outbox.outboxEntries(sid)[0]?.state === "failed",
+      outbox
+        .outboxSettlements(sid, "local")
+        .settledIds.includes("prepared-current") ||
+      outbox.outboxEntries(sid, "local")[0]?.state === "failed",
     "refreshed handoff",
   );
-  assert.deepEqual(outbox.outboxEntries(sid), []);
+  assert.deepEqual(outbox.outboxEntries(sid, "local"), []);
   assert.deepEqual(
     transport.pendingMessages.map((command) => [command.type, command.message]),
     [
@@ -1585,7 +1692,7 @@ test("a held observer attaches on explicit idle wrapper startup and rebinds with
   const sid = uuid(1);
   assert.equal((await add(sid, "observer")).status, 200);
   await until(
-    () => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+    () => outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
     "offline held row",
   );
   const watch = await channel(sid);
@@ -1596,8 +1703,16 @@ test("a held observer attaches on explicit idle wrapper startup and rebinds with
     );
     const first = await liveSession(sid);
     assert.equal(
-      (await runAgentCommand(sid, { type: "get_state" }, false, "owner"))
-        .status,
+      (
+        await runAgentCommand(
+          sid,
+          { type: "get_state" },
+          false,
+          "owner",
+          undefined,
+          { hostId: "local" },
+        )
+      ).status,
       200,
     );
     assert.equal(
@@ -1621,7 +1736,7 @@ test("a held observer attaches on explicit idle wrapper startup and rebinds with
     });
     assert.equal(watch.frames.at(-1)?.message?.content, "replacement");
     assert.equal(
-      outbox.outboxEntries(sid)[0].state,
+      outbox.outboxEntries(sid, "local")[0].state,
       "waiting_host",
       "observing never dispatches the held row",
     );
@@ -1652,6 +1767,8 @@ test("a competing API write cannot donate its identical echo or queue occurrence
       { type: "follow_up", message: "same" },
       false,
       "another-client",
+      undefined,
+      { hostId: "local" },
     );
     await until(
       () => transport.pendingMessages.length === 2,
@@ -1673,15 +1790,28 @@ test("a competing API write cannot donate its identical echo or queue occurrence
     transport.answer(own);
     await until(
       () =>
-        outbox.outboxEntries(sid)[0]?.state === "failed" ||
-        outbox.outboxEntries(sid).length === 0,
+        outbox.outboxEntries(sid, "local")[0]?.state === "failed" ||
+        outbox.outboxEntries(sid, "local").length === 0,
       "correlation outcome",
     );
-    assert.equal(outbox.outboxEntries(sid)[0]?.state, "failed", eventType);
-    assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
-    assert.deepEqual(outbox.outboxSettlements(sid).settledIds, []);
     assert.equal(
-      (await runAgentCommand(sid, { type: "abort" }, false, "owner")).status,
+      outbox.outboxEntries(sid, "local")[0]?.state,
+      "failed",
+      eventType,
+    );
+    assert.equal(outbox.outboxEntries(sid, "local")[0].mayHaveBeenSent, true);
+    assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, []);
+    assert.equal(
+      (
+        await runAgentCommand(
+          sid,
+          { type: "abort" },
+          false,
+          "owner",
+          undefined,
+          { hostId: "local" },
+        )
+      ).status,
       200,
       "Stop is never fenced behind replacement inference",
     );
@@ -1706,6 +1836,8 @@ test("an exact client message ID settles its outbox row while another command is
       { type: "follow_up", message: "same" },
       false,
       "another-client",
+      undefined,
+      { hostId: "local" },
     );
     await until(
       () => transport.pendingMessages.length === 2,
@@ -1717,7 +1849,7 @@ test("an exact client message ID settles its outbox row while another command is
     });
     await sleep(10);
     assert.equal(
-      outbox.outboxEntries(sid)[0]?.state,
+      outbox.outboxEntries(sid, "local")[0]?.state,
       "delivering",
       `${evidence}: the competing echo carries no ID and neither settles nor ends the wait`,
     );
@@ -1733,12 +1865,16 @@ test("an exact client message ID settles its outbox row while another command is
     transport.answer(own);
     await until(
       () =>
-        outbox.outboxEntries(sid).length === 0 ||
-        outbox.outboxEntries(sid)[0]?.state === "failed",
+        outbox.outboxEntries(sid, "local").length === 0 ||
+        outbox.outboxEntries(sid, "local")[0]?.state === "failed",
       `${evidence}: exact receipt outcome`,
     );
-    assert.deepEqual(outbox.outboxEntries(sid), [], evidence);
-    assert.deepEqual(outbox.outboxSettlements(sid).settledIds, [id], evidence);
+    assert.deepEqual(outbox.outboxEntries(sid, "local"), [], evidence);
+    assert.deepEqual(
+      outbox.outboxSettlements(sid, "local").settledIds,
+      [id],
+      evidence,
+    );
   }
 });
 
@@ -1771,7 +1907,7 @@ test("a displayed native custom message with the exact ID settles its row withou
     },
   });
   await sleep(10);
-  assert.equal(outbox.outboxEntries(sid)[0]?.state, "delivering");
+  assert.equal(outbox.outboxEntries(sid, "local")[0]?.state, "delivering");
   transport.emitFor(sent, {
     type: "message_end",
     message: {
@@ -1784,12 +1920,14 @@ test("a displayed native custom message with the exact ID settles its row withou
   transport.answer(sent);
   await until(
     () =>
-      outbox.outboxEntries(sid).length === 0 ||
-      outbox.outboxEntries(sid)[0]?.state === "failed",
+      outbox.outboxEntries(sid, "local").length === 0 ||
+      outbox.outboxEntries(sid, "local")[0]?.state === "failed",
     "exact custom receipt outcome",
   );
-  assert.deepEqual(outbox.outboxEntries(sid), []);
-  assert.deepEqual(outbox.outboxSettlements(sid).settledIds, ["exact-custom"]);
+  assert.deepEqual(outbox.outboxEntries(sid, "local"), []);
+  assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, [
+    "exact-custom",
+  ]);
 });
 
 test("a hidden native custom message with the exact ID never settles its row, even when attributed to the user", async () => {
@@ -1815,15 +1953,15 @@ test("a hidden native custom message with the exact ID never settles its row, ev
   transport.answer(sent);
   await sleep(50);
   assert.equal(
-    outbox.outboxEntries(sid)[0]?.state,
+    outbox.outboxEntries(sid, "local")[0]?.state,
     "delivering",
     "a hidden message is no replacement",
   );
-  assert.deepEqual(outbox.outboxSettlements(sid).settledIds, []);
+  assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, []);
 });
 
 test("a real server agent-tool steer also invalidates an overlapping identical text-matched outbox echo", async () => {
-  saveWebServerSettings({ agentToolsEnabled: true });
+  saveHostSettings({ agentToolsEnabled: true });
   const sid = "overlap-agent-target";
   const sourceId = "overlap-agent-source";
   const message = `[From session ${sourceId} via keylime agent tools]: same`;
@@ -1853,17 +1991,17 @@ test("a real server agent-tool steer also invalidates an overlapping identical t
   target.transport.answer(target.transport.pendingMessages[0]);
   await until(
     () =>
-      outbox.outboxEntries(sid)[0]?.state === "failed" ||
-      outbox.outboxEntries(sid).length === 0,
+      outbox.outboxEntries(sid, "local")[0]?.state === "failed" ||
+      outbox.outboxEntries(sid, "local").length === 0,
     "agent-tool overlap outcome",
   );
-  assert.equal(outbox.outboxEntries(sid)[0]?.state, "failed");
-  assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
+  assert.equal(outbox.outboxEntries(sid, "local")[0]?.state, "failed");
+  assert.equal(outbox.outboxEntries(sid, "local")[0].mayHaveBeenSent, true);
 });
 
 test("an open ask holds a steer until it is answered and turns an agent-tool steer into a follow-up", async () => {
   outbox.startOutbox();
-  saveWebServerSettings({ agentToolsEnabled: true });
+  saveHostSettings({ agentToolsEnabled: true });
   const sid = "open-ask-target";
   const target = await liveSession(sid);
   const source = await liveSession("open-ask-source");
@@ -1878,7 +2016,7 @@ test("an open ask holds a steer until it is answered and turns an agent-tool ste
   await until(() => target.session.isAwaitingAsk(), "the open ask");
   await add(sid, "ask-steer", "after the answer", "steer");
   await sleep(200);
-  assert.equal(outbox.outboxEntries(sid)[0]?.state, "held");
+  assert.equal(outbox.outboxEntries(sid, "local")[0]?.state, "held");
   assert.deepEqual(
     [...target.transport.pendingMessages],
     [],
@@ -1928,6 +2066,8 @@ test("an open ask holds a steer until it is answered and turns an agent-tool ste
     { type: "ui_response", id: 7, value: { data: { a: "1" } } },
     false,
     "owner",
+    undefined,
+    { hostId: "local" },
   );
   // Closing the ask wakes the dispatcher at once, well inside the RETRY_MS timer.
   const answered = Date.now();
@@ -1965,12 +2105,12 @@ test("a message pending before the baseline cannot donate its delayed identical 
   await prior;
   await until(
     () =>
-      outbox.outboxEntries(sid)[0]?.state === "failed" ||
-      outbox.outboxEntries(sid).length === 0,
+      outbox.outboxEntries(sid, "local")[0]?.state === "failed" ||
+      outbox.outboxEntries(sid, "local").length === 0,
     "prior-message outcome",
   );
-  assert.equal(outbox.outboxEntries(sid)[0]?.state, "failed");
-  assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
+  assert.equal(outbox.outboxEntries(sid, "local")[0]?.state, "failed");
+  assert.equal(outbox.outboxEntries(sid, "local")[0].mayHaveBeenSent, true);
 });
 
 test("a prompt omp ends before showing it settles at its prompt_result, and the next message goes to the same child", async () => {
@@ -2103,7 +2243,7 @@ test("a prompt omp ends before showing it settles at its prompt_result, and the 
     });
     await sleep(50);
     assert.equal(
-      outbox.outboxEntries(sid)[0].state,
+      outbox.outboxEntries(sid, "local")[0].state,
       "delivering",
       `${name}: another command's result proves nothing`,
     );
@@ -2114,10 +2254,10 @@ test("a prompt omp ends before showing it settles at its prompt_result, and the 
       sessionSettled: true,
     });
     await until(
-      () => outbox.outboxEntries(sid)[0]?.state === "failed",
+      () => outbox.outboxEntries(sid, "local")[0]?.state === "failed",
       `${name}: settles without the fallback`,
     );
-    const entry = outbox.outboxEntries(sid)[0];
+    const entry = outbox.outboxEntries(sid, "local")[0];
     assert.equal(entry.mayHaveBeenSent === true, !dropped, name);
     if (error) assert.equal(entry.error, error, name);
     if (!dropped) continue;
@@ -2144,6 +2284,8 @@ test("an already-acknowledged direct prompt cannot donate its delayed identical 
     { type: "prompt", message: "same" },
     false,
     "another-client",
+    undefined,
+    { hostId: "local" },
   );
   await until(
     () => transport.pendingMessages.length === 1,
@@ -2167,13 +2309,13 @@ test("an already-acknowledged direct prompt cannot donate its delayed identical 
   transport.answer(transport.pendingMessages[1]);
   await until(
     () =>
-      outbox.outboxEntries(sid)[0]?.state === "failed" ||
-      outbox.outboxEntries(sid).length === 0,
+      outbox.outboxEntries(sid, "local")[0]?.state === "failed" ||
+      outbox.outboxEntries(sid, "local").length === 0,
     "acknowledged-prior outcome",
   );
-  assert.equal(outbox.outboxEntries(sid)[0]?.state, "failed");
-  assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
-  assert.deepEqual(outbox.outboxSettlements(sid).settledIds, []);
+  assert.equal(outbox.outboxEntries(sid, "local")[0]?.state, "failed");
+  assert.equal(outbox.outboxEntries(sid, "local")[0].mayHaveBeenSent, true);
+  assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, []);
 
   transport.emit({ type: "agent_end", isTerminal: true });
   assert.equal(
@@ -2203,10 +2345,10 @@ test("an already-acknowledged direct prompt cannot donate its delayed identical 
   await until(
     () =>
       outbox
-        .outboxSettlements(sid)
+        .outboxSettlements(sid, "local")
         .settledIds.includes("after-native-replacement") ||
       outbox
-        .outboxEntries(sid)
+        .outboxEntries(sid, "local")
         .some(
           (entry) =>
             entry.id === "after-native-replacement" && entry.state === "failed",
@@ -2214,7 +2356,7 @@ test("an already-acknowledged direct prompt cannot donate its delayed identical 
     "fresh child's uncontended handoff",
   );
   assert.deepEqual(
-    outbox.outboxEntries(sid).map((entry) => entry.id),
+    outbox.outboxEntries(sid, "local").map((entry) => entry.id),
     ["acked-prior-overlap"],
   );
   assert.equal(
@@ -2296,12 +2438,12 @@ test("uncontended real wrapper handoffs preserve native queue, skill, template a
     transport.answer(sent, kind === "builtin" ? { agentInvoked: false } : {});
     await until(
       () =>
-        outbox.outboxEntries(sid).length === 0 ||
-        outbox.outboxEntries(sid)[0]?.state === "failed",
+        outbox.outboxEntries(sid, "local").length === 0 ||
+        outbox.outboxEntries(sid, "local")[0]?.state === "failed",
       `${kind} handoff`,
     );
-    assert.deepEqual(outbox.outboxEntries(sid), [], kind);
-    assert.deepEqual(outbox.outboxSettlements(sid).settledIds, [
+    assert.deepEqual(outbox.outboxEntries(sid, "local"), [], kind);
+    assert.deepEqual(outbox.outboxSettlements(sid, "local").settledIds, [
       `native-${kind}`,
     ]);
     const replay = await add(
@@ -2332,7 +2474,7 @@ test("uncontended outbox admissions preserve prompt-time followups, steers and u
   });
   transport.answer(transport.pendingMessages[0]);
   await until(
-    () => outbox.outboxEntries(sid).length === 0,
+    () => outbox.outboxEntries(sid, "local").length === 0,
     "initial prompt handoff",
   );
   assert.equal(session.isRunning(), true);
@@ -2356,15 +2498,19 @@ test("uncontended outbox admissions preserve prompt-time followups, steers and u
     transport.answer(sent);
     await until(
       () =>
-        outbox.outboxEntries(sid).length === 0 ||
-        outbox.outboxEntries(sid)[0]?.state === "failed",
+        outbox.outboxEntries(sid, "local").length === 0 ||
+        outbox.outboxEntries(sid, "local")[0]?.state === "failed",
       `${mode} handoff`,
     );
-    assert.deepEqual(outbox.outboxEntries(sid), []);
+    assert.deepEqual(outbox.outboxEntries(sid, "local"), []);
     assert.equal(session.hasPendingMessageCommands(), false);
   }
   assert.equal(
-    (await runAgentCommand(sid, { type: "abort" }, false, "owner")).status,
+    (
+      await runAgentCommand(sid, { type: "abort" }, false, "owner", undefined, {
+        hostId: "local",
+      })
+    ).status,
     200,
   );
 });
@@ -2397,6 +2543,8 @@ test("a direct first prompt's uncontended native replacement permits later ordin
       { type: "prompt", message },
       false,
       "owner",
+      undefined,
+      { hostId: "local" },
     );
     await until(
       () => transport.pendingMessages.length === 1,
@@ -2477,11 +2625,11 @@ test("a direct first prompt's uncontended native replacement permits later ordin
     transport.answer(transport.pendingMessages[1]);
     await until(
       () =>
-        outbox.outboxEntries(sid).length === 0 ||
-        outbox.outboxEntries(sid)[0]?.state === "failed",
+        outbox.outboxEntries(sid, "local").length === 0 ||
+        outbox.outboxEntries(sid, "local")[0]?.state === "failed",
       "later outbox handoff",
     );
-    assert.deepEqual(outbox.outboxEntries(sid), [], kind);
+    assert.deepEqual(outbox.outboxEntries(sid, "local"), [], kind);
   }
 });
 
@@ -2492,11 +2640,11 @@ test(
     const sid = uuid(2);
     await add(sid, "startup-retry");
     await until(
-      () => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+      () => outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
       "initial waiting state",
     );
-    assert.ok(globalThis.__ompOutboxStore);
-    const database = globalThis.__ompOutboxStore.db;
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const database = globalThis.__keylimeHostOutboxes!.get("local")!.store!.db;
     database
       .prepare(
         "UPDATE entries SET state = 'delivering', dispatch_pid = ? WHERE id = 'startup-retry'",
@@ -2506,22 +2654,29 @@ test(
     const exitHooks = process.listenerCount("exit");
     const frameHooks = globalThis.__ompFrameTaps?.size ?? 0;
     assert.doesNotThrow(() => outbox.startOutbox());
-    assert.ok(globalThis.__ompOutbox);
-    assert.equal(globalThis.__ompOutbox.started, false);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.state);
+    assert.equal(
+      globalThis.__keylimeHostOutboxes!.get("local")!.state.started,
+      false,
+    );
     assert.equal(process.listenerCount("exit"), exitHooks);
     assert.equal(globalThis.__ompFrameTaps?.size ?? 0, frameHooks);
     database.exec("PRAGMA query_only = OFF");
     await sleep(outbox.RETRY_MS + 100);
     await until(
-      () => globalThis.__ompOutbox?.started,
+      () => globalThis.__keylimeHostOutboxes?.get("local")?.state?.started,
       "autonomous recovery startup",
     );
-    assert.equal(outbox.outboxEntries(sid)[0].state, "failed");
-    assert.equal(outbox.outboxEntries(sid)[0].mayHaveBeenSent, true);
-    const maintenance = globalThis.__ompOutbox.maintenance;
+    assert.equal(outbox.outboxEntries(sid, "local")[0].state, "failed");
+    assert.equal(outbox.outboxEntries(sid, "local")[0].mayHaveBeenSent, true);
+    const maintenance =
+      globalThis.__keylimeHostOutboxes!.get("local")!.state.maintenance;
     outbox.startOutbox();
     outbox.startOutbox();
-    assert.equal(globalThis.__ompOutbox.maintenance, maintenance);
+    assert.equal(
+      globalThis.__keylimeHostOutboxes!.get("local")!.state.maintenance,
+      maintenance,
+    );
     assert.equal(process.listenerCount("exit"), exitHooks + 1);
     assert.ok(globalThis.__ompFrameTaps);
     assert.equal(globalThis.__ompFrameTaps.size, frameHooks + 1);
@@ -2530,15 +2685,22 @@ test(
     assert.equal(globalThis.__ompFrameTaps.size, frameHooks);
 
     // This open succeeds, but its pruning write fails before any hook can be installed.
-    outbox.outboxEntries(sid);
-    assert.ok(globalThis.__ompOutboxStore);
-    globalThis.__ompOutboxStore.db.exec("PRAGMA query_only = ON");
+    outbox.outboxEntries(sid, "local");
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    globalThis
+      .__keylimeHostOutboxes!.get("local")!
+      .store!.db.exec("PRAGMA query_only = ON");
     assert.doesNotThrow(() => outbox.startOutbox());
-    assert.equal(globalThis.__ompOutbox.started, false);
-    globalThis.__ompOutboxStore.db.exec("PRAGMA query_only = OFF");
+    assert.equal(
+      globalThis.__keylimeHostOutboxes!.get("local")!.state.started,
+      false,
+    );
+    globalThis
+      .__keylimeHostOutboxes!.get("local")!
+      .store!.db.exec("PRAGMA query_only = OFF");
     await sleep(outbox.RETRY_MS + 100);
     await until(
-      () => globalThis.__ompOutbox?.started,
+      () => globalThis.__keylimeHostOutboxes?.get("local")?.state?.started,
       "autonomous pruning retry",
     );
     assert.equal(process.listenerCount("exit"), exitHooks + 1);
@@ -2552,13 +2714,16 @@ test(
   async () => {
     const sid = uuid(3);
     const { transport } = await liveSession(sid);
-    outbox.outboxEntries(sid);
-    assert.ok(globalThis.__ompOutboxStore);
-    const database = globalThis.__ompOutboxStore.db;
+    outbox.outboxEntries(sid, "local");
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const database = globalThis.__keylimeHostOutboxes!.get("local")!.store!.db;
     database.exec("PRAGMA query_only = ON");
     outbox.startOutbox();
-    assert.ok(globalThis.__ompOutbox);
-    assert.equal(globalThis.__ompOutbox.started, false);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.state);
+    assert.equal(
+      globalThis.__keylimeHostOutboxes!.get("local")!.state.started,
+      false,
+    );
     database.exec("PRAGMA query_only = OFF");
     // Storage is back before the retry: an add dispatches at once.
     assert.equal((await add(sid, "live-claim", "start")).status, 200);
@@ -2567,9 +2732,12 @@ test(
       "native prompt before the startup retry",
     );
     await sleep(outbox.RETRY_MS + 100);
-    await until(() => globalThis.__ompOutbox?.started, "startup retry");
+    await until(
+      () => globalThis.__keylimeHostOutboxes?.get("local")?.state?.started,
+      "startup retry",
+    );
     assert.equal(
-      outbox.outboxEntries(sid)[0]?.state,
+      outbox.outboxEntries(sid, "local")[0]?.state,
       "delivering",
       "the retry must not fail this process's in-flight claim",
     );
@@ -2580,17 +2748,19 @@ test(
     });
     transport.answer(transport.pendingMessages[0]);
     await until(
-      () => outbox.outboxEntries(sid).length === 0,
+      () => outbox.outboxEntries(sid, "local").length === 0,
       "acknowledged and echoed handoff",
     );
-    assert.ok(outbox.outboxSettlements(sid).settledIds.includes("live-claim"));
+    assert.ok(
+      outbox.outboxSettlements(sid, "local").settledIds.includes("live-claim"),
+    );
   },
 );
 
 test("a connection migrated by previous hot-reloaded code is reopened with the current schema", async () => {
   const sid = uuid(60);
-  outbox.outboxEntries(sid);
-  const previous = globalThis.__ompOutboxStore;
+  outbox.outboxEntries(sid, "local");
+  const previous = globalThis.__keylimeHostOutboxes?.get("local")?.store;
   assert.ok(previous);
   // The code before this reload had no change log; its connection is still cached.
   previous.db.exec(
@@ -2599,15 +2769,18 @@ test("a connection migrated by previous hot-reloaded code is reopened with the c
   previous.schema = "previous code";
   const response = await add(sid, "after-reload");
   assert.equal(response.status, 200, await response.clone().text());
-  assert.ok(globalThis.__ompOutboxStore);
+  assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
   assert.notEqual(
-    globalThis.__ompOutboxStore.db,
+    globalThis.__keylimeHostOutboxes!.get("local")!.store!.db,
     previous.db,
     "the stale connection is replaced",
   );
   assert.ok(
-    globalThis.__ompOutboxStore.db
-      .prepare("SELECT revision FROM session_changes WHERE session_id = ?")
+    globalThis
+      .__keylimeHostOutboxes!.get("local")!
+      .store!.db.prepare(
+        "SELECT revision FROM session_changes WHERE session_id = ?",
+      )
       .get(sid),
     "the change log is installed again",
   );
@@ -2620,21 +2793,29 @@ test(
     const sid = uuid(61);
     await add(sid, "peer-after-reopen");
     await until(
-      () => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+      () => outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
       "held before reload",
     );
     outbox.startOutbox();
-    assert.ok(globalThis.__ompOutbox);
-    assert.equal(globalThis.__ompOutbox.started, true);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.state);
+    assert.equal(
+      globalThis.__keylimeHostOutboxes!.get("local")!.state.started,
+      true,
+    );
     const view = await channel(sid);
     // New code after a reload: the next db() call replaces (and finalizes) the connection the observer started on.
-    const previous = globalThis.__ompOutboxStore;
+    const previous = globalThis.__keylimeHostOutboxes?.get("local")?.store;
     assert.ok(previous);
     previous.schema = "previous code";
-    outbox.outboxEntries(sid);
-    assert.ok(globalThis.__ompOutboxStore);
-    assert.notEqual(globalThis.__ompOutboxStore.db, previous.db);
-    const peer = new Database(globalThis.__ompOutboxStore.path);
+    outbox.outboxEntries(sid, "local");
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    assert.notEqual(
+      globalThis.__keylimeHostOutboxes!.get("local")!.store!.db,
+      previous.db,
+    );
+    const peer = new Database(
+      globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+    );
     try {
       peer
         .prepare(
@@ -2665,13 +2846,13 @@ test(
     const sid = uuid(62);
     await add(sid, "peer-before-reopen");
     await until(
-      () => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+      () => outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
       "held before reload",
     );
     outbox.startOutbox();
     const view = await channel(sid);
     await sleep(600); // the observer ticks at 250ms: it has read the old connection's baseline
-    const previous = globalThis.__ompOutboxStore;
+    const previous = globalThis.__keylimeHostOutboxes?.get("local")?.store;
     assert.ok(previous);
     const baseline = previous.db
       .query<{ data_version: number }, []>("PRAGMA data_version")
@@ -2686,12 +2867,16 @@ test(
         .run(Date.now(), "peer-before-reopen");
       previous.schema = "previous code";
       view.frames.length = 0;
-      outbox.outboxEntries(sid);
-      assert.ok(globalThis.__ompOutboxStore);
-      assert.notEqual(globalThis.__ompOutboxStore.db, previous.db);
+      outbox.outboxEntries(sid, "local");
+      assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+      assert.notEqual(
+        globalThis.__keylimeHostOutboxes!.get("local")!.store!.db,
+        previous.db,
+      );
       assert.equal(
-        globalThis.__ompOutboxStore.db
-          .query<{ data_version: number }, []>("PRAGMA data_version")
+        globalThis
+          .__keylimeHostOutboxes!.get("local")!
+          .store!.db.query<{ data_version: number }, []>("PRAGMA data_version")
           .get()!.data_version,
         baseline,
         "per-connection counters coincide, so the version alone cannot reveal the peer change",
@@ -2721,7 +2906,9 @@ test(
     writeFileSync(blocked, "blocked");
     process.env.PI_CODING_AGENT_DIR = join(blocked, "agent");
     assert.doesNotThrow(() => outbox.startOutbox());
+    assert.ok(globalThis.__keylimeOutboxDiscoveryRetry);
     outbox.closeOutboxStore();
+    assert.equal(globalThis.__keylimeOutboxDiscoveryRetry, undefined);
     rmSync(blocked);
     await sleep(outbox.RETRY_MS + 100);
     assert.equal(existsSync(blocked), false);
@@ -2743,17 +2930,22 @@ test(
     const sid = uuid(40);
     await add(sid, "peer-during-startup");
     await until(
-      () => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+      () => outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
       "held before startup",
     );
-    assert.ok(globalThis.__ompOutboxStore);
-    const database = globalThis.__ompOutboxStore.db;
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const database = globalThis.__keylimeHostOutboxes!.get("local")!.store!.db;
     database.exec("PRAGMA query_only = ON");
     outbox.startOutbox();
-    assert.ok(globalThis.__ompOutbox);
-    assert.equal(globalThis.__ompOutbox.started, false);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.state);
+    assert.equal(
+      globalThis.__keylimeHostOutboxes!.get("local")!.state.started,
+      false,
+    );
     const view = await channel(sid);
-    const peer = new Database(globalThis.__ompOutboxStore.path);
+    const peer = new Database(
+      globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+    );
     try {
       assert.equal(view.frames.at(-1)!.entries![0].id, "peer-during-startup");
       peer
@@ -2792,7 +2984,8 @@ test(
     await until(
       () =>
         [first, second].every(
-          (sid) => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+          (sid) =>
+            outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
         ),
       "held messages",
     );
@@ -2800,13 +2993,19 @@ test(
     let fail = false;
     let firstEntries:
       Parameters<Parameters<typeof outbox.onOutboxChange>[1]>[0] | undefined;
-    const detach = outbox.onOutboxChange(first, (entries) => {
-      if (fail) throw new Error("Transient snapshot failure");
-      firstEntries = entries;
-    });
+    const detach = outbox.onOutboxChange(
+      first,
+      (entries) => {
+        if (fail) throw new Error("Transient snapshot failure");
+        firstEntries = entries;
+      },
+      "local",
+    );
     const view = await channel(second);
-    assert.ok(globalThis.__ompOutboxStore);
-    const peer = new Database(globalThis.__ompOutboxStore.path);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const peer = new Database(
+      globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+    );
     try {
       peer.exec("UPDATE entries SET state = 'failed', error = 'peer refusal'");
       await until(
@@ -2861,13 +3060,15 @@ test(
       target = uuid(44);
     await add(sid, "peer-moved");
     await until(
-      () => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+      () => outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
       "held before peer move",
     );
     outbox.startOutbox();
     const view = await channel(sid);
-    assert.ok(globalThis.__ompOutboxStore);
-    const peer = new Database(globalThis.__ompOutboxStore.path);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const peer = new Database(
+      globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+    );
     try {
       peer
         .prepare(
@@ -2894,9 +3095,11 @@ test(
 test("moved-source tombstones cannot displace the original session's delivery confirmations", async () => {
   const sid = uuid(45),
     target = uuid(46);
-  outbox.outboxEntries(sid);
-  assert.ok(globalThis.__ompOutboxStore);
-  const peer = new Database(globalThis.__ompOutboxStore.path);
+  outbox.outboxEntries(sid, "local");
+  assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+  const peer = new Database(
+    globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+  );
   try {
     const insert = peer.prepare(
       "INSERT INTO entries (id, session_id, source_session_id, mode, message, owner, advisor, state, created_at, done_at) VALUES (?, ?, ?, 'prompt', '', 'owner', 0, 'delivered', ?, ?)",
@@ -2907,7 +3110,7 @@ test("moved-source tombstones cannot displace the original session's delivery co
       for (let n = 0; n < 257; n++)
         insert.run(`moved-source-${n}`, target, sid, now + n, now + n);
     })();
-    const settled = outbox.outboxSettlements(sid).settledIds;
+    const settled = outbox.outboxSettlements(sid, "local").settledIds;
     assert.ok(
       settled.includes("original-session-delivery"),
       "newer moved-source history cannot evict an original-session receipt",
@@ -2937,14 +3140,16 @@ test(
     await until(
       () =>
         outbox
-          .outboxEntries(sid)
+          .outboxEntries(sid, "local")
           .every((entry) => entry.state === "waiting_host"),
       "held before peer move",
     );
     outbox.startOutbox();
     const view = await channel(sid);
-    assert.ok(globalThis.__ompOutboxStore);
-    const peer = new Database(globalThis.__ompOutboxStore.path);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const peer = new Database(
+      globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+    );
     try {
       const before = view.frames.length;
       peer.transaction(() => {
@@ -2987,6 +3192,7 @@ test(
         { type: "outbox_remove", id: "peer-uncertain" },
         false,
         "owner",
+        { hostId: "local" },
       );
       assert.equal((await canonicalDelete.json()).data.removed, true);
       await until(
@@ -3000,6 +3206,7 @@ test(
         { type: "outbox_remove", id: "peer-waiting" },
         false,
         "owner",
+        { hostId: "local" },
       );
       assert.equal(
         (await sourceDelete.json()).data.removed,
@@ -3023,11 +3230,13 @@ test("a moved unresolved row still consumes the original session's outbox budget
     target = uuid(50);
   await add(sid, "peer-budget", "retained message");
   await until(
-    () => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+    () => outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
     "held before peer move",
   );
-  assert.ok(globalThis.__ompOutboxStore);
-  const peer = new Database(globalThis.__ompOutboxStore.path);
+  assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+  const peer = new Database(
+    globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+  );
   try {
     peer
       .prepare(
@@ -3059,12 +3268,14 @@ test(
       canonical = uuid(53);
     await add(source, "peer-intermediate", "retained through two moves");
     await until(
-      () => outbox.outboxEntries(source)[0]?.state === "waiting_host",
+      () => outbox.outboxEntries(source, "local")[0]?.state === "waiting_host",
       "held before native moves",
     );
     outbox.startOutbox();
-    assert.ok(globalThis.__ompOutboxStore);
-    const peer = new Database(globalThis.__ompOutboxStore.path);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const peer = new Database(
+      globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+    );
     let closeView: (() => void) | undefined;
     try {
       peer
@@ -3116,6 +3327,7 @@ test(
         { type: "outbox_remove", id: "peer-intermediate" },
         false,
         "owner",
+        { hostId: "local" },
       );
       assert.equal(
         (await removed.json()).data.removed,
@@ -3128,7 +3340,7 @@ test(
           view.frames.at(-1)?.settledIds?.includes("peer-intermediate"),
         "intermediate chat receives the removal receipt",
       );
-      assert.deepEqual(outbox.outboxEntries(canonical), []);
+      assert.deepEqual(outbox.outboxEntries(canonical, "local"), []);
     } finally {
       peer.close(true);
       closeView?.();
@@ -3149,9 +3361,9 @@ test(
     await add(source, "throwing-second", "second held prompt");
     await until(
       () =>
-        outbox.outboxEntries(source).length === 2 &&
+        outbox.outboxEntries(source, "local").length === 2 &&
         outbox
-          .outboxEntries(source)
+          .outboxEntries(source, "local")
           .every((entry) => entry.state === "waiting_host"),
       "both prompts held before move",
     );
@@ -3164,18 +3376,26 @@ test(
       message: "Session moved to a new file",
     });
     await until(() => session.sessionId === canonical, "native move confirmed");
-    outbox.pumpOutbox(canonical);
+    outbox.pumpOutbox(canonical, "local");
     await until(
       () => transport.pendingMessages.length === 1,
       "first moved native dispatch",
     );
     let healthyEntries;
-    const detachThrowing = outbox.onOutboxChange(source, () => {
-      throw new Error("Local source observer failed");
-    });
-    const detachHealthy = outbox.onOutboxChange(source, (entries) => {
-      healthyEntries = entries;
-    });
+    const detachThrowing = outbox.onOutboxChange(
+      source,
+      () => {
+        throw new Error("Local source observer failed");
+      },
+      "local",
+    );
+    const detachHealthy = outbox.onOutboxChange(
+      source,
+      (entries) => {
+        healthyEntries = entries;
+      },
+      "local",
+    );
     const view = await channel(canonical);
     try {
       transport.emitFor(transport.pendingMessages[0], {
@@ -3218,7 +3438,7 @@ test(
       await until(
         () =>
           outbox
-            .outboxSettlements(canonical)
+            .outboxSettlements(canonical, "local")
             .settledIds.includes("throwing-second"),
         "second native echo settles",
       );
@@ -3238,13 +3458,15 @@ test("a moved row consumes the budget of every local registry alias of its sourc
   host.status = () => "offline";
   await add(source, "registry-budget-row", "retained source message");
   await until(
-    () => outbox.outboxEntries(source)[0]?.state === "waiting_host",
+    () => outbox.outboxEntries(source, "local")[0]?.state === "waiting_host",
     "source row held",
   );
   assert.ok(globalThis.__ompSessions);
-  assert.ok(globalThis.__ompOutboxStore);
-  globalThis.__ompSessions.set(alias, session);
-  const peer = new Database(globalThis.__ompOutboxStore.path);
+  assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+  globalThis.__ompSessions.set(sessionKey(alias, "local"), session);
+  const peer = new Database(
+    globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+  );
   try {
     peer
       .prepare(
@@ -3276,7 +3498,7 @@ test("a moved row consumes the budget of every local registry alias of its sourc
       "quota refusal stores no new payload",
     );
   } finally {
-    globalThis.__ompSessions.delete(alias);
+    globalThis.__ompSessions.delete(sessionKey(alias, "local"));
     peer.close(true);
   }
 });
@@ -3292,15 +3514,18 @@ test(
     await until(
       () =>
         [first, second].every(
-          (sid) => outbox.outboxEntries(sid)[0]?.state === "waiting_host",
+          (sid) =>
+            outbox.outboxEntries(sid, "local")[0]?.state === "waiting_host",
         ),
       "both sessions have stored entries",
     );
     outbox.startOutbox();
     const firstView = await channel(first),
       secondView = await channel(second);
-    assert.ok(globalThis.__ompOutboxStore);
-    const peer = new Database(globalThis.__ompOutboxStore.path);
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const peer = new Database(
+      globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+    );
     const snapshots = (view: { frames: { type: string }[] }) =>
       view.frames.filter((frame) => frame.type === "outbox_update").length;
     try {
@@ -3363,8 +3588,8 @@ test(
 );
 
 function seedBytePool(message: string, count: number) {
-  assert.ok(globalThis.__ompOutboxStore);
-  const database = globalThis.__ompOutboxStore.db;
+  assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+  const database = globalThis.__keylimeHostOutboxes!.get("local")!.store!.db;
   const insert = database.prepare(`
     INSERT INTO entries (id, session_id, mode, message, owner, advisor, state, created_at, source_session_id, payload_bytes)
     VALUES (?, ?, 'prompt', ?, 'owner', 0, 'held', ?, ?, ?)
@@ -3421,7 +3646,7 @@ async function parallelAdds(
           for (let n = 0; n < ${perWorker}; n++) {
             const number = ${worker} * ${perWorker} + n;
             const sid = '11111111-2222-4333-8444-' + number.toString(16).padStart(12, '0');
-            const response = await o.runOutboxCommand(sid, {type:'outbox_add', scope, id:'quota-'+number, mode:'prompt', message:'x'.repeat(${bytes})}, false, 'owner');
+            const response = await o.runOutboxCommand(sid, {type:'outbox_add', scope, id:'quota-'+number, mode:'prompt', message:'x'.repeat(${bytes})}, false, 'owner', { hostId: 'local' });
             const body = await response.json();
             statuses.push([response.status, body.code]);
           }
@@ -3457,7 +3682,7 @@ test(
   "concurrent processes share the 1000-row active pool across arbitrary UUIDs and known ids still receipt",
   { timeout: 30_000 },
   async () => {
-    outbox.outboxEntries(uuid(0)); // initialize the shared real SQLite store before parallel writers
+    outbox.outboxEntries(uuid(0), "local"); // initialize the shared real SQLite store before parallel writers
     outbox.outboxScope();
     const results = await parallelAdds(6, 180, 1, 29_000);
     assert.equal(results.filter(([status]) => status === 200).length, 1000);
@@ -3467,8 +3692,8 @@ test(
       ).length,
       80,
     );
-    assert.ok(globalThis.__ompOutboxStore);
-    const database = globalThis.__ompOutboxStore.db;
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const database = globalThis.__keylimeHostOutboxes!.get("local")!.store!.db;
     assert.equal(
       database
         .prepare<{ count: number }, []>(
@@ -3493,6 +3718,7 @@ test(
           { type: "outbox_remove", id: known.id },
           false,
           "owner",
+          { hostId: "local" },
         )
       ).status,
       200,
@@ -3508,7 +3734,7 @@ test(
   "concurrent processes share the 256 MiB byte pool even below the row cap",
   { timeout: 60_000 },
   async () => {
-    outbox.outboxEntries(uuid(0));
+    outbox.outboxEntries(uuid(0), "local");
     outbox.outboxScope();
     const message = "x".repeat(4 * 1024 * 1024);
     // Preload real held payloads in one transaction; subprocesses below exercise quota admission.
@@ -3522,8 +3748,8 @@ test(
       ).length,
       3,
     );
-    assert.ok(globalThis.__ompOutboxStore);
-    const database = globalThis.__ompOutboxStore.db;
+    assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+    const database = globalThis.__keylimeHostOutboxes!.get("local")!.store!.db;
     const total = database
       .prepare<{ count: number; bytes: number }, []>(
         "SELECT SUM(payload_bytes) AS bytes, COUNT(*) AS count FROM entries WHERE state != 'delivered'",
@@ -3540,72 +3766,90 @@ test(
   },
 );
 
-test("upload continuity: concurrent store upgrades preserve one completion proof", async () => {
-  const { Database } = await import("bun:sqlite");
-  const { mkdirSync } = await import("node:fs");
+test("the legacy unqualified queue and sidecars are never opened", async () => {
   const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
-  const barrier = join(process.env.PI_CODING_AGENT_DIR!, "upgrade-readers");
   mkdirSync(dir, { recursive: true });
-  mkdirSync(barrier);
-  const old = new Database(join(dir, "outbox.db"));
-  old.exec(
-    "CREATE TABLE completed_uploads (id TEXT PRIMARY KEY, owner TEXT NOT NULL, receipt TEXT NOT NULL, at INTEGER NOT NULL)",
-  );
+  const path = join(dir, "outbox.db");
+  const old = new Database(path);
+  old.exec("CREATE TABLE entries (id TEXT, session_id TEXT, state TEXT)");
+  old
+    .prepare("INSERT INTO entries VALUES (?, ?, 'held')")
+    .run("legacy-pending", uuid(41));
   old.close(true);
-  outbox.outboxScope();
-  const results = await Promise.all(
-    Array.from({ length: 4 }, async (_, index) => {
-      const script = `
-      import { Database } from "bun:sqlite";
-      import { readdirSync, writeFileSync } from "node:fs";
-      import { join } from "node:path";
-      const prepare = Database.prototype.prepare;
-      const pause = new Int32Array(new SharedArrayBuffer(4));
-      Database.prototype.prepare = function (sql, ...args) {
-        const statement = prepare.call(this, sql, ...args);
-        if (sql === "PRAGMA table_info(completed_uploads)") {
-          const all = statement.all.bind(statement);
-          const database = this;
-          statement.all = (...args) => {
-            const rows = all(...args);
-            // Widen the real read/ALTER race only when no write transaction protects the schema snapshot.
-            if (!database.inTransaction) {
-              writeFileSync(join(${JSON.stringify(barrier)}, ${JSON.stringify(String(index))}), "");
-              const deadline = Date.now() + 10000;
-              while (readdirSync(${JSON.stringify(barrier)}).length < 4 && Date.now() < deadline) Atomics.wait(pause, 0, 0, 10);
-            }
-            return rows;
-          };
-        }
-        return statement;
-      };
-      const store = await import(${JSON.stringify(new URL("./message-outbox.ts", import.meta.url).href)});
-      try {
-        const proof = store.saveCompletedUpload("original-owner", { id: "11111111-2222-4333-8444-555555555555", hostId: "host", name: "file.bin", size: 1, type: "", attached: null });
-        process.stdout.write(JSON.stringify({ proof }));
-      } finally { store.closeOutboxStore(); }
-    `;
-      const child = Bun.spawn([process.execPath, "--eval", script], {
-        env: { ...process.env },
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ]);
-      return { stdout, stderr, exitCode };
-    }),
+  const original = readFileSync(path);
+  writeFileSync(`${path}-wal`, "old wal");
+  writeFileSync(`${path}-shm`, "old shm");
+  outbox.startOutbox();
+  assert.deepEqual(outbox.outboxEntries(uuid(41), "local"), []);
+  assert.deepEqual(readFileSync(path), original);
+  assert.equal(readFileSync(`${path}-wal`, "utf8"), "old wal");
+  assert.equal(readFileSync(`${path}-shm`, "utf8"), "old shm");
+});
+
+for (const quota of ["count", "bytes"] as const) {
+  test(`an offline host at its ${quota} limit cannot block another destination or claim its entry IDs`, async () => {
+    const b = await linkHost("Destination B");
+    closeHostLink(b.id);
+    const sid = uuid(42);
+    assert.equal(
+      (await add(sid, "shared-id", "B message", "prompt", b.id)).status,
+      200,
+    );
+    await until(
+      () => outbox.outboxEntries(sid, b.id)[0]?.state === "waiting_host",
+      "destination B is offline",
+    );
+    const database = globalThis.__keylimeHostOutboxes!.get(b.id)!.store!.db;
+    // Seed the persisted byte accounting without allocating hundreds of MiB in the test.
+    database
+      .prepare(
+        `
+      WITH RECURSIVE n(i) AS (VALUES (1) UNION ALL SELECT i + 1 FROM n WHERE i < ?)
+      INSERT INTO entries (id, session_id, mode, message, owner, advisor, state, created_at, payload_bytes)
+      SELECT 'filler-' || i, 'separate-session-' || i, 'prompt', 'held', 'owner', 0, 'waiting_host', ?, ? FROM n
+    `,
+      )
+      .run(
+        quota === "count" ? 999 : 32,
+        Date.now(),
+        quota === "count" ? 8192 : 8 * 1024 * 1024,
+      );
+    const full = await add(sid, "another-b", "blocked", "prompt", b.id);
+    assert.equal(full.status, 429);
+    assert.equal((await full.json()).code, "outbox_full");
+    assert.equal((await add(sid, "shared-id", "A message")).status, 200);
+    outbox.closeOutboxStore();
+    assert.deepEqual(
+      outbox.outboxEntries(sid, "local").map(({ message }) => message),
+      ["A message"],
+    );
+    assert.deepEqual(
+      outbox.outboxEntries(sid, b.id).map(({ message }) => message),
+      ["B message"],
+    );
+  });
+}
+
+test("the server filesystem reserve refuses a new payload without evicting an accepted one", async (t) => {
+  const sid = uuid(43);
+  assert.equal((await add(sid, "already-accepted", "keep me")).status, 200);
+  const actualStatfs = fs.statfsSync;
+  const calls: string[] = [];
+  t.mock.method(fs, "statfsSync", (path: string) => {
+    calls.push(path);
+    return { ...actualStatfs(path), bsize: 4096, bavail: 1 };
+  });
+  const response = await add(sid, "disk-limit");
+  assert.equal(response.status, 429);
+  assert.equal((await response.json()).code, "outbox_full");
+  assert.deepEqual(calls, [join(process.env.PI_CODING_AGENT_DIR!, "keylime")]);
+  outbox.closeOutboxStore();
+  assert.deepEqual(
+    outbox.outboxEntries(sid, "local").map(({ message }) => message),
+    ["keep me"],
   );
-  for (const result of results) assert.equal(result.exitCode, 0, result.stderr);
-  const proofs = results.map(({ stdout }) => JSON.parse(stdout).proof);
-  assert.equal(
-    new Set(proofs).size,
-    1,
-    "every successful opener must return the same durable authority",
-  );
-  assert.match(proofs[0], /^[A-Za-z0-9_-]{43}$/);
+  t.mock.restoreAll();
+  assert.equal((await add(sid, "disk-limit")).status, 200);
 });
 
 test("upload continuity: stale receipt retirement cannot revoke a newer completion proof", async () => {
@@ -3620,21 +3864,32 @@ test("upload continuity: stale receipt retirement cannot revoke a newer completi
     attached: null,
   };
   const oldProof = outbox.saveCompletedUpload("old-owner", receipt);
-  const oldReceipt = outbox.completedUpload(id);
+  const oldReceipt = outbox.completedUpload(id, receipt.hostId);
   assert.ok(oldReceipt);
-  outbox.forgetCompletedUpload(id);
+  outbox.forgetCompletedUpload(id, undefined, receipt.hostId);
   const newProof = outbox.saveCompletedUpload("new-owner", receipt);
-  outbox.forgetCompletedUpload(id, oldReceipt);
-  const authorized = snapshotOutboxUploads([id], "renewed-cookie", {
-    [id]: newProof,
-  });
+  outbox.forgetCompletedUpload(id, oldReceipt, receipt.hostId);
+  const authorized = snapshotOutboxUploads(
+    [id],
+    "renewed-cookie",
+    {
+      [id]: newProof,
+    },
+    receipt.hostId,
+  );
   assert.equal(
     authorized[0].owner,
     "new-owner",
     "retiring old authority must leave the new grant usable",
   );
   assert.throws(
-    () => snapshotOutboxUploads([id], "renewed-cookie", { [id]: oldProof }),
+    () =>
+      snapshotOutboxUploads(
+        [id],
+        "renewed-cookie",
+        { [id]: oldProof },
+        receipt.hostId,
+      ),
     (error) =>
       error instanceof Error &&
       "code" in error &&
@@ -3645,9 +3900,9 @@ test("upload continuity: stale receipt retirement cannot revoke a newer completi
 test("closing one web wrapper preserves another live server's native delivery claim", async () => {
   const sid = "foreign-live-delivery";
   const { session, transport } = await liveSession(sid);
-  outbox.outboxEntries(sid);
-  assert.ok(globalThis.__ompOutboxStore);
-  const database = globalThis.__ompOutboxStore.db;
+  outbox.outboxEntries(sid, "local");
+  assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+  const database = globalThis.__keylimeHostOutboxes!.get("local")!.store!.db;
   database
     .prepare(
       `INSERT INTO entries
@@ -3656,11 +3911,11 @@ test("closing one web wrapper preserves another live server's native delivery cl
     )
     .run("foreign-claim", sid, sid, Date.now(), process.ppid);
   outbox.startOutbox();
-  assert.equal(outbox.outboxEntries(sid)[0].state, "delivering");
+  assert.equal(outbox.outboxEntries(sid, "local")[0].state, "delivering");
   transport.exit(0, null);
   await until(() => !session.isAlive(), "local wrapper closed");
   const entry = outbox
-    .outboxEntries(sid)
+    .outboxEntries(sid, "local")
     .find((entry) => entry.id === "foreign-claim");
   assert.ok(entry);
   assert.equal(
@@ -3671,7 +3926,9 @@ test("closing one web wrapper preserves another live server's native delivery cl
   assert.equal(entry.error, undefined);
 });
 
-test("a handoff status read reaches the live child through the real wrapper and returns its reply", async () => {
+test("a handoff status read reaches the live child through the real wrapper and returns its reply", async (t) => {
+  await linkLocalHost();
+  t.after(() => closeHostLink("local"));
   const sid = "handoff-status-passthrough";
   const { session, transport } = await liveSession(sid);
   const reply = {
@@ -3700,6 +3957,8 @@ test("a handoff status read reaches the live child through the real wrapper and 
     },
     false,
     "owner",
+    undefined,
+    { hostId: "local" },
   );
   assert.equal(
     response.status,
@@ -3734,8 +3993,10 @@ test("a handoff status read reaches the live child through the real wrapper and 
 test("an entry and its receipt are read in one snapshot, so a peer retiring the row between them cannot split them", async () => {
   const sid = uuid(63);
   await add(sid, "snapshot-row");
-  assert.ok(globalThis.__ompOutboxStore);
-  const peer = new Database(globalThis.__ompOutboxStore.path);
+  assert.ok(globalThis.__keylimeHostOutboxes?.get("local")?.store);
+  const peer = new Database(
+    globalThis.__keylimeHostOutboxes!.get("local")!.store!.path,
+  );
   const original = globalThis.__ompSessions;
   const registry = new Map();
   let lookups = 0;
@@ -3752,7 +4013,7 @@ test("an entry and its receipt are read in one snapshot, so a peer retiring the 
   };
   globalThis.__ompSessions = registry;
   try {
-    const snapshot = outbox.outboxSnapshot(sid);
+    const snapshot = outbox.outboxSnapshot(sid, "local");
     assert.deepEqual(
       snapshot.entries.map((entry) => entry.id),
       ["snapshot-row"],
@@ -3764,7 +4025,7 @@ test("an entry and its receipt are read in one snapshot, so a peer retiring the 
       "so its peer-made receipt is not part of it",
     );
     assert.ok(lookups > 2, "the peer retired the row between the two reads");
-    const next = outbox.outboxSnapshot(sid);
+    const next = outbox.outboxSnapshot(sid, "local");
     assert.deepEqual(
       [next.entries, next.settledIds, next.nativeSettledIds],
       [[], ["snapshot-row"], ["snapshot-row"]],

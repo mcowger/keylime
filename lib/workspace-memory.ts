@@ -36,13 +36,7 @@ export function workspaceKeyOf(workspace: {
   path?: string;
   projectRoot?: string;
   projectKey?: string;
-  poolId?: string;
-  projectId?: string;
 }): string {
-  if (workspace.poolId && workspace.projectId)
-    return (
-      workspace.projectKey ?? `pool:${workspace.poolId}:${workspace.projectId}`
-    );
   return (
     workspace.projectKey ??
     workspace.projectRoot ??
@@ -52,6 +46,8 @@ export function workspaceKeyOf(workspace: {
   );
 }
 
+// Callers scope the workspace with hostProjectKey before reading or writing.
+// The stored value is a session ID relative to that host, never a global ID.
 export function getLastOpenSession(
   workspace: string,
   storage: StorageLike | null = browserStorage(),

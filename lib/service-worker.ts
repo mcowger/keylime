@@ -1,6 +1,12 @@
 /// <reference lib="webworker" />
 import type { LocalOutboxEntry } from "./event-stream";
 import { isRecord } from "./type-guards";
+import { sessionKey, sessionUrl } from "./session-identity";
+import {
+  BROWSER_OUTBOX_DB,
+  BROWSER_OUTBOX_KEY_PATH,
+  groupBrowserOutbox,
+} from "./browser-outbox";
 
 const worker = self as unknown as ServiceWorkerGlobalScope;
 type SyncEvent = ExtendableEvent & { tag: string };
@@ -15,7 +21,7 @@ worker.addEventListener("activate", (event) =>
 
 worker.addEventListener("message", (event) => {
   if (event.data?.type === "omp-outbox-capability")
-    event.ports[0]?.postMessage({ type: "omp-outbox-capability", version: 2 });
+    event.ports[0]?.postMessage({ type: "omp-outbox-capability", version: 3 });
 });
 
 worker.addEventListener("push", (event) => {
@@ -65,7 +71,15 @@ worker.addEventListener("push", (event) => {
 
 worker.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const { url = "/", sessionId = "" } = event.notification.data || {};
+  const target = new URL(
+    event.notification.data?.url || "/",
+    worker.location.origin,
+  );
+  const trusted =
+    target.origin === worker.location.origin && target.pathname === "/";
+  const hostId = trusted ? target.searchParams.get("hostId") : null;
+  const sessionId = trusted ? target.searchParams.get("session") : null;
+  const url = hostId && sessionId ? `/${target.search}` : "/";
   event.waitUntil(
     (async () => {
       const windows = await worker.clients.matchAll({
@@ -83,8 +97,12 @@ worker.addEventListener("notificationclick", (event) => {
           // other page (the sign-in screen after the cookie expired) loads the
           // session URL, which the sign-in screen carries through as `next`.
           if (new URL(client.url).pathname === "/") {
-            if (sessionId)
-              client.postMessage({ type: "omp-open-session", sessionId });
+            if (hostId && sessionId)
+              client.postMessage({
+                type: "omp-open-session",
+                sessionId,
+                hostId,
+              });
           } else {
             await client.navigate(url);
           }
@@ -110,7 +128,11 @@ const done = <T>(request: IDBRequest<T>) =>
     request.onerror = () => reject(request.error);
   });
 
-function markOutboxFailed(db: IDBDatabase, id: string, error: string) {
+function markOutboxFailed(
+  db: IDBDatabase,
+  { hostId, sessionId, id }: LocalOutboxEntry,
+  error: string,
+) {
   return new Promise<void>((resolve, reject) => {
     const transaction = db.transaction("entries", "readwrite");
     transaction.oncomplete = () => resolve();
@@ -119,7 +141,7 @@ function markOutboxFailed(db: IDBDatabase, id: string, error: string) {
         transaction.error || new Error("Could not save the outbox failure"),
       );
     const store = transaction.objectStore("entries");
-    const request = store.get(id);
+    const request = store.get([hostId, sessionId, id]);
     request.onsuccess = () => {
       const entry = request.result;
       // Another sender may have accepted and deleted it while this request was in flight.
@@ -133,11 +155,10 @@ function markOutboxFailed(db: IDBDatabase, id: string, error: string) {
 /** Remove the accepted local add and its same-session, exact-intent retry lineage atomically. */
 function deleteOutboxEntry(
   db: IDBDatabase,
-  id: string,
   replaces: string | undefined,
-  sessionId: string,
   intent: LocalOutboxEntry,
 ) {
+  const { hostId, sessionId, id } = intent;
   return new Promise<void>((resolve, reject) => {
     const transaction = db.transaction("entries", "readwrite");
     transaction.oncomplete = () => resolve();
@@ -148,7 +169,9 @@ function deleteOutboxEntry(
     const store = transaction.objectStore("entries");
     const request = store.getAll();
     request.onsuccess = () => {
-      const entries: LocalOutboxEntry[] = request.result;
+      const entries = (request.result as LocalOutboxEntry[]).filter(
+        (entry) => entry.hostId === hostId && entry.sessionId === sessionId,
+      );
       const byId = new Map(entries.map((entry) => [entry.id, entry]));
       let lineageRoot = replaces;
       if (lineageRoot === undefined && intent.replaces !== undefined) {
@@ -165,7 +188,7 @@ function deleteOutboxEntry(
       for (const entry of entries) {
         if (entry.sessionId !== sessionId) continue;
         if (entry.id === id) {
-          store.delete(entry.id);
+          store.delete([hostId, sessionId, entry.id]);
           continue;
         }
         if (
@@ -175,7 +198,7 @@ function deleteOutboxEntry(
             replacementRoot(entry, byId) !== lineageRoot)
         )
           continue;
-        store.delete(entry.id);
+        store.delete([hostId, sessionId, entry.id]);
       }
     };
   });
@@ -260,11 +283,12 @@ function readOutboxForSync(db: IDBDatabase) {
             );
       request.onsuccess = () => {
         entries = request.result;
-        const byId = new Map(entries.map((entry) => [entry.id, entry]));
+        const groups = groupBrowserOutbox(entries);
         for (let index = 0; index < entries.length; index++) {
           const entry = entries[index];
           if (entry.state !== "sending" || entry.replaces === undefined)
             continue;
+          const byId = groups.get(sessionKey(entry.sessionId, entry.hostId))!;
           const root = replacementRoot(entry, byId);
           if (root === null) {
             const failed: LocalOutboxEntry = {
@@ -291,7 +315,7 @@ function readOutboxForSync(db: IDBDatabase) {
 
 function acceptedOutboxEntry(
   reply: unknown,
-  id: string,
+  { id, hostId }: LocalOutboxEntry,
 ): { replaces?: string } | null {
   if (!isRecord(reply) || !isRecord(reply.data) || !isRecord(reply.data.entry))
     return null;
@@ -300,6 +324,7 @@ function acceptedOutboxEntry(
     entry?.id === id &&
     typeof entry.sessionId === "string" &&
     entry.sessionId.length > 0 &&
+    entry.hostId === hostId &&
     typeof entry.mode === "string" &&
     ["prompt", "followUp", "steer"].includes(entry.mode) &&
     typeof entry.state === "string" &&
@@ -335,9 +360,11 @@ function acceptedOutboxEntry(
 }
 
 async function flushOutbox() {
-  const open = indexedDB.open("keylime-outbox", 1);
+  const open = indexedDB.open(BROWSER_OUTBOX_DB, 1);
   open.onupgradeneeded = () =>
-    open.result.createObjectStore("entries", { keyPath: "id" });
+    open.result.createObjectStore("entries", {
+      keyPath: BROWSER_OUTBOX_KEY_PATH,
+    });
   const db = await done(open);
   try {
     const entries = await readOutboxForSync(db);
@@ -345,13 +372,17 @@ async function flushOutbox() {
     entries.sort(compareOutbox);
     const waiting = new Set<string>();
     for (const initial of entries) {
-      const { id, sessionId } = initial;
-      if (initial.state !== "sending" || waiting.has(sessionId)) continue;
+      const { id, sessionId, hostId } = initial;
+      const key = sessionKey(sessionId, hostId);
+      if (initial.state !== "sending" || waiting.has(key)) continue;
       // A running worker may have added or accepted an entry since our snapshot: only the shared session head can go.
       const current = await readOutboxForSync(db);
       const head = current
         .filter(
-          (entry) => entry.sessionId === sessionId && entry.state === "sending",
+          (entry) =>
+            entry.hostId === hostId &&
+            entry.sessionId === sessionId &&
+            entry.state === "sending",
         )
         .sort(compareOutbox)[0];
       if (!head || head.id !== id) continue;
@@ -374,7 +405,7 @@ async function flushOutbox() {
             ? "This message has no saved installation or sign-in scope and cannot be sent."
             : null;
       if (stale) {
-        await markOutboxFailed(db, id, stale);
+        await markOutboxFailed(db, head, stale);
         continue;
       }
       let status = 0;
@@ -400,7 +431,10 @@ async function flushOutbox() {
           40_000 + Math.ceil(body.length / 2),
         );
         const response = await fetch(
-          `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
+          sessionUrl(
+            `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
+            hostId,
+          ),
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -413,7 +447,7 @@ async function flushOutbox() {
         });
         if (isRecord(reply) && typeof reply.error === "string")
           error = reply.error;
-        accepted = acceptedOutboxEntry(reply, id);
+        accepted = acceptedOutboxEntry(reply, head);
         status =
           response.status >= 200 && response.status < 300 && !accepted
             ? 0
@@ -428,7 +462,7 @@ async function flushOutbox() {
           accepted && accepted.replaces === replaces
             ? accepted.replaces
             : undefined;
-        await deleteOutboxEntry(db, id, confirmedReplaces, sessionId, head);
+        await deleteOutboxEntry(db, confirmedReplaces, head);
       } else if (
         status === 0 ||
         status === 401 ||
@@ -436,8 +470,8 @@ async function flushOutbox() {
         status === 429 ||
         status >= 500
       )
-        waiting.add(sessionId);
-      else await markOutboxFailed(db, id, error || `HTTP ${status}`);
+        waiting.add(key);
+      else await markOutboxFailed(db, head, error || `HTTP ${status}`);
     }
     if (waiting.size > 0) throw new Error("omp-outbox: entries left to send");
   } finally {

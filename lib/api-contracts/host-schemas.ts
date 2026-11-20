@@ -99,26 +99,6 @@ export const HostUriSchemeSchema = Type.Object(
   },
 );
 export type HostUriScheme = Static<typeof HostUriSchemeSchema>;
-export const HostCapacitySchema = Type.Object(
-  {
-    effectiveCpus: Type.Number({
-      description: "Effective CPU capacity available to the host.",
-    }),
-    load1: Type.Number(),
-    busyFraction: Type.Number(),
-    stealFraction: Type.Number(),
-    availableMemoryBytes: Type.Number({
-      description: "Available memory in bytes.",
-    }),
-    activeSessions: SafeCount,
-  },
-  {
-    title: "HostCapacity",
-    description:
-      "Advisory host resource sample; active sessions are active turns.",
-  },
-);
-export type HostCapacity = Static<typeof HostCapacitySchema>;
 export const TerminalEventSchema = Type.Union(
   [
     Type.Object({
@@ -359,9 +339,6 @@ export const UpMessageSchema = Type.Union(
         v: Type.Number(),
         ompVersion: Type.Union([Type.String(), Type.Null()]),
         keylimeVersion: Type.Optional(Type.String()),
-        link: Type.Optional(
-          Type.Object({ id: Type.String(), notifier: Type.Boolean() }),
-        ),
         workspaceOps: Type.Optional(Type.Array(Type.String())),
         canStageArtifact: Type.Optional(
           Type.Boolean({
@@ -370,10 +347,18 @@ export const UpMessageSchema = Type.Union(
           }),
         ),
         canActivateArtifact: Type.Optional(
-          Type.Boolean({ description: "This standalone daemon accepts staged binary activation." }),
+          Type.Boolean({
+            description:
+              "This standalone daemon accepts staged binary activation.",
+          }),
         ),
         platform: Type.String(),
-        arch: Type.Optional(Type.String({ description: "CPU architecture reported by a daemon supporting paired release deployment." })),
+        arch: Type.Optional(
+          Type.String({
+            description:
+              "CPU architecture reported by a daemon supporting paired release deployment.",
+          }),
+        ),
         home: Type.String(),
         autoApproveExtension: Type.Boolean(),
         ack: SafeCount,
@@ -453,13 +438,6 @@ export const UpMessageSchema = Type.Union(
       },
     ),
     Type.Object(
-      { type: Type.Literal("notifier"), seq: SafeCount, on: Type.Boolean() },
-      {
-        title: "HostLinkNotifier",
-        description: "Notifier election for this link changed.",
-      },
-    ),
-    Type.Object(
       { type: Type.Literal("sessions_changed"), seq: SafeCount },
       {
         title: "HostLinkSessionsChanged",
@@ -494,14 +472,6 @@ export const UpMessageSchema = Type.Union(
         title: "HostLinkStats",
         description:
           "Advisory link samples: the receiver drops and counts invalid or excess samples rather than rejecting the line. invalid is decoder-only, not a sender field.",
-      },
-    ),
-    Type.Object(
-      { type: Type.Literal("capacity"), sample: HostCapacitySchema },
-      {
-        title: "HostLinkCapacity",
-        description:
-          "Unsequenced advisory capacity sample, not retained for replay.",
       },
     ),
     Type.Object(

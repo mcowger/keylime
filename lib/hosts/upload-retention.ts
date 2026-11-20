@@ -1,18 +1,8 @@
-// Retention of sent uploads, the daemon's side (docs/specs/2026-11-02-file-uploads-design.md, U6): main sends the
-// `uploadRetentionDays` setting (op `setUploadRetention`), the daemon keeps it in `<agent dir>/keylime/upload-retention.json`
-// and deletes files older than that from every session's `local://uploads/`, at start and every 24 h.
-// Loaded by the daemon through Bun's native TypeScript runtime: no `@/` imports.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+// The daemon deletes expired sent uploads from its own active and archived sessions.
 import { lstat, readdir, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import {
-  getAgentDir,
-  getArchivedSessionsDir,
-  getSessionsDir,
-} from "../omp/paths";
-import { isRecord } from "../type-guards";
-import { isUploadRetentionDays } from "../upload-limits";
-import { HostOpError } from "./link-protocol";
+import { join } from "node:path";
+import { getArchivedSessionsDir, getSessionsDir } from "../omp/paths";
+import { loadHostSettings } from "../web-settings";
 import { UPLOADS_LOCAL_DIR, withUploadNameLock } from "./uploads";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -122,21 +112,7 @@ export async function sweepSentUploads(
   }
 }
 
-/** The stored days, or undefined when nothing valid is stored. */
-function readStored(file: string): number | null | undefined {
-  try {
-    const stored: unknown = JSON.parse(readFileSync(file, "utf8"));
-    if (isRecord(stored) && isUploadRetentionDays(stored.days))
-      return stored.days;
-  } catch {
-    // Absent or unreadable: no sweep until main sends the setting.
-  }
-  return undefined;
-}
-
 export class UploadRetention {
-  /** undefined: main has not said yet. null: keep for ever. */
-  private days: number | null | undefined;
   private timer: NodeJS.Timeout | undefined;
   private active = 0;
   busy(): boolean {
@@ -144,15 +120,10 @@ export class UploadRetention {
   }
 
   constructor(
-    private readonly file: string = join(
-      getAgentDir(),
-      "keylime",
-      "upload-retention.json",
-    ),
+    private readonly readDays: () => number | null = () =>
+      loadHostSettings().uploadRetentionDays,
     private readonly roots: RetentionRoots = defaultRoots(),
-  ) {
-    this.days = readStored(file);
-  }
+  ) {}
 
   /** Sweep with the stored setting, then again every 24 h (a timer that never keeps the process alive). */
   start(): Promise<void> {
@@ -169,34 +140,12 @@ export class UploadRetention {
   /** A sweep is idempotent and skips entries that vanish under it, so two at once are harmless. It reads the setting
    * before each delete, so one still running after a change follows the new value. */
   async sweep(now = Date.now()): Promise<void> {
-    if (typeof this.days !== "number") return;
+    if (this.readDays() === null) return;
     this.active++;
     try {
-      await sweepSentUploads(
-        () => (typeof this.days === "number" ? this.days : null),
-        now,
-        this.roots,
-      );
+      await sweepSentUploads(this.readDays, now, this.roots);
     } finally {
       this.active--;
     }
-  }
-
-  /** Op setUploadRetention: keep `days` (null: for ever), then sweep without holding up the answer. The same value as
-   * the last one does nothing, so a daemon that links over and over does not walk every session each time. The file is
-   * not secret, and one that is corrupt reads as none (main sends the value again at every hello): a plain write. */
-  set(days: unknown): null {
-    if (!isUploadRetentionDays(days))
-      throw new HostOpError(
-        400,
-        "invalid_request",
-        "days must be a whole number from 1 to 3650, or null",
-      );
-    if (days === this.days) return null;
-    mkdirSync(dirname(this.file), { recursive: true });
-    writeFileSync(this.file, `${JSON.stringify({ days })}\n`);
-    this.days = days;
-    void this.sweep();
-    return null;
   }
 }

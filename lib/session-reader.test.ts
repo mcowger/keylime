@@ -1636,13 +1636,15 @@ test(
         await import(`./session-watcher.ts?fresh=${isolatedFresh++}`);
       t.mock.timers.enable({ apis: ["setTimeout"] });
 
-      const notified: string[][] = [];
+      const notified: { sessionId: string; hostId: string }[][] = [];
       const { promise: notification, resolve: resolveNotification } =
         Promise.withResolvers<void>();
-      const unsubscribe = subscribeKnownChanges((ids: string[]) => {
-        notified.push(ids);
-        resolveNotification();
-      });
+      const unsubscribe = subscribeKnownChanges(
+        (sessions: { sessionId: string; hostId: string }[]) => {
+          notified.push(sessions);
+          resolveNotification();
+        },
+      );
       try {
         // Both appends are real; only native scheduling and filenames are
         // controlled. No cache may drop before the debounce window expires.
@@ -1671,7 +1673,7 @@ test(
         await notification;
         assert.deepEqual(
           notified,
-          [["watch-a"]],
+          [[{ sessionId: "watch-a", hostId: "local" }]],
           "both known-path events coalesce into one targeted notification",
         );
 
@@ -1724,7 +1726,9 @@ test(
       const fixture = readFileSync(filePath);
       const notifications = new EventEmitter();
       let nativeReady = false;
-      const unsubscribe = subscribeSessionFileChanges((ids) => {
+      const unsubscribe = subscribeSessionFileChanges((sessions) => {
+        assert.ok(sessions.every(({ hostId }) => hostId === "local"));
+        const ids = sessions.map(({ sessionId }) => sessionId);
         if (ids.includes("watch-native")) nativeReady = true;
         notifications.emit("change", ids);
       });

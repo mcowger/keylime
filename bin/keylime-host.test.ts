@@ -367,7 +367,7 @@ test("worker maintenance startup is drained before linking and can be explicitly
   assert.equal(JSON.parse(resumed.stdout).drained, false);
 });
 
-test("`keylime host login --add` and logout change only the selected URL without argv tokens", async (t) => {
+test("host login replaces the controller and logout removes only the matching login", async (t) => {
   const scratch = mkdtempSync(join(tmpdir(), "keylime-host-multi-login-"));
   const agentDir = join(scratch, "agent");
   const file = join(agentDir, "keylime", "host.json");
@@ -379,7 +379,7 @@ test("`keylime host login --add` and logout change only the selected URL without
   const staging = { url: "http://127.0.0.1:40000", token: "staging-secret" };
   writeFileSync(file, JSON.stringify(primary));
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
-  const run = async (args: string[], input = "") => {
+  const run = async (args: string[], input = "", expected = 0) => {
     assert.ok(!args.includes(staging.token));
     const child = spawn(process.execPath, [bin, "host", ...args], {
       env: { ...process.env, HOME: scratch, PI_CODING_AGENT_DIR: agentDir },
@@ -402,23 +402,15 @@ test("`keylime host login --add` and logout change only the selected URL without
       closed,
       sleep(10_000, "timeout", { ref: false }),
     ]);
-    assert.equal(code, 0, log);
+    assert.equal(code, expected, log);
     assert.ok(!log.includes(staging.token));
     assert.ok(!log.includes(primary.token));
   };
-  await run(["login", "--add", "--url", staging.url], `${staging.token}\n`);
-  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {
-    ...primary,
-    links: [primary, staging],
-  });
-  await run(["logout", "--url", `${staging.url}/`]);
-  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {
-    ...primary,
-    links: [primary],
-  });
+  await run(["login", "--add", "--url", staging.url], "", 2);
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), primary);
+  await run(["login", "--url", staging.url], `${staging.token}\n`);
   await run(["logout", "--url", primary.url]);
-  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {
-    ...primary,
-    links: [],
-  });
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), staging);
+  await run(["logout", "--url", `${staging.url}/`]);
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {});
 });

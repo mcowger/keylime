@@ -39,16 +39,17 @@ import {
   DEFAULT_COMPACTION_METHOD_ORDER,
   type CompactionMethod,
 } from "@/lib/compaction-methods";
-import {
-  formatAgentEnvText,
-  parseAgentEnvText,
-  type AgentEnvErrorLabels,
-} from "@/lib/omp/agent-env-policy";
+import type {
+  BrowserSettings,
+  HostSettings,
+} from "@/lib/api-contracts/configuration-models";
 import { isRecord } from "@/lib/type-guards";
 import { Alert } from "@/components/ui/field";
 import { toast } from "@/components/ui/toast";
 import { useI18n } from "@/lib/i18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useHostRows } from "@/hooks/useHostRows";
+import { hostName, hostStatusText } from "./host-status";
 import {
   SettingsTabs,
   type SettingsTab,
@@ -852,7 +853,7 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     fallbackSection: "System",
     fallbackLabel: "Resume running sessions after a restart",
     fallbackDesc:
-      'When key lime restarts while agents are working, restart those sessions and tell each agent: "Session interrupted and resumed. Continue as you would have done without the interruption." Work in progress at the moment of the restart, such as a running command, is lost.',
+      "Resume interrupted sessions when this host's daemon restarts. In-flight work, such as a running command, may be lost.",
   },
   {
     id: "agent-tools-cross-session",
@@ -863,7 +864,7 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     fallbackSection: "System",
     fallbackLabel: "Agent tools (cross-session)",
     fallbackDesc:
-      "Allow agents to call list_sessions, new_session and send_to_session to reach other key lime sessions, even with no browser tab open. Delivered messages are prefixed with the sending session's ID.",
+      "Let agents list, start, and message other sessions on this host, even with no browser open. Applies to sessions started or reconnected after saving.",
   },
   {
     id: "upload-retention",
@@ -874,19 +875,7 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     fallbackSection: "System",
     fallbackLabel: "Delete sent uploads after",
     fallbackDesc:
-      "Files attached As file are deleted from each session's local://uploads folder on every host, archived sessions included, once they are this old. Never keeps them for ever.",
-  },
-  {
-    id: "agent-env",
-    tab: "system",
-    sectionKey: "settingsConfig.systemUpdates",
-    labelKey: "settingsConfig.agentEnv",
-    descKey: "settingsConfig.agentEnvDesc",
-    fallbackSection: "System",
-    fallbackLabel: "Agent environment variables",
-    fallbackDesc:
-      "Extra environment variables passed to the omp process, one KEY=VALUE per line. Applied to sessions started after saving.",
-    scope: "UI",
+      "Delete sent uploads from active and archived sessions on this host after this many days. Never keeps them indefinitely.",
   },
   // Notifications
   {
@@ -1077,28 +1066,26 @@ function SearchResultsList({
 }
 
 /** Server-side keylime setting (lib/web-settings.ts), loaded on mount. */
-function AutoResumeSessionsSetting() {
+function AutoResumeSessionsSetting({ endpoint }: { endpoint: string }) {
   const { t } = useI18n();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch("/api/web-settings")
+    fetch(endpoint)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { autoResumeSessions?: boolean } | null) => {
-        if (alive) setEnabled(data?.autoResumeSessions === true);
+      .then((data: HostSettings | null) => {
+        if (alive && data) setEnabled(data.autoResumeSessions);
       })
-      .catch(() => {
-        if (alive) setEnabled(false);
-      });
+      .catch(() => {});
     return () => {
       alive = false;
     };
-  }, []);
+  }, [endpoint]);
   const change = async (next: boolean) => {
     const previous = enabled;
     setEnabled(next);
     try {
-      const res = await fetch("/api/web-settings", {
+      const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ autoResumeSessions: next }),
@@ -1127,30 +1114,27 @@ function AutoResumeSessionsSetting() {
   );
 }
 
-/** Server-side keylime setting (issue #275): cross-session agent tools.
- * Off by default; mirrors AutoResumeSessionsSetting above. */
-function AgentToolsSetting() {
+/** Session collaboration policy for the selected host. */
+function AgentToolsSetting({ endpoint }: { endpoint: string }) {
   const { t } = useI18n();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch("/api/web-settings")
+    fetch(endpoint)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { agentToolsEnabled?: boolean } | null) => {
-        if (alive) setEnabled(data?.agentToolsEnabled === true);
+      .then((data: HostSettings | null) => {
+        if (alive && data) setEnabled(data.agentToolsEnabled);
       })
-      .catch(() => {
-        if (alive) setEnabled(false);
-      });
+      .catch(() => {});
     return () => {
       alive = false;
     };
-  }, []);
+  }, [endpoint]);
   const change = async (next: boolean) => {
     const previous = enabled;
     setEnabled(next);
     try {
-      const res = await fetch("/api/web-settings", {
+      const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agentToolsEnabled: next }),
@@ -1181,8 +1165,8 @@ function AgentToolsSetting() {
 
 const UPLOAD_RETENTION_CHOICES: readonly (number | null)[] = [null, 7, 30, 90];
 
-/** Server-side keylime setting (lib/web-settings.ts): every host's daemon applies it to its own sessions' uploads. */
-function UploadRetentionSetting() {
+/** The selected daemon applies this retention to its own sessions. */
+function UploadRetentionSetting({ endpoint }: { endpoint: string }) {
   const { t, tn } = useI18n();
   // undefined until loaded; null is "Never".
   const [days, setDays] = useState<number | null | undefined>(undefined);
@@ -1190,9 +1174,9 @@ function UploadRetentionSetting() {
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     let alive = true;
-    fetch("/api/web-settings")
+    fetch(endpoint)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { uploadRetentionDays?: number | null } | null) => {
+      .then((data: HostSettings | null) => {
         if (alive && data && data.uploadRetentionDays !== undefined)
           setDays(data.uploadRetentionDays);
       })
@@ -1200,13 +1184,13 @@ function UploadRetentionSetting() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [endpoint]);
   const change = async (next: number | null) => {
     const previous = days;
     setDays(next);
     setSaving(true);
     try {
-      const res = await fetch("/api/web-settings", {
+      const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uploadRetentionDays: next }),
@@ -1254,6 +1238,42 @@ function UploadRetentionSetting() {
   );
 }
 
+function HostPolicySettings({ hostId }: { hostId?: string }) {
+  const { t } = useI18n();
+  const { hosts } = useHostRows();
+  const [selected, setSelected] = useState(hostId ?? "local");
+  const endpoint = `/api/web-settings?hostId=${encodeURIComponent(selected)}`;
+  return (
+    <>
+      {hosts && (
+        <NativeSetting
+          label={t("settingsConfig.policyHost")}
+          description={t("settingsConfig.policyHostDesc")}
+        >
+          <ThemedSelect
+            style={nativeSelectStyle}
+            value={selected}
+            onChange={setSelected}
+            options={hosts.map((host) => ({
+              value: host.id,
+              label: `${hostName(t, host)} (${hostStatusText(t, host)})`,
+            }))}
+          />
+        </NativeSetting>
+      )}
+      <AutoResumeSessionsSetting
+        key={`resume:${selected}`}
+        endpoint={endpoint}
+      />
+      <AgentToolsSetting key={`tools:${selected}`} endpoint={endpoint} />
+      <UploadRetentionSetting
+        key={`retention:${selected}`}
+        endpoint={endpoint}
+      />
+    </>
+  );
+}
+
 const BROWSER_TRANSPORT_LABELS: Record<BrowserTransport, string> = {
   sse: "settingsConfig.browserTransportSse",
   ws: "settingsConfig.browserTransportWs",
@@ -1267,9 +1287,9 @@ function BrowserTransportSetting() {
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     let alive = true;
-    fetch("/api/web-settings")
+    fetch("/api/web-settings?scope=browser")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { browserTransport?: BrowserTransport } | null) => {
+      .then((data: BrowserSettings | null) => {
         if (alive) setTransport(data?.browserTransport ?? "ws");
       })
       .catch(() => {
@@ -1285,7 +1305,7 @@ function BrowserTransportSetting() {
     setTransport(next);
     setSaving(true);
     try {
-      const res = await fetch("/api/web-settings", {
+      const res = await fetch("/api/web-settings?scope=browser", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ browserTransport: next }),
@@ -1321,202 +1341,6 @@ function BrowserTransportSetting() {
           label: t(BROWSER_TRANSPORT_LABELS[mode]),
         }))}
       />
-    </NativeSetting>
-  );
-}
-
-/** Server-side keylime setting (issue #104): KEY=VALUE text injected into the
- * `omp` child process. Parsing/validation lives in lib/omp/agent-env.ts; this only
- * feeds it localized messages and renders the result. */
-function AgentEnvSetting() {
-  const { t } = useI18n();
-  const [text, setText] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const errorLabels = useMemo<AgentEnvErrorLabels>(
-    () => ({
-      missingSeparator: (line) =>
-        t("settingsConfig.agentEnvErrMissingSeparator", { line }),
-      emptyName: (line) => t("settingsConfig.agentEnvErrEmptyName", { line }),
-      invalidName: (line, name) =>
-        t("settingsConfig.agentEnvErrInvalidName", { line, name }),
-      deniedName: (line, name) =>
-        t("settingsConfig.agentEnvErrDenied", { line, name }),
-    }),
-    [t],
-  );
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/web-settings")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { agentEnv?: Record<string, string> } | null) => {
-        if (!alive) return;
-        setText(
-          formatAgentEnvText(isRecord(data?.agentEnv) ? data.agentEnv : {}),
-        );
-        setLoaded(true);
-      })
-      .catch(() => {
-        if (alive) setLoaded(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const { errors } = useMemo(
-    () => parseAgentEnvText(text, errorLabels),
-    [text, errorLabels],
-  );
-
-  const save = async () => {
-    if (errors.length > 0) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/web-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentEnv: text }),
-      });
-      const data = (await res.json().catch(() => null)) as {
-        agentEnv?: Record<string, string>;
-        errors?: string[];
-      } | null;
-      if (!res.ok) {
-        throw new Error(
-          data?.errors?.length
-            ? data.errors.join("\n")
-            : data &&
-                typeof data === "object" &&
-                "error" in data &&
-                typeof data.error === "string"
-              ? data.error
-              : `HTTP ${res.status}`,
-        );
-      }
-      // Re-render from the server's canonical form so the textarea matches what is stored.
-      setText(
-        formatAgentEnvText(isRecord(data?.agentEnv) ? data.agentEnv : {}),
-      );
-      toast.success(t("settingsConfig.agentEnvSaved"));
-    } catch (error) {
-      toast.error(
-        t("settingsConfig.agentEnvSaveFailed"),
-        error instanceof Error ? error.message : String(error),
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <NativeSetting
-      searchId="agent-env"
-      scope="UI"
-      label={t("settingsConfig.agentEnv")}
-      description={t("settingsConfig.agentEnvDesc")}
-    >
-      <div
-        className="settings-card-block"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          width: "100%",
-          minWidth: 0,
-        }}
-      >
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          spellCheck={false}
-          rows={5}
-          disabled={!loaded}
-          placeholder={t("settingsConfig.agentEnvPlaceholder")}
-          aria-label={t("settingsConfig.agentEnv")}
-          aria-invalid={errors.length > 0 || undefined}
-          aria-describedby="agent-env-note"
-          style={{
-            width: "100%",
-            boxSizing: "border-box",
-            padding: "7px 9px",
-            border: `1px solid ${errors.length > 0 ? "var(--status-error)" : "var(--border)"}`,
-            borderRadius: "var(--radius-control)",
-            background: "var(--bg)",
-            color: "var(--text)",
-            fontFamily: "var(--font-mono)",
-            fontSize: 12,
-            lineHeight: 1.45,
-            minHeight: 96,
-            fieldSizing: "content",
-            resize: "vertical",
-            outline: "none",
-          }}
-        />
-        {errors.length > 0 && (
-          <ul
-            role="alert"
-            aria-label={t("settingsConfig.agentEnvErrors")}
-            style={{
-              margin: 0,
-              padding: 0,
-              listStyle: "none",
-              display: "flex",
-              flexDirection: "column",
-              gap: 2,
-            }}
-          >
-            {errors.map((error) => (
-              <li
-                key={error}
-                style={{
-                  fontSize: 11,
-                  color: "var(--status-error)",
-                  lineHeight: 1.4,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {error}
-              </li>
-            ))}
-          </ul>
-        )}
-        <p
-          id="agent-env-note"
-          style={{
-            margin: 0,
-            fontSize: 11,
-            color: "var(--text-dim)",
-            lineHeight: 1.45,
-          }}
-        >
-          {t("settingsConfig.agentEnvNote")}
-        </p>
-        <div>
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={saving || !loaded || errors.length > 0}
-            style={{
-              padding: "6px 14px",
-              border: "1px solid var(--accent-strong)",
-              borderRadius: "var(--radius-control)",
-              background: "var(--accent-strong)",
-              color: "var(--on-accent)",
-              cursor: saving || errors.length > 0 ? "not-allowed" : "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              opacity: saving || !loaded || errors.length > 0 ? 0.6 : 1,
-            }}
-          >
-            {saving
-              ? t("settingsConfig.agentEnvSaving")
-              : t("settingsConfig.agentEnvSave")}
-          </button>
-        </div>
-      </div>
     </NativeSetting>
   );
 }
@@ -1995,6 +1819,7 @@ export function SettingsConfig({
   onOpenUrlAutomaticallyChange,
   cwd,
   remoteHost,
+  hostId,
   sessionId,
   onModelsSaved,
   onPluginsReloaded,
@@ -2024,6 +1849,7 @@ export function SettingsConfig({
   cwd: string | null;
   /** Remote workspace paths do not exist on the web server's filesystem. */
   remoteHost: boolean;
+  hostId?: string;
   sessionId: string | null;
   onModelsSaved: () => void;
   onPluginsReloaded: () => void;
@@ -4050,8 +3876,9 @@ export function SettingsConfig({
                           </NativeSetting>
                         </div>
                       )}
-                      {(!remoteHost || sessionId) ? (
+                      {!remoteHost || sessionId ? (
                         <McpConfig
+                          hostId={hostId}
                           cwd={remoteHost ? null : cwd}
                           sessionId={sessionId}
                           liveOnly={remoteHost}
@@ -4321,13 +4148,7 @@ export function SettingsConfig({
                         </p>
                       </div>
 
-                      <AutoResumeSessionsSetting />
-
-                      <AgentToolsSetting />
-
-                      <UploadRetentionSetting />
-
-                      {!remoteHost && <AgentEnvSetting />}
+                      <HostPolicySettings key={hostId} hostId={hostId} />
                     </div>
                   )}
                 </>

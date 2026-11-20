@@ -10,7 +10,7 @@ import { LOCAL_HOST_ID } from "@/lib/hosts/registry";
 /**
  * @apiContract exportSession
  * @apiUsage Render persisted session history as self-contained HTML using omp on the owning host.
- * @apiInputs id identifies the session; inline=1 requests inline disposition only for the local host.
+ * @apiInputs id identifies the session; inline=1 requests inline disposition only for the local host. Optional hostId selects the host; omission selects local.
  * @apiInvariants Remote host HTML is always an attachment, even when inline was requested. The result reflects the host's export at request time.
  * @apiEffects Runs the host export operation and returns HTML; it does not mutate the session.
  * @apiRecovery Retry the read when the host and its omp binary are available; restart an interrupted download.
@@ -20,10 +20,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
   const inline = new URL(req.url).searchParams.get("inline") === "1";
 
   try {
-    const resolved = await resolveSessionHostOr404(id);
+    const resolved = await resolveSessionHostOr404(id, hostId);
     if ("response" in resolved) return resolved.response;
     const result = await resolved.host.sessionOps.exportSession(id);
     if (!result.ok) return opErrorResponse(result);

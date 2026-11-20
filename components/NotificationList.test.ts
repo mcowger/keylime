@@ -60,6 +60,7 @@ function mount() {
   act(() => {
     notificationHistory.add({
       type: "error",
+      hostId: "remote",
       sessionId: "n1-session",
       sessionName: "Agent finished",
       detail: "A long description",
@@ -202,9 +203,9 @@ test("the click ending a drag is swallowed; taps and keyboard clicks still reach
 });
 
 test("clicking or pressing Enter on a row marks it read and opens its session, but not from its controls", () => {
-  const opened: string[] = [];
+  const opened: Array<{ sessionId: string; hostId: string }> = [];
   const onOpen = (event: Event) =>
-    opened.push((event as CustomEvent<string>).detail);
+    opened.push((event as CustomEvent<(typeof opened)[number]>).detail);
   window.addEventListener(OPEN_SESSION_EVENT, onOpen);
   try {
     const { row } = mount();
@@ -219,7 +220,7 @@ test("clicking or pressing Enter on a row marks it read and opens its session, b
         );
       });
     act(() => row().querySelector<HTMLElement>(".display-heading")!.click());
-    assert.deepEqual(opened, ["n1-session"]);
+    assert.deepEqual(opened, [{ sessionId: "n1-session", hostId: "remote" }]);
     assert.equal(notificationHistory.get()[0].read, true);
     assert.equal(row().tabIndex, 0);
     assert.equal(row().style.cursor, "pointer");
@@ -262,9 +263,9 @@ test("a row shows the event in the viewer's language, and its session name as th
 });
 
 test("pressing Space on a row opens its session, like Enter", () => {
-  const opened: string[] = [];
+  const opened: Array<{ sessionId: string; hostId: string }> = [];
   const onOpen = (event: Event) =>
-    opened.push((event as CustomEvent<string>).detail);
+    opened.push((event as CustomEvent<(typeof opened)[number]>).detail);
   window.addEventListener(OPEN_SESSION_EVENT, onOpen);
   try {
     const { row } = mount();
@@ -277,7 +278,7 @@ test("pressing Space on a row opens its session, like Enter", () => {
         }),
       );
     });
-    assert.deepEqual(opened, ["n1-session"]);
+    assert.deepEqual(opened, [{ sessionId: "n1-session", hostId: "remote" }]);
     assert.equal(notificationHistory.get()[0].read, true);
   } finally {
     window.removeEventListener(OPEN_SESSION_EVENT, onOpen);
@@ -288,6 +289,7 @@ test("an entry whose session no longer exists still renders and opens by id", ()
   act(() => {
     notificationHistory.add({
       type: "error",
+      hostId: "remote",
       sessionId: "gone-session",
       sessionName: null,
     });
@@ -302,17 +304,18 @@ test("an entry whose session no longer exists still renders and opens by id", ()
   assert.equal(row.tabIndex, 0);
 });
 
-test("an entry without a session is not focusable or clickable", () => {
+test("a legacy entry without a host is visible but not a conversation link", () => {
   act(() => {
     notificationHistory.add({
       type: "completed",
-      sessionId: "",
-      sessionName: "keylime",
+      sessionId: "legacy-session",
+      sessionName: "Legacy notification",
     });
   });
   const row = render(
     React.createElement(NotificationList),
   ).container.querySelector("li")!;
+  assert.match(row.textContent!, /Legacy notification/);
   assert.equal(row.hasAttribute("tabindex"), false);
   assert.equal(row.style.cursor, "");
 });

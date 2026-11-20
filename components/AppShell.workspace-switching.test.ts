@@ -9,7 +9,7 @@ import type { EffortRecord } from "@/lib/api-contracts/systems";
 import type { EventStreamChannel } from "@/lib/event-stream";
 import type { ShipDialog } from "./ShipDialog";
 import { setDraft, clearDraft } from "@/lib/draft-store";
-import { newChatDraftKey } from "@/lib/project-ordering";
+import { sessionKey } from "@/lib/session-identity";
 const { render, fireEvent, waitFor, cleanup, act } =
   await import("@testing-library/react/pure.js");
 
@@ -20,19 +20,53 @@ const projects = ["/repo", "/repo/worktrees/B", "/other"].map((path) => ({
 }));
 const empty = () => null;
 const effort: EffortRecord = {
-  id: "effort-test", systemId: "system-test", systemName: "Test system",
-  name: "Test effort", slug: "test-effort", status: "ready",
-  root: "/efforts/test", branch: "test-system/test-effort", sessionIds: [],
-  members: [{ repoPath: "/repo", name: "Member", path: "/efforts/test/member", baseRef: "main", baseCommit: "abc", skipsCustomCreate: false, status: "complete" }],
-  services: [{ id: "logs", name: "Build log", command: "echo done", status: "exited", terminalId: "terminal-logs" }],
+  id: "effort-test",
+  systemId: "system-test",
+  systemName: "Test system",
+  name: "Test effort",
+  slug: "test-effort",
+  status: "ready",
+  root: "/efforts/test",
+  branch: "test-system/test-effort",
+  sessionIds: [],
+  members: [
+    {
+      repoPath: "/repo",
+      name: "Member",
+      path: "/efforts/test/member",
+      baseRef: "main",
+      baseCommit: "abc",
+      skipsCustomCreate: false,
+      status: "complete",
+    },
+  ],
+  services: [
+    {
+      id: "logs",
+      name: "Build log",
+      command: "echo done",
+      status: "exited",
+      terminalId: "terminal-logs",
+    },
+  ],
 };
 let showEffort = false;
-let updateWorkspaceOptions: NonNullable<React.ComponentProps<typeof SessionSidebar>["onWorkspaceOptionsChange"]>;
+let updateWorkspaceOptions: NonNullable<
+  React.ComponentProps<typeof SessionSidebar>["onWorkspaceOptionsChange"]
+>;
 mock.module("./SessionSidebar", () => ({
   SessionSidebar: (props: React.ComponentProps<typeof SessionSidebar>) => {
     updateWorkspaceOptions = props.onWorkspaceOptionsChange!;
     React.useEffect(() => {
-      props.onWorkspaceOptionsChange!([...projects, { path: "/repo/worktrees/B", hostId: "remote", name: "Remote B" }], null, "/repo", "local");
+      props.onWorkspaceOptionsChange!(
+        [
+          ...projects,
+          { path: "/repo/worktrees/B", hostId: "remote", name: "Remote B" },
+        ],
+        null,
+        "/repo",
+        "local",
+      );
     }, []);
     React.useEffect(() => {
       if (props.selectedCwd)
@@ -50,10 +84,13 @@ mock.module("./SessionSidebar", () => ({
       projects.map(({ path }) =>
         React.createElement(
           "button",
-          { key: path, onClick: () => {
-            props.onCwdChange!(path, path, "local");
-            props.onClose?.();
-          } },
+          {
+            key: path,
+            onClick: () => {
+              props.onCwdChange!(path, path, "local");
+              props.onClose?.();
+            },
+          },
           path,
         ),
       ),
@@ -86,32 +123,133 @@ mock.module("./SessionSidebar", () => ({
         },
         "Open saved nested chat",
       ),
-      React.createElement("button", {
-        onClick: () => props.onCwdChange!("/other", "/other", "local", undefined, false, {
-          id: "remote-saved", cwd: "/other", path: "/saved.jsonl", created: "2026-11-14",
-          modified: "2026-11-14", messageCount: 1, firstMessage: "hello", name: "Existing",
-        }),
-      }, "Open workspace with saved chat"),
-      React.createElement("button", { onClick: () => props.onCwdChange!("/other", "/other", "local", undefined, false, undefined, "pending") }, "Pending workspace"),
-      React.createElement("button", { onClick: () => props.onCwdChange!("/other", "/other", "local", undefined, false, { id: "late", cwd: "/other", path: "/late", created: "2026-11-14", modified: "2026-11-14", messageCount: 1, firstMessage: "hello" }, "resolved") }, "Resolve workspace"),
-      React.createElement("button", { onClick: () => {
-        props.onCwdChange!("/repo/worktrees/B", "/repo", "local");
-        props.onShip!({ host: "local", projectPath: "/repo", path: "/repo/worktrees/B", sessionId: "initiator" });
-      } }, "Ship B"),
-      React.createElement("button", { onClick: () => props.onShip!({ host: "local", projectPath: "/repo", path: "/repo/worktrees/B", sessionId: "other-session" }) }, "Reopen B"),
-      React.createElement("button", { onClick: () => {
-        props.onCwdChange!("/repo/worktrees/B", "/repo", "remote");
-        props.onShip!({ host: "remote", projectPath: "/repo", path: "/repo/worktrees/B", sessionId: "remote-initiator" });
-      } }, "Ship remote B"),
-      React.createElement("button", { onClick: () => props.onOpenSettings!() }, "Open settings"),
-      React.createElement("button", { onClick: () => props.onOpenPlanning!({
-        host: "local",
-        owner: { kind: "repo", id: "repo-test" },
-        onChanged: () => {},
-        onOpenTarget: ({ path }) => { if (path) props.onCwdChange!(path, path, "local"); },
-        onOpenChat: props.onOpenLinkedSession,
-      }) }, "Open test board"),
-      showEffort && React.createElement("button", { onClick: () => props.onOpenEffort("local", effort, false) }, "Manage test Effort"),
+      React.createElement(
+        "button",
+        {
+          onClick: () =>
+            props.onCwdChange!("/other", "/other", "local", undefined, false, {
+              id: "remote-saved",
+              cwd: "/other",
+              path: "/saved.jsonl",
+              created: "2026-11-14",
+              modified: "2026-11-14",
+              messageCount: 1,
+              firstMessage: "hello",
+              name: "Existing",
+            }),
+        },
+        "Open workspace with saved chat",
+      ),
+      React.createElement(
+        "button",
+        {
+          onClick: () =>
+            props.onCwdChange!(
+              "/other",
+              "/other",
+              "local",
+              undefined,
+              false,
+              undefined,
+              "pending",
+            ),
+        },
+        "Pending workspace",
+      ),
+      React.createElement(
+        "button",
+        {
+          onClick: () =>
+            props.onCwdChange!(
+              "/other",
+              "/other",
+              "local",
+              undefined,
+              false,
+              {
+                id: "late",
+                cwd: "/other",
+                path: "/late",
+                created: "2026-11-14",
+                modified: "2026-11-14",
+                messageCount: 1,
+                firstMessage: "hello",
+              },
+              "resolved",
+            ),
+        },
+        "Resolve workspace",
+      ),
+      React.createElement(
+        "button",
+        {
+          onClick: () => {
+            props.onCwdChange!("/repo/worktrees/B", "/repo", "local");
+            props.onShip!({
+              host: "local",
+              projectPath: "/repo",
+              path: "/repo/worktrees/B",
+              sessionId: "initiator",
+            });
+          },
+        },
+        "Ship B",
+      ),
+      React.createElement(
+        "button",
+        {
+          onClick: () =>
+            props.onShip!({
+              host: "local",
+              projectPath: "/repo",
+              path: "/repo/worktrees/B",
+              sessionId: "other-session",
+            }),
+        },
+        "Reopen B",
+      ),
+      React.createElement(
+        "button",
+        {
+          onClick: () => {
+            props.onCwdChange!("/repo/worktrees/B", "/repo", "remote");
+            props.onShip!({
+              host: "remote",
+              projectPath: "/repo",
+              path: "/repo/worktrees/B",
+              sessionId: "remote-initiator",
+            });
+          },
+        },
+        "Ship remote B",
+      ),
+      React.createElement(
+        "button",
+        { onClick: () => props.onOpenSettings!() },
+        "Open settings",
+      ),
+      React.createElement(
+        "button",
+        {
+          onClick: () =>
+            props.onOpenPlanning!({
+              host: "local",
+              owner: { kind: "repo", id: "repo-test" },
+              onChanged: () => {},
+              onOpenTarget: ({ path }) => {
+                if (path) props.onCwdChange!(path, path, "local");
+              },
+              onOpenChat: props.onOpenLinkedSession,
+            }),
+        },
+        "Open test board",
+      ),
+      showEffort &&
+        React.createElement(
+          "button",
+          { onClick: () => props.onOpenEffort("local", effort, false) },
+          "Manage test Effort",
+        ),
     );
   },
 }));
@@ -150,10 +288,16 @@ mock.module("./ChatWindow", () => ({
       React.createElement(
         "button",
         {
-          onClick: () => props.onSessionCreated!({
-            id: "new-chat", cwd: "/repo", path: "", created: "2026-11-14",
-            modified: "2026-11-14", messageCount: 1, firstMessage: "hello",
-          }),
+          onClick: () =>
+            props.onSessionCreated!({
+              id: "new-chat",
+              cwd: "/repo",
+              path: "",
+              created: "2026-11-14",
+              modified: "2026-11-14",
+              messageCount: 1,
+              firstMessage: "hello",
+            }),
         },
         "Create chat here",
       ),
@@ -165,9 +309,17 @@ mock.module("./ShipDialog", () => ({
   ShipDialog: (props: React.ComponentProps<typeof ShipDialog>) => {
     shipDialogs.set(`${props.host}:${props.path}`, props);
     const [draft, setDraft] = React.useState("");
-    return React.createElement("div", { hidden: !props.visible, "data-testid": `ship:${props.path}` },
-      React.createElement("input", { "aria-label": "Ship draft", value: draft, onChange: (event: React.ChangeEvent<HTMLInputElement>) => setDraft(event.target.value) }),
-      React.createElement("span", null, props.sessionId));
+    return React.createElement(
+      "div",
+      { hidden: !props.visible, "data-testid": `ship:${props.path}` },
+      React.createElement("input", {
+        "aria-label": "Ship draft",
+        value: draft,
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
+          setDraft(event.target.value),
+      }),
+      React.createElement("span", null, props.sessionId),
+    );
   },
 }));
 for (const [path, name] of [
@@ -201,7 +353,9 @@ mock.module("./WorkspaceTerminalTabs", () => ({
 }));
 mock.module("@/hooks/useHostRows", () => ({
   useHostRows: () => ({
-    hosts: showEffort ? [{ id: "local", label: "This machine", status: "online" }] : [],
+    hosts: showEffort
+      ? [{ id: "local", label: "This machine", status: "online" }]
+      : [],
     pools: [],
   }),
 }));
@@ -251,7 +405,15 @@ globalThis.fetch = (async (url: Parameters<typeof fetch>[0]) =>
         : showEffort && String(url).startsWith("/api/systems?")
           ? { root: "/efforts", systems: [], efforts: [effort] }
           : String(url) === "/api/planning"
-            ? { board: { name: "Test repo", canLaunch: true, notes: "", notesRevision: 0, tasks: [] } }
+            ? {
+                board: {
+                  name: "Test repo",
+                  canLaunch: true,
+                  notes: "",
+                  notesRevision: 0,
+                  tasks: [],
+                },
+              }
             : {},
   )) as typeof fetch;
 const { AppShell } = await import("./AppShell.tsx");
@@ -259,20 +421,32 @@ const { AppShell } = await import("./AppShell.tsx");
 for (const mobile of [false, true]) {
   test(`planning retains the workspace and leaves on selection (${mobile ? "mobile" : "desktop"})`, async () => {
     const originalMatchMedia = window.matchMedia;
-    window.matchMedia = (query) => ({ ...originalMatchMedia(query), matches: mobile && query === "(max-width: 640px)" });
+    window.matchMedia = (query) => ({
+      ...originalMatchMedia(query),
+      matches: mobile && query === "(max-width: 640px)",
+    });
     sessionStorage.clear();
     window.history.replaceState(null, "", "/?cwd=%2Frepo");
     try {
-      const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+      const view = render(
+        React.createElement(AppShell, { appName: "Keylime" }),
+      );
       await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
       const workspace = view.getByTestId("workspace-tabs");
-      const openSidebar = () => fireEvent.click(view.getByRole("button", { name: "Show sidebar" }));
+      const openSidebar = () =>
+        fireEvent.click(view.getByRole("button", { name: "Show sidebar" }));
       const openBoard = async () => {
         fireEvent.click(view.getByRole("button", { name: "Open test board" }));
-        const heading = await view.findByRole("heading", { name: "Repo Notes & Tasks: Test repo" });
+        const heading = await view.findByRole("heading", {
+          name: "Repo Notes & Tasks: Test repo",
+        });
         assert.ok(heading.closest("main"));
         assert.ok(workspace.closest("[hidden]"));
-        if (mobile) assert.equal(view.queryByRole("button", { name: "Open test board" }), null);
+        if (mobile)
+          assert.equal(
+            view.queryByRole("button", { name: "Open test board" }),
+            null,
+          );
       };
 
       if (mobile) openSidebar();
@@ -287,14 +461,22 @@ for (const mobile of [false, true]) {
       if (mobile) openSidebar();
       fireEvent.click(view.getByRole("button", { name: "/other" }));
       await waitFor(() => assert.equal(tabProps.cwd, "/other"));
-      assert.equal(view.queryByRole("heading", { name: /Repo Notes & Tasks/ }), null);
+      assert.equal(
+        view.queryByRole("heading", { name: /Repo Notes & Tasks/ }),
+        null,
+      );
 
       if (mobile) openSidebar();
       await openBoard();
       if (mobile) openSidebar();
-      fireEvent.click(view.getByRole("button", { name: "Open saved nested chat" }));
+      fireEvent.click(
+        view.getByRole("button", { name: "Open saved nested chat" }),
+      );
       await waitFor(() => assert.equal(tabProps.cwd, "/repo/worktrees/B"));
-      assert.equal(view.queryByRole("heading", { name: /Repo Notes & Tasks/ }), null);
+      assert.equal(
+        view.queryByRole("heading", { name: /Repo Notes & Tasks/ }),
+        null,
+      );
     } finally {
       cleanup();
       window.matchMedia = originalMatchMedia;
@@ -352,9 +534,14 @@ test("Ship survives workspace navigation and background completion preserves the
   await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
   fireEvent.click(view.getByRole("button", { name: "Ship B" }));
   await waitFor(() => assert.equal(tabProps.cwd, "/repo/worktrees/B"));
-  fireEvent.change(view.getByLabelText("Ship draft"), { target: { value: "keep this" } });
+  fireEvent.change(view.getByLabelText("Ship draft"), {
+    target: { value: "keep this" },
+  });
   fireEvent.click(view.getByRole("button", { name: "Reopen B" }));
-  assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.sessionId, "initiator");
+  assert.equal(
+    shipDialogs.get("local:/repo/worktrees/B")?.sessionId,
+    "initiator",
+  );
   fireEvent.click(view.getByRole("button", { name: "/other" }));
   await waitFor(() => assert.equal(tabProps.cwd, "/other"));
   act(() => tabProps.onSelect("terminal-other"));
@@ -364,7 +551,12 @@ test("Ship survives workspace navigation and background completion preserves the
   assert.equal(tabProps.cwd, "/other");
   assert.equal(tabProps.activeId, "terminal-other");
   fireEvent.click(view.getByRole("button", { name: "/repo/worktrees/B" }));
-  await waitFor(() => assert.equal((view.getByLabelText("Ship draft") as HTMLInputElement).value, "keep this"));
+  await waitFor(() =>
+    assert.equal(
+      (view.getByLabelText("Ship draft") as HTMLInputElement).value,
+      "keep this",
+    ),
+  );
   cleanup();
 });
 
@@ -376,7 +568,9 @@ test("opening service output from a member keeps it selected after sidebar sync"
   try {
     const view = render(React.createElement(AppShell, { appName: "Keylime" }));
     fireEvent.click(view.getByRole("button", { name: "Manage test Effort" }));
-    fireEvent.click(await view.findByRole("button", { name: "Open Effort root" }));
+    fireEvent.click(
+      await view.findByRole("button", { name: "Open Effort root" }),
+    );
     await waitFor(() => assert.equal(tabProps.cwd, effort.root));
     const rootChat = tabProps.activeChatId;
     assert.ok(rootChat);
@@ -385,7 +579,9 @@ test("opening service output from a member keeps it selected after sidebar sync"
     fireEvent.click(await view.findByRole("button", { name: "Open Member" }));
     await waitFor(() => assert.equal(tabProps.cwd, effort.members[0].path));
     fireEvent.click(view.getByRole("button", { name: "Manage test Effort" }));
-    fireEvent.click(await view.findByRole("button", { name: "Open Build log terminal" }));
+    fireEvent.click(
+      await view.findByRole("button", { name: "Open Build log terminal" }),
+    );
     assert.equal(tabProps.cwd, effort.root);
     assert.equal(tabProps.activeId, "terminal-logs");
   } finally {
@@ -400,8 +596,17 @@ test("Ship leaves the removed workspace after its hierarchy entry disappears", a
   const view = render(React.createElement(AppShell, { appName: "Keylime" }));
   await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
   fireEvent.click(view.getByRole("button", { name: "Ship B" }));
-  await waitFor(() => assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.visible, true));
-  act(() => updateWorkspaceOptions([projects[0]!, projects[2]!], null, "/repo", "local"));
+  await waitFor(() =>
+    assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.visible, true),
+  );
+  act(() =>
+    updateWorkspaceOptions(
+      [projects[0]!, projects[2]!],
+      null,
+      "/repo",
+      "local",
+    ),
+  );
   act(() => shipDialogs.get("local:/repo/worktrees/B")!.onRemoved!());
   await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
   assert.equal(window.location.search, "");
@@ -415,18 +620,40 @@ test("Ship flows on different hosts remain independent and completion in Setting
   const view = render(React.createElement(AppShell, { appName: "Keylime" }));
   await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
   fireEvent.click(view.getByRole("button", { name: "Ship B" }));
-  await waitFor(() => assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.visible, true));
-  fireEvent.change(view.getByRole("textbox", { name: "Ship draft" }), { target: { value: "local draft" } });
+  await waitFor(() =>
+    assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.visible, true),
+  );
+  fireEvent.change(view.getByRole("textbox", { name: "Ship draft" }), {
+    target: { value: "local draft" },
+  });
   fireEvent.click(view.getByRole("button", { name: "Ship remote B" }));
-  await waitFor(() => assert.equal(shipDialogs.get("remote:/repo/worktrees/B")?.visible, true));
-  fireEvent.change(view.getByRole("textbox", { name: "Ship draft" }), { target: { value: "remote draft" } });
+  await waitFor(() =>
+    assert.equal(shipDialogs.get("remote:/repo/worktrees/B")?.visible, true),
+  );
+  fireEvent.change(view.getByRole("textbox", { name: "Ship draft" }), {
+    target: { value: "remote draft" },
+  });
   assert.equal(shipDialogs.get("local:/repo/worktrees/B")?.visible, false);
   fireEvent.click(view.getByRole("button", { name: "/repo/worktrees/B" }));
-  await waitFor(() => assert.equal((view.getByRole("textbox", { name: "Ship draft" }) as HTMLInputElement).value, "local draft"));
+  await waitFor(() =>
+    assert.equal(
+      (view.getByRole("textbox", { name: "Ship draft" }) as HTMLInputElement)
+        .value,
+      "local draft",
+    ),
+  );
   fireEvent.click(view.getByRole("button", { name: "Ship remote B" }));
-  await waitFor(() => assert.equal((view.getByRole("textbox", { name: "Ship draft" }) as HTMLInputElement).value, "remote draft"));
+  await waitFor(() =>
+    assert.equal(
+      (view.getByRole("textbox", { name: "Ship draft" }) as HTMLInputElement)
+        .value,
+      "remote draft",
+    ),
+  );
   fireEvent.click(view.getByRole("button", { name: "Open settings" }));
-  await waitFor(() => assert.equal(shipDialogs.get("remote:/repo/worktrees/B")?.visible, false));
+  await waitFor(() =>
+    assert.equal(shipDialogs.get("remote:/repo/worktrees/B")?.visible, false),
+  );
   const route = window.location.href;
   act(() => shipDialogs.get("remote:/repo/worktrees/B")!.onRemoved!());
   assert.equal(window.location.href, route);
@@ -439,8 +666,14 @@ test("workspace entry opens its registered saved chat on a new browser", async (
   window.history.replaceState(null, "", "/?cwd=%2Frepo");
   const view = render(React.createElement(AppShell, { appName: "Keylime" }));
   await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
-  fireEvent.click(view.getByRole("button", { name: "Open workspace with saved chat" }));
-  await waitFor(() => assert.ok(tabProps.chatTabs.some((tab) => tab.sessionId === "remote-saved")));
+  fireEvent.click(
+    view.getByRole("button", { name: "Open workspace with saved chat" }),
+  );
+  await waitFor(() =>
+    assert.ok(
+      tabProps.chatTabs.some((tab) => tab.sessionId === "remote-saved"),
+    ),
+  );
   assert.equal(window.location.search, "?session=remote-saved");
   cleanup();
 });
@@ -458,13 +691,12 @@ test("delayed discovery replaces only the untouched auto-created chat", async ()
 });
 test("delayed discovery preserves a draft edited after workspace entry", async () => {
   sessionStorage.clear();
-  const key = newChatDraftKey("/other", "local");
-  clearDraft(key);
   window.history.replaceState(null, "", "/?cwd=%2Frepo");
   const view = render(React.createElement(AppShell, { appName: "Keylime" }));
   await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
   fireEvent.click(view.getByRole("button", { name: "Pending workspace" }));
   await waitFor(() => assert.equal(tabProps.cwd, "/other"));
+  const key = sessionKey(`new:tab:${tabProps.activeChatId}`);
   setDraft(key, { value: "my draft", images: [], files: [] });
   fireEvent.click(view.getByRole("button", { name: "Resolve workspace" }));
   assert.equal(window.location.search, "");
@@ -558,20 +790,32 @@ test("a generated title survives delayed new-chat hydration", async () => {
   sessionStorage.clear();
   streams.length = 0;
   const originalFetch = globalThis.fetch;
-  const { promise: hydration, resolve: resolveHydration } = Promise.withResolvers<Response>();
+  const { promise: hydration, resolve: resolveHydration } =
+    Promise.withResolvers<Response>();
   const stale = {
-    id: "new-chat", cwd: "/repo", path: "/new-chat.jsonl", projectRoot: "/repo",
-    created: "2026-11-14", modified: "2026-11-14", messageCount: 1, firstMessage: "hello",
+    id: "new-chat",
+    cwd: "/repo",
+    path: "/new-chat.jsonl",
+    projectRoot: "/repo",
+    created: "2026-11-14",
+    modified: "2026-11-14",
+    messageCount: 1,
+    firstMessage: "hello",
   };
   let holdHydration = false;
   let hydrationRequested = false;
   globalThis.fetch = (async (url, options) => {
+    if (
+      String(url) === "/api/sessions?id=new-chat&hostId=local" &&
+      holdHydration
+    ) {
+      hydrationRequested = true;
+      return hydration;
+    }
     if (String(url) === "/api/sessions") {
-      if (holdHydration && !hydrationRequested) {
-        hydrationRequested = true;
-        return hydration;
-      }
-      return Response.json({ sessions: [{ ...stale, name: "Generated title" }] });
+      return Response.json({
+        sessions: [{ ...stale, name: "Generated title" }],
+      });
     }
     return originalFetch(url, options);
   }) as typeof fetch;
@@ -584,16 +828,74 @@ test("a generated title survives delayed new-chat hydration", async () => {
     await waitFor(() => assert.ok(hydrationRequested));
     const running = streams.find((stream) => stream.channel.kind === "running");
     assert.ok(running?.onmessage);
-    await act(async () => running.onmessage!({ data: JSON.stringify({ type: "running", refreshSessionList: true }) }));
+    await act(async () =>
+      running.onmessage!({
+        data: JSON.stringify({ type: "running", refreshSessionList: true }),
+      }),
+    );
     await waitFor(() => {
       assert.equal(tabProps.activeSessionName, "Generated title");
-      assert.equal(tabProps.chatTabs.find((tab) => tab.sessionId === "new-chat")?.title, "Generated title");
+      assert.equal(
+        tabProps.chatTabs.find((tab) => tab.sessionId === "new-chat")?.title,
+        "Generated title",
+      );
     });
-    await act(async () => resolveHydration(Response.json({ sessions: [stale] })));
+    await act(async () =>
+      resolveHydration(Response.json({ sessions: [stale] })),
+    );
     await waitFor(() => {
       assert.equal(tabProps.activeSessionName, "Generated title");
-      assert.equal(tabProps.chatTabs.find((tab) => tab.sessionId === "new-chat")?.title, "Generated title");
+      assert.equal(
+        tabProps.chatTabs.find((tab) => tab.sessionId === "new-chat")?.title,
+        "Generated title",
+      );
     });
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("browser traversal selects the link host and treats a bare link as local", async () => {
+  sessionStorage.clear();
+  const originalFetch = globalThis.fetch;
+  const base = {
+    id: "same",
+    cwd: "/repo",
+    path: "/same.jsonl",
+    created: "2026-11-14",
+    modified: "2026-11-14",
+    messageCount: 1,
+    firstMessage: "hello",
+  };
+  globalThis.fetch = (async (url, options) => {
+    const route = new URL(String(url), "http://localhost");
+    if (route.pathname === "/api/sessions/same") {
+      const hostId = route.searchParams.get("hostId") ?? "local";
+      return Response.json({ info: { ...base, hostId, name: hostId }, hostId });
+    }
+    if (route.pathname === "/api/hierarchy") {
+      return Response.json({
+        projects: [{ workspaces: [{ path: "/repo", sessionIds: ["same"] }] }],
+      });
+    }
+    return originalFetch(url, options);
+  }) as typeof fetch;
+  try {
+    window.history.replaceState(null, "", "/?session=same");
+    render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => assert.equal(tabProps.activeSessionName, "local"));
+    for (const [url, name] of [
+      ["/?session=same&hostId=remote", "remote"],
+      ["/?session=same", "local"],
+    ]) {
+      await act(async () => {
+        window.history.replaceState(null, "", url);
+        window.dispatchEvent(new window.PopStateEvent("popstate"));
+      });
+      await waitFor(() => assert.equal(tabProps.activeSessionName, name));
+      assert.equal(window.location.search, url.slice(1));
+    }
   } finally {
     cleanup();
     globalThis.fetch = originalFetch;
@@ -635,7 +937,11 @@ test("shared chats appear without local membership and can be selected or dismis
     const onSnapshot = snapshot.onmessage;
     assert.ok(onSnapshot);
     await act(async () =>
-      onSnapshot({ data: JSON.stringify({ sessionIds: ["shared"] }) }),
+      onSnapshot({
+        data: JSON.stringify({
+          openSessions: [{ sessionId: "shared", hostId: "local" }],
+        }),
+      }),
     );
     await waitFor(() =>
       assert.ok(tabProps.chatTabs.some((tab) => tab.title === "Shared")),
@@ -643,29 +949,41 @@ test("shared chats appear without local membership and can be selected or dismis
     session.name = "Generated title";
     const running = streams.find((stream) => stream.channel.kind === "running");
     assert.ok(running?.onmessage);
-    await act(async () => running.onmessage!({ data: JSON.stringify({ type: "running", refreshSessionList: true }) }));
-    await waitFor(() => assert.ok(tabProps.chatTabs.some((tab) => tab.title === "Generated title")));
+    await act(async () =>
+      running.onmessage!({
+        data: JSON.stringify({ type: "running", refreshSessionList: true }),
+      }),
+    );
+    await waitFor(() =>
+      assert.ok(
+        tabProps.chatTabs.some((tab) => tab.title === "Generated title"),
+      ),
+    );
     session.name = "Shared";
-    assert.ok(tabProps.openSessionIds.includes("shared"));
+    assert.ok(tabProps.openSessionIds.includes("local:shared"));
     assert.equal(
       streams.filter(
         (stream) => stream.channel.kind === "open-chat" && !stream.closed,
       ).length,
       0,
     );
-    await act(async () => tabProps.onCloseChat("shared:shared"));
+    await act(async () => tabProps.onCloseChat("shared:local:shared"));
     assert.ok(!tabProps.chatTabs.some((tab) => tab.title === "Shared"));
     assert.ok(!requests.some((url) => url.includes("/archive")));
     await act(async () =>
-      onSnapshot({ data: JSON.stringify({ sessionIds: [] }) }),
+      onSnapshot({ data: JSON.stringify({ openSessions: [] }) }),
     );
     await act(async () =>
-      onSnapshot({ data: JSON.stringify({ sessionIds: ["shared"] }) }),
+      onSnapshot({
+        data: JSON.stringify({
+          openSessions: [{ sessionId: "shared", hostId: "local" }],
+        }),
+      }),
     );
     await waitFor(() =>
       assert.ok(tabProps.chatTabs.some((tab) => tab.title === "Shared")),
     );
-    act(() => tabProps.onSelectChat("shared:shared"));
+    act(() => tabProps.onSelectChat("shared:local:shared"));
     await waitFor(() =>
       assert.equal(
         streams.filter(
@@ -682,7 +1000,7 @@ test("shared chats appear without local membership and can be selected or dismis
       1,
     );
     await act(async () =>
-      onSnapshot({ data: JSON.stringify({ sessionIds: [] }) }),
+      onSnapshot({ data: JSON.stringify({ openSessions: [] }) }),
     );
     assert.ok(tabProps.chatTabs.some((tab) => tab.sessionId === "shared"));
     assert.ok(view);
@@ -697,22 +1015,52 @@ test("entering a workspace selects its first shared chat and shows all shared ch
   streams.length = 0;
   const originalFetch = globalThis.fetch;
   const sessions = ["first", "second"].map((id) => ({
-    id, cwd: "/other", path: `/${id}.jsonl`, created: "2026-11-14",
-    modified: "2026-11-14", messageCount: 1, firstMessage: id, name: id,
+    id,
+    cwd: "/other",
+    path: `/${id}.jsonl`,
+    created: "2026-11-14",
+    modified: "2026-11-14",
+    messageCount: 1,
+    firstMessage: id,
+    name: id,
   }));
-  globalThis.fetch = (async (url, options) => String(url) === "/api/sessions"
-    ? Response.json({ sessions }) : originalFetch(url, options)) as typeof fetch;
+  globalThis.fetch = (async (url, options) =>
+    String(url) === "/api/sessions"
+      ? Response.json({ sessions })
+      : originalFetch(url, options)) as typeof fetch;
   try {
     window.history.replaceState(null, "", "/?cwd=%2Frepo");
     const view = render(React.createElement(AppShell, { appName: "Keylime" }));
     await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
-    const source = streams.find((stream) => stream.channel.kind === "open-chats");
+    const source = streams.find(
+      (stream) => stream.channel.kind === "open-chats",
+    );
     assert.ok(source?.onmessage);
-    await act(async () => source.onmessage!({ data: JSON.stringify({ sessionIds: ["first", "second"] }) }));
-    await waitFor(() => assert.ok(tabProps.openSessionIds.includes("second")));
+    await act(async () =>
+      source.onmessage!({
+        data: JSON.stringify({
+          openSessions: ["first", "second"].map((sessionId) => ({
+            sessionId,
+            hostId: "local",
+          })),
+        }),
+      }),
+    );
+    await waitFor(() =>
+      assert.ok(tabProps.openSessionIds.includes("local:second")),
+    );
     fireEvent.click(view.getByRole("button", { name: "/other" }));
-    await waitFor(() => assert.equal(tabProps.chatTabs.find((tab) => tab.id === tabProps.activeChatId)?.sessionId, "first"));
-    assert.deepEqual(tabProps.chatTabs.map((tab) => tab.sessionId), ["first", "second"]);
+    await waitFor(() =>
+      assert.equal(
+        tabProps.chatTabs.find((tab) => tab.id === tabProps.activeChatId)
+          ?.sessionId,
+        "first",
+      ),
+    );
+    assert.deepEqual(
+      tabProps.chatTabs.map((tab) => tab.sessionId),
+      ["first", "second"],
+    );
   } finally {
     cleanup();
     globalThis.fetch = originalFetch;
@@ -721,29 +1069,69 @@ test("entering a workspace selects its first shared chat and shows all shared ch
 
 test("workspace entry reconciles a restored draft when shared chat discovery resolves", async () => {
   sessionStorage.clear();
-  sessionStorage.setItem("keylime:workspace-chat-tabs", JSON.stringify([
-    { id: "draft", cwd: "/other", hostId: undefined, session: null, creation: { id: "draft-creation" } },
-  ]));
+  sessionStorage.setItem(
+    "keylime:workspace-chat-tabs",
+    JSON.stringify([
+      {
+        id: "draft",
+        cwd: "/other",
+        hostId: undefined,
+        session: null,
+        creation: { id: "draft-creation" },
+      },
+    ]),
+  );
   streams.length = 0;
   const originalFetch = globalThis.fetch;
-  const { promise: delayed, resolve: resolveSessions } = Promise.withResolvers<Response>();
-  globalThis.fetch = (async (url, options) => String(url) === "/api/sessions"
-    ? delayed : originalFetch(url, options)) as typeof fetch;
+  const { promise: delayed, resolve: resolveSessions } =
+    Promise.withResolvers<Response>();
+  globalThis.fetch = (async (url, options) =>
+    String(url) === "/api/sessions"
+      ? delayed
+      : originalFetch(url, options)) as typeof fetch;
   try {
     window.history.replaceState(null, "", "/?cwd=%2Frepo");
     const view = render(React.createElement(AppShell, { appName: "Keylime" }));
     await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
-    const source = streams.find((stream) => stream.channel.kind === "open-chats");
+    const source = streams.find(
+      (stream) => stream.channel.kind === "open-chats",
+    );
     assert.ok(source?.onmessage);
-    await act(async () => source.onmessage!({ data: JSON.stringify({ sessionIds: ["shared"] }) }));
+    await act(async () =>
+      source.onmessage!({
+        data: JSON.stringify({
+          openSessions: [{ sessionId: "shared", hostId: "local" }],
+        }),
+      }),
+    );
     fireEvent.click(view.getByRole("button", { name: "/other" }));
     await waitFor(() => assert.equal(tabProps.activeChatId, "draft"));
     fireEvent.click(view.getByRole("button", { name: "/other" }));
-    await act(async () => resolveSessions(Response.json({ sessions: [{
-      id: "shared", cwd: "/other", path: "/shared.jsonl", created: "2026-11-14",
-      modified: "2026-11-14", messageCount: 1, firstMessage: "shared", name: "Shared",
-    }] })));
-    await waitFor(() => assert.equal(tabProps.chatTabs.find((tab) => tab.id === tabProps.activeChatId)?.sessionId, "shared"));
+    await act(async () =>
+      resolveSessions(
+        Response.json({
+          sessions: [
+            {
+              id: "shared",
+              cwd: "/other",
+              path: "/shared.jsonl",
+              created: "2026-11-14",
+              modified: "2026-11-14",
+              messageCount: 1,
+              firstMessage: "shared",
+              name: "Shared",
+            },
+          ],
+        }),
+      ),
+    );
+    await waitFor(() =>
+      assert.equal(
+        tabProps.chatTabs.find((tab) => tab.id === tabProps.activeChatId)
+          ?.sessionId,
+        "shared",
+      ),
+    );
     assert.ok(tabProps.chatTabs.some((tab) => tab.id === "draft"));
   } finally {
     cleanup();

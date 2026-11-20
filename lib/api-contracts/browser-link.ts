@@ -13,7 +13,11 @@ import type { SocketContract } from "./types";
 export const EventStreamChannelSchema = Type.Union(
   [
     Type.Object({ kind: Type.Literal("running") }),
-    Type.Object({ kind: Type.Literal("open-chat"), sessionId: Type.String() }),
+    Type.Object({
+      kind: Type.Literal("open-chat"),
+      sessionId: Type.String(),
+      hostId: Type.Optional(Type.String()),
+    }),
     Type.Object({ kind: Type.Literal("open-chats") }),
     Type.Object({
       kind: Type.Literal("terminal"),
@@ -24,8 +28,16 @@ export const EventStreamChannelSchema = Type.Union(
       kind: Type.Literal("notifications"),
       clientId: Type.String(),
     }),
-    Type.Object({ kind: Type.Literal("session"), sessionId: Type.String() }),
-    Type.Object({ kind: Type.Literal("commit-plan-progress"), sessionId: Type.String() }),
+    Type.Object({
+      kind: Type.Literal("session"),
+      sessionId: Type.String(),
+      hostId: Type.Optional(Type.String()),
+    }),
+    Type.Object({
+      kind: Type.Literal("commit-plan-progress"),
+      sessionId: Type.String(),
+      hostId: Type.Optional(Type.String()),
+    }),
     Type.Object({
       kind: Type.Literal("file"),
       path: Type.String(),
@@ -38,7 +50,7 @@ export const EventStreamChannelSchema = Type.Union(
   {
     title: "EventStreamChannel",
     description:
-      "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. The parser additionally validates identifiers and paths. A file's null sessionId selects no session; an omitted hostId uses the default resolution.",
+      "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. Session, open-chat, and commit-plan progress channels take a raw session ID and default an omitted hostId to local. The parser validates identifiers and paths. A file's null sessionId selects no session.",
   },
 );
 export type EventStreamChannel = Static<typeof EventStreamChannelSchema>;
@@ -141,12 +153,13 @@ const Unsub = object("BrowserUnsubscribe", "Release a subscription.", {
 });
 const Command = object(
   "BrowserCommand",
-  "Agent command for an existing session. rid is scoped to session for deduplication, not globally; a reply reports dispatch outcome and is not necessarily completion of the resulting turn. advisor selects the advisor.",
+  "Agent command for an existing session. rid is scoped to (hostId, session) for deduplication. session is the raw session ID; omitted hostId selects local. A reply reports dispatch outcome, not necessarily completion of the resulting turn.",
   {
     type: Type.Literal("cmd"),
     seq: seq(),
     rid: Type.String(),
     session: Type.String(),
+    hostId: Type.Optional(Type.String()),
     advisor: Type.Optional(Type.Boolean()),
     command: Type.Unknown(),
   },
@@ -294,7 +307,7 @@ export const BrowserDownHeadSchema = Type.Object(
 );
 export type BrowserDownHead = Static<typeof BrowserDownHeadSchema>;
 
-/** The HTTP gate authenticates and checks applicable API origins before upgrade; resume tokens and uploads are owner-bound, while command request IDs are scoped to the session rather than the connection. */
+/** The HTTP gate authenticates and checks applicable API origins before upgrade; resume tokens and uploads are owner-bound, while command request IDs are scoped to the host and session rather than the connection. */
 export const browserLinkContract: SocketContract = {
   id: "browser-link",
   title: "Browser link",

@@ -70,6 +70,15 @@ test("serves the full image with its real type, and a small cached WebP preview"
   );
 });
 
+test("a different host cannot use local blobs or cached thumbnails", async () => {
+  assert.equal((await get(screenshotHash, "?thumb=1")).status, 200);
+  assert.equal((await get(screenshotHash, "?hostId=unknown")).status, 404);
+  assert.equal(
+    (await get(screenshotHash, "?hostId=unknown&thumb=1")).status,
+    404,
+  );
+});
+
 /** `jpeg` with an EXIF APP1 segment (big-endian TIFF, one Orientation entry) right after SOI. */
 function withExifOrientation(jpeg: Buffer, orientation: number) {
   const tiff = Buffer.from([

@@ -104,13 +104,16 @@ function serverSummary(config: Record<string, unknown>): {
 export function McpConfig({
   cwd,
   sessionId,
-  liveOnly = false,
+  hostId = "local",
+  liveOnly: attachOnly = false,
 }: {
   cwd: string | null;
   sessionId?: string | null;
+  hostId?: string;
   liveOnly?: boolean;
 }) {
   const { t } = useI18n();
+  const liveOnly = attachOnly || hostId !== "local";
   const [servers, setServers] = useState<McpServer[]>([]);
   const [userConfig, setUserConfig] = useState<McpUserConfig | null>(null);
   const [liveServers, setLiveServers] = useState<McpLiveServer[] | null>(null);
@@ -133,7 +136,8 @@ export function McpConfig({
     setLiveError(null);
     try {
       const params = new URLSearchParams();
-      if (cwd) params.set("cwd", cwd);
+      if (hostId !== "local") params.set("hostId", hostId);
+      if (cwd && !liveOnly) params.set("cwd", cwd);
       if (sessionId) {
         params.set("sessionId", sessionId);
         if (liveOnly) {
@@ -203,7 +207,7 @@ export function McpConfig({
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
     }
-  }, [cwd, sessionId, liveOnly]);
+  }, [cwd, sessionId, hostId, liveOnly]);
 
   const invalidateLoad = useCallback(() => {
     loadGeneration.current++;
@@ -537,7 +541,7 @@ export function McpConfig({
         <p className="mcp-management-description">
           {t(
             liveOnly
-              ? "mcpConfig.clusterLiveHint"
+              ? "mcpConfig.remoteLiveHint"
               : sessionId
                 ? "mcpConfig.applyHint"
                 : "mcpConfig.selectSessionHint",
@@ -595,7 +599,7 @@ export function McpConfig({
           </details>
         )}
       </section>
-      {cwd && (
+      {cwd && !liveOnly && (
         <div
           className="settings-card mcp-editor-card"
           style={{

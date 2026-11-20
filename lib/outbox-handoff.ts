@@ -1,9 +1,7 @@
 import { isClientMessageId, readQueueSnapshot } from "./client-message-ids";
 import { isLinkUp } from "./hosts/host";
-import { adoptedChild, hostListsChild, listHosts } from "./hosts/hub";
+import { adoptedChild, getHost, hostListsChild } from "./hosts/hub";
 import { HostOpError } from "./hosts/link-protocol";
-import { LOCAL_HOST_ID } from "./hosts/registry";
-import { hostForSessionId } from "./hosts/session-index";
 import { outboxCanonicalSessions } from "./message-outbox";
 import type { ClientMessageStatus } from "./pi-types";
 import { getRpcSession, WebRpcError } from "./rpc-manager";
@@ -91,15 +89,18 @@ function nativeStatus(
 
 /** The live child answering for `sessionId`; 409 only once its absence is established. A child another server started
  * is adopted here only after its daemon lists it, and an offline or unlisted host proves nothing: those are a retryable 503. */
-async function liveChild(sessionId: string) {
-  let live = getRpcSession(sessionId);
-  if (!live) {
-    await Promise.all(
-      [LOCAL_HOST_ID, ...listHosts().map(({ id }) => id)].map((id) =>
-        adoptedChild(id, sessionId),
-      ),
+async function liveChild(sessionId: string, hostId: string) {
+  const host = getHost(hostId);
+  if (!host || !isLinkUp(host.status()))
+    throw new WebRpcError(
+      `${host?.label ?? "Host"} is offline`,
+      "host_offline",
+      "refused",
     );
-    live = getRpcSession(sessionId);
+  let live = getRpcSession(sessionId, hostId);
+  if (!live) {
+    await adoptedChild(hostId, sessionId);
+    live = getRpcSession(sessionId, hostId);
   }
   if (live?.isAlive()) return live;
   if (live) {
@@ -119,15 +120,13 @@ async function liveChild(sessionId: string) {
       );
   } else {
     // A child a host still runs is not gone just because this server failed to adopt it: retry.
-    if (hostListsChild(sessionId))
+    if (hostListsChild(sessionId, hostId))
       throw new HostOpError(
         503,
         "handoff_child_pending",
         "The session's native process is running but not attached here yet",
       );
-    // Throws a 503 while a host that may hold the session is offline or its list unavailable.
-    const host = await hostForSessionId(sessionId);
-    if (host && !isLinkUp(host.status()))
+    if (!isLinkUp(host.status()))
       throw new WebRpcError(
         `${host.label} is offline`,
         "host_offline",
@@ -143,17 +142,21 @@ async function liveChild(sessionId: string) {
 
 /** The child answering for `sessionId` or, after a native identity move, for the session that owns these entries now.
  * A candidate that cannot prove absence keeps the answer retryable: 409 only once every candidate is known gone. */
-async function liveChildFor(sessionId: string, ids: readonly string[]) {
+async function liveChildFor(
+  sessionId: string,
+  ids: readonly string[],
+  hostId: string,
+) {
   let failure: unknown;
   try {
-    return await liveChild(sessionId);
+    return await liveChild(sessionId, hostId);
   } catch (error) {
     failure = error;
   }
-  for (const owner of outboxCanonicalSessions(ids)) {
+  for (const owner of outboxCanonicalSessions(ids, hostId)) {
     if (owner === sessionId) continue;
     try {
-      return await liveChild(owner);
+      return await liveChild(owner, hostId);
     } catch (error) {
       if (failure instanceof HostOpError && failure.status === 409)
         failure = error;
@@ -167,8 +170,9 @@ async function liveChildFor(sessionId: string, ids: readonly string[]) {
 export async function reconcileOutboxHandoffs(
   sessionId: string,
   ids: readonly string[],
+  hostId: string,
 ): Promise<ClientMessageStatus> {
-  const live = await liveChildFor(sessionId, ids);
+  const live = await liveChildFor(sessionId, ids, hostId);
   const nativeSessionId = live.sessionId;
   const raw = await live.send({
     type: "get_client_message_status",

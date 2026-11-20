@@ -101,7 +101,7 @@ function fileStem(filePath: string): string {
     : fileName;
 }
 
-/** `userOnly`: the user level alone (a cluster member's settings, spec K7), with no project scope to offer. */
+/** `userOnly` offers no project scope. */
 export function AgentsConfig({
   cwd,
   userOnly = false,

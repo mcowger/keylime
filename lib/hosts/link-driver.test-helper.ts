@@ -297,7 +297,6 @@ export class LinkDriver {
       autoApproveExtension: false,
       ack,
       channels,
-      link: { id: "l1", notifier: true },
       ...overrides,
     };
     socket.frame(`${JSON.stringify(hello)}\n`);
@@ -369,6 +368,18 @@ export class LinkDriver {
     // A fake daemon's supplied session list is complete unless the test overrides the strict op to model an old or failing
     // daemon. Real daemon helpers already supply their actual strict scanner through SESSION_OP_PARAMS.
     const handlers: Handlers = {
+      hostSettingsGet: () => ({
+        autoResumeSessions: false,
+        agentToolsEnabled: false,
+        uploadRetentionDays: 30,
+      }),
+      modelsList: () => ({
+        models: {},
+        modelList: [],
+        defaultModel: null,
+        thinkingLevels: {},
+        anthropicSlowMode: false,
+      }),
       ...(ops.listSessions
         ? {
             listSessionIdsForRestore: async (args: Args) =>

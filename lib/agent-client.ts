@@ -16,29 +16,35 @@ import {
 import { formatApiError } from "@/lib/i18n/api-error";
 import type { Static } from "@sinclair/typebox";
 import type { OutboxScopeResultSchema } from "@/lib/api-contracts/browser-agent-operations";
+import { sessionKey, sessionUrl } from "./session-identity";
 
 // Sessions whose per-chat advisor toggle is on: their lazily spawned omp
 // process must start with --advisor. Keyed by session id because the spawn
 // decision happens inside the route, which only sees id + query string.
 const advisorSpawnSessions = new Set<string>();
 
-const OUTBOX_SCOPE_KEY = "keylime:outbox-scope";
-let outboxScope: string | null = null;
+const OUTBOX_SCOPE_KEY = "keylime:outbox-scope:host:";
+const outboxScopes = new Map<string, string>();
 
 /** Nonsecret installation/auth fingerprint, not a cookie: reuse it offline, but never rebind a stored entry. */
-export function rememberOutboxScope(scope: string): void {
-  outboxScope = scope;
+export function rememberOutboxScope(scope: string, hostId = "local"): void {
+  outboxScopes.set(hostId, scope);
   try {
-    localStorage.setItem(OUTBOX_SCOPE_KEY, scope);
+    localStorage.setItem(OUTBOX_SCOPE_KEY + hostId, scope);
   } catch {
     /* Storage blocked: this page still knows it. */
   }
 }
 
-export async function getOutboxScope(sessionId: string): Promise<string> {
+export async function getOutboxScope(
+  sessionId: string,
+  hostId = "local",
+): Promise<string> {
+  let outboxScope = outboxScopes.get(hostId);
   if (!outboxScope) {
     try {
-      outboxScope = localStorage.getItem(OUTBOX_SCOPE_KEY);
+      outboxScope =
+        localStorage.getItem(OUTBOX_SCOPE_KEY + hostId) ?? undefined;
     } catch {
       /* Ask the server instead. */
     }
@@ -46,14 +52,18 @@ export async function getOutboxScope(sessionId: string): Promise<string> {
   if (!outboxScope) {
     const result = await sendAgentCommand<
       Static<typeof OutboxScopeResultSchema>
-    >(sessionId, {
-      type: "outbox_scope",
-    });
+    >(
+      sessionId,
+      {
+        type: "outbox_scope",
+      },
+      { hostId },
+    );
     if (!result?.scope)
       throw new Error(
         "The message cannot be saved until key lime has confirmed this installation.",
       );
-    rememberOutboxScope(result.scope);
+    rememberOutboxScope(result.scope, hostId);
     return result.scope;
   }
   return outboxScope;
@@ -67,7 +77,7 @@ const HANG_AFTER_MS = 10_000;
  * and the server's receive time arrives only with the response, so a POST counts until answered, even once its body is
  * in; the summary's LARGE_FRAME_BYTES floor keeps a small command the server is still running from reading as blocking.
  */
-const inFlightPosts = new Set<{ sessionId: string; bytes: number }>();
+const inFlightPosts = new Set<{ key: string; bytes: number }>();
 
 /** 503 `{hostOffline: true}`: the session's host has no link right now. With
  *  `delivery: "refused"` the request never left, so the caller keeps what the
@@ -89,9 +99,14 @@ export class TransportLostError extends Error {
   readonly mayHaveRun = true;
 }
 
-export function setSessionAdvisorSpawn(sessionId: string, enabled: boolean) {
-  if (enabled) advisorSpawnSessions.add(sessionId);
-  else advisorSpawnSessions.delete(sessionId);
+export function setSessionAdvisorSpawn(
+  sessionId: string,
+  enabled: boolean,
+  hostId = "local",
+) {
+  const key = sessionKey(sessionId, hostId);
+  if (enabled) advisorSpawnSessions.add(key);
+  else advisorSpawnSessions.delete(key);
 }
 
 /** A successful command reply acknowledges the command, not necessarily prompt completion.
@@ -99,8 +114,9 @@ export function setSessionAdvisorSpawn(sessionId: string, enabled: boolean) {
 export async function sendAgentCommand<T = unknown>(
   sessionId: string,
   command: Record<string, unknown>,
+  { hostId = "local" }: { hostId?: string } = {},
 ): Promise<T> {
-  const advisor = advisorSpawnSessions.has(sessionId);
+  const advisor = advisorSpawnSessions.has(sessionKey(sessionId, hostId));
   // The link's dedupe key; no crypto.randomUUID (insecure LAN origins lack it).
   const req = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
   const json = JSON.stringify(command);
@@ -111,14 +127,15 @@ export async function sendAgentCommand<T = unknown>(
     req,
     type,
     session: sessionId,
+    hostId,
     bytes: json.length,
     sentAt: Date.now(),
   };
   let reply: CommandReply;
   try {
     reply =
-      (await sendSessionCommand(sessionId, req, json, advisor, type)) ??
-      (await postAgentCommand(sessionId, json, advisor, req, type));
+      (await sendSessionCommand(sessionId, req, json, advisor, type, hostId)) ??
+      (await postAgentCommand(sessionId, json, advisor, req, type, hostId));
   } catch (error) {
     // The POST got no answer at all (offline, connection reset).
     recordTransportSample({
@@ -181,14 +198,16 @@ async function postAgentCommand(
   advisor: boolean,
   req: string,
   type: string,
+  hostId: string,
 ): Promise<CommandReply> {
+  const key = sessionKey(sessionId, hostId);
   let behindSameBytes = 0;
   let behindOtherBytes = 0;
   for (const other of inFlightPosts) {
-    if (other.sessionId === sessionId) behindSameBytes += other.bytes;
+    if (other.key === key) behindSameBytes += other.bytes;
     else behindOtherBytes += other.bytes;
   }
-  const mine = { sessionId, bytes: body.length };
+  const mine = { key, bytes: body.length };
   inFlightPosts.add(mine);
   // The hang formula over all this tab has in flight (HTTP/2 shares one connection); it records, never aborts.
   const waitedMs =
@@ -209,7 +228,10 @@ async function postAgentCommand(
   );
   try {
     const res = await fetch(
-      `/api/agent/${encodeURIComponent(sessionId)}${advisor ? "?advisor=1" : ""}`,
+      sessionUrl(
+        `/api/agent/${encodeURIComponent(sessionId)}${advisor ? "?advisor=1" : ""}`,
+        hostId,
+      ),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

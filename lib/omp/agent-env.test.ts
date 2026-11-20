@@ -22,7 +22,6 @@ function withAgentDir(run: (dir: string) => void) {
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;
-    delete globalThis.__keylimeSettingsCache;
     rmSync(dir, { recursive: true, force: true });
   }
 }

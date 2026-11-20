@@ -238,9 +238,13 @@ test("strict discovery rejects unidentifiable headers but accepts a genuinely mi
   }));
 
 for (const side of ["local", "remote"]) {
-  for (const code of ["EACCES", "EIO"]) {
+  for (const code of ["EACCES", "EIO", null]) {
     for (const project of [false, true]) {
-      test(`${side} ${project ? "project" : "root"} ${code} blocks a restore on another host without consuming its real archive`, () =>
+      if (code === null && project) continue;
+      const condition = code
+        ? `${project ? "project" : "root"} ${code}`
+        : "with an active copy of the same UUID";
+      test(`${side} peer ${condition} does not block a restore on another host`, () =>
         withRoots(async ({ root, local, remote }) => {
           const active = side === "local" ? local : remote;
           writeFileSync(join(active, "project", "active.jsonl"), body());
@@ -280,11 +284,12 @@ for (const side of ["local", "remote"]) {
                 };
               },
             });
-            faultState.value = {
-              operation: "readdir",
-              path: project ? join(active, "project") : active,
-              code,
-            };
+            if (code)
+              faultState.value = {
+                operation: "readdir",
+                path: project ? join(active, "project") : active,
+                code,
+              };
             const response = await route.POST(
               new Request("http://localhost/api/sessions/archive", {
                 method: "POST",
@@ -293,14 +298,14 @@ for (const side of ["local", "remote"]) {
               }),
             );
             assert.deepEqual(
-              [response.status, (await response.json()).code],
-              [503, "host_sessions_unavailable"],
+              [response.status, await response.json()],
+              [200, { ok: true, sessionId: ID }],
             );
-            assert.equal(restores, 0);
-            assert.deepEqual(readFileSync(join(archive, key)), compressed);
+            assert.equal(restores, 1);
+            assert.equal(existsSync(join(archive, key)), false);
             assert.equal(
               existsSync(join(target, "project", "restored.jsonl")),
-              false,
+              true,
             );
           } finally {
             faultState.value = null;
@@ -316,8 +321,10 @@ for (const scenario of [
   "renamed-project",
   "symlinked-project",
   "symlinked-file",
+  "EACCES",
+  "EIO",
 ]) {
-  test(`${scenario} on a peer blocks restore with 503 and preserves the selected host's archive`, () =>
+  test(`${scenario} on the target blocks restore with 503 and preserves its archive`, () =>
     withRoots(async ({ root, remote }) => {
       const active = join(remote, "project", "active.jsonl");
       writeFileSync(active, body());
@@ -336,9 +343,8 @@ for (const scenario of [
         realFs.symlinkSync(join(root, "outside-session.jsonl"), active, "file");
       }
       await linkLocalDaemon();
-      const peer = await linkHost("Uncertain peer");
+      const target = remote;
       const selected = await linkHost("Selected archive");
-      const target = join(root, "target-sessions");
       const archive = join(root, "target-archive");
       const key = "project/restored.jsonl.gz";
       mkdirSync(join(archive, "project"), { recursive: true });
@@ -346,9 +352,6 @@ for (const scenario of [
       writeFileSync(join(archive, key), compressed);
       let restores = 0;
       try {
-        peer.serve({
-          listSessionIdsForRestore: () => listSessionIdsForRestore(remote),
-        });
         selected.serve({
           listArchives: () => listArchivedSessionInfos(archive),
           listSessionIdsForRestore: () => listSessionIdsForRestore(target),
@@ -375,6 +378,12 @@ for (const scenario of [
             from: join(remote, "project"),
             to: join(remote, "renamed"),
           };
+        if (scenario === "EACCES" || scenario === "EIO")
+          faultState.value = {
+            operation: "readdir",
+            path: join(target, "project"),
+            code: scenario,
+          };
         const response = await route.POST(
           new Request("http://localhost/api/sessions/archive", {
             method: "POST",
@@ -394,7 +403,6 @@ for (const scenario of [
         );
       } finally {
         faultState.value = null;
-        closeHostLink(peer.id);
         closeHostLink(selected.id);
       }
     }));

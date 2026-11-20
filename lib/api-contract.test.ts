@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import type { LinkDriver } from "./hosts/link-driver.test-helper.ts";
 
 test("new-session route rejects malformed commands", async () => {
   const newRoute = await readFile(
@@ -9,23 +10,6 @@ test("new-session route rejects malformed commands", async () => {
   );
   assert.match(newRoute, /command_type_required/);
   assert.match(newRoute, /newSessionErrorResponse/);
-});
-
-test("web-settings route validates the agent environment and keeps the keys optional", async () => {
-  const route = await readFile(
-    new URL("../app/api/web-settings/route.ts", import.meta.url),
-    "utf8",
-  );
-  // Reserved/invalid names come back as per-line errors instead of being persisted.
-  assert.match(route, /parsed\.errors\.length > 0/);
-  assert.match(route, /invalid_agent_env/);
-  assert.match(route, /parseAgentEnvText/);
-  assert.match(route, /sanitizeAgentEnvValues/);
-  // Both settings are optional so one can be saved without clobbering the other.
-  assert.match(route, /payload\.autoResumeSessions !== undefined/);
-  assert.match(route, /payload\.agentEnv !== undefined/);
-  // An agentEnv-only save must not re-sync live sessions.
-  assert.match(route, /if \(resumeProvided\) syncInterruptibleSessions\(\)/);
 });
 
 test("session archive route stops live children and maps missing sessions", async () => {
@@ -84,17 +68,6 @@ test("worktree discovery filters prunable entries and identifies the main checko
   assert.match(source, /"worktree", "list", "--porcelain"/);
 });
 
-test("model endpoint invalidates cached runtime models after external config edits", async () => {
-  const route = await readFile(
-    new URL("../app/api/models/route.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(route, /statSync/);
-  assert.match(route, /__ompModelsConfigFingerprint/);
-  assert.match(route, /invalidateModelsCache\(\)/);
-  assert.match(route, /disposeUtilityRpc\(\)/);
-});
-
 test("agent project discovery requires an explicit workspace", async () => {
   const route = await readFile(
     new URL("../app/api/agents/route.ts", import.meta.url),
@@ -146,14 +119,6 @@ test("MCP route redacts project server credentials", async () => {
   assert.doesNotMatch(route, /config }\)\), user: safeUser/);
 });
 
-test("agent command route reads the advisor choice from the query string", async () => {
-  const route = await readFile(
-    new URL("../app/api/agent/[id]/route.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(route, /searchParams\.get\("advisor"\) === "1"/);
-});
-
 test("new-session route never forwards a session id into the child RPC", async () => {
   const route = await readFile(
     new URL("../app/api/agent/new/route.ts", import.meta.url),
@@ -169,12 +134,12 @@ test("PUT /api/web-settings validates the transport and tells open streams only 
   const dir = mkdtempSync(join(tmpdir(), "keylime-settings-route-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = dir;
-  delete globalThis.__keylimeSettingsCache;
   const { PUT, GET } = await import("../app/api/web-settings/route.ts");
   const { EventStreamConnection } = await import("./event-stream-hub.ts");
+  const endpoint = "http://localhost/api/web-settings?scope=browser";
   const put = (body: unknown) =>
     PUT(
-      new Request("http://localhost/api/web-settings", {
+      new Request(endpoint, {
         method: "PUT",
         body: JSON.stringify(body),
       }),
@@ -204,9 +169,7 @@ test("PUT /api/web-settings validates the transport and tells open streams only 
     for (const value of ["websocket", "ws-pool", "ws-client"]) {
       const invalid = await put({ browserTransport: value });
       assert.equal(invalid.status, 400);
-      const answer = await invalid.json();
-      assert.equal(answer.code, "invalid_settings");
-      assert.match(answer.error, /browserTransport must be one of "sse", "ws"/);
+      assert.match((await invalid.json()).error, /Expected browserTransport/);
     }
 
     // The default is ws, so the first change is to sse.
@@ -217,14 +180,16 @@ test("PUT /api/web-settings validates the transport and tells open streams only 
       await read(),
       /^event: mux\n[\s\S]*\ndata: \{"type":"transport","transport":"sse"\}\n\n$/,
     );
-    assert.equal((await (await GET()).json()).browserTransport, "sse");
+    assert.deepEqual(await (await GET(new Request(endpoint))).json(), {
+      browserTransport: "sse",
+    });
 
     // Saves that do not change the state broadcast nothing: the next frame is the one we trigger ourselves.
-    for (const unchanged of [
-      { autoResumeSessions: false },
-      { browserTransport: "sse" },
-    ]) {
-      assert.equal((await put(unchanged)).status, 200);
+    for (const [patch, status] of [
+      [{ autoResumeSessions: false }, 400],
+      [{ browserTransport: "sse" }, 200],
+    ] as const) {
+      assert.equal((await put(patch)).status, status);
       connection.control({ type: "open", sub: "s1" });
       assert.match(await read(), /"type":"open"/);
     }
@@ -235,7 +200,100 @@ test("PUT /api/web-settings validates the transport and tells open streams only 
     connection.close();
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;
-    delete globalThis.__keylimeSettingsCache;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings and model requests stay on the selected daemon", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { linkHost } = await import("./hosts/link-driver.test-helper.ts");
+  const { closeHostLink } = await import("./hosts/hub.ts");
+  const settings = await import("../app/api/web-settings/route.ts");
+  const models = await import("../app/api/models/route.ts");
+  const dir = mkdtempSync(join(tmpdir(), "keylime-host-policy-route-"));
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = dir;
+  const links: LinkDriver[] = [];
+  try {
+    const first = await linkHost("first");
+    links.push(first);
+    const second = await linkHost("second");
+    links.push(second);
+    const requests: string[] = [];
+    for (const link of links) {
+      let policy = {
+        autoResumeSessions: false,
+        agentToolsEnabled: false,
+        uploadRetentionDays: link === first ? 7 : 90,
+      };
+      void link.serve({
+        hostSettingsGet: () => policy,
+        hostSettingsSet: (patch) => {
+          requests.push(link.id);
+          policy = { ...policy, ...patch };
+          return policy;
+        },
+        modelsList: ({ refresh }) => {
+          requests.push(`${link.id}:${refresh}`);
+          return {
+            models: { [link.id]: "Model" },
+            modelList: [],
+            defaultModel: null,
+            thinkingLevels: {},
+            anthropicSlowMode: link === second,
+          };
+        },
+      });
+    }
+    const url = (path: string, id: string) =>
+      `http://localhost/api/${path}?hostId=${encodeURIComponent(id)}`;
+    const firstSettings = url("web-settings", first.id);
+    const patch = (body: unknown) =>
+      settings.PUT(
+        new Request(firstSettings, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        }),
+      );
+    assert.equal(
+      (await patch({ agentEnv: { SECRET: "never forwarded" } })).status,
+      400,
+    );
+    const saved = await patch({ uploadRetentionDays: 30 });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await saved.json(), {
+      autoResumeSessions: false,
+      agentToolsEnabled: false,
+      uploadRetentionDays: 30,
+    });
+    const untouched = await settings.GET(
+      new Request(url("web-settings", second.id)),
+    );
+    assert.equal((await untouched.json()).uploadRetentionDays, 90);
+    const catalog = await models.GET(new Request(url("models", first.id)));
+    assert.deepEqual((await catalog.json()).models, { [first.id]: "Model" });
+    const refreshed = await models.POST(
+      new Request(url("models", second.id), { method: "POST" }),
+    );
+    assert.equal((await refreshed.json()).anthropicSlowMode, true);
+    assert.deepEqual(requests, [
+      first.id,
+      `${first.id}:false`,
+      `${second.id}:true`,
+    ]);
+
+    closeHostLink(first.id);
+    assert.equal((await settings.GET(new Request(firstSettings))).status, 503);
+    assert.equal(
+      (await models.GET(new Request(url("models", first.id)))).status,
+      503,
+    );
+  } finally {
+    for (const link of links) link.drop();
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
     rmSync(dir, { recursive: true, force: true });
   }
 });

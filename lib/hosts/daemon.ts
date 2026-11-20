@@ -31,9 +31,14 @@ import { getAgentDir, getSessionsDir } from "../omp/paths";
 import { ProjectPathError } from "../project-registry";
 import { isValidSessionId } from "../session-file-references-core";
 import { isRecord } from "../type-guards";
-import { sampleHostCapacity } from "./capacity";
+import {
+  loadHostSettings,
+  parseHostSettingsPatch,
+  saveHostSettings,
+} from "../web-settings";
+import { getHostModels } from "../models-cache";
 import type { HostControlCommand, HostControlStatus } from "./host-control";
-import { readHostLinks, readHostLogin, type HostLink } from "./host-login";
+import { readHostLogin, type HostLink } from "./host-login";
 import { DaemonLink, dialable, nextRedialDelay } from "./daemon-link";
 import { ChannelTable } from "./daemon-channels";
 import { TerminalManager } from "./terminals";
@@ -149,30 +154,21 @@ type DaemonOptions = {
   allowHttp: boolean;
   url?: string;
   token?: string;
-  links?: HostLink[];
   hostSocket?: string;
   standaloneControl?: boolean;
 };
 export function runHostDaemon(options: DaemonOptions): HostDaemon {
-  const explicit =
-    options.url !== undefined && options.token !== undefined
-      ? [{ url: options.url, token: options.token }]
-      : options.links;
-  const initial = explicit ?? readHostLinks();
-  for (const link of initial)
-    if (!dialable(link.url, options.allowHttp))
-      throw new Error(
-        "keylime host needs an https:// server URL (http:// only for loopback, or with --allow-http)",
-      );
-  const primaryUrl = (
-    explicit?.[0]?.url ??
-    readHostLogin()?.url ??
-    initial[0]?.url
-  )?.replace(/\/+$/, "");
-  const links = new Map<string, DaemonLink>();
+  const explicit = options.url !== undefined && options.token !== undefined;
+  const initial = explicit
+    ? { url: options.url!.replace(/\/+$/, ""), token: options.token! }
+    : readHostLogin();
+  if (initial && !dialable(initial.url, options.allowHttp))
+    throw new Error(
+      "keylime host needs an https:// server URL (http:// only for loopback, or with --allow-http)",
+    );
+  let controller: DaemonLink | undefined;
   const shipOwners = new Map<string, DaemonLink>();
   const shipOwnerByLink = new WeakMap<DaemonLink, string>();
-  const ended = new Map<string, string>();
   const services = new Map<string, WorkspaceService>();
   const uploadOwners = new Map<string, { link: DaemonLink; attempt: string }>();
   const uploadAttempts = new Map<string, DaemonLink>();
@@ -180,7 +176,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   const { promise: done, resolve: finish } = Promise.withResolvers<number>();
   let stopped = false,
     linkId = 0,
-    notifierId: string | null = null,
     ompVersion: string | null = null;
   let stopping: Promise<void> | undefined;
   let reloadTimer: NodeJS.Timeout | undefined;
@@ -489,24 +484,22 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   });
   const terminalOverflow = new Set<string>();
   const terminals = new TerminalManager((id, event) => {
-    for (const link of links.values())
-      if (link.isUp()) {
-        const key = link.id + ":" + id;
-        if (
+    const link = controller;
+    if (link?.isUp()) {
+      const key = link.id + ":" + id;
+      if (
+        link.queue({ type: "terminal_event", id, event }, "terminal:" + id) ===
+        null
+      ) {
+        if (!terminalOverflow.has(key)) {
+          terminalOverflow.add(key);
           link.queue(
-            { type: "terminal_event", id, event },
+            { type: "terminal_event", id, event: { type: "disconnected" } },
             "terminal:" + id,
-          ) === null
-        ) {
-          if (!terminalOverflow.has(key)) {
-            terminalOverflow.add(key);
-            link.queue(
-              { type: "terminal_event", id, event: { type: "disconnected" } },
-              "terminal:" + id,
-            );
-          }
-        } else terminalOverflow.delete(key);
-      }
+          );
+        }
+      } else terminalOverflow.delete(key);
+    }
   }, isEffortCleaningPath);
   const processes: WorkspaceDeletionAdapter = {
     fence: (directory) => {
@@ -602,8 +595,8 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         return "Wait for active filesystem operations to finish.";
     if (operationsInFlight > 0)
       return "Wait for pending host operations to finish.";
-    for (const link of links.values())
-      if (link.busy()) return "Wait for reliable host results to be delivered.";
+    if (controller?.busy())
+      return "Wait for reliable host results to be delivered.";
     return null;
   }
   function control(command: HostControlCommand): HostControlStatus {
@@ -631,28 +624,12 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       pid: process.pid,
       version: packageJson.version,
       protocol: LINK_PROTOCOL_VERSION,
-      linked: !stopped && [...links.values()].some((link) => link.isUp()),
+      linked: !stopped && (controller?.isUp() ?? false),
       drained,
       executable,
       entrypoint,
     };
   }
-  function reportCapacity(): void {
-    if (stopped) return;
-    let linked = false;
-    for (const link of links.values())
-      if (link.isUp()) {
-        linked = true;
-        break;
-      }
-    if (!linked) return;
-    const sample = sampleHostCapacity(channels.activeTurns);
-    if (sample)
-      for (const link of links.values())
-        link.report({ type: "capacity", sample });
-  }
-  const capacityTimer = setInterval(reportCapacity, 5_000);
-  capacityTimer.unref?.();
   startShipWatcher(
     sessionsChanged,
     offerShipDigest,
@@ -668,30 +645,17 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   function sessionsChanged(): void {
     localHost.invalidateSessionLists();
     invalidateWorkspaceRoots();
-    if (!stopped)
-      for (const link of links.values())
-        link.queue({ type: "sessions_changed" }, "sessions");
+    if (!stopped) controller?.queue({ type: "sessions_changed" }, "sessions");
   }
   function channelsChanged(ch: string): void {
-    if (stopped) return;
-    for (const link of links.values())
-      if (link.isUp()) {
-        link.queue(
-          { type: "channels_changed", channels: channels.listing(link) },
-          ch,
-        );
-      }
+    const link = controller;
+    if (!stopped && link?.isUp())
+      link.queue(
+        { type: "channels_changed", channels: channels.listing(link) },
+        ch,
+      );
   }
-  function electNotifier(): void {
-    const next = [...links.values()].find((link) => link.isUp())?.id ?? null;
-    if (next === notifierId) return;
-    const old = notifierId;
-    notifierId = next;
-    for (const link of links.values())
-      if (link.id === old || link.id === next)
-        link.queue({ type: "notifier", on: link.id === next }, "notifier");
-  }
-  /** Stops a removed link's workspace service (tracked so shutdown awaits it) and frees its upload ownership so other servers can take those uploads. */
+  /** Retire the old controller's workspace service and invalidate its upload ownership. */
   function dropLink(link: DaemonLink): void {
     const shipOwner = shipOwnerByLink.get(link);
     if (shipOwner && shipOwners.get(shipOwner) === link)
@@ -712,7 +676,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     for (const [key, owner] of uploadAttempts)
       if (owner === link) uploadAttempts.delete(key);
   }
-  function makeLink(login: HostLink, primary: boolean): DaemonLink {
+  function makeLink(login: HostLink): DaemonLink {
     // The bearer identifies a configured server relationship, not just an address.
     const shipOwner = createHash("sha256")
       .update(
@@ -721,7 +685,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       .digest("hex");
     const link = new DaemonLink(login, "l" + ++linkId, {
       allowHttp: options.allowHttp,
-      primary,
       log,
       hello: (link, replay) =>
         encodeLine({
@@ -738,13 +701,11 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           autoApproveExtension: localHost.autoApproveExtension(),
           ack: link.ackedDown,
           channels: channels.listing(link, replay),
-          link: { id: link.id, notifier: notifierId === link.id },
         }),
       handleDown,
       onState: (link, up) => {
         if (up) {
           channels.linkUp(link);
-          reportCapacity();
           link.queue(
             {
               type: "channels_changed",
@@ -757,7 +718,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           services.get(link.id)?.onDisconnect();
           channels.linkDown(link);
         }
-        electNotifier();
       },
       onBlob: (link, id, bytes) => {
         if (!drained && uploadOwners.get(id)?.link === link)
@@ -765,21 +725,16 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       },
       reload: (source, unauthorized) => reconcile(source, unauthorized),
       onEnd: (link, why) => {
-        if (links.get(login.url) !== link) return;
-        links.delete(login.url);
-        ended.set(login.url, login.token);
+        if (controller !== link) return;
+        controller = undefined;
         channels.linkGone(link);
         dropLink(link);
-        electNotifier();
-        if (links.size === 0) {
-          log(
-            why === "revoked"
-              ? "the server rejected this host's token (revoked?); stopping its omp sessions"
-              : "the last host link ended",
-          );
-          const code = why === "replaced" ? 0 : 1;
-          void shutdown(code);
-        }
+        log(
+          why === "revoked"
+            ? "the server rejected this host's token (revoked?); stopping its omp sessions"
+            : "the controller link ended",
+        );
+        void shutdown(why === "replaced" ? 0 : 1);
       },
     });
     services.set(
@@ -794,7 +749,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         {
           shipOwner,
           assertShipMonitorAvailable: (directory) => {
-            if (!link.isUp() || shipOwners.get(shipOwner) !== link)
+            if (!link.isUp() || controller !== link)
               throw new HostOpError(
                 403,
                 "link_not_authenticated",
@@ -806,67 +761,52 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         },
       ),
     );
-    links.set(login.url, link);
+    controller = link;
     shipOwners.set(shipOwner, link);
     shipOwnerByLink.set(link, shipOwner);
     return link;
   }
 
   function reconcile(source?: DaemonLink, unauthorized = false): boolean {
-    if (stopped) return false;
-    const previousToken = source?.login.token;
-    let saved: HostLink[];
+    if (stopped || (source && controller !== source)) return false;
+    let saved: HostLink | null;
     try {
-      saved = readHostLinks();
+      saved = readHostLogin();
     } catch (error) {
       log("could not reload host.json: " + reason(error));
       return false;
     }
+    if (saved && !dialable(saved.url, options.allowHttp)) return false;
+    const previous = controller;
     if (unauthorized) {
-      if (!source) return false;
-      const fresh = saved.find(
-        (login) =>
-          login.url === source.login.url && login.token !== source.login.token,
-      );
-      if (!fresh || !dialable(fresh.url, options.allowHttp)) return false;
+      if (
+        !source ||
+        !saved ||
+        saved.url !== source.login.url ||
+        saved.token === source.login.token
+      )
+        return false;
       log(
         "the server rejected this host's token; using the new one from host.json",
       );
-      saved = [...links.values()].map((link) =>
-        link === source ? fresh : link.login,
-      );
-    } else if (explicit && saved.length === 0) return false;
-    if (saved.some((login) => !dialable(login.url, options.allowHttp)))
+    } else if (explicit && !saved) return false;
+    if (
+      saved?.url === previous?.login.url &&
+      saved?.token === previous?.login.token
+    )
       return false;
-    const wanted = new Map(
-      saved.map((login) => [login.url.replace(/\/+$/, ""), login]),
-    );
-    for (const [url, link] of links) {
-      const login = wanted.get(url);
-      if (login?.token === link.login.token) continue;
-      // A replacement credential must not replay the previous link's queued digests.
-      // Do not rekey this transport in place: its sequence windows and outbox survive a redial.
-      links.delete(url);
-      channels.linkGone(link);
-      dropLink(link);
-      void link.stop();
+    if (previous) {
+      // Do not rekey in place: sequence windows and queued results belong to the old credential.
+      controller = undefined;
+      channels.linkGone(previous);
+      dropLink(previous);
+      void previous.stop();
     }
-    for (const login of wanted.values()) {
-      if (links.has(login.url) || ended.get(login.url) === login.token)
-        continue;
-      log("host.json changed; dialing " + login.url);
-      const link = makeLink(
-        login,
-        login.url ===
-          (readHostLogin()?.url.replace(/\/+$/, "") ?? saved[0]?.url),
-      );
-      link.start();
+    if (saved) {
+      log("host.json changed; dialing " + saved.url);
+      makeLink(saved).start();
     }
-    electNotifier();
-    return source
-      ? links.get(source.login.url) !== source ||
-          source.login.token !== previousToken
-      : true;
+    return true;
   }
 
   function handleDown(
@@ -977,7 +917,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       );
     if (stopped)
       throw new HostOpError(503, "host_stopping", "This host is stopping");
-    // Putting this host's own configuration back is not new work: a drained member can still leave its cluster.
     if (
       drained &&
       ![
@@ -987,6 +926,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         "close",
         "ptySessions",
         "hostArtifactActivationStatus",
+        "hostSettingsGet",
       ].includes(op)
     ) {
       throw new HostOpError(
@@ -1000,7 +940,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         (op === "startShip" ||
           op === "startShipMonitor" ||
           op === "stopShipMonitor") &&
-        (!link.isUp() || links.get(link.login.url) !== link)
+        (!link.isUp() || controller !== link)
       )
         throw new HostOpError(
           403,
@@ -1313,14 +1253,14 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           typeof args.id === "string" &&
           uploadOwners.get(args.id)?.link === link;
         const staged = await uploads.stageHostArtifact(args.id);
-        if (ownedUpload && owner && links.get(link.login.url) === link)
+        if (ownedUpload && owner && controller === link)
           activation.stage(args.id as string, staged.path, owner);
         return staged;
       }
       case "activateHostArtifact":
       case "hostArtifactActivationStatus": {
         const owner = shipOwnerByLink.get(link);
-        if (!owner || !link.isUp() || links.get(link.login.url) !== link)
+        if (!owner || !link.isUp() || controller !== link)
           throw new HostOpError(
             403,
             "link_not_authenticated",
@@ -1337,8 +1277,29 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           sessionsPath(args.sessionFile),
           args.sessionId,
         );
-      case "setUploadRetention":
-        return uploadRetention.set(args.days);
+      case "hostSettingsGet":
+        return loadHostSettings();
+      case "hostSettingsSet": {
+        const patch = parseHostSettingsPatch(args);
+        if (!patch)
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "Invalid host settings patch",
+          );
+        const settings = saveHostSettings(patch);
+        if (Object.hasOwn(patch, "uploadRetentionDays"))
+          void uploadRetention.sweep();
+        return settings;
+      }
+      case "modelsList":
+        if (args.refresh !== undefined && typeof args.refresh !== "boolean")
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "refresh must be a boolean",
+          );
+        return getHostModels(args.refresh === true);
       default: {
         const run = sessionOps[op] as (
           ...params: unknown[]
@@ -1373,7 +1334,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     watcher.close();
     clearTimeout(reloadTimer);
     clearInterval(sweepTimer);
-    clearInterval(capacityTimer);
     uploadRetention.stop();
     // Freeze before exit handlers observe children stopping.
     resume.freeze();
@@ -1387,7 +1347,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         if (result.status === "rejected")
           log("could not stop workspace jobs: " + reason(result.reason));
       await terminals.stop();
-      await Promise.all([...links.values()].map((link) => link.stop()));
+      await controller?.stop();
       await Promise.all([
         ...stops,
         ...[...services.values()].map((service) => service.stop()),
@@ -1404,11 +1364,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     })();
     return stopping;
   }
-  for (const saved of initial)
-    makeLink(
-      { ...saved, url: saved.url.replace(/\/+$/, "") },
-      saved.url.replace(/\/+$/, "") === primaryUrl,
-    );
+  if (initial) makeLink(initial);
   let interrupted: HostResumeEntry[] = [];
   try {
     interrupted = resume.takeRunning();
@@ -1437,7 +1393,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     .catch((error) => log("could not read omp version: " + reason(error)))
     .finally(() => {
       operationsInFlight--;
-      if (!stopped) for (const link of links.values()) link.start();
+      if (!stopped) controller?.start();
     });
   const started = Promise.all([
     startupSweep,

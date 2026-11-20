@@ -67,6 +67,7 @@ test("opening a notification's session closes the popover", async () => {
     notificationHistory.add({
       type: "completed",
       sessionId: "a",
+      hostId: "local",
       sessionName: "Alpha",
     });
   });

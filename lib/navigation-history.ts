@@ -15,13 +15,9 @@ export interface NavigationEntry {
   sessionId: string | null;
   /** The view's cwd — the session's cwd, or the new-chat cwd. */
   cwd: string | null;
-  /** Host of a new-chat view's cwd; absent for this machine. */
+  /** Owning host; absent for this machine. */
   hostId?: string;
-  poolId?: string;
-  projectId?: string;
   creationId?: string;
-  /** Initial ensure_session configuration only; never prompt text or credentials. */
-  initialization?: string;
 }
 
 export interface NavigationHistory {
@@ -41,22 +37,15 @@ export function createNavigationHistory(): NavigationHistory {
 }
 
 /**
- * Session views compare by id (a session keeps its identity while its cwd
- * metadata refreshes); new-chat views compare by host and cwd.
+ * Session views compare by host and id; new-chat views by host and cwd.
  */
 export function navigationEntriesEqual(
   a: NavigationEntry,
   b: NavigationEntry,
 ): boolean {
+  if ((a.hostId ?? "local") !== (b.hostId ?? "local")) return false;
   if (a.sessionId !== b.sessionId) return false;
-  if (a.sessionId !== null) return true;
-  if (a.poolId || b.poolId)
-    return (
-      a.poolId === b.poolId &&
-      a.projectId === b.projectId &&
-      a.creationId === b.creationId
-    );
-  return (a.cwd ?? null) === (b.cwd ?? null) && a.hostId === b.hostId;
+  return a.sessionId !== null || a.cwd === b.cwd;
 }
 
 export function currentNavigationEntry(
@@ -80,20 +69,7 @@ export function pushNavigationEntry(
     return { entries: [entry], index: 0 };
   }
   const current = history.entries[history.index];
-  if (current && navigationEntriesEqual(current, entry)) {
-    if (
-      !current.poolId ||
-      current.initialization !== undefined ||
-      entry.initialization === undefined
-    )
-      return history;
-    const entries = [...history.entries];
-    entries[history.index] = {
-      ...current,
-      initialization: entry.initialization,
-    };
-    return { ...history, entries };
-  }
+  if (current && navigationEntriesEqual(current, entry)) return history;
   const entries = history.entries.slice(0, history.index + 1);
   entries.push(entry);
   if (entries.length > NAVIGATION_HISTORY_MAX_ENTRIES) {

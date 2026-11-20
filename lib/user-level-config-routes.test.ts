@@ -1,6 +1,5 @@
-// Settings routes for a cluster member (spec K7). Requests without a cwd act on the user level only: omp runs in its
-// agent directory, where no project lies, and project-scope entries are left out. MCP's live status of a member's
-// session is read from its running process (`attach=1`), never from one started here.
+// User-level settings run omp in its agent directory, outside any project.
+// MCP attach reads only the selected host's existing session process.
 import assert from "node:assert/strict";
 import {
   mkdirSync,
@@ -15,6 +14,7 @@ import * as os from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import { mock } from "bun:test";
+import { sessionKey } from "./session-identity.ts";
 
 const scratch = realpathSync(
   mkdtempSync(join(os.tmpdir(), "keylime-user-level-")),
@@ -104,7 +104,7 @@ const MCP_LIST = "User level (mcp.json):\n  demo ● connected [stdio]\n";
 let mcpLists = 0;
 globalThis.__ompSessions = new Map([
   [
-    "running-session",
+    sessionKey("running-session"),
     {
       isAlive: () => true,
       getMcpList: async () => {
@@ -114,7 +114,7 @@ globalThis.__ompSessions = new Map([
     },
   ],
   [
-    "ended-session",
+    sessionKey("ended-session"),
     {
       isAlive: () => false,
       getMcpList: async () => {
@@ -123,6 +123,7 @@ globalThis.__ompSessions = new Map([
       },
     },
   ],
+  [sessionKey("running-session", "build-box"), { isAlive: () => false }],
 ]) as unknown as NonNullable<typeof globalThis.__ompSessions>;
 after(() => {
   for (const [key, value] of Object.entries(saved)) {
@@ -254,11 +255,11 @@ test("a missing agent directory is created owner-only before omp runs there, not
   assert.equal(calls().at(-1), `${fresh} skill list --json`);
 });
 
-const liveMcp = async (sessionId: string) =>
+const liveMcp = async (sessionId: string, hostId = "local") =>
   (
     await mcp.GET(
       new Request(
-        `http://localhost/api/mcp?${new URLSearchParams({ sessionId, attach: "1", live: "1" })}`,
+        `http://localhost/api/mcp?${new URLSearchParams({ sessionId, hostId, attach: "1", live: "1" })}`,
       ),
     )
   ).json();
@@ -276,6 +277,14 @@ test("MCP with attach=1 reads the live status of a running session", async () =>
   );
 });
 
+test("MCP attach never falls back to a local namesake of a remote session", async () => {
+  const before = mcpLists;
+  const body = await liveMcp("running-session", "build-box");
+  assert.equal(body.liveError, "The session is not running");
+  assert.equal(body.liveServers, undefined);
+  assert.equal(mcpLists, before);
+});
+
 for (const [label, sessionId] of [
   ["whose process ended", "ended-session"],
   ["unknown here", "unknown-session"],
@@ -289,7 +298,7 @@ for (const [label, sessionId] of [
       [undefined, "The session is not running"],
     );
     assert.equal(
-      globalThis.__ompSessions?.has(sessionId),
+      globalThis.__ompSessions?.has(sessionKey(sessionId)),
       sessionId === "ended-session",
       "nothing registered",
     );

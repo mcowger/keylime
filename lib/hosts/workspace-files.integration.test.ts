@@ -264,7 +264,7 @@ test("a session reference permits only its owning host and never grants director
       .join("\n") + "\n",
   );
   assert.ok(owner.host);
-  owner.host.invalidateSessionLists();
+  await owner.host.invalidateSessionLists();
   const allowed = await h.file(owner.id, outside, "read", { sessionId: id });
   assert.equal(allowed.status, 200);
   assert.equal((await allowed.json()).content, "referenced on this host");
@@ -273,10 +273,9 @@ test("a session reference permits only its owning host and never grants director
     403,
   );
   const other = await h.startHost();
-  assert.equal(
-    (await h.file(other.id, outside, "read", { sessionId: id })).status,
-    409,
-  );
+  const wrongHost = await h.file(other.id, outside, "read", { sessionId: id });
+  assert.equal(wrongHost.status, 404);
+  assert.equal((await wrongHost.json()).code, "session_not_found");
 });
 
 test("an older linked daemon refuses workspace access instead of reading main's disk", async () => {

@@ -29,7 +29,7 @@ const isId = (value: unknown): value is string =>
  * @apiContract getNotificationsHistory
  * @apiUsage Load the persistent notification center history.
  * @apiInputs No parameters.
- * @apiInvariants Entries are newest first, limited to the latest 100; events requested by at least one enabled device are recorded even if undelivered.
+ * @apiInvariants Entries are newest first, limited to the latest 100; events requested by at least one enabled device are recorded even if undelivered. Old entries without a host remain readable and have no session link.
  * @apiEffects Returns entries without marking them read.
  * @apiRecovery Reload history to reconcile the client mirror after a failed mutation.
  */
@@ -42,7 +42,7 @@ export async function GET() {
  * @apiContract patchNotificationsHistory
  * @apiUsage Mark only entries the client has shown as read.
  * @apiInputs JSON ids array of at most 100 nonempty strings, each at most 256 characters; body limit 32 KiB.
- * @apiInvariants Unknown IDs and an empty array are harmless; replacing a session/type entry later creates a new notification with its own read state.
+ * @apiInvariants Unknown IDs and an empty array are harmless; replacing a host/session/type entry later creates a new notification with its own read state.
  * @apiEffects Marks matching stored entries read and returns ok.
  * @apiRecovery Correct malformed requests after 400 invalid_history_request or reduce the body after 413 request_too_large.
  */

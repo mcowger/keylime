@@ -10,7 +10,6 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import * as os from "node:os";
-import { captureExpectedConsole } from "../../tests/expected-console.ts";
 import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
 import {
   encodeBlobFrame,
@@ -18,6 +17,7 @@ import {
   LINK_PROTOCOL_VERSION,
   PartJoiner,
 } from "./link-protocol.ts";
+import { loginHost, removeHostLink } from "./host-login";
 
 const scratch = mkdtempSync(join(os.tmpdir(), "daemon-multi-runtime-"));
 const old = {
@@ -58,7 +58,7 @@ function writeFakeOmp(version: string) {
 writeFakeOmp("99.0.0-fake");
 process.env.KEYLIME_OMP_BIN = fakeOmp;
 const { runHostDaemon } = await import("./daemon.ts");
-const { saveWebServerSettings } = await import("../web-settings.ts");
+const { saveHostSettings } = await import("../web-settings.ts");
 test.after(() => {
   for (const [key, value] of [
     ["PI_CODING_AGENT_DIR", old.agent],
@@ -101,7 +101,6 @@ function hub(
   { version = LINK_PROTOCOL_VERSION }: { version?: number } = {},
 ) {
   const hellos: {
-      link: { id: string; notifier: boolean };
       channels: unknown[];
     }[] = [],
     messages: HubMessage[] = [],
@@ -178,429 +177,25 @@ function hub(
   };
 }
 
-test("configuration reload, source ops/uploads and peer-only deletion preserve other links and one process", async (t) => {
-  captureExpectedConsole(
-    t,
-    "error",
-    (message) =>
-      typeof message === "string" &&
-      message.startsWith("[keylime host] could not reload host.json: ") &&
-      message.endsWith("/host.json is not valid host link configuration"),
-  );
-  const a = hub(t),
-    b = hub(t),
-    c = hub(t);
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime"),
-    root = join(process.env.PI_CODING_AGENT_DIR!, "sessions", "-project");
-  mkdirSync(dir, { recursive: true });
-  mkdirSync(root, { recursive: true });
-  const config = join(dir, "host.json"),
-    file = join(root, "2026-11-06_fixture.jsonl"),
-    id = "11111111-1111-4111-8111-111111111111";
-  const session = () =>
-    writeFileSync(
-      file,
-      [
-        {
-          type: "session",
-          version: 3,
-          id,
-          cwd: scratch,
-          timestamp: "2026-11-06T00:00:00.000Z",
-        },
-        {
-          type: "message",
-          id: "u1",
-          parentId: null,
-          timestamp: "2026-11-06T00:00:01.000Z",
-          message: { role: "user", content: "hello" },
-        },
-      ]
-        .map((frame) => JSON.stringify(frame))
-        .join("\n") + "\n",
-    );
-  const save = (servers: ReturnType<typeof hub>[]) =>
-    writeFileSync(
-      config,
-      JSON.stringify({
-        url: a.url,
-        token: "a",
-        links: servers.map((server) => ({ url: server.url, token: "token" })),
-      }),
-    );
-  session();
-  save([a, b]);
-  const daemon = runHostDaemon({ allowHttp: false });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1 && b.hellos.length === 1);
-  assert.notEqual(a.hellos[0].link.id, b.hellos[0].link.id);
-  await until(() =>
-    a.messages.some((message) => message.type === "notifier" && message.on),
-  );
-  assert.equal(a.hellos[0].link.notifier, false);
-  assert.equal(b.hellos[0].link.notifier, false);
-  const launch = {
-    cwd: scratch,
-    recordedCwd: scratch,
-    sessionFile: file,
-    advisor: false,
-  };
-  a.send({
-    type: "req",
-    id: "open-a",
-    op: "open",
-    args: { sessionId: id, launch },
-  });
-  await until(() => a.result("open-a"));
-  assert.equal(a.result("open-a").ok, true);
-  const firstCh = a.result("open-a").result.ch;
-  const changes = (server: ReturnType<typeof hub>) =>
-    server.messages.filter((message) => message.type === "sessions_changed")
-      .length;
-  await until(() => changes(a) > 0 && changes(b) > 0);
-  const beforeA = changes(a),
-    beforeB = changes(b);
-  b.send({
-    type: "req",
-    id: "rename",
-    op: "renameSessionFile",
-    args: { id, title: "Shared title", source: "user" },
-  });
-  await until(
-    () => b.result("rename") && changes(a) > beforeA && changes(b) > beforeB,
-  );
-  assert.equal(b.result("rename").result.ok, true);
-  // B has no membership or wrapper: the daemon, not B's live-id snapshot, must stop A's child.
-  b.send({
-    type: "req",
-    id: "delete",
-    op: "deleteSession",
-    args: { id, liveSessionIds: [] },
-  });
-  await until(
-    () =>
-      b.result("delete") &&
-      a.messages.some(
-        (message) => message.type === "exit" && message.ch === firstCh,
-      ),
-  );
-  assert.equal(b.result("delete").result.ok, true);
-  assert.equal(existsSync(file), false);
-  assert.equal(
-    b.messages.some((message) => message.type === "exit"),
-    false,
-  );
-  session();
-  a.send({
-    type: "req",
-    id: "open-again",
-    op: "open",
-    args: { sessionId: id, launch },
-  });
-  await until(() => a.result("open-again"));
-  const ch = a.result("open-again").result.ch;
-  writeFileSync(config, "{bad");
-  await sleep(300);
-  a.send({
-    type: "req",
-    id: "same",
-    op: "sessionFileExists",
-    args: { path: file },
-  });
-  b.send({
-    type: "req",
-    id: "same",
-    op: "sessionFileExists",
-    args: { path: join(root, "missing.jsonl") },
-  });
-  await until(() => a.result("same") && b.result("same"));
-  assert.equal(a.result("same").result, true);
-  assert.equal(b.result("same").result, false);
-  const upload = "33333333-3333-4333-8333-333333333333",
-    attempt = "44444444-4444-4444-8444-444444444444";
-  const args = {
-    id: upload,
-    attempt,
-    name: "file.txt",
-    size: 3,
-    type: "text/plain",
-  };
-  a.send({ type: "req", id: "upload", op: "uploadStart", args });
-  await until(() => a.result("upload"));
-  b.send({
-    type: "req",
-    id: "collision",
-    op: "uploadStart",
-    args: { ...args, attempt: "55555555-5555-4555-8555-555555555555" },
-  });
-  await until(() => b.result("collision"));
-  assert.equal(b.result("collision").error.status, 409);
-  b.bytes(upload, "bad");
-  a.bytes(upload, "yes");
-  await until(() =>
-    a.messages.some((message) => message.type === "upload_ack" && message.done),
-  );
-  assert.equal(
-    b.messages.some((message) => message.type === "upload_ack"),
-    false,
-  );
-  assert.equal(
-    readFileSync(join(dir, "uploads", upload + ".part"), "utf8"),
-    "yes",
-  );
-  save([a, b, c]);
-  await until(() => c.hellos.length === 1);
-  assert.equal(a.hellos.length, 1);
-  assert.equal(b.hellos.length, 1);
-  save([a, c]);
-  await until(() => b.closed.length > 0);
-  assert.equal(a.closed.length, 0);
-  assert.equal(c.closed.length, 0);
-  a.close(4409);
-  await until(() =>
-    c.messages.some((message) => message.type === "notifier" && message.on),
-  );
-  assert.equal(
-    daemon.control("status").linked,
-    true,
-    "ending one link must not hide a still-linked secondary server",
-  );
-  assert.throws(
-    () => daemon.control("drain"),
-    { code: "host_busy" },
-    "another link's native child still prevents maintenance",
-  );
-  c.send({
-    type: "req",
-    id: "join-c",
-    op: "open",
-    args: { sessionId: id, launch },
-  });
-  await until(() => c.result("join-c"));
-  assert.equal(c.result("join-c").result.ch, ch);
-  assert.equal(c.result("join-c").result.joined, true);
-  c.send({
-    type: "stdin",
-    ch,
-    line:
-      JSON.stringify({ t: "cmd", id: 4242, op: "get_messages", args: {} }) +
-      "\n",
-  });
-  await until(() =>
-    c.messages.some(
-      (message) =>
-        message.type === "stdout" &&
-        JSON.parse(message.line).t === "res" &&
-        JSON.parse(message.line).id === 4242,
-    ),
-  );
-  assert.equal(
-    readFileSync(spawns, "utf8").trim().split("\n").length,
-    2,
-    "only the explicitly deleted session was respawned",
-  );
-  c.close(1000);
-  assert.equal(await daemon.done, 1);
-});
-
-test("a channel created during another link's handshake is announced when that link comes up", async (t) => {
-  const a = hub(t),
-    b = hub(t, false);
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
-  const sessions = join(
-    process.env.PI_CODING_AGENT_DIR!,
-    "sessions",
-    "-handshake",
-  );
-  mkdirSync(dir, { recursive: true });
-  mkdirSync(sessions, { recursive: true });
-  const id = "77777777-7777-4777-8777-777777777777";
-  const file = join(sessions, "handshake.jsonl");
-  writeFileSync(
-    file,
-    `${JSON.stringify({ type: "session", version: 3, id, cwd: scratch })}\n`,
-  );
-  writeFileSync(
-    join(dir, "host.json"),
-    JSON.stringify({
-      url: a.url,
-      token: "a",
-      links: [
-        { url: a.url, token: "a" },
-        { url: b.url, token: "b" },
-      ],
-    }),
-  );
-  const daemon = runHostDaemon({ allowHttp: false });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1 && b.hellos.length === 1);
-  assert.equal(b.hellos[0].channels.length, 0);
-  a.send({
-    type: "req",
-    id: "during-handshake",
-    op: "open",
-    args: {
-      sessionId: id,
-      launch: {
-        cwd: scratch,
-        recordedCwd: scratch,
-        sessionFile: file,
-        advisor: false,
-      },
-    },
-  });
-  await until(() => a.result("during-handshake"));
-  assert.equal(a.result("during-handshake").ok, true);
-  b.welcome();
-  await until(() =>
-    b.messages.some(
-      (m) =>
-        m.type === "channels_changed" &&
-        m.channels.some((c) => c.sessionId === id),
-    ),
-  );
-});
-
-test("a removed link stops owning its uploads while an active link keeps exclusion", async (t) => {
-  const a = hub(t),
-    b = hub(t),
-    dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
-  mkdirSync(dir, { recursive: true });
-  const save = (servers: ReturnType<typeof hub>[]) =>
-    writeFileSync(
-      join(dir, "host.json"),
-      JSON.stringify({
-        url: a.url,
-        token: "a",
-        links: servers.map((server) => ({ url: server.url, token: "token" })),
-      }),
-    );
-  save([a, b]);
-  const daemon = runHostDaemon({ allowHttp: false });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1 && b.hellos.length === 1);
-  const upload = "66666666-6666-4666-8666-666666666666",
-    args = {
-      id: upload,
-      attempt: "88888888-8888-4888-8888-888888888888",
-      name: "file.txt",
-      size: 3,
-      type: "text/plain",
-    };
-  b.send({ type: "req", id: "own", op: "uploadStart", args });
-  await until(() => b.result("own"));
-  assert.equal(b.result("own").ok, true);
-  a.send({
-    type: "req",
-    id: "blocked",
-    op: "uploadStart",
-    args: { ...args, attempt: "99999999-9999-4999-8999-999999999999" },
-  });
-  await until(() => a.result("blocked"));
-  assert.equal(a.result("blocked").error.status, 409);
-  save([a]);
-  await until(() => b.closed.length > 0);
-  a.send({
-    type: "req",
-    id: "take",
-    op: "uploadStart",
-    args: { ...args, attempt: "99999999-9999-4999-8999-999999999999" },
-  });
-  await until(() => a.result("take"));
-  assert.equal(a.result("take").ok, true);
-  a.bytes(upload, "yes");
-  await until(() =>
-    a.messages.some((message) => message.type === "upload_ack" && message.done),
-  );
-});
-
-test("local maintenance accounts for workspace reads and uploads on every native link", async (t) => {
+test("replacing the saved controller retires the old link", async (t) => {
   const a = hub(t),
     b = hub(t);
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [
-      { url: a.url, token: "a" },
-      { url: b.url, token: "b" },
-    ],
+  await loginHost({ url: a.url, token: LINK_TOKEN });
+  const daemon = runHostDaemon({ allowHttp: false });
+  t.after(async () => {
+    await daemon.stop();
+    await removeHostLink(b.url);
   });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1 && b.hellos.length === 1);
-  const file = join(scratch, "maintenance-read.txt");
-  writeFileSync(file, "native secondary read");
-  const owner = {
-    sessionId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-    cwd: scratch,
-  };
-  b.send({
-    type: "req",
-    id: "read",
-    op: "openFile",
-    args: { input: { segments: [file], sessionId: owner.sessionId, owner } },
-  });
-  await until(() => b.result("read"));
-  assert.equal(b.result("read").result.ok, true);
-  assert.throws(() => daemon.control("drain"), { code: "host_busy" });
-  a.send({ type: "req", id: "home-while-read", op: "home", args: {} });
-  await until(() => a.result("home-while-read"));
-  assert.equal(a.result("home-while-read").result.ok, true);
-  b.send({
-    type: "req",
-    id: "close-read",
-    op: "closeFile",
-    args: { id: b.result("read").result.value.id },
-  });
-  await until(() => b.result("close-read"));
-  await until(() => {
-    try {
-      return daemon.control("drain").drained;
-    } catch (error) {
-      if ((error as { code?: string }).code !== "host_busy") throw error;
-      return false;
-    }
-  });
-  a.send({
-    type: "req",
-    id: "read-drained",
-    op: "openFile",
-    args: { input: { segments: [file], sessionId: owner.sessionId, owner } },
-  });
-  await until(() => a.result("read-drained"));
-  assert.equal(a.result("read-drained").error.code, "host_drained");
-  daemon.control("resume");
-  const id = "99999999-9999-4999-8999-999999999990";
-  b.send({
-    type: "req",
-    id: "upload-maintenance",
-    op: "uploadStart",
-    args: {
-      id,
-      attempt: "99999999-9999-4999-8999-999999999991",
-      name: "native.bin",
-      type: "application/octet-stream",
-      size: 3,
-    },
-  });
-  await until(() => b.result("upload-maintenance"));
-  assert.equal(b.result("upload-maintenance").ok, true);
-  assert.throws(() => daemon.control("drain"), { code: "host_busy" });
-  b.send({
-    type: "req",
-    id: "abort-maintenance",
-    op: "uploadAbort",
-    args: { id },
-  });
-  await until(() => b.result("abort-maintenance"));
-  await until(() => {
-    try {
-      return daemon.control("drain").drained;
-    } catch (error) {
-      if ((error as { code?: string }).code !== "host_busy") throw error;
-      return false;
-    }
-  });
-  assert.equal(daemon.control("status").linked, true);
-  daemon.control("resume");
+  await until(() => daemon.control("status").linked);
+  await loginHost({ url: b.url, token: "replacement" });
+  await until(
+    () =>
+      a.closed.length > 0 &&
+      b.hellos.length > 0 &&
+      daemon.control("status").linked,
+  );
+  await removeHostLink(b.url);
+  await until(() => !daemon.control("status").linked);
 });
 
 const lines = (path: string) =>
@@ -619,14 +214,19 @@ function sessionFile(name: string, id: string) {
 }
 
 function configureHostAuth(t: TestContext): void {
-  saveWebServerSettings({
-    agentEnv: {
-      OPENAI_API_KEY: "host-local-test-key",
-      OMP_AUTH_BROKER_URL: "https://host-local.example",
-      OMP_AUTH_BROKER_TOKEN: "host-local-test-token",
-    },
-  });
-  t.after(() => saveWebServerSettings({ agentEnv: {} }));
+  const path = join(process.env.PI_CODING_AGENT_DIR!, "keylime-settings.json");
+  mkdirSync(process.env.PI_CODING_AGENT_DIR!, { recursive: true });
+  writeFileSync(
+    path,
+    JSON.stringify({
+      agentEnv: {
+        OPENAI_API_KEY: "host-local-test-key",
+        OMP_AUTH_BROKER_URL: "https://host-local.example",
+        OMP_AUTH_BROKER_TOKEN: "host-local-test-token",
+      },
+    }),
+  );
+  t.after(() => rmSync(path, { force: true }));
 }
 
 const hostAuth = { localBroker: true, localAuth: true, leaked: false };
@@ -640,7 +240,8 @@ test("legacy credential fields on an open do not override host-local auth or gat
     file = sessionFile("old-omp", id);
   const daemon = runHostDaemon({
     allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
+    url: a.url,
+    token: LINK_TOKEN,
   });
   t.after(() => daemon.stop());
   await until(() => a.hellos.length === 1);
@@ -664,7 +265,9 @@ test("legacy credential fields on an open do not override host-local auth or gat
   await until(() => a.result("open"));
   assert.equal(a.result("open").ok, true);
   assert.deepEqual(
-    lines(envs).slice(before).map((line) => JSON.parse(line)),
+    lines(envs)
+      .slice(before)
+      .map((line) => JSON.parse(line)),
     [hostAuth],
   );
 });
@@ -689,14 +292,16 @@ test("a legacy session resumes with host-local auth even when its former credent
       },
     ]),
   );
-  saveWebServerSettings({ autoResumeSessions: true });
-  t.after(() => saveWebServerSettings({ autoResumeSessions: false }));
+  saveHostSettings({ autoResumeSessions: true });
+  t.after(() => saveHostSettings({ autoResumeSessions: false }));
   const before = lines(envs).length;
-  const daemon = runHostDaemon({ allowHttp: false, links: [] });
+  const daemon = runHostDaemon({ allowHttp: false });
   t.after(() => daemon.stop());
   await daemon.started;
   assert.deepEqual(
-    lines(envs).slice(before).map((line) => JSON.parse(line)),
+    lines(envs)
+      .slice(before)
+      .map((line) => JSON.parse(line)),
     [hostAuth],
   );
 });

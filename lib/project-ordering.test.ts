@@ -12,7 +12,6 @@ const {
   nextPinOrder,
   orderProjects,
   sortManagedProjects,
-  projectTargetId,
 } = await import("./project-ordering.ts");
 const { comparableProjectPath } = await import("./comparable-path.ts");
 
@@ -132,9 +131,9 @@ test("projectActivityCounts tallies running, unread, and exited sessions per pro
   ];
   const counts = projectActivityCounts(
     sessions,
-    ["running-main", "running-wt"],
-    ["unread-main"],
-    ["exited-main"],
+    ["local:running-main", "local:running-wt"],
+    ["local:unread-main"],
+    ["local:exited-main"],
   );
   // Keys are the case-folded comparable form (see projectActivityCounts docs).
   assert.deepEqual(counts.get(comparableProjectPath("/repo")), {
@@ -337,123 +336,6 @@ test("host groups put this machine first, then the remote hosts by label, each w
   );
 });
 
-const cluster = [
-  { id: "cluster", members: [{ hostId: "local" }, { hostId: "h-a" }] },
-];
-
-test("projectTargetId: a project of a member of the first pool goes to that pool, anything else keeps its host", () => {
-  assert.equal(projectTargetId({ hostId: "h-a" }, cluster), "pool:cluster");
-  assert.equal(
-    projectTargetId({}, cluster),
-    "pool:cluster",
-    "local is a member",
-  );
-  assert.equal(projectTargetId({ hostId: "local" }, cluster), "pool:cluster");
-  assert.equal(
-    projectTargetId({ hostId: "h-z" }, cluster),
-    "h-z",
-    "a standalone host",
-  );
-  assert.equal(projectTargetId({ poolId: "cluster" }, cluster), "pool:cluster");
-  assert.equal(
-    projectTargetId({ hostId: "h-a" }),
-    "h-a",
-    "no pools: unchanged",
-  );
-  assert.equal(projectTargetId({ hostId: "h-a" }, []), "h-a");
-  const second = [...cluster, { id: "other", members: [{ hostId: "h-b" }] }];
-  assert.equal(
-    projectTargetId({ hostId: "h-b" }, second),
-    "h-b",
-    "members of another pool are unaffected",
-  );
-});
-
-test("cluster group: no group for members; pool projects and every member's own projects keep the given (sorted, pinned) order", () => {
-  const hosts = [
-    { id: "h-z", label: "zeta" },
-    { id: "local", label: "This machine" },
-    { id: "h-a", label: "Alpha" },
-    { id: "pool:cluster", label: "Cluster" },
-  ];
-  const projects = [
-    { path: "/p/1", hostId: "h-a" },
-    { path: "/p/shared", hostId: "local" },
-    { path: "/p/shared", hostId: "h-a" },
-    { path: "pool:cluster:b", poolId: "cluster" },
-    { path: "/p/z", hostId: "h-z" },
-    { path: "pool:cluster:a", poolId: "cluster" },
-  ];
-  const groups = groupProjectsByHost(projects, hosts, cluster);
-  assert.deepEqual(
-    groups.map((g) => g.host.id),
-    ["pool:cluster", "h-z"],
-  );
-  assert.deepEqual(
-    groups.map((g) => g.projects.map((p) => `${p.hostId ?? ""}${p.path}`)),
-    [
-      [
-        "h-a/p/1",
-        "local/p/shared",
-        "h-a/p/shared",
-        "pool:cluster:b",
-        "pool:cluster:a",
-      ],
-      ["h-z/p/z"],
-    ],
-  );
-  assert.deepEqual(
-    groupProjectsByHost(projects, hosts).map((g) => g.host.id),
-    ["local", "h-a", "pool:cluster", "h-z"],
-    "no pools: every host has its group",
-  );
-});
-
-test("cluster group keeps the given order for sidebar-shaped entries too (hostId already the target, no poolId)", () => {
-  const hosts = [
-    { id: "local", label: "This machine" },
-    { id: "h-a", label: "Alpha" },
-    { id: "pool:cluster", label: "Cluster" },
-  ];
-  const entries = [
-    { project: { path: "/l" }, hostId: "local" },
-    {
-      project: { path: "pool:cluster:x", poolId: "cluster" },
-      hostId: "pool:cluster",
-    },
-    { project: { path: "/a", hostId: "h-a" }, hostId: "h-a" },
-  ];
-  const [group] = groupProjectsByHost(entries, hosts, cluster);
-  assert.equal(group.host.id, "pool:cluster");
-  assert.deepEqual(
-    group.projects.map((entry) => entry.project.path),
-    ["/l", "pool:cluster:x", "/a"],
-  );
-});
-
-test("members of a second pool keep their group", () => {
-  const second = [...cluster, { id: "other", members: [{ hostId: "h-b" }] }];
-  const hosts = [
-    { id: "local", label: "This machine" },
-    { id: "h-b", label: "Beta" },
-    { id: "pool:cluster", label: "Cluster" },
-    { id: "pool:other", label: "Other" },
-  ];
-  const groups = groupProjectsByHost(
-    [{ path: "/b", hostId: "h-b" }, { path: "/l" }],
-    hosts,
-    second,
-  );
-  assert.deepEqual(
-    groups.map((g) => [g.host.id, g.projects.map((p) => p.path)]),
-    [
-      ["h-b", ["/b"]],
-      ["pool:cluster", ["/l"]],
-      ["pool:other", []],
-    ],
-  );
-});
-
 test("the same path on two hosts is two projects with their own sessions and counts", () => {
   const projects = [
     { path: "/w/app", hostId: "local" },
@@ -482,7 +364,11 @@ test("the same path on two hosts is two projects with their own sessions and cou
     grouped.get("h1:/w/app")?.map((s) => s.id),
     ["s-remote"],
   );
-  const counts = projectActivityCounts(sessions, ["s-remote"], ["s-local"]);
+  const counts = projectActivityCounts(
+    sessions,
+    ["h1:s-remote"],
+    ["local:s-local"],
+  );
   assert.deepEqual(counts.get(foldedHostProjectKey("local", "/w/app")), {
     running: 0,
     unread: 1,

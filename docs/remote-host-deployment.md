@@ -45,6 +45,18 @@ Each daemon uses its own OMP settings, plugins, environment, and provider
 logins for new and recovered sessions. Neither linking nor binary deployment
 copies or shares them.
 
+A daemon connects to one controller. One controller can manage several hosts.
+For the host-independence upgrade, stop old writers and confirm no restores
+are in progress. This release requires link protocol 14 on both sides; use
+the host console to update daemons that can no longer connect. Do not replay
+old outbox messages or clear filesystem restore claims during the upgrade.
+
+Old `host.json` files with a `links` array are not loaded. On each stopped
+daemon, back up that private file and retain only the `url` and `token` for
+the controller you want, as a top-level pair. Do not print or share the
+token. If its token is unavailable, enroll the host again.
+See [host independence](specs/2026-11-20-host-independence.md) for the cutover.
+
 ## Deploy a release without SSH
 
 In **Settings → Hosts**, choose **Deploy release** on the target host. The
@@ -196,6 +208,7 @@ credentials your projects need separately on the new host.
    until you revoke it. If the token is exposed or you lose it before
    enrollment, use **Revoke** in **Settings → Hosts** and add the host again
    to get a new token.
+
 3. Check that the host shows `online` in **Settings → Hosts**. Expand that
    host in the sidebar and click **+** next to **Repos** to register or clone a
    repo there, then start a chat in its workspace. Linking doesn't copy repos,

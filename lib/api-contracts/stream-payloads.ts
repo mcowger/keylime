@@ -12,9 +12,7 @@ export const RunningRpcSessionSchema = Type.Object(
   {
     id: Type.String({ description: "Live session identifier." }),
     cwd: Type.String({ description: "Session working directory on its host." }),
-    hostId: Type.Optional(
-      Type.String({ description: "Owning host when known." }),
-    ),
+    hostId: Type.String({ description: "Owning host, including local." }),
     awaitingInput: Type.Optional(
       Type.Literal(true, {
         description: "Present only while the session is awaiting input.",
@@ -24,7 +22,7 @@ export const RunningRpcSessionSchema = Type.Object(
   {
     title: "RunningRpcSession",
     description:
-      "A live RPC session advertised to running-session subscribers; hostId is omitted when unavailable and awaitingInput is present only when true.",
+      "A live RPC session on the named host. awaitingInput is present only when true.",
   },
 );
 export const NotificationMessageSchema = Type.Object(
@@ -51,18 +49,10 @@ function hostsSchema(): TObject {
   const schema = content["application/json"]?.schema;
   if (!schema || schema.type !== "object")
     throw new Error("Hosts response must be an object schema");
-  const hostObject = schema as TObject;
-  return Type.Object(
-    {
-      ...hostObject.properties,
-      pools: Type.Optional(hostObject.properties.pools),
-    },
-    {
-      title: "HostStreamSnapshot",
-      description:
-        "Unlike GET /hosts, a live snapshot omits pools while pools.json is unreadable so clients retain their last successful pool state.",
-    },
-  );
+  return Type.Object((schema as TObject).properties, {
+    title: "HostStreamSnapshot",
+    description: "Independent hosts, local first. Matches GET /api/hosts.",
+  });
 }
 export const StreamPayloadSchema = Type.Union(
   [
@@ -71,7 +61,11 @@ export const StreamPayloadSchema = Type.Union(
     hostsSchema(),
     TerminalEventSchema,
     WorkspaceFileEventSchema,
-    Type.Object({ type: Type.Literal("connected"), filePath: Type.String() }),
+    Type.Object({
+      type: Type.Literal("connected"),
+      filePath: Type.String(),
+      hostId: Type.String(),
+    }),
     Type.Object({
       type: Type.Literal("running"),
       runningSessionIds: Type.Array(Type.String()),
@@ -81,10 +75,17 @@ export const StreamPayloadSchema = Type.Union(
     }),
     Type.Object({
       type: Type.Literal("sessions-changed"),
-      sessionIds: Type.Array(Type.String()),
+      sessions: Type.Array(
+        Type.Object({ sessionId: Type.String(), hostId: Type.String() }),
+      ),
       refreshSessionList: Type.Literal(true),
     }),
-    Type.Object({ sessionIds: Type.Array(Type.String()) }),
+    Type.Object({
+      sessionIds: Type.Array(Type.String()),
+      openSessions: Type.Array(
+        Type.Object({ sessionId: Type.String(), hostId: Type.String() }),
+      ),
+    }),
     Type.Intersect([
       Type.Object({ type: Type.Literal("notification") }),
       NotificationMessageSchema,

@@ -1,6 +1,8 @@
 "use client";
 
 import { browserUUID } from "@/lib/browser-uuid";
+import { sessionKey } from "@/lib/session-identity";
+import type { TranscriptSearchBatch } from "@/lib/api-contracts/http-sessions";
 import {
   memo,
   useEffect,
@@ -35,7 +37,6 @@ import {
 import {
   LOCAL_HOST_ID,
   foldedHostProjectKey,
-  groupProjectsByHost,
   groupSessionsByProject,
   hostProjectKey,
   projectIdentity,
@@ -133,11 +134,12 @@ export type PlanningDestination = Omit<
 
 interface Props {
   selectedSessionId: string | null;
-  dismissExitedChatRef?: Ref<(id: string) => void>;
+  selectedSessionHostId?: string;
+  dismissExitedChatRef?: Ref<(id: string, hostId?: string) => void>;
   /** The active session can exist in memory before its JSONL file is flushed. */
   optimisticSession?: SessionInfo | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
-  onOpenLinkedSession?: (sessionId: string) => void;
+  onOpenLinkedSession?: (sessionId: string, hostId?: string) => void;
   onOpenPlanning?: (destination: PlanningDestination) => void;
   onNewSession?: (
     sessionId: string,
@@ -151,9 +153,14 @@ interface Props {
   skipInitialProjectSelection?: boolean;
   onInitialRestoreDone?: () => void;
   refreshKey?: number;
-  onSessionDeleted?: (sessionId: string) => void;
+  onSessionDeleted?: (sessionId: string, hostId?: string) => void;
   systemsHosts: SystemsHosts;
-  onOpenEffort: (host: string, effort: EffortRecord, navigate: boolean, latestSession?: SessionInfo) => void;
+  onOpenEffort: (
+    host: string,
+    effort: EffortRecord,
+    navigate: boolean,
+    latestSession?: SessionInfo,
+  ) => void;
   onWorkspaceRemoved?: (path: string, host: string) => void;
   onShip?: (target: ShipTarget) => void;
   selectedCwd?: string | null;
@@ -236,7 +243,8 @@ function loadCollapsedHosts(): Set<string> {
 }
 
 export const SessionSidebar = memo(function SessionSidebar({
-  selectedSessionId,
+  selectedSessionId: rawSelectedSessionId,
+  selectedSessionHostId,
   dismissExitedChatRef,
   optimisticSession,
   onSelectSession,
@@ -336,6 +344,10 @@ export const SessionSidebar = memo(function SessionSidebar({
     Record<string, HierarchySnapshot>
   >({});
   const [sessionRefreshDone, setSessionRefreshDone] = useState(false);
+  const selectedSessionId =
+    rawSelectedSessionId === null
+      ? null
+      : sessionKey(rawSelectedSessionId, selectedSessionHostId);
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -348,16 +360,21 @@ export const SessionSidebar = memo(function SessionSidebar({
   const [dismissedExits, setDismissedExits] = useState(() => {
     try {
       return new Map<string, number>(
-        JSON.parse(sessionStorage.getItem("omp-web:dismissed-chat-exits") ?? "[]"),
+        JSON.parse(
+          sessionStorage.getItem("omp-web:dismissed-chat-exits") ?? "[]",
+        ),
       );
     } catch {
       return new Map<string, number>();
     }
   });
-  const hasUndismissedExit = useCallback((id: string) => {
-    const exit = exitedSessions.get(id);
-    return exit !== undefined && dismissedExits.get(id) !== exit.at;
-  }, [exitedSessions, dismissedExits]);
+  const hasUndismissedExit = useCallback(
+    (id: string) => {
+      const exit = exitedSessions.get(id);
+      return exit !== undefined && dismissedExits.get(id) !== exit.at;
+    },
+    [exitedSessions, dismissedExits],
+  );
   const awaitingInputIds = useMemo(
     () =>
       new Set(
@@ -373,23 +390,31 @@ export const SessionSidebar = memo(function SessionSidebar({
     loadUnreadSessionIds(),
   );
   // Close only acknowledges the crash we saw. A replacement process can fail again.
-  useImperativeHandle(dismissExitedChatRef, () => (id) => {
-    const exit = exitedSessions.get(id);
-    if (!exit || dismissedExits.get(id) === exit.at) return;
-    const next = new Map(dismissedExits).set(id, exit.at);
-    setDismissedExits(next);
-    try {
-      sessionStorage.setItem("omp-web:dismissed-chat-exits", JSON.stringify([...next]));
-    } catch {
-      // Storage may be unavailable.
-    }
-    setUnreadSessionIds((previous) => {
-      if (!previous.has(id)) return previous;
-      const unread = new Set(previous);
-      unread.delete(id);
-      return unread;
-    });
-  }, [exitedSessions, dismissedExits]);
+  useImperativeHandle(
+    dismissExitedChatRef,
+    () => (sessionId, hostId) => {
+      const id = sessionKey(sessionId, hostId);
+      const exit = exitedSessions.get(id);
+      if (!exit || dismissedExits.get(id) === exit.at) return;
+      const next = new Map(dismissedExits).set(id, exit.at);
+      setDismissedExits(next);
+      try {
+        sessionStorage.setItem(
+          "omp-web:dismissed-chat-exits",
+          JSON.stringify([...next]),
+        );
+      } catch {
+        // Storage may be unavailable.
+      }
+      setUnreadSessionIds((previous) => {
+        if (!previous.has(id)) return previous;
+        const unread = new Set(previous);
+        unread.delete(id);
+        return unread;
+      });
+    },
+    [exitedSessions, dismissedExits],
+  );
   const [recentCompletedRuns, setRecentCompletedRuns] = useState<
     RecentRunEntry[]
   >(() => loadRecentRuns());
@@ -405,16 +430,17 @@ export const SessionSidebar = memo(function SessionSidebar({
 
     // 2. On-disk active sessions (fallback & recency backfill)
     for (const s of allSessions) {
-      if (runningSessionIds.has(s.id)) continue;
+      const key = sessionKey(s.id, s.hostId);
+      if (runningSessionIds.has(key)) continue;
       const isValid =
         (s.firstMessage && s.firstMessage !== "(no messages)") ||
         s.messageCount > 0 ||
         Boolean(s.name);
       if (!isValid) continue;
       const ts = new Date(s.modified).getTime();
-      const existing = timestampMap.get(s.id);
+      const existing = timestampMap.get(key);
       if (existing === undefined || ts > existing) {
-        timestampMap.set(s.id, ts);
+        timestampMap.set(key, ts);
       }
     }
 
@@ -493,23 +519,36 @@ export const SessionSidebar = memo(function SessionSidebar({
         setAllSessions(data.sessions);
         if (data.runningSessions) {
           for (const rs of data.runningSessions) {
-            if (rs.id && rs.cwd) knownRunningPlacesRef.current.set(rs.id, rs);
+            if (rs.id && rs.cwd)
+              knownRunningPlacesRef.current.set(
+                sessionKey(rs.id, rs.hostId),
+                rs,
+              );
           }
         }
         // Treat the fetched running set as an initial fallback only. Once SSE is
         // live it owns this state, so a slow fetch can't revive a stale snapshot.
         if (!sseAuthoritativeRef.current) {
-          setRunningSessionIds(new Set(data.runningSessionIds ?? []));
+          setRunningSessionIds(
+            new Set(
+              data.runningSessions?.map((s) => sessionKey(s.id, s.hostId)) ??
+                data.runningSessionIds?.map((id) => sessionKey(id)) ??
+                [],
+            ),
+          );
           if (data.runningSessions) {
             const nextPlaces: Record<string, LivePlace> = {};
             for (const rs of data.runningSessions) {
-              if (rs.id && rs.cwd) nextPlaces[rs.id] = rs;
+              if (rs.id && rs.cwd)
+                nextPlaces[sessionKey(rs.id, rs.hostId)] = rs;
             }
             setRunningSessionPlaces(nextPlaces);
           }
         }
         // Drop unread markers for sessions that no longer exist (e.g. deleted).
-        const existingIds = new Set(data.sessions.map((s) => s.id));
+        const existingIds = new Set(
+          data.sessions.map((s) => sessionKey(s.id, s.hostId)),
+        );
         setUnreadSessionIds((prev) => {
           if (prev.size === 0) return prev;
           const next = new Set([...prev].filter((id) => existingIds.has(id)));
@@ -652,15 +691,21 @@ export const SessionSidebar = memo(function SessionSidebar({
           runningSessions?: Array<LivePlace & { id: string }>;
           exitedSessions?: ExitedRpcSession[];
           refreshSessionList?: boolean;
-          sessionIds?: string[];
+          sessions?: Array<{ sessionId: string; hostId: string }>;
         };
         if (data.type === "running") {
           sseAuthoritativeRef.current = true;
-          setRunningSessionIds(new Set(data.runningSessionIds ?? []));
+          setRunningSessionIds(
+            new Set(
+              data.runningSessions?.map((s) => sessionKey(s.id, s.hostId)) ??
+                data.runningSessionIds?.map((id) => sessionKey(id)) ??
+                [],
+            ),
+          );
           setExitedSessions(
             new Map(
               (data.exitedSessions ?? []).map((session) => [
-                session.id,
+                sessionKey(session.id, session.hostId),
                 session,
               ]),
             ),
@@ -669,8 +714,9 @@ export const SessionSidebar = memo(function SessionSidebar({
             const nextPlaces: Record<string, LivePlace> = {};
             for (const rs of data.runningSessions) {
               if (rs.id && rs.cwd) {
-                knownRunningPlacesRef.current.set(rs.id, rs);
-                nextPlaces[rs.id] = rs;
+                const key = sessionKey(rs.id, rs.hostId);
+                knownRunningPlacesRef.current.set(key, rs);
+                nextPlaces[key] = rs;
               }
             }
             setRunningSessionPlaces(nextPlaces);
@@ -678,7 +724,11 @@ export const SessionSidebar = memo(function SessionSidebar({
           if (data.refreshSessionList) scheduleRefresh();
         } else if (data.type === "sessions-changed") {
           if (data.refreshSessionList) scheduleRefresh();
-          publishSessionsChanged(data.sessionIds ?? []);
+          publishSessionsChanged(
+            (data.sessions ?? []).map(({ sessionId, hostId }) =>
+              sessionKey(sessionId, hostId),
+            ),
+          );
         }
       } catch {
         // ignore malformed frames
@@ -819,7 +869,10 @@ export const SessionSidebar = memo(function SessionSidebar({
 
   // Notify parent only when the effective cwd actually changes (not when
   // projectRootFor identity changes due to session/worktree refreshes).
-  const pendingWorkspaceDiscovery = useRef<{ path: string; host: string } | null>(null);
+  const pendingWorkspaceDiscovery = useRef<{
+    path: string;
+    host: string;
+  } | null>(null);
   const lastNotifiedCwdRef = useRef<string | null>(null);
   const synchronizedCwdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -847,10 +900,33 @@ export const SessionSidebar = memo(function SessionSidebar({
       .flatMap((project) => project.workspaces)
       .find((item) => item.path === pending.path);
     const latest = allSessions
-      .filter((session) => workspace?.sessionIds.includes(session.id) && hostOf(session) === pending.host)
-      .sort((a, b) => (b.lastMessageAt ?? b.modified).localeCompare(a.lastMessageAt ?? a.modified))[0];
-    onCwdChange?.(pending.path, projectRootFor(pending.path, pending.host), pending.host, undefined, false, latest, "resolved");
-  }, [loading, error, allSessions, hierarchySnapshots, onCwdChange, projectRootFor]);
+      .filter(
+        (session) =>
+          workspace?.sessionIds.includes(session.id) &&
+          hostOf(session) === pending.host,
+      )
+      .sort((a, b) =>
+        (b.lastMessageAt ?? b.modified).localeCompare(
+          a.lastMessageAt ?? a.modified,
+        ),
+      )[0];
+    onCwdChange?.(
+      pending.path,
+      projectRootFor(pending.path, pending.host),
+      pending.host,
+      undefined,
+      false,
+      latest,
+      "resolved",
+    );
+  }, [
+    loading,
+    error,
+    allSessions,
+    hierarchySnapshots,
+    onCwdChange,
+    projectRootFor,
+  ]);
 
   // Sync the worktree switcher to the selected session's cwd. Sessions of all
   // worktrees in a project share one list, so clicking a session from another
@@ -906,17 +982,22 @@ export const SessionSidebar = memo(function SessionSidebar({
   const placeholderTsRef = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     if (optimisticSession?.id && optimisticSession.cwd) {
-      const { id, cwd, hostId, projectId, projectKey } = optimisticSession;
-      const place = { cwd, hostId, projectId, projectKey };
-      knownRunningPlacesRef.current.set(id, place);
-      setRunningSessionPlaces((prev) => ({ ...prev, [id]: place }));
+      const { id, cwd, hostId, projectKey } = optimisticSession;
+      const key = sessionKey(id, hostId);
+      const place = { cwd, hostId, projectKey };
+      knownRunningPlacesRef.current.set(key, place);
+      setRunningSessionPlaces((prev) => ({ ...prev, [key]: place }));
     }
   }, [optimisticSession]);
   const visibleSessions = useMemo(() => {
     let base = allSessions;
     if (
       optimisticSession &&
-      !base.some((session) => session.id === optimisticSession.id)
+      !base.some(
+        (s) =>
+          sessionKey(s.id, s.hostId) ===
+          sessionKey(optimisticSession.id, optimisticSession.hostId),
+      )
     ) {
       const stableRoot = optimisticProjectRoot ?? optimisticSession.cwd;
       const stableKey = stableRoot
@@ -934,7 +1015,7 @@ export const SessionSidebar = memo(function SessionSidebar({
     // A running session's JSONL may not exist yet (first turn still
     // streaming). Keep it in the list so navigating away never hides it
     // until the file lands and the next refresh replaces the placeholder.
-    const known = new Set(base.map((s) => s.id));
+    const known = new Set(base.map((s) => sessionKey(s.id, s.hostId)));
     const placeholders: SessionInfo[] = [];
     const visibleLiveIds = new Set(runningSessionIds);
     for (const id of exitedSessions.keys()) visibleLiveIds.add(id);
@@ -945,7 +1026,9 @@ export const SessionSidebar = memo(function SessionSidebar({
         ts = new Date().toISOString();
         placeholderTsRef.current.set(id, ts);
       }
-      const isOptimistic = optimisticSession?.id === id;
+      const isOptimistic =
+        !!optimisticSession &&
+        sessionKey(optimisticSession.id, optimisticSession.hostId) === id;
       const place = livePlace(
         id,
         optimisticSession,
@@ -963,7 +1046,7 @@ export const SessionSidebar = memo(function SessionSidebar({
       const phRoot = resolvedRoot ?? "";
       const phKey = phRoot ? comparableProjectPath(phRoot) : undefined;
       placeholders.push({
-        id,
+        id: id.slice(id.indexOf(":") + 1),
         path: "",
         cwd: place.cwd,
         name: undefined,
@@ -1020,7 +1103,10 @@ export const SessionSidebar = memo(function SessionSidebar({
   const hasPendingNewSession = Boolean(
     optimisticSession ||
     [...runningSessionIds, ...exitedSessions.keys()].some(
-      (id) => !allSessions.some((session) => session.id === id),
+      (id) =>
+        !allSessions.some(
+          (session) => sessionKey(session.id, session.hostId) === id,
+        ),
     ),
   );
   // Only "Last updated" reads sessions; other modes must not re-sort on every session refresh.
@@ -1169,12 +1255,18 @@ export const SessionSidebar = memo(function SessionSidebar({
               !parsed ||
               typeof parsed !== "object" ||
               !("scores" in parsed) ||
-              !parsed.scores ||
-              typeof parsed.scores !== "object"
+              !Array.isArray(parsed.scores)
             )
               continue;
-            for (const [id, score] of Object.entries(parsed.scores))
-              if (typeof score === "number") pending[id] = score;
+            for (const row of parsed.scores as TranscriptSearchBatch["scores"]) {
+              if (
+                row &&
+                typeof row.hostId === "string" &&
+                typeof row.sessionId === "string" &&
+                typeof row.score === "number"
+              )
+                pending[sessionKey(row.sessionId, row.hostId)] = row.score;
+            }
           }
           if (Date.now() - lastFlush >= 200) flush();
         }
@@ -1205,10 +1297,16 @@ export const SessionSidebar = memo(function SessionSidebar({
     return new Set(
       allSessions
         .filter((session) => {
-          if (runningOnly && !runningSessionIds.has(session.id)) return false;
+          if (
+            runningOnly &&
+            !runningSessionIds.has(sessionKey(session.id, session.hostId))
+          )
+            return false;
           return (
             !query ||
-            currentTranscriptSearch?.scores[session.id] !== undefined ||
+            currentTranscriptSearch?.scores[
+              sessionKey(session.id, session.hostId)
+            ] !== undefined ||
             scoreSearchFields(
               [
                 searchField(session.name ?? "", TITLE_WEIGHT),
@@ -1218,7 +1316,7 @@ export const SessionSidebar = memo(function SessionSidebar({
             ) !== null
           );
         })
-        .map((session) => session.id),
+        .map((session) => sessionKey(session.id, session.hostId)),
     );
   }, [
     allSessions,
@@ -1227,6 +1325,10 @@ export const SessionSidebar = memo(function SessionSidebar({
     runningSessionIds,
     currentTranscriptSearch,
   ]);
+  const matchScore = useCallback(
+    (id: string) => currentTranscriptSearch?.scores[id] ?? 0,
+    [currentTranscriptSearch],
+  );
 
   // Drop persisted expansion keys whose project no longer exists (removed or
   // vanished), so the storage stays bounded to real projects. Only runs after
@@ -1458,18 +1560,33 @@ export const SessionSidebar = memo(function SessionSidebar({
   );
 
   const newSessionWorkspace = registeredWorkspaces
-    .filter((workspace) =>
-      hostOf(workspace) === selectedHostId && selectedCwd !== null &&
-      (selectedCwd === workspace.path || selectedCwd.startsWith(workspace.path === "/" ? "/" : `${workspace.path}/`)),
+    .filter(
+      (workspace) =>
+        hostOf(workspace) === selectedHostId &&
+        selectedCwd !== null &&
+        (selectedCwd === workspace.path ||
+          selectedCwd.startsWith(
+            workspace.path === "/" ? "/" : `${workspace.path}/`,
+          )),
     )
     .sort((a, b) => b.path.length - a.path.length)[0];
-  const selectedEffort = selectedCwd && systemsHosts.byHost[selectedHostId]?.data?.efforts.find((effort) =>
-    effort.status !== "cleaned" && (selectedCwd === effort.root || selectedCwd.startsWith(`${effort.root}/`)),
-  );
-  const newSessionPath = selectedEffort ? selectedEffort.root : newSessionWorkspace?.path;
-  const newSessionBlockedReason = selectedEffort && selectedEffort.status !== "ready"
-    ? "This Effort isn't ready for a new chat."
-    : newSessionPath ? hostUnavailableReason(selectedHostId) : null;
+  const selectedEffort =
+    selectedCwd &&
+    systemsHosts.byHost[selectedHostId]?.data?.efforts.find(
+      (effort) =>
+        effort.status !== "cleaned" &&
+        (selectedCwd === effort.root ||
+          selectedCwd.startsWith(`${effort.root}/`)),
+    );
+  const newSessionPath = selectedEffort
+    ? selectedEffort.root
+    : newSessionWorkspace?.path;
+  const newSessionBlockedReason =
+    selectedEffort && selectedEffort.status !== "ready"
+      ? "This Effort isn't ready for a new chat."
+      : newSessionPath
+        ? hostUnavailableReason(selectedHostId)
+        : null;
   const handleNewSession = useCallback(() => {
     if (newSessionBlockedReason) return;
     if (!newSessionPath) {
@@ -1479,7 +1596,13 @@ export const SessionSidebar = memo(function SessionSidebar({
       return;
     }
     onNewSession?.(browserUUID(), newSessionPath, selectedHostId);
-  }, [newSessionPath, newSessionBlockedReason, selectedHostId, onNewSession, setAddProjectOpen]);
+  }, [
+    newSessionPath,
+    newSessionBlockedReason,
+    selectedHostId,
+    onNewSession,
+    setAddProjectOpen,
+  ]);
   const newSessionEnabled = newSessionBlockedReason === null;
 
   const [importing, setImporting] = useState(false);
@@ -1557,13 +1680,16 @@ export const SessionSidebar = memo(function SessionSidebar({
   // Stable callbacks for the session list so memoized children don't re-render
   // on every parent state change.
   const handleSessionDeleted = useCallback(
-    (id: string) => {
-      const deleted = allSessions.find((session) => session.id === id);
+    (id: string, hostId?: string) => {
+      const deleted = allSessions.find(
+        (session) =>
+          sessionKey(session.id, session.hostId) === sessionKey(id, hostId),
+      );
       if (deleted)
         clearLastOpenSession(
           hostProjectKey(deleted.hostId, workspaceKeyOf(deleted)),
         );
-      onSessionDeleted?.(id);
+      onSessionDeleted?.(id, hostId);
       loadSessions();
     },
     [allSessions, onSessionDeleted, loadSessions],
@@ -1571,7 +1697,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 
   useEffect(() => {
     const selected = allSessions.find(
-      (session) => session.id === selectedSessionId,
+      (session) => sessionKey(session.id, session.hostId) === selectedSessionId,
     );
     if (selected)
       setLastOpenSession(
@@ -1884,6 +2010,9 @@ export const SessionSidebar = memo(function SessionSidebar({
               e.currentTarget.style.borderColor = "var(--border)";
             }}
           />
+          <div style={{ color: "var(--text-dim)", fontSize: 11 }}>
+            {t("sessionSidebar.localTranscriptsOnly")}
+          </div>
           {currentTranscriptSearch &&
             currentTranscriptSearch.status !== "done" && (
               <div
@@ -2091,6 +2220,7 @@ export const SessionSidebar = memo(function SessionSidebar({
           unreadSessionIds={unreadSessionIds}
           hasUndismissedExit={hasUndismissedExit}
           matchedSessionIds={matchedSessionIds}
+          matchScore={matchScore}
           refreshKey={(refreshKey ?? 0) + hierarchyRefresh}
           sessions={allSessions}
           selectedSessionId={selectedSessionId}
@@ -2100,7 +2230,15 @@ export const SessionSidebar = memo(function SessionSidebar({
           onSelectWorkspace={(path, host, latestSession) => {
             pendingWorkspaceDiscovery.current = loading ? { path, host } : null;
             lastNotifiedCwdRef.current = hostProjectKey(host, path);
-            onCwdChange?.(path, projectRootFor(path, host), host, undefined, false, latestSession, loading ? "pending" : undefined);
+            onCwdChange?.(
+              path,
+              projectRootFor(path, host),
+              host,
+              undefined,
+              false,
+              latestSession,
+              loading ? "pending" : undefined,
+            );
             setSelectedCwd(path);
             setSelectedHostId(host);
             onClose?.();

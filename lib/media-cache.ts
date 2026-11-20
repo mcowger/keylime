@@ -115,11 +115,6 @@ export function storeInlineImage(base64: string): string {
   return hash;
 }
 
-/** Keep a copy of an image another host sent, so later requests are served locally. */
-export function storeMediaCopy(hash: string, bytes: Uint8Array): void {
-  if (HASH_RE.test(hash)) writeAtomic(path.join(mediaDir(), hash), bytes);
-}
-
 function imageBlockAsUrl(block: unknown): unknown {
   if (!isRecord(block) || block.type !== "image") return block;
   let data: unknown;
@@ -274,6 +269,7 @@ export function existingThumbnail(hash: string): string | null {
 export async function createThumbnail(
   hash: string,
   image: Buffer,
+  cache = true,
 ): Promise<Uint8Array | null> {
   let thumb: Uint8Array;
   try {
@@ -284,6 +280,7 @@ export async function createThumbnail(
   } catch {
     return null;
   }
+  if (!cache) return thumb;
   try {
     writeAtomic(path.join(mediaDir(), `${hash}.thumb.webp`), thumb);
   } catch {

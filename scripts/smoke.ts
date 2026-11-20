@@ -9,7 +9,6 @@ import assert from "node:assert/strict";
 import {
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -23,7 +22,6 @@ const { values } = parseArgs({
     package: { type: "string" },
     binary: { type: "string" },
     omp: { type: "string" },
-    "second-server": { type: "boolean" },
   },
 });
 const binary = values.binary && path.resolve(values.binary);
@@ -161,7 +159,6 @@ if (values.omp) env.KEYLIME_OMP_BIN = path.resolve(values.omp);
 let log = "";
 let launcher: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
 let daemon: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
-let secondLauncher: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
 const stop = (child: Bun.Subprocess) => child.kill("SIGTERM");
 try {
   const ready = Promise.withResolvers<void>();
@@ -348,85 +345,6 @@ try {
       },
     );
 
-    if (values["second-server"]) {
-      await step(
-        "two web servers list the same session through one host daemon",
-        async () => {
-          const probe = Bun.listen({
-            hostname: "127.0.0.1",
-            port: 0,
-            socket: { data() {} },
-          });
-          const secondPort = probe.port;
-          probe.stop(true);
-          const secondBase = `http://127.0.0.1:${secondPort}`;
-          const child = Bun.spawn(
-            [
-              ...keylime,
-              "-p",
-              String(secondPort),
-              "-H",
-              "127.0.0.1",
-              "--no-open",
-            ],
-            {
-              env,
-              stdin: "ignore",
-              stdout: "pipe",
-              stderr: "pipe",
-            },
-          );
-          secondLauncher = child;
-          void readText(child.stdout, (text) => {
-            log += text;
-          });
-          void readText(child.stderr, (text) => {
-            log += text;
-          });
-          const deadline = Date.now() + 60_000;
-          for (;;) {
-            assert(
-              child.exitCode === null,
-              `second server exited with ${child.exitCode}`,
-            );
-            try {
-              const views = await Promise.all(
-                [base, secondBase].map(async (url) => {
-                  const hosts = (await (
-                    await fetch(`${url}/api/hosts`)
-                  ).json()) as { hosts: { id: string; status: string }[] };
-                  const list = (await (
-                    await fetch(`${url}/api/sessions`)
-                  ).json()) as { sessions: { id: string }[] };
-                  return (
-                    hosts.hosts.some(
-                      (h) => h.id === "local" && h.status === "online",
-                    ) && list.sessions.some((s) => s.id === SESSION_ID)
-                  );
-                }),
-              );
-              if (views.every(Boolean)) break;
-            } catch {
-              // The second listener or its daemon link is not ready yet.
-            }
-            assert(
-              Date.now() < deadline,
-              "both servers did not show the shared session within 30 s",
-            );
-            await Bun.sleep(200);
-          }
-          const saved = JSON.parse(
-            readFileSync(path.join(agentDir, "keylime", "host.json"), "utf8"),
-          ) as { url: string };
-          assert.equal(
-            saved.url,
-            base,
-            "starting staging changed the primary daemon URL",
-          );
-        },
-      );
-    }
-
     // No model call: the spawn, the runner's hello and the get_state that follows it.
     await step("a live session starts through the omp runner", async () => {
       const response = await fetch(`${base}/api/agent/${SESSION_ID}`, {
@@ -490,17 +408,6 @@ try {
     );
   }
 } finally {
-  if (secondLauncher) {
-    const child = secondLauncher;
-    await step("second launcher stops", async () => {
-      stop(child);
-      const outcome = await Promise.race([
-        child.exited,
-        Bun.sleep(15_000).then(() => "running"),
-      ]);
-      assert(outcome !== "running", "second launcher still runs after SIGTERM");
-    });
-  }
   if (daemon) {
     const child = daemon;
     await step("`keylime host` stops", async () => {

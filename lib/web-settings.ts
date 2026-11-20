@@ -1,113 +1,138 @@
-import type { WebServerSettings as ContractWebServerSettings } from "./api-contracts/configuration-models";
+import type {
+  BrowserSettings,
+  HostSettings,
+  HostSettingsPatch,
+} from "./api-contracts/configuration-models";
+import { randomUUID } from "node:crypto";
 import {
-  existsSync,
   mkdirSync,
   readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
-} from "fs";
-import { resolve } from "path";
+} from "node:fs";
+import { dirname, resolve } from "node:path";
 import { getAgentDir } from "./omp/paths";
-import {
-  BROWSER_TRANSPORTS,
-  type BrowserTransportState,
-} from "./event-stream-protocol";
-import {
-  DEFAULT_UPLOAD_RETENTION_DAYS,
-  isUploadRetentionDays,
-} from "./upload-limits";
+import { sanitizeAgentEnvValues } from "./omp/agent-env-policy";
+import { type BrowserTransportState } from "./event-stream-protocol";
+import { isUploadRetentionDays } from "./upload-limits";
 import { isRecord } from "./type-guards";
 
-/** keylime's own server-side settings (omp's config.yml stays omp's). */
-export type WebServerSettings = ContractWebServerSettings;
-
-const DEFAULTS: WebServerSettings = {
-  autoResumeSessions: false,
-  agentToolsEnabled: false,
-  agentEnv: {},
-  browserTransport: "ws",
-  uploadRetentionDays: DEFAULT_UPLOAD_RETENTION_DAYS,
-};
-
-/** What every hello and `transport` frame tells the browser. */
-export function browserTransportState(
-  settings = loadWebServerSettings(),
-): BrowserTransportState {
-  return { transport: settings.browserTransport };
-}
-
-/** String-valued entries only — the allow-list lives in lib/omp/agent-env.ts. */
-function readAgentEnvRecord(value: unknown): Record<string, string> {
-  if (!isRecord(value)) return {};
-  const entries: Array<[string, string]> = [];
-  for (const [name, entry] of Object.entries(value)) {
-    if (typeof entry === "string") entries.push([name, entry]);
-  }
-  return Object.fromEntries(entries);
-}
-
-function settingsPath(): string {
+function hostSettingsPath(): string {
   return resolve(getAgentDir(), "keylime-settings.json");
 }
 
-declare global {
-  // Survives `bun --hot` re-evaluation, which creates fresh module instances.
-  var __keylimeSettingsCache:
-    { path: string; settings: WebServerSettings } | undefined;
+function browserSettingsPath(): string {
+  return resolve(getAgentDir(), "keylime-browser-settings.json");
 }
 
-export function loadWebServerSettings(): WebServerSettings {
-  const path = settingsPath();
-  const cached = globalThis.__keylimeSettingsCache;
-  if (cached?.path === path) return cached.settings;
-  let settings = DEFAULTS;
+function readSettings(path: string, preserve = false): Record<string, unknown> {
   try {
-    if (existsSync(path)) {
-      const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
-      if (isRecord(raw)) {
-        settings = {
-          autoResumeSessions: raw.autoResumeSessions === true,
-          agentToolsEnabled: raw.agentToolsEnabled === true,
-          agentEnv: readAgentEnvRecord(raw.agentEnv),
-          browserTransport:
-            BROWSER_TRANSPORTS.find(
-              (transport) => transport === raw.browserTransport,
-            ) ?? "ws",
-          uploadRetentionDays: isUploadRetentionDays(raw.uploadRetentionDays)
-            ? raw.uploadRetentionDays
-            : DEFAULT_UPLOAD_RETENTION_DAYS,
-        };
-      }
+    const value: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (isRecord(value)) return value;
+    if (preserve) throw new Error("Settings file must contain an object");
+  } catch (error) {
+    if (preserve && (!isRecord(error) || error.code !== "ENOENT")) {
+      throw new Error(
+        "Cannot read daemon settings; the existing file was not changed",
+      );
     }
-  } catch {
-    // Unreadable settings fall back to the defaults.
+    // Missing or unreadable settings use defaults for reads, not writes.
   }
-  globalThis.__keylimeSettingsCache = { path, settings };
-  return settings;
+  return {};
 }
 
-/** Atomic write (temp file + rename), like the project registry. Private to its user: it holds agentEnv. */
-export function saveWebServerSettings(
-  patch: Partial<WebServerSettings>,
-): WebServerSettings {
-  const path = settingsPath();
-  const settings = { ...loadWebServerSettings(), ...patch };
-  mkdirSync(resolve(path, ".."), { recursive: true });
-  const temp = `${path}.tmp-${process.pid}-${Date.now()}`;
+function writeSettings(path: string, settings: Record<string, unknown>): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const temp = `${path}.tmp-${randomUUID()}`;
   try {
     writeFileSync(temp, `${JSON.stringify(settings, null, 2)}\n`, {
-      encoding: "utf8",
       mode: 0o600,
+      flag: "wx",
     });
     renameSync(temp, path);
   } finally {
-    try {
-      if (existsSync(temp)) rmSync(temp);
-    } catch {
-      // ignore cleanup failures
+    rmSync(temp, { force: true });
+  }
+}
+
+function hostPolicy(raw: Record<string, unknown>): HostSettings {
+  const days = isUploadRetentionDays(raw.uploadRetentionDays)
+    ? raw.uploadRetentionDays
+    : readSettings(resolve(getAgentDir(), "keylime", "upload-retention.json"))
+        .days;
+  return {
+    autoResumeSessions: raw.autoResumeSessions === true,
+    agentToolsEnabled: raw.agentToolsEnabled === true,
+    uploadRetentionDays: isUploadRetentionDays(days) ? days : null,
+  };
+}
+
+export function loadHostSettings(): HostSettings {
+  return hostPolicy(readSettings(hostSettingsPath()));
+}
+
+export function parseHostSettingsPatch(
+  value: unknown,
+): HostSettingsPatch | null {
+  if (!isRecord(value)) return null;
+  const patch: HostSettingsPatch = {};
+  for (const [key, entry] of Object.entries(value)) {
+    switch (key) {
+      case "autoResumeSessions":
+      case "agentToolsEnabled":
+        if (typeof entry !== "boolean") return null;
+        patch[key] = entry;
+        break;
+      case "uploadRetentionDays":
+        if (!isUploadRetentionDays(entry)) return null;
+        patch[key] = entry;
+        break;
+      default:
+        return null;
     }
   }
-  globalThis.__keylimeSettingsCache = { path, settings };
+  return patch;
+}
+
+export function saveHostSettings(value: unknown): HostSettings {
+  const patch = parseHostSettingsPatch(value);
+  if (!patch) throw new TypeError("Invalid host settings patch");
+  const path = hostSettingsPath();
+  const raw = readSettings(path, Object.keys(patch).length > 0);
+  const settings = { ...hostPolicy(raw), ...patch };
+  if (Object.keys(patch).length) writeSettings(path, { ...raw, ...patch });
   return settings;
+}
+
+/** Operator-managed in the daemon's local settings file, never part of a wire payload. */
+export function loadLocalAgentEnv(): Record<string, string> {
+  const { agentEnv } = readSettings(hostSettingsPath());
+  if (!isRecord(agentEnv)) return {};
+  return sanitizeAgentEnvValues(
+    Object.fromEntries(
+      Object.entries(agentEnv).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    ),
+  ).values;
+}
+
+export function loadBrowserSettings(): BrowserSettings {
+  const { browserTransport } = readSettings(browserSettingsPath());
+  return { browserTransport: browserTransport === "sse" ? "sse" : "ws" };
+}
+
+export function saveBrowserSettings(
+  settings: BrowserSettings,
+): BrowserSettings {
+  const { browserTransport } = settings;
+  writeSettings(browserSettingsPath(), { browserTransport });
+  return { browserTransport };
+}
+
+export function browserTransportState(
+  settings = loadBrowserSettings(),
+): BrowserTransportState {
+  return { transport: settings.browserTransport };
 }

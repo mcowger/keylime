@@ -1,11 +1,11 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { fetchMediaFromHosts } from "@/lib/hosts/session-index";
+import { getHost } from "@/lib/hosts/hub";
 import {
   createThumbnail,
   existingThumbnail,
   imageMimeType,
   mediaFilePath,
-  storeMediaCopy,
 } from "@/lib/media-cache";
 
 function image(body: Uint8Array, type: string, immutable = true): Response {
@@ -42,9 +42,9 @@ async function readIfPresent(file: string): Promise<Buffer | null> {
 /**
  * @apiContract workspaceMediaGet
  * @apiUsage Fetch a content-addressed tool-result image or thumbnail.
- * @apiInputs hash is a SHA-256 content identifier; presence of thumb requests a preview.
+ * @apiInputs hash is a SHA-256 content identifier; thumb requests a preview; hostId selects the source and defaults to local.
  * @apiInvariants Remote bytes must match the hash; non-images return 415 and missing images return 404.
- * @apiEffects May fetch from linked hosts and cache a local copy or thumbnail; full images are privately immutable-cached.
+ * @apiEffects Only the selected host is read. Local thumbnails may be cached on disk; images are privately immutable-cached.
  * @apiRecovery If thumbnail generation fails the full image is served without immutable caching, allowing a later preview.
  */
 export async function GET(
@@ -52,35 +52,39 @@ export async function GET(
   { params }: { params: Promise<{ hash: string }> },
 ) {
   const { hash } = await params;
-  const thumb = new URL(req.url).searchParams.has("thumb");
-  const cached = thumb ? existingThumbnail(hash) : null;
+  const query = new URL(req.url).searchParams;
+  const hostId = query.get("hostId") ?? "local";
+  const thumb = query.has("thumb");
+  const local = hostId === "local";
+  if (!/^[a-f0-9]{64}$/.test(hash))
+    return new Response("Not found", { status: 404 });
+  const cached = local && thumb ? existingThumbnail(hash) : null;
   const cachedBytes = cached ? await readIfPresent(cached) : null;
   if (cachedBytes) return image(cachedBytes, "image/webp");
 
-  // The sweep can delete our copy between lookup and read once omp's blob is
-  // complete; one more lookup then finds the blob.
   let bytes: Buffer | null = null;
-  for (let attempt = 0; attempt < 2 && !bytes; attempt++) {
-    const file = mediaFilePath(hash);
-    if (!file) break;
-    bytes = await readIfPresent(file);
+  if (local) {
+    // Retry on a race between our copy being swept and omp's blob taking over.
+    for (let attempt = 0; attempt < 2 && !bytes; attempt++) {
+      const file = mediaFilePath(hash);
+      if (!file) break;
+      bytes = await readIfPresent(file);
+    }
+  } else {
+    const result = await getHost(hostId)?.sessionOps.readMedia(hash);
+    if (
+      result?.ok &&
+      createHash("sha256").update(result.value).digest("hex") === hash
+    ) {
+      const remote = result.value;
+      bytes = Buffer.from(remote.buffer, remote.byteOffset, remote.byteLength);
+    }
   }
-  // A remote session's image: ask the linked hosts (only bytes that hash to `hash` come back).
-  const remote = bytes ? null : await fetchMediaFromHosts(hash);
-  if (remote)
-    bytes = Buffer.from(remote.buffer, remote.byteOffset, remote.byteLength);
   if (!bytes) return new Response("Not found", { status: 404 });
   const type = imageMimeType(bytes);
   if (!type) return new Response("Not an image", { status: 415 });
-  if (remote) {
-    try {
-      storeMediaCopy(hash, remote);
-    } catch {
-      // Disk trouble: still serve it, the next request asks again.
-    }
-  }
   if (thumb) {
-    const preview = await createThumbnail(hash, bytes);
+    const preview = await createThumbnail(hash, bytes, local);
     if (preview) return image(preview, "image/webp");
     // Full image standing in for a preview: not cached, so a later preview can replace it.
     return image(bytes, type, false);

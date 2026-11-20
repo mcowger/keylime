@@ -11877,6 +11877,9 @@
                 },
                 {
                   "properties": {
+                    "hostId": {
+                      "type": "string"
+                    },
                     "kind": {
                       "const": "open-chat",
                       "type": "string"
@@ -11929,6 +11932,9 @@
                 },
                 {
                   "properties": {
+                    "hostId": {
+                      "type": "string"
+                    },
                     "kind": {
                       "const": "session",
                       "type": "string"
@@ -11942,6 +11948,9 @@
                 },
                 {
                   "properties": {
+                    "hostId": {
+                      "type": "string"
+                    },
                     "kind": {
                       "const": "commit-plan-progress",
                       "type": "string"
@@ -12000,7 +12009,7 @@
                   "type": "object"
                 }
               ],
-              "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. The parser additionally validates identifiers and paths. A file's null sessionId selects no session; an omitted hostId uses the default resolution.",
+              "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. Session, open-chat, and commit-plan progress channels take a raw session ID and default an omitted hostId to local. The parser validates identifiers and paths. A file's null sessionId selects no session.",
               "title": "EventStreamChannel"
             },
             "id": {
@@ -12043,12 +12052,15 @@
           "type": "object"
         },
         {
-          "description": "Agent command for an existing session. rid is scoped to session for deduplication, not globally; a reply reports dispatch outcome and is not necessarily completion of the resulting turn. advisor selects the advisor.",
+          "description": "Agent command for an existing session. rid is scoped to (hostId, session) for deduplication. session is the raw session ID; omitted hostId selects local. A reply reports dispatch outcome, not necessarily completion of the resulting turn.",
           "properties": {
             "advisor": {
               "type": "boolean"
             },
             "command": {},
+            "hostId": {
+              "type": "string"
+            },
             "rid": {
               "type": "string"
             },
@@ -12164,6 +12176,9 @@
         },
         {
           "properties": {
+            "hostId": {
+              "type": "string"
+            },
             "kind": {
               "const": "open-chat",
               "type": "string"
@@ -12216,6 +12231,9 @@
         },
         {
           "properties": {
+            "hostId": {
+              "type": "string"
+            },
             "kind": {
               "const": "session",
               "type": "string"
@@ -12229,6 +12247,9 @@
         },
         {
           "properties": {
+            "hostId": {
+              "type": "string"
+            },
             "kind": {
               "const": "commit-plan-progress",
               "type": "string"
@@ -12287,7 +12308,7 @@
           "type": "object"
         }
       ],
-      "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. The parser additionally validates identifiers and paths. A file's null sessionId selects no session; an omitted hostId uses the default resolution.",
+      "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. Session, open-chat, and commit-plan progress channels take a raw session ID and default an omitted hostId to local. The parser validates identifiers and paths. A file's null sessionId selects no session.",
       "title": "EventStreamChannel"
     },
     "configuration_AgentDiagnostic": {
@@ -12465,6 +12486,27 @@
       ],
       "description": "Origin of an agent definition: bundled, user or project."
     },
+    "configuration_BrowserSettings": {
+      "additionalProperties": false,
+      "description": "Web-server browser settings, separate from daemon policy.",
+      "properties": {
+        "browserTransport": {
+          "anyOf": [
+            {
+              "const": "sse",
+              "type": "string"
+            },
+            {
+              "const": "ws",
+              "type": "string"
+            }
+          ],
+          "description": "Browser event transport selected by the web server."
+        }
+      },
+      "required": ["browserTransport"],
+      "type": "object"
+    },
     "configuration_CompleteModelCatalogCost": {
       "description": "Catalog price with all input, output, cache-read and cache-write components present.",
       "properties": {
@@ -12486,6 +12528,179 @@
         }
       },
       "required": ["input", "output", "cacheRead", "cacheWrite"],
+      "type": "object"
+    },
+    "configuration_HostModels": {
+      "description": "The selected daemon's model catalog and current slow-mode preference.",
+      "properties": {
+        "anthropicSlowMode": {
+          "description": "Whether Claude low-priority mode is configured on the selected daemon.",
+          "type": "boolean"
+        },
+        "connectedProviders": {
+          "items": {
+            "properties": {
+              "disabled": {
+                "type": "boolean"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "name", "disabled"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "defaultModel": {
+          "anyOf": [
+            {
+              "properties": {
+                "modelId": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                }
+              },
+              "required": ["provider", "modelId"],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "modelError": {
+          "type": "string"
+        },
+        "modelList": {
+          "items": {
+            "properties": {
+              "contextWindow": {
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "maxTokens": {
+                "type": "number"
+              },
+              "name": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "supportsFastMode": {
+                "type": "boolean"
+              },
+              "supportsSlowMode": {
+                "type": "boolean"
+              },
+              "thinkingLevels": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["id", "name", "provider"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "models": {
+          "patternProperties": {
+            "^(.*)$": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "thinkingLevels": {
+          "patternProperties": {
+            "^(.*)$": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "models",
+        "modelList",
+        "defaultModel",
+        "thinkingLevels",
+        "anthropicSlowMode"
+      ],
+      "type": "object"
+    },
+    "configuration_HostSettings": {
+      "additionalProperties": false,
+      "description": "Operator-editable policy for one daemon. Never includes environment variables.",
+      "properties": {
+        "agentToolsEnabled": {
+          "description": "Enable cross-session agent tools on this daemon.",
+          "type": "boolean"
+        },
+        "autoResumeSessions": {
+          "description": "Resume sessions interrupted on this daemon.",
+          "type": "boolean"
+        },
+        "uploadRetentionDays": {
+          "anyOf": [
+            {
+              "maximum": 3650,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Days to retain sent uploads; null retains them indefinitely."
+        }
+      },
+      "required": [
+        "autoResumeSessions",
+        "agentToolsEnabled",
+        "uploadRetentionDays"
+      ],
+      "type": "object"
+    },
+    "configuration_HostSettingsPatch": {
+      "additionalProperties": false,
+      "description": "Patch one daemon's policy, preserving omitted fields.",
+      "properties": {
+        "agentToolsEnabled": {
+          "description": "Enable cross-session agent tools on this daemon.",
+          "type": "boolean"
+        },
+        "autoResumeSessions": {
+          "description": "Resume sessions interrupted on this daemon.",
+          "type": "boolean"
+        },
+        "uploadRetentionDays": {
+          "anyOf": [
+            {
+              "maximum": 3650,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Days to retain sent uploads; null retains them indefinitely."
+        }
+      },
       "type": "object"
     },
     "configuration_McpLiveServer": {
@@ -13129,7 +13344,7 @@
       "description": "A custom model definition in models.yml; unspecified settings inherit provider or runtime defaults and extra YAML keys are preserved."
     },
     "configuration_ModelsData": {
-      "description": "Shared model-cache projection from omp, including resolved default and optional runtime error. The HTTP route adds anthropicSlowMode.",
+      "description": "Daemon model-cache projection from omp, including resolved default and optional runtime error.",
       "properties": {
         "connectedProviders": {
           "items": {
@@ -14981,60 +15196,6 @@
         }
       ],
       "description": "Outcome of comparing an installed skill with its upstream source."
-    },
-    "configuration_WebServerSettings": {
-      "description": "Persisted web-server settings shared by clients, separate from browser-local preferences.",
-      "properties": {
-        "agentEnv": {
-          "description": "Validated environment variables for child agents; reserved names are rejected or filtered.",
-          "patternProperties": {
-            "^(.*)$": {
-              "type": "string"
-            }
-          },
-          "type": "object"
-        },
-        "agentToolsEnabled": {
-          "description": "Enable server-side cross-session agent tools.",
-          "type": "boolean"
-        },
-        "autoResumeSessions": {
-          "description": "Resume sessions interrupted by server shutdown.",
-          "type": "boolean"
-        },
-        "browserTransport": {
-          "anyOf": [
-            {
-              "const": "sse",
-              "type": "string"
-            },
-            {
-              "const": "ws",
-              "type": "string"
-            }
-          ],
-          "description": "Server-selected browser event transport, shared across connected clients."
-        },
-        "uploadRetentionDays": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Days to retain sent uploads; null retains them indefinitely."
-        }
-      },
-      "required": [
-        "autoResumeSessions",
-        "agentToolsEnabled",
-        "agentEnv",
-        "browserTransport",
-        "uploadRetentionDays"
-      ],
-      "type": "object"
     },
     "domain_AgentMessage": {
       "anyOf": [
@@ -17433,6 +17594,9 @@
         },
         {
           "properties": {
+            "hostId": {
+              "type": "string"
+            },
             "sessionId": {
               "type": "string"
             },
@@ -17444,7 +17608,7 @@
               "type": "string"
             }
           },
-          "required": ["type", "sessionId", "targetId"],
+          "required": ["type", "sessionId", "hostId", "targetId"],
           "type": "object"
         }
       ],
@@ -20157,10 +20321,6 @@
         "pinOrder": {
           "description": "Set when pinned: position among pinned workspaces (lower first). Pins\nonly apply while the sidebar sorts by name or activity.",
           "type": "number"
-        },
-        "poolId": {
-          "description": "Logical pool target; path/hostId, when present, are diagnostic only.",
-          "type": "string"
         },
         "projectId": {
           "type": "string"
@@ -24054,13 +24214,6 @@
         },
         "path": {
           "description": "Session file path local to its owning host.",
-          "type": "string"
-        },
-        "poolId": {
-          "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-          "type": "string"
-        },
-        "projectId": {
           "type": "string"
         },
         "projectKey": {
@@ -29689,10 +29842,6 @@
                   "description": "Set when pinned: position among pinned workspaces (lower first). Pins\nonly apply while the sidebar sorts by name or activity.",
                   "type": "number"
                 },
-                "poolId": {
-                  "description": "Logical pool target; path/hostId, when present, are diagnostic only.",
-                  "type": "string"
-                },
                 "projectId": {
                   "type": "string"
                 },
@@ -32904,13 +33053,6 @@
                         "description": "Session file path local to its owning host.",
                         "type": "string"
                       },
-                      "poolId": {
-                        "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                        "type": "string"
-                      },
-                      "projectId": {
-                        "type": "string"
-                      },
                       "projectKey": {
                         "description": "Stable identity key for grouping and comparison.",
                         "type": "string"
@@ -33083,41 +33225,102 @@
       "required": ["state"],
       "type": "object"
     },
-    "host_HostCapacity": {
-      "description": "Advisory host resource sample; active sessions are active turns.",
+    "host_hostSettingsGet_args": {
+      "properties": {},
+      "type": "object"
+    },
+    "host_hostSettingsGet_result": {
+      "additionalProperties": false,
+      "description": "Operator-editable policy for one daemon. Never includes environment variables.",
       "properties": {
-        "activeSessions": {
-          "maximum": 9007199254740991,
-          "minimum": 0,
-          "type": "integer"
+        "agentToolsEnabled": {
+          "description": "Enable cross-session agent tools on this daemon.",
+          "type": "boolean"
         },
-        "availableMemoryBytes": {
-          "description": "Available memory in bytes.",
-          "type": "number"
+        "autoResumeSessions": {
+          "description": "Resume sessions interrupted on this daemon.",
+          "type": "boolean"
         },
-        "busyFraction": {
-          "type": "number"
-        },
-        "effectiveCpus": {
-          "description": "Effective CPU capacity available to the host.",
-          "type": "number"
-        },
-        "load1": {
-          "type": "number"
-        },
-        "stealFraction": {
-          "type": "number"
+        "uploadRetentionDays": {
+          "anyOf": [
+            {
+              "maximum": 3650,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Days to retain sent uploads; null retains them indefinitely."
         }
       },
       "required": [
-        "effectiveCpus",
-        "load1",
-        "busyFraction",
-        "stealFraction",
-        "availableMemoryBytes",
-        "activeSessions"
+        "autoResumeSessions",
+        "agentToolsEnabled",
+        "uploadRetentionDays"
       ],
-      "title": "HostCapacity",
+      "type": "object"
+    },
+    "host_hostSettingsSet_args": {
+      "additionalProperties": false,
+      "description": "Patch one daemon's policy, preserving omitted fields.",
+      "properties": {
+        "agentToolsEnabled": {
+          "description": "Enable cross-session agent tools on this daemon.",
+          "type": "boolean"
+        },
+        "autoResumeSessions": {
+          "description": "Resume sessions interrupted on this daemon.",
+          "type": "boolean"
+        },
+        "uploadRetentionDays": {
+          "anyOf": [
+            {
+              "maximum": 3650,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Days to retain sent uploads; null retains them indefinitely."
+        }
+      },
+      "type": "object"
+    },
+    "host_hostSettingsSet_result": {
+      "additionalProperties": false,
+      "description": "Operator-editable policy for one daemon. Never includes environment variables.",
+      "properties": {
+        "agentToolsEnabled": {
+          "description": "Enable cross-session agent tools on this daemon.",
+          "type": "boolean"
+        },
+        "autoResumeSessions": {
+          "description": "Resume sessions interrupted on this daemon.",
+          "type": "boolean"
+        },
+        "uploadRetentionDays": {
+          "anyOf": [
+            {
+              "maximum": 3650,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Days to retain sent uploads; null retains them indefinitely."
+        }
+      },
+      "required": [
+        "autoResumeSessions",
+        "agentToolsEnabled",
+        "uploadRetentionDays"
+      ],
       "type": "object"
     },
     "host_HostUriScheme": {
@@ -33718,13 +33921,6 @@
             "description": "Session file path local to its owning host.",
             "type": "string"
           },
-          "poolId": {
-            "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-            "type": "string"
-          },
-          "projectId": {
-            "type": "string"
-          },
           "projectKey": {
             "description": "Stable identity key for grouping and comparison.",
             "type": "string"
@@ -33854,6 +34050,126 @@
           "type": "object"
         }
       ]
+    },
+    "host_modelsList_args": {
+      "properties": {
+        "refresh": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "host_modelsList_result": {
+      "description": "The selected daemon's model catalog and current slow-mode preference.",
+      "properties": {
+        "anthropicSlowMode": {
+          "description": "Whether Claude low-priority mode is configured on the selected daemon.",
+          "type": "boolean"
+        },
+        "connectedProviders": {
+          "items": {
+            "properties": {
+              "disabled": {
+                "type": "boolean"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "name", "disabled"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "defaultModel": {
+          "anyOf": [
+            {
+              "properties": {
+                "modelId": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                }
+              },
+              "required": ["provider", "modelId"],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "modelError": {
+          "type": "string"
+        },
+        "modelList": {
+          "items": {
+            "properties": {
+              "contextWindow": {
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "maxTokens": {
+                "type": "number"
+              },
+              "name": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "supportsFastMode": {
+                "type": "boolean"
+              },
+              "supportsSlowMode": {
+                "type": "boolean"
+              },
+              "thinkingLevels": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["id", "name", "provider"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "models": {
+          "patternProperties": {
+            "^(.*)$": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "thinkingLevels": {
+          "patternProperties": {
+            "^(.*)$": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "models",
+        "modelList",
+        "defaultModel",
+        "thinkingLevels",
+        "anthropicSlowMode"
+      ],
+      "type": "object"
     },
     "host_open_args": {
       "description": "Join an existing daemon-owned session, or start it if no process owns it. Membership, not WebSocket lifetime, controls interest.",
@@ -39055,13 +39371,6 @@
                         "path": {
                           "description": "Session file path local to its owning host.",
                           "type": "string"
-                        },
-                        "poolId": {
-                          "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                          "type": "string"
-                        },
-                        "projectId": {
-                          "type": "string"
                         }
                       },
                       "required": [
@@ -43661,26 +43970,6 @@
     "host_sessionFileExists_result": {
       "type": "boolean"
     },
-    "host_setUploadRetention_args": {
-      "properties": {
-        "days": {
-          "anyOf": [
-            {
-              "minimum": 1,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": ["days"],
-      "type": "object"
-    },
-    "host_setUploadRetention_result": {
-      "type": "null"
-    },
     "host_shipFinish_args": {
       "properties": {
         "input": {
@@ -47083,18 +47372,6 @@
             "keylimeVersion": {
               "type": "string"
             },
-            "link": {
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "notifier": {
-                  "type": "boolean"
-                }
-              },
-              "required": ["id", "notifier"],
-              "type": "object"
-            },
             "ompVersion": {
               "anyOf": [
                 {
@@ -47260,26 +47537,6 @@
           },
           "required": ["type", "seq", "ch"],
           "title": "HostLinkResync",
-          "type": "object"
-        },
-        {
-          "description": "Notifier election for this link changed.",
-          "properties": {
-            "on": {
-              "type": "boolean"
-            },
-            "seq": {
-              "maximum": 9007199254740991,
-              "minimum": 0,
-              "type": "integer"
-            },
-            "type": {
-              "const": "notifier",
-              "type": "string"
-            }
-          },
-          "required": ["type", "seq", "on"],
-          "title": "HostLinkNotifier",
           "type": "object"
         },
         {
@@ -47506,55 +47763,6 @@
           },
           "required": ["type", "seq", "samples"],
           "title": "HostLinkStats",
-          "type": "object"
-        },
-        {
-          "description": "Unsequenced advisory capacity sample, not retained for replay.",
-          "properties": {
-            "sample": {
-              "description": "Advisory host resource sample; active sessions are active turns.",
-              "properties": {
-                "activeSessions": {
-                  "maximum": 9007199254740991,
-                  "minimum": 0,
-                  "type": "integer"
-                },
-                "availableMemoryBytes": {
-                  "description": "Available memory in bytes.",
-                  "type": "number"
-                },
-                "busyFraction": {
-                  "type": "number"
-                },
-                "effectiveCpus": {
-                  "description": "Effective CPU capacity available to the host.",
-                  "type": "number"
-                },
-                "load1": {
-                  "type": "number"
-                },
-                "stealFraction": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "effectiveCpus",
-                "load1",
-                "busyFraction",
-                "stealFraction",
-                "availableMemoryBytes",
-                "activeSessions"
-              ],
-              "title": "HostCapacity",
-              "type": "object"
-            },
-            "type": {
-              "const": "capacity",
-              "type": "string"
-            }
-          },
-          "required": ["type", "sample"],
-          "title": "HostLinkCapacity",
           "type": "object"
         },
         {
@@ -49409,6 +49617,10 @@
           "description": "Previous model for a model-switch event.",
           "type": "string"
         },
+        "hostId": {
+          "description": "Conversation host; absent for historical notifications without provenance and test pushes.",
+          "type": "string"
+        },
         "sessionId": {
           "description": "Conversation identifier; empty for a test push.",
           "type": "string"
@@ -49487,6 +49699,10 @@
               "description": "Previous model for a model-switch event.",
               "type": "string"
             },
+            "hostId": {
+              "description": "Conversation host; absent for historical notifications without provenance and test pushes.",
+              "type": "string"
+            },
             "sessionId": {
               "description": "Conversation identifier; empty for a test push.",
               "type": "string"
@@ -49541,7 +49757,7 @@
           "type": "object"
         },
         "id": {
-          "description": "Replace tag: sessionId:type.",
+          "description": "Opaque replace tag scoped to host, session and type for new conversation notifications.",
           "type": "string"
         },
         "read": {
@@ -185072,13 +185288,6 @@
                 "path": {
                   "description": "Session file path local to its owning host.",
                   "type": "string"
-                },
-                "poolId": {
-                  "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                  "type": "string"
-                },
-                "projectId": {
-                  "type": "string"
                 }
               },
               "required": [
@@ -188750,13 +188959,6 @@
             "path": {
               "description": "Session file path local to its owning host.",
               "type": "string"
-            },
-            "poolId": {
-              "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-              "type": "string"
-            },
-            "projectId": {
-              "type": "string"
             }
           },
           "required": [
@@ -191659,6 +191861,9 @@
                     },
                     {
                       "properties": {
+                        "hostId": {
+                          "type": "string"
+                        },
                         "kind": {
                           "const": "open-chat",
                           "type": "string"
@@ -191711,6 +191916,9 @@
                     },
                     {
                       "properties": {
+                        "hostId": {
+                          "type": "string"
+                        },
                         "kind": {
                           "const": "session",
                           "type": "string"
@@ -191724,6 +191932,9 @@
                     },
                     {
                       "properties": {
+                        "hostId": {
+                          "type": "string"
+                        },
                         "kind": {
                           "const": "commit-plan-progress",
                           "type": "string"
@@ -193561,13 +193772,6 @@
               },
               "path": {
                 "description": "Session file path local to its owning host.",
-                "type": "string"
-              },
-              "poolId": {
-                "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                "type": "string"
-              },
-              "projectId": {
                 "type": "string"
               },
               "projectKey": {

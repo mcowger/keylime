@@ -906,6 +906,7 @@ test("a command goes over the link under its session and its reply reaches the t
     type: "cmd",
     rid: "r1",
     session: "a",
+    hostId: "local",
     advisor: false,
     command: { type: "get_state" },
     seq: 2,
@@ -1205,7 +1206,8 @@ test("a refused upgrade falls back to SSE for 5 minutes only after 3 in a row wh
   // A proxy that strips Upgrade: every dial closes before it opens, and the plain GET reaches the server (426).
   const proxied = loadWorker({ linkStatus: () => 426 });
   const other = proxied.connectTab();
-  other.open(1, running);
+  const remoteSession = { kind: "session", sessionId: "a", hostId: "remote" };
+  other.open(1, remoteSession);
   proxied.source.hello("c0", "ws");
   for (const refusal of [1, 2]) {
     proxied.socket.drop();
@@ -1232,6 +1234,11 @@ test("a refused upgrade falls back to SSE for 5 minutes only after 3 in a row wh
     subscribedIds(proxied.posts, "c1"),
     ["s1"],
     "the setting still says ws, but the worker stays on SSE",
+  );
+  assert.deepEqual(
+    proxied.posts.find((post) => post.connectionId === "c1")?.subscribe
+      ?.channel,
+    remoteSession,
   );
   other.send({
     op: "cmd",
@@ -4030,6 +4037,7 @@ const NOW = Date.now();
 const outboxEntry = (id: string, sessionId = "a", createdAt = NOW) => ({
   id,
   sessionId,
+  hostId: "local",
   scope: "test-scope",
   mode: "prompt",
   message: `hi ${id}`,
@@ -4048,6 +4056,7 @@ const acceptedM1 = {
     entry: {
       id: "m1",
       sessionId: "a",
+      hostId: "local",
       mode: "prompt",
       message: "hi m1",
       state: "held",
@@ -4061,6 +4070,7 @@ const acceptedM2 = {
     entry: {
       id: "m2",
       sessionId: "a",
+      hostId: "local",
       mode: "prompt",
       message: "hi m2",
       state: "held",
@@ -4184,6 +4194,7 @@ test("outbox: a matching delivered tombstone with empty message is authoritative
       entry: {
         id: "m1",
         sessionId: "canonical-session",
+        hostId: "local",
         mode: "prompt",
         message: "",
         state: "delivered",
@@ -4219,6 +4230,7 @@ test("outbox: a delivered native receipt retains the exact original intent witho
       entry: {
         id: "m1",
         sessionId: "canonical-session",
+        hostId: "local",
         mode: "prompt",
         message: "",
         state: "delivered",
@@ -4366,7 +4378,7 @@ test("outbox: duplicate active ids reject the second composer without replacing 
   tabB.send({
     op: "outbox_add",
     n: 2,
-    entry: { ...outboxEntry("same-id", "other"), message: "new draft" },
+    entry: { ...outboxEntry("same-id"), message: "new draft" },
   });
   await flush();
   assert.equal(
@@ -4382,6 +4394,42 @@ test("outbox: duplicate active ids reject the second composer without replacing 
   assert.equal(second.posts.length, 0);
 });
 
+test("outbox: identical IDs on different hosts dispatch independently and delete only within scope", async () => {
+  const idb = fakeIndexedDB();
+  const worker = loadWorker({
+    indexedDB: idb,
+    respond: () => ({ status: 503, body: {} }),
+  });
+  const tab = worker.connectTab();
+  const entry = outboxEntry("same-id");
+  tab.send({ op: "outbox_add", n: 1, entry });
+  tab.send({ op: "outbox_add", n: 2, entry: { ...entry, hostId: "remote" } });
+  await flush();
+  assert.equal(idb.entries.size, 2);
+  assert.ok(worker.requests.includes("POST /api/agent/a?hostId=remote"));
+  tab.send({
+    op: "outbox_reconcile",
+    n: 3,
+    sessionId: "a",
+    hostId: "local",
+    confirmedIds: [entry.id],
+  });
+  await flush();
+  assert.deepEqual(
+    [...idb.entries.values()].map((row) => row.hostId),
+    ["remote"],
+  );
+  tab.send({
+    op: "outbox_drop",
+    n: 4,
+    sessionId: "a",
+    hostId: "remote",
+    id: entry.id,
+  });
+  await flush();
+  assert.equal(idb.entries.size, 0);
+});
+
 for (const body of [
   null,
   "<html>login</html>",
@@ -4390,6 +4438,7 @@ for (const body of [
   { success: true, data: { entry: { id: "m1", state: "held" } } },
   ...[
     { id: "wrong-id" },
+    { hostId: "wrong-host" },
     { state: "unknown" },
     { sessionId: "" },
     { mode: "unknown" },
@@ -4500,11 +4549,11 @@ test("outbox: an add is answered once IndexedDB commits it, then goes over the l
   srv.reply(cmd.rid, 200, { success: true, data: { entry: held } });
   await flush();
   assert.deepEqual(outboxMessages(tab).slice(2), [
-    { outboxStored: held },
+    { outboxStored: held, outboxSessionId: "a" },
     { outbox: [] },
   ]);
   assert.deepEqual(outboxMessages(other).slice(1), [
-    { outboxStored: held },
+    { outboxStored: held, outboxSessionId: "a" },
     { outbox: [] },
   ]);
   assert.equal(idb.entries.size, 0, "deleted from IndexedDB");
@@ -4535,7 +4584,7 @@ test("outbox: over SSE the worker POSTs outbox_add itself", async () => {
     },
   ]);
   assert.deepEqual(outboxMessages(tab).slice(-2), [
-    { outboxStored: acceptedM1.data.entry },
+    { outboxStored: acceptedM1.data.entry, outboxSessionId: "s/1" },
     { outbox: [] },
   ]);
   assert.equal(idb.entries.size, 0);
@@ -4631,7 +4680,13 @@ test("outbox: a 413 or 404 is final: failed with the server's error and kept unt
   assert.deepEqual(tab.received.at(-1), { outbox: [failed1, failed2] });
 
   tab.send({ op: "wake", reason: "online", visible: true, clientId: "c" });
-  tab.send({ op: "outbox_drop", n: 3, id: "m1" });
+  tab.send({
+    op: "outbox_drop",
+    n: 3,
+    sessionId: "a",
+    hostId: "local",
+    id: "m1",
+  });
   await flush();
   assert.deepEqual([...idb.entries.values()], [failed2]);
   assert.deepEqual(tab.received.at(-1), { outbox: [failed2] });
@@ -4762,7 +4817,11 @@ test("outbox: later sends recover a failed initial read without restarting or ov
     { outboxAdded: 3 },
   );
   assert.deepEqual(idb.entries.get("m1"), existing);
-  assert.deepEqual([...idb.entries.keys()].sort(), ["m1", "m2", "m3"]);
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
+    "m1",
+    "m2",
+    "m3",
+  ]);
   assert.deepEqual(
     worker.posts.map((post) => post.id),
     ["m1"],
@@ -4785,7 +4844,13 @@ test("outbox: a later tab recovers stored failed messages and can delete them af
     tab.received.filter((message) => "outbox" in message).at(-1),
     { outbox: [existing] },
   );
-  tab.send({ op: "outbox_drop", n: 4, id: "m1" });
+  tab.send({
+    op: "outbox_drop",
+    n: 4,
+    sessionId: "a",
+    hostId: "local",
+    id: "m1",
+  });
   await flush();
   assert.deepEqual(
     tab.received.find((message) => message.outboxDropped === 4),
@@ -4902,7 +4967,7 @@ for (const stalled of ["headers", "body"])
     assert.equal(attempt, 2);
     assert.equal(idb.entries.size, 0);
     assert.deepEqual(outboxMessages(tab).slice(-2), [
-      { outboxStored: held },
+      { outboxStored: held, outboxSessionId: "a" },
       { outbox: [] },
     ]);
   });
@@ -4997,7 +5062,13 @@ test("outbox: drop acknowledges only a committed deletion", async () => {
   await flush();
   tab.received.length = 0;
   idb.hold = true;
-  tab.send({ op: "outbox_drop", n: 7, id: "m1" });
+  tab.send({
+    op: "outbox_drop",
+    n: 7,
+    sessionId: "a",
+    hostId: "local",
+    id: "m1",
+  });
   await flush();
   assert.deepEqual(
     tab.received,
@@ -5029,7 +5100,13 @@ test("outbox: a failed delete rejects the drop while keeping its row, local entr
   await flush();
   tab.received.length = 0;
   idb.failWrites = true;
-  tab.send({ op: "outbox_drop", n: 7, id: "m1" });
+  tab.send({
+    op: "outbox_drop",
+    n: 7,
+    sessionId: "a",
+    hostId: "local",
+    id: "m1",
+  });
   await flush();
   const ack = tab.received.find((message) => message.outboxDropped === 7);
   assert.equal(typeof ack?.error, "string");
@@ -5100,7 +5177,10 @@ test("outbox: a backed-off session never blocks delivery to another session", as
     worker.posts.map((post) => post.id),
     ["m1", "m2"],
   );
-  assert.deepEqual([...idb.entries.keys()], ["m1"]);
+  assert.deepEqual(
+    [...idb.entries.values()].map((entry) => entry.id),
+    ["m1"],
+  );
   assert.equal(idb.entries.get("m1")!.state, "sending");
 });
 
@@ -5172,7 +5252,10 @@ test("outbox: an add whose commit succeeds stays accepted when the shared list c
     { outboxAdded: 1 },
     "committed: the composer may clear, so no duplicate under a fresh id",
   );
-  assert.deepEqual([...idb.entries.keys()], ["m1"]);
+  assert.deepEqual(
+    [...idb.entries.values()].map((entry) => entry.id),
+    ["m1"],
+  );
   const sending = { ...outboxEntry("m1"), state: "sending", enqueueOrder: 1 };
   assert.deepEqual(
     tab.received.filter((message) => "outbox" in message).at(-1),
@@ -5247,12 +5330,12 @@ test("outbox: a Retry's copy names the entry it replaces; its 200 deletes that f
   srv.reply(cmd.rid, 200, { success: true, data: { entry: held } });
   await flush();
   assert.deepEqual(
-    [...idb.entries.keys()],
+    [...idb.entries.values()].map((entry) => entry.id),
     [],
     "the copy and the original it replaced leave IndexedDB together",
   );
   assert.deepEqual(outboxMessages(tab).slice(-2), [
-    { outboxStored: { ...held, replaces: "orig" } },
+    { outboxStored: { ...held, replaces: "orig" }, outboxSessionId: "a" },
     { outbox: [] },
   ]);
 });
@@ -5318,7 +5401,10 @@ test("outbox: concurrent workers reuse one exact retry copy from the shared Inde
     root.uploadProofs,
     "the shared retry retains its original attachment proof",
   );
-  assert.deepEqual([...idb.entries.keys()].sort(), ["race-copy-a", root.id]);
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
+    "race-copy-a",
+    root.id,
+  ]);
   for (const client of [tab, secondTab]) {
     assert.deepEqual(
       (
@@ -5347,7 +5433,10 @@ test("outbox: concurrent workers reuse one exact retry copy from the shared Inde
       error: "The upload is gone",
     });
   await flush();
-  assert.deepEqual([...idb.entries.keys()].sort(), ["race-copy-a", root.id]);
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
+    "race-copy-a",
+    root.id,
+  ]);
   assert.equal(idb.entries.get(root.id)!.state, "failed");
   assert.equal(idb.entries.get("race-copy-a")!.state, "failed");
 });
@@ -5376,6 +5465,7 @@ test("outbox: a reused sending copy is sent when the peer that stored it never d
             entry: {
               id: body.id,
               sessionId,
+              hostId: "local",
               mode: body.mode,
               message: "",
               state: "delivered",
@@ -5433,7 +5523,7 @@ test("outbox: a reused sending copy is sent when the peer that stored it never d
     "the stale worker sends the shared IDB winner without a wake or new ID",
   );
   assert.deepEqual(
-    [...idb.entries.keys()],
+    [...idb.entries.values()].map((entry) => entry.id),
     [],
     "the accepted receipt retires the root and the peer's local copy",
   );
@@ -5451,7 +5541,7 @@ test("outbox: a reused sending copy is sent when the peer that stored it never d
   answerPeer({ status: 404, body: { error: "Late refusal" } });
   await flush();
   assert.deepEqual(
-    [...idb.entries.keys()],
+    [...idb.entries.values()].map((entry) => entry.id),
     [],
     "the peer's late refusal cannot resurrect the accepted copy or root",
   );
@@ -5526,6 +5616,7 @@ test("outbox: a server-confirmed local retry copy becomes the anchor for a later
   ];
   tab.send({
     op: "outbox_reconcile",
+    hostId: "local",
     n: 1,
     sessionId,
     confirmedIds: serverSnapshot.map(({ id }) => id),
@@ -5535,7 +5626,7 @@ test("outbox: a server-confirmed local retry copy becomes the anchor for a later
     tab.received.find((message) => message.outboxReconciled === 1),
     { outboxReconciled: 1 },
   );
-  assert.deepEqual([...idb.entries.keys()].sort(), [
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
     "different-intent",
     "other-session-copy",
     "same-text-unrelated",
@@ -5555,7 +5646,7 @@ test("outbox: a server-confirmed local retry copy becomes the anchor for a later
     posts.map(({ id, replaces }) => [id, replaces]),
     [["retry-server-copy", acceptedCopy.id]],
   );
-  assert.deepEqual([...idb.entries.keys()].sort(), [
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
     "different-intent",
     "other-session-copy",
     "retry-server-copy",
@@ -5651,6 +5742,7 @@ test("outbox: server confirmation consumes stale local ancestry and keeps the co
   await flush();
   tab.send({
     op: "outbox_reconcile",
+    hostId: "local",
     n: 1,
     sessionId,
     confirmedIds: [accepted.id, foreignCopy.id],
@@ -5661,7 +5753,7 @@ test("outbox: server confirmation consumes stale local ancestry and keeps the co
     tab.received.some((message) => message.outboxReconciled === 1),
     true,
   );
-  assert.deepEqual([...idb.entries.keys()].sort(), [
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
     "cross-session",
     "different-intent",
     "different-upload",
@@ -5712,6 +5804,7 @@ test("outbox: failed server-root reconciliation preserves local C and O", async 
   idb.failWrites = true;
   tab.send({
     op: "outbox_reconcile",
+    hostId: "local",
     n: 1,
     sessionId,
     confirmedIds: [copy.id],
@@ -5720,7 +5813,10 @@ test("outbox: failed server-root reconciliation preserves local C and O", async 
 
   const answer = tab.received.find((message) => message.outboxReconciled === 1);
   assert.equal(typeof answer!.error, "string");
-  assert.deepEqual([...idb.entries.keys()].sort(), [copy.id, root.id]);
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
+    copy.id,
+    root.id,
+  ]);
 });
 test("outbox: reconciliation deletes a confirmed ordinary local ID only in its owning session", async () => {
   const idb = fakeIndexedDB();
@@ -5746,6 +5842,7 @@ test("outbox: reconciliation deletes a confirmed ordinary local ID only in its o
   await flush();
   tab.send({
     op: "outbox_reconcile",
+    hostId: "local",
     n: 1,
     sessionId,
     confirmedIds: [accepted.id, otherSession.id],
@@ -5757,7 +5854,7 @@ test("outbox: reconciliation deletes a confirmed ordinary local ID only in its o
     true,
   );
   assert.deepEqual(
-    [...idb.entries.keys()].sort(),
+    [...idb.entries.values()].map((entry) => entry.id).sort(),
     [otherSession.id, unrelated.id].sort(),
   );
 });
@@ -5775,6 +5872,7 @@ test("outbox: reconciliation refreshes rows a peer already removed before acknow
   await flush();
   peerTab.send({
     op: "outbox_reconcile",
+    hostId: "local",
     n: 1,
     sessionId,
     confirmedIds: [copy.id],
@@ -5784,6 +5882,7 @@ test("outbox: reconciliation refreshes rows a peer already removed before acknow
   staleTab.received.length = 0;
   staleTab.send({
     op: "outbox_reconcile",
+    hostId: "local",
     n: 2,
     sessionId,
     confirmedIds: [copy.id],
@@ -5919,6 +6018,7 @@ test("outbox: a lost acknowledgement retires browser-only lineage from an empty 
       entry: {
         id: copy.command.id,
         sessionId,
+        hostId: "local",
         mode: "prompt",
         message: "",
         state: "delivered",
@@ -5934,7 +6034,7 @@ test("outbox: a lost acknowledgement retires browser-only lineage from an empty 
     "the accepted same-ID replay schedules no further POST",
   );
 
-  assert.deepEqual([...idb.entries.keys()].sort(), [
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
     "different-intent-sibling",
     "different-upload-sibling",
     "same-text-unrelated",
@@ -6056,7 +6156,7 @@ test("outbox: a refused retry copy stays linked to its root and acceptance retir
   });
   await flush();
 
-  assert.deepEqual([...idb.entries.keys()].sort(), [
+  assert.deepEqual([...idb.entries.values()].map((entry) => entry.id).sort(), [
     "other-session",
     "unrelated",
   ]);
@@ -6171,6 +6271,7 @@ test("outbox: an accepted cross-session copy leaves its unconfirmed original int
           entry: {
             id: body.id,
             sessionId: "b",
+            hostId: "local",
             mode: body.mode,
             message: body.message,
             state: "held",

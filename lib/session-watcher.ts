@@ -9,6 +9,7 @@ import {
   resolveSessionIdByPath,
 } from "./session-reader";
 import { invalidateLocalSessionLists } from "./hosts/session-index";
+import { LOCAL_HOST_ID } from "./hosts/registry";
 
 // omp owns the writes to a session's JSONL. keylime streams RPC events only for
 // the sessions it spawned itself, so a session started outside the web UI — by
@@ -17,7 +18,7 @@ import { invalidateLocalSessionLists } from "./hosts/session-index";
 // session tree and reports which session ids changed, which the running-events
 // stream forwards to the client.
 
-type Listener = (sessionIds: string[]) => void;
+type Listener = (sessions: { sessionId: string; hostId: string }[]) => void;
 
 const DEBOUNCE_MS = 250;
 
@@ -64,9 +65,13 @@ function flush(): void {
         ...new Set(ids.filter((id): id is string => Boolean(id))),
       ];
       if (sessionIds.length === 0) return;
+      const sessions = sessionIds.map((sessionId) => ({
+        sessionId,
+        hostId: LOCAL_HOST_ID,
+      }));
       for (const listener of listeners) {
         try {
-          listener(sessionIds);
+          listener(sessions);
         } catch {
           // a failing subscriber must not stop the others
         }
@@ -79,12 +84,14 @@ function flush(): void {
 
 async function rescanAndNotify(): Promise<void> {
   try {
-    const sessions = await listAllSessions();
-    const sessionIds = sessions.map((s) => s.id);
-    if (sessionIds.length === 0) return;
+    const sessions = (await listAllSessions()).map((session) => ({
+      sessionId: session.id,
+      hostId: LOCAL_HOST_ID,
+    }));
+    if (sessions.length === 0) return;
     for (const listener of listeners) {
       try {
-        listener(sessionIds);
+        listener(sessions);
       } catch {
         // a failing subscriber must not stop the others
       }

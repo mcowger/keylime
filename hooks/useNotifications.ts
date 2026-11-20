@@ -51,15 +51,16 @@ export function useNotificationPrefs() {
  * - opens the session when a notification is clicked;
  * - keeps the server's copy of this device's prefs and push subscription current.
  *
- * `sessionId` is the session whose chat is on screen (null while Settings or
- * another view covers it).
+ * The visible pair identifies the chat on screen (null while another view covers it).
  */
 export function useNotifications({
-  sessionId,
+  visibleSessionId,
+  visibleHostId,
   onOpenSession,
 }: {
-  sessionId: string | null;
-  onOpenSession: (sessionId: string) => void;
+  visibleSessionId: string | null;
+  visibleHostId: string | null;
+  onOpenSession: (sessionId: string, hostId: string) => void;
 }) {
   const openRef = useRef(onOpenSession);
   useEffect(() => {
@@ -80,7 +81,8 @@ export function useNotifications({
         clientId: notificationClientId,
         deviceId: getNotificationDeviceId(),
         visible,
-        sessionId,
+        sessionId: visibleSessionId,
+        hostId: visibleHostId,
         seq: presenceSeq,
       });
       if (!visible && navigator.sendBeacon) {
@@ -122,7 +124,7 @@ export function useNotifications({
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
     };
-  }, [sessionId]);
+  }, [visibleSessionId, visibleHostId]);
 
   // Startup sync for any browser with saved settings: the server may have lost
   // its store, missed a save (including turning notifications off), or the
@@ -152,25 +154,26 @@ export function useNotifications({
   // Delivery to this tab and notification clicks. Every open goes through
   // OPEN_SESSION_EVENT, so listeners such as the bell popover see each one.
   useEffect(() => {
-    const openSession = (sessionId: string) =>
+    const openSession = (sessionId: string, hostId: string) =>
       window.dispatchEvent(
-        new CustomEvent(OPEN_SESSION_EVENT, { detail: sessionId }),
+        new CustomEvent(OPEN_SESSION_EVENT, { detail: { sessionId, hostId } }),
       );
     const showToast = (
       rendered: RenderedNotification,
       type: NotificationEvent["type"],
     ) => {
       const show = type === "error" ? toast.error : toast.info;
-      const target = rendered.sessionId;
+      const { sessionId, hostId } = rendered;
       // The whole card opens the session (click, tap, or Enter on the focused card); following it is reading it.
       show(rendered.title, rendered.body, {
         id: rendered.tag,
-        onClick: target
-          ? () => {
-              notificationHistory.markRead(rendered.tag);
-              openSession(target);
-            }
-          : undefined,
+        onClick:
+          sessionId && hostId
+            ? () => {
+                notificationHistory.markRead(rendered.tag);
+                openSession(sessionId, hostId);
+              }
+            : undefined,
       });
     };
     const deliver = (kind: "toast" | "os", event: NotificationEvent) => {
@@ -189,19 +192,25 @@ export function useNotifications({
     const onOpen = (raw: Event) => {
       if (
         raw instanceof CustomEvent &&
-        typeof raw.detail === "string" &&
-        raw.detail
+        isRecord(raw.detail) &&
+        typeof raw.detail.sessionId === "string" &&
+        raw.detail.sessionId &&
+        typeof raw.detail.hostId === "string" &&
+        raw.detail.hostId
       )
-        openRef.current(raw.detail);
+        openRef.current(raw.detail.sessionId, raw.detail.hostId);
     };
     const onWorkerMessage = (message: MessageEvent) => {
       const data: unknown = message.data;
       if (!isRecord(data)) return;
       if (
         data.type === "omp-open-session" &&
-        typeof data.sessionId === "string"
+        typeof data.sessionId === "string" &&
+        data.sessionId &&
+        typeof data.hostId === "string" &&
+        data.hostId
       ) {
-        openSession(data.sessionId);
+        openSession(data.sessionId, data.hostId);
         return;
       }
       // A push the service worker showed while this tab was open: the server recorded it; fetch the list.

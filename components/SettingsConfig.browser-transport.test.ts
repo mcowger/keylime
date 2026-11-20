@@ -95,7 +95,8 @@ test("the browser transport control offers SSE and the WebSocket link, saves a c
   const originalFetch = globalThis.fetch;
   globalThis.fetch = Object.assign(
     async (url: RequestInfo | URL, init?: RequestInit) => {
-      if (String(url) !== "/api/web-settings") return Response.json({});
+      if (String(url) !== "/api/web-settings?scope=browser")
+        return Response.json({});
       if (init?.method === "PUT") {
         puts.push(init.body);
         return Response.json({}, { status: putStatus });
@@ -146,7 +147,8 @@ test("the browser transport control is disabled while its save is in flight, so 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = Object.assign(
     async (url: RequestInfo | URL, init?: RequestInit) => {
-      if (String(url) !== "/api/web-settings") return Response.json({});
+      if (String(url) !== "/api/web-settings?scope=browser")
+        return Response.json({});
       if (init?.method === "PUT") {
         await putPending;
         return Response.json({});
@@ -191,7 +193,9 @@ test("the browser transport control shows the WebSocket link when the server sen
   ]) {
     globalThis.fetch = Object.assign(
       async (url: RequestInfo | URL) =>
-        String(url) === "/api/web-settings" ? answer() : Response.json({}),
+        String(url) === "/api/web-settings?scope=browser"
+          ? answer()
+          : Response.json({}),
       { preconnect: originalFetch.preconnect },
     );
     const { container, unmount } = render(

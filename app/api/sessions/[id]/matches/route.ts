@@ -20,7 +20,7 @@ const MAX_QUERY_LENGTH = 500;
 /**
  * @apiContract getSessionMatches
  * @apiUsage Find the best-ranked matches in the active conversation of one session.
- * @apiInputs q defaults to empty and is limited to 500 characters; limit is a positive bounded decimal and defaults to the search page size.
+ * @apiInputs q defaults to empty and is limited to 500 characters; limit is a positive bounded decimal and defaults to the search page size. Optional hostId selects the host; omission selects local.
  * @apiInvariants Every request rereads and reranks the active context; results are a best-first prefix, not an offset page, and may change as the session changes. Matches include submitted skill prompts, not expanded instructions. Pre-compaction entries are excluded.
  * @apiEffects Reads host history with thinking and media deferred; no-store response and no agent spawn.
  * @apiRecovery To load more request a larger prefix and replace the old results rather than concatenating offset pages; refresh after history changes.
@@ -30,6 +30,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
   const url = new URL(req.url);
   const q = url.searchParams.get("q") ?? "";
   if (q.length > MAX_QUERY_LENGTH) {
@@ -48,7 +49,7 @@ export async function GET(
     );
   }
   try {
-    const resolved = await resolveSessionHostOr404(id);
+    const resolved = await resolveSessionHostOr404(id, hostId);
     if ("response" in resolved) return resolved.response;
     const result = await resolved.host.sessionOps.readContext(id, undefined, {
       deferThinking: true,

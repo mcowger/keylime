@@ -1,7 +1,6 @@
 // Sessions and projects across hosts (spec "Routing", "Data flow"): this
 // machine's lists (from its daemon) plus each linked host's, cached per host.
 // No `next/*` or `@/` imports.
-import { createHash } from "node:crypto";
 import type { HierarchySnapshot } from "../project-hierarchy-types";
 import { isValidSessionId } from "../session-file-references-core";
 import type { ManagedProject, SessionInfo } from "../types";
@@ -102,86 +101,72 @@ export async function hostSessions(
   return lists.loading!.promise;
 }
 
-/** Every host's sessions, each with its `hostId`. An id on several hosts is
- * listed once: under this machine if it is here, else under the first host by label. */
+/** A host's registered sessions, including live sessions not yet written to disk. */
+export async function listRegisteredHostSessions(
+  hostId: string,
+): Promise<SessionInfo[]> {
+  const [hierarchy, sessions] = await Promise.all([
+    hostHierarchy(hostId),
+    hostSessions(hostId),
+  ]);
+  const registered = new Set(
+    hierarchy.projects.flatMap((project) =>
+      project.workspaces.flatMap((workspace) => workspace.sessionIds),
+    ),
+  );
+  const visible = sessions.filter((session) => registered.has(session.id));
+  const seen = new Set(visible.map((session) => session.id));
+  for (const project of hierarchy.projects)
+    for (const workspace of project.workspaces)
+      for (const id of workspace.sessionIds) {
+        if (seen.has(id)) continue;
+        const live = getRpcSession(id, hostId);
+        if (!live?.isAlive()) continue;
+        seen.add(id);
+        visible.push({
+          id,
+          path: live.sessionFile,
+          cwd: workspace.path,
+          projectRoot: project.path,
+          hostId,
+          created: "",
+          modified: "",
+          messageCount: 0,
+          firstMessage: "New session",
+        });
+      }
+  return visible;
+}
+
+/** Combined discovery does not choose an owner for duplicate IDs. */
 export async function listSessionsAllHosts(): Promise<SessionInfo[]> {
-  const ids = hostIds();
-  const hierarchies = await Promise.all(ids.map(hostHierarchy));
-  const lists = await Promise.all(ids.map((id) => hostSessions(id)));
-  const merged: SessionInfo[] = [];
-  const seen = new Set<string>();
-  for (let index = 0; index < lists.length; index++) {
-    const registered = new Set(
-      hierarchies[index].projects.flatMap((p) =>
-        p.workspaces.flatMap((w) => w.sessionIds),
-      ),
-    );
-    for (const session of lists[index]) {
-      if (!registered.has(session.id) || seen.has(session.id)) continue;
-      seen.add(session.id);
-      merged.push(session);
-    }
-    for (const project of hierarchies[index].projects)
-      for (const workspace of project.workspaces)
-        for (const id of workspace.sessionIds) {
-          if (seen.has(id)) continue;
-          const live = getRpcSession(id);
-          if (!live?.isAlive() || live.host.id !== ids[index]) continue;
-          seen.add(id);
-          merged.push({
-            id,
-            path: live.sessionFile,
-            cwd: workspace.path,
-            projectRoot: project.path,
-            hostId: ids[index],
-            created: "",
-            modified: "",
-            messageCount: 0,
-            firstMessage: "New session",
-          });
-        }
-  }
-  return merged;
+  return (await Promise.all(hostIds().map(listRegisteredHostSessions))).flat();
 }
 
-async function hostWithSession(
+/** Look for a session only on the selected host. */
+export async function hostForSessionId(
   id: string,
-  refresh: boolean,
+  hostId = LOCAL_HOST_ID,
 ): Promise<Host | null> {
-  const ids = hostIds();
-  const lists = await Promise.all(
-    ids.map((hostId) => hostSessions(hostId, refresh)),
-  );
-  const index = lists.findIndex((sessions) =>
-    sessions.some((session) => session.id === id),
-  );
-  return index === -1 ? null : getHost(ids[index]);
-}
-
-/** The host holding a session: this machine first, then linked hosts; refresh all lists once on a miss.
- * A negative result is authoritative only when every registered host has a successful current list. */
-export async function hostForSessionId(id: string): Promise<Host | null> {
-  // Host lists only hold valid ids: a malformed one never costs a round trip.
   if (!isValidSessionId(id)) return null;
-  // shortcut: every miss re-asks each linked host; throttle per host if polling for gone sessions shows up.
-  const host =
-    (await hostWithSession(id, false)) ?? (await hostWithSession(id, true));
-  if (host) return host;
-  for (const hostId of hostIds()) {
-    const candidate = getHost(hostId);
-    if (!candidate || !isLinkUp(candidate.status()))
-      throw new HostOpError(
-        503,
-        "host_offline",
-        `${candidate?.label ?? "A host"} is offline`,
-      );
-    if (!hostLists(hostId).loaded)
-      throw new HostOpError(
-        503,
-        "host_sessions_unavailable",
-        `${candidate.label}'s sessions are unavailable`,
-      );
+  const host = getHost(hostId);
+  if (!host) return null;
+  const requireOnline = () => {
+    if (!isLinkUp(host.status()))
+      throw new HostOpError(503, "host_offline", `${host.label} is offline`);
+  };
+  requireOnline();
+  for (const refresh of [false, true]) {
+    const sessions = await hostSessions(hostId, refresh);
+    requireOnline();
+    if (sessions.some((session) => session.id === id)) return host;
   }
+  if (!hostLists(hostId).loaded)
+    throw new HostOpError(
+      503,
+      "host_sessions_unavailable",
+      `${host.label}'s sessions are unavailable`,
+    );
   return null;
 }
 
@@ -219,6 +204,27 @@ export function invalidateLocalSessionLists(sessionFile?: string): void {
   invalidateHostSessionList(LOCAL_HOST_ID);
 }
 
+/** Registry IDs used to admit local transcript scores; never reads linked hosts. */
+export async function registeredHostSessionIds(
+  hostId: string,
+): Promise<Set<string>> {
+  const host = getHost(hostId);
+  if (!host || !isLinkUp(host.status()))
+    throw new HostOpError(
+      503,
+      "host_offline",
+      `${host?.label ?? "Host"} is offline`,
+    );
+  const result = await host.workspaceOps.hierarchy({ action: "list" });
+  if (!result.ok)
+    throw new HostOpError(result.status, result.code, result.error);
+  return new Set(
+    result.value.projects.flatMap((project) =>
+      project.workspaces.flatMap((workspace) => workspace.sessionIds),
+    ),
+  );
+}
+
 async function hostHierarchy(id: string): Promise<HierarchySnapshot> {
   const lists = hostLists(id);
   const host = getHost(id);
@@ -248,26 +254,4 @@ export async function listProjectsAllHosts(): Promise<ManagedProject[]> {
       hostId: ids[index],
     })),
   );
-}
-
-/** An image from the first online host whose bytes hash to `hash`. */
-export async function fetchMediaFromHosts(
-  hash: string,
-): Promise<Uint8Array | null> {
-  const online = listHosts().filter((host) => isLinkUp(host.status));
-  try {
-    return await Promise.any(
-      online.map(async ({ id }) => {
-        const result = await getHost(id)?.sessionOps.readMedia(hash);
-        if (
-          !result?.ok ||
-          createHash("sha256").update(result.value).digest("hex") !== hash
-        )
-          throw new Error("Not this image");
-        return result.value;
-      }),
-    );
-  } catch {
-    return null;
-  }
 }

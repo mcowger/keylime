@@ -227,8 +227,7 @@ async function toMarketplacePackageInfo(
   };
 }
 
-/** Without a cwd, the user level only (a cluster member's settings act on this machine's, spec K7): omp runs in its
- * agent directory, where no project lies, and a project-scope entry is left out all the same. */
+/** Without a cwd, omp runs in its agent directory and reads user-level plugins only. */
 async function readPlugins(cwd: string | null): Promise<PluginsResponse> {
   const diagnostics: PluginDiagnostic[] = [];
   const packages: PluginPackageInfo[] = [];

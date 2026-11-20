@@ -59,6 +59,7 @@ export interface RenderedNotification {
   url: string;
   tag: string;
   sessionId: string;
+  hostId?: string;
 }
 
 type Translate = (
@@ -73,6 +74,17 @@ const MAX_TITLE = 100;
 function clip(text: string, max = MAX_DETAIL): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** Keep legacy IDs readable; tuple tags cannot collide with legacy tags or other host/session pairs. */
+export function notificationId({
+  hostId,
+  sessionId,
+  type,
+}: NotificationEvent): string {
+  return hostId
+    ? JSON.stringify([hostId, sessionId, type])
+    : `${sessionId}:${type}`;
 }
 
 /** Title, body, click target, and replace-tag for one event. */
@@ -121,11 +133,13 @@ export function renderNotification(
       (event.sessionName && clip(event.sessionName, MAX_TITLE)) ||
       t("notifications.untitledSession"),
     body,
-    url: event.sessionId
-      ? `/?session=${encodeURIComponent(event.sessionId)}`
-      : "/",
-    tag: `${event.sessionId}:${event.type}`,
+    url:
+      event.sessionId && event.hostId
+        ? `/?${new URLSearchParams({ session: event.sessionId, hostId: event.hostId })}`
+        : "/",
+    tag: notificationId(event),
     sessionId: event.sessionId,
+    hostId: event.hostId,
   };
 }
 
@@ -143,7 +157,7 @@ const str = (value: unknown): string | undefined =>
 
 type Detect = (
   frame: Record<string, unknown>,
-  session: { sessionId: string; sessionName: string | null },
+  session: { hostId: string; sessionId: string; sessionName: string | null },
 ) => NotificationEvent[];
 
 /**
@@ -170,8 +184,8 @@ export function createNotificationDetector(): Detect {
     return held ? [{ ...held, detail }] : [];
   };
 
-  return (frame, { sessionId, sessionName }) => {
-    const base = { sessionId, sessionName };
+  return (frame, { hostId, sessionId, sessionName }) => {
+    const base = { hostId, sessionId, sessionName };
     switch (frame.type) {
       case "agent_start":
         failureReported = false;

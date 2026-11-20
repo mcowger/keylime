@@ -389,12 +389,6 @@ export const SessionInfoSchema = Type.Object(
       description:
         "Host the session's file lives on (\"local\" for this machine). Set by the\nall-hosts session list; a host's own list leaves it out.",
     },
-    poolId: {
-      ...Type.Optional(Type.String()),
-      description:
-        "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-    },
-    projectId: Type.Optional(Type.String()),
   },
   {
     description:
@@ -1363,11 +1357,6 @@ export const ManagedProjectSchema = {
       description:
         'Host the project lives on ("local" for this machine). Set by GET /api/projects.',
     },
-    poolId: {
-      ...Type.Optional(Type.String()),
-      description:
-        "Logical pool target; path/hostId, when present, are diagnostic only.",
-    },
     projectId: Type.Optional(Type.String()),
     workspaceId: Type.Optional(Type.String()),
     projectPath: Type.Optional(Type.String()),
@@ -1396,6 +1385,7 @@ export const CrossSessionHostToolEventSchema = Type.Union(
     Type.Object({
       type: Type.Literal("host_tool_cancel"),
       sessionId: Type.String(),
+      hostId: Type.String(),
       targetId: Type.String(),
     }),
   ],

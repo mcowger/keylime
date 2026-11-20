@@ -816,6 +816,7 @@ test("commit planning waits for its session stream and displays only matching pr
     assert.deepEqual(stream.channel, {
       kind: "commit-plan-progress",
       sessionId: "session",
+      hostId: "local",
     });
     assert.equal(plans.length, 0);
     await act(async () => {

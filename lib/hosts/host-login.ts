@@ -1,4 +1,4 @@
-// The daemon's saved links, shared by `keylime host` and local-bootstrap.
+// The daemon's saved controller login, shared by `keylime host` and local-bootstrap.
 // Pure Node: no daemon/spawn code, `next/*` or `@/` imports.
 import { randomUUID } from "node:crypto";
 import {
@@ -19,11 +19,9 @@ const loginFile = () => join(getAgentDir(), "keylime", "host.json");
 const trimUrl = (url: string) => url.replace(/\/+$/, "");
 
 export type HostLink = { url: string; token: string };
-type SavedLink = HostLink & Record<string, unknown>;
 type HostConfig = Record<string, unknown> & {
   url?: string;
   token?: string;
-  links?: SavedLink[];
 };
 
 export const isLoopbackHost = (hostname: string) =>
@@ -59,20 +57,11 @@ function readConfig(): HostConfig {
   let saved: unknown;
   try {
     saved = JSON.parse(text);
-    if (!isRecord(saved)) throw new Error();
-    const checkLink = (link: unknown) => {
-      if (
-        !isRecord(link) ||
-        typeof link.url !== "string" ||
-        typeof link.token !== "string"
-      )
+    if (!isRecord(saved) || "links" in saved) throw new Error();
+    if ("url" in saved || "token" in saved) {
+      if (typeof saved.url !== "string" || typeof saved.token !== "string")
         throw new Error();
-      normalizeLink({ url: link.url, token: link.token });
-    };
-    if ("url" in saved || "token" in saved) checkLink(saved);
-    if ("links" in saved) {
-      if (!Array.isArray(saved.links)) throw new Error();
-      saved.links.forEach(checkLink);
+      normalizeLink({ url: saved.url, token: saved.token });
     }
   } catch {
     throw new HostLoginUnreadableError(
@@ -82,21 +71,14 @@ function readConfig(): HostConfig {
   return saved as HostConfig;
 }
 
-function configLinks(saved: HostConfig): SavedLink[] {
-  return (
-    saved.links ??
-    (saved.url !== undefined && saved.token !== undefined
-      ? [{ url: saved.url, token: saved.token }]
-      : [])
-  );
+function configLogin(saved: HostConfig): HostLink | null {
+  return saved.url !== undefined && saved.token !== undefined
+    ? normalizeLink({ url: saved.url, token: saved.token })
+    : null;
 }
 
-/** Only a missing links list falls back to the primary used by older daemons. */
-export function readHostLinks(): HostLink[] {
-  return configLinks(readConfig()).map(({ url, token }) => ({
-    url: trimUrl(url),
-    token,
-  }));
+export function readHostLogin(): HostLink | null {
+  return configLogin(readConfig());
 }
 
 function ownerExited(text: string): boolean {
@@ -228,59 +210,24 @@ async function mutateConfig(
   if (failure) throw failure.error;
 }
 
-/** Upsert one URL, preserving the legacy primary and all other links.
- * Local bootstrap selects/validates its shared token inside the same lock. */
-export async function addHostLink(
-  input: HostLink | (() => HostLink),
+/** Replace the controller, preserving unrelated config. Bootstrap selects the token under this lock. */
+export async function loginHost(
+  input: HostLink | ((saved: HostLink | null) => HostLink),
 ): Promise<void> {
   await mutateConfig((saved) => {
-    const link = normalizeLink(typeof input === "function" ? input() : input);
-    const links = configLinks(saved);
-    const index = links.findIndex(({ url }) => trimUrl(url) === link.url);
-    if (index === -1) links.push(link);
-    else links[index] = { ...links[index], ...link };
-    if (saved.url === undefined || trimUrl(saved.url) === link.url)
-      Object.assign(saved, link); // v6 daemons only read the top-level pair.
-    saved.links = links;
+    Object.assign(
+      saved,
+      normalizeLink(
+        typeof input === "function" ? input(configLogin(saved)) : input,
+      ),
+    );
   });
 }
 
-/** Remove membership only; the legacy primary remains for v6 readers. */
 export async function removeHostLink(url: string): Promise<void> {
   await mutateConfig((saved) => {
-    saved.links = configLinks(saved).filter(
-      (link) => trimUrl(link.url) !== trimUrl(url),
-    );
+    if (configLogin(saved)?.url !== trimUrl(url)) return;
+    delete saved.url;
+    delete saved.token;
   });
-}
-
-/** Replace the primary, retaining secondary links and unknown settings. Tokens never use argv. */
-export async function loginHost(input: HostLink): Promise<void> {
-  const link = normalizeLink(input);
-  await mutateConfig((saved) => {
-    const links = configLinks(saved).filter(
-      ({ url }) =>
-        trimUrl(url) !== trimUrl(saved.url ?? "") || trimUrl(url) === link.url,
-    );
-    const index = links.findIndex(({ url }) => trimUrl(url) === link.url);
-    if (index === -1) links.push(link);
-    else links[index] = { ...links[index], ...link };
-    Object.assign(saved, link, { links });
-  });
-}
-
-/** The legacy primary, or null before login or when it cannot be read. */
-export function readHostLogin(): HostLink | null {
-  try {
-    const saved: unknown = JSON.parse(readFileSync(loginFile(), "utf8"));
-    if (
-      isRecord(saved) &&
-      typeof saved.url === "string" &&
-      typeof saved.token === "string"
-    )
-      return { url: saved.url, token: saved.token };
-  } catch {
-    // Retain the legacy reader's tolerant behaviour.
-  }
-  return null;
 }

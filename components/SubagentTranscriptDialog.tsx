@@ -1,7 +1,16 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { sendAgentCommand } from "@/lib/agent-client";
+import { sessionUrl } from "@/lib/session-identity";
+import { WorkspaceFileContext } from "@/lib/workspace-file-context";
 import { useI18n } from "@/lib/i18n";
 import {
   formatCost,
@@ -383,6 +392,7 @@ export function SubagentTranscriptDialog({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const hostId = useContext(WorkspaceFileContext)?.hostId;
   const [detail, setDetail] = useState<SubagentSnapshotLike | null>(null);
   const [completion, setCompletion] = useState<string | null>(null);
   const [completionTruncated, setCompletionTruncated] = useState(false);
@@ -415,7 +425,10 @@ export function SubagentTranscriptDialog({
   }> => {
     if (!sessionId || !subagent?.id) throw new Error("No session");
     const res = await fetch(
-      `/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(subagent.id)}?mode=completion`,
+      sessionUrl(
+        `/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(subagent.id)}?mode=completion`,
+        hostId,
+      ),
     );
     if (res.status === 404) return { completion: null, truncated: false };
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -423,7 +436,7 @@ export function SubagentTranscriptDialog({
       completion: string | null;
       truncated: boolean;
     };
-  }, [sessionId, subagent?.id]);
+  }, [sessionId, hostId, subagent?.id]);
 
   // Full transcript page (RPC registry first, disk fallback) — mirrors the
   // get_subagent_messages response shape so both sources are interchangeable.
@@ -435,19 +448,26 @@ export function SubagentTranscriptDialog({
       if (!sessionId || !subagent?.id) throw new Error("No session");
       if (preferDisk) {
         const res = await fetch(
-          `/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(subagent.id)}?fromByte=${startByte}`,
+          sessionUrl(
+            `/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(subagent.id)}?fromByte=${startByte}`,
+            hostId,
+          ),
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()) as SubagentMessagesPage;
       }
-      return await sendAgentCommand<SubagentMessagesPage>(sessionId, {
-        type: "get_subagent_messages",
-        subagentId: subagent.id,
-        sessionFile: subagent.sessionFile,
-        fromByte: startByte,
-      });
+      return await sendAgentCommand<SubagentMessagesPage>(
+        sessionId,
+        {
+          type: "get_subagent_messages",
+          subagentId: subagent.id,
+          sessionFile: subagent.sessionFile,
+          fromByte: startByte,
+        },
+        { hostId },
+      );
     },
-    [sessionId, subagent?.id, subagent?.sessionFile],
+    [sessionId, hostId, subagent?.id, subagent?.sessionFile],
   );
 
   const loadTranscriptPage = useCallback(
@@ -503,7 +523,7 @@ export function SubagentTranscriptDialog({
       if (found.completion === null && live) {
         const result = await sendAgentCommand<{
           subagents?: SubagentSnapshotLike[];
-        }>(sessionId, { type: "get_subagents" });
+        }>(sessionId, { type: "get_subagents" }, { hostId });
         const snap = (result.subagents ?? []).find(
           (s) => s.id === subagent?.id,
         );
@@ -523,7 +543,7 @@ export function SubagentTranscriptDialog({
     } finally {
       if (seq === requestSeqRef.current) setLoading(false);
     }
-  }, [sessionId, subagent?.id, live, fetchCompletion]);
+  }, [sessionId, hostId, subagent?.id, live, fetchCompletion]);
 
   // Load the completion whenever the dialog opens for a subagent.
   useEffect(() => {

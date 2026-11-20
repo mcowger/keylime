@@ -18,7 +18,7 @@ import {
 import type { RpcTransport } from "./omp/rpc-transport";
 import { cacheSessionPath } from "./session-reader";
 import { allowFileRoot } from "./file-access";
-import { loadWebServerSettings } from "./web-settings";
+import { sessionKey } from "./session-identity";
 import {
   AGENT_TOOL_DEFINITIONS,
   AGENT_TOOL_NAMES,
@@ -29,14 +29,6 @@ import {
   type AgentToolDeliverResult,
   type AgentToolSessionOps,
 } from "./agent-tools";
-import {
-  markShuttingDown,
-  recordRunningSessions,
-  resumeOnHostLink,
-  takeInterruptedSessions,
-  type InterruptibleSession,
-} from "./session-resume";
-import { RESUME_PROMPT } from "./hosts/host-resume";
 import { samePath } from "./paths";
 import { isRecord } from "./type-guards";
 import { isClientMessageId, readQueueSnapshot } from "./client-message-ids";
@@ -68,25 +60,20 @@ import {
 import {
   freezeHostLinks,
   getHost,
-  hostOwnsLifecycle,
-  isNotifier,
   lastUplinkAt,
-  listHosts,
   orphanExit,
 } from "./hosts/hub";
 import {
   CREATION_ID_RE,
   HISTORY_MUTATING_COMMANDS,
   HostOpError,
-  PEER_MESSAGE_FRAME,
-  PEER_PROMPT_OUTCOME_FRAME,
 } from "./hosts/link-protocol";
 import { LOCAL_HOST_ID } from "./hosts/registry";
 import type { OpResult } from "./hosts/session-ops";
 import {
   hostForSessionId,
   invalidateHostSessionList,
-  listSessionsAllHosts,
+  listRegisteredHostSessions,
   sessionSpawnTarget,
 } from "./hosts/session-index";
 import { comparableProjectPath } from "./comparable-path";
@@ -398,14 +385,11 @@ function watchReplacement(
   const clientMessageId = isClientMessageId(command.clientMessageId)
     ? command.clientMessageId
     : null;
-  // A peer server's admission (the daemon's marker) also contends: its identical echo is not this command's proof. An
-  // exact ID names this command's message whoever else writes meanwhile, so only text inference needs the sole window.
-  const peers = wrapper.peerMessageCommands;
+  // An exact ID identifies the message even when another tab submits at the same time.
   const ownsWindow = () =>
     clientMessageId !== null ||
     (!competingPending &&
-      wrapper.getMessageCommandGeneration() === generation + 1 &&
-      wrapper.peerMessageCommands === peers);
+      wrapper.getMessageCommandGeneration() === generation + 1);
   // The text rules need omp's user attribution. An exact ID identifies a native custom message by itself, but only a
   // displayed one: the browser never shows a hidden message, so it cannot replace the pending row there.
   const isUserInput = (message: Record<string, unknown>) =>
@@ -521,8 +505,7 @@ function watchReplacement(
       if (
         !clientMessageId &&
         (competingPending ||
-          wrapper.getMessageCommandGeneration() > generation + 1 ||
-          wrapper.peerMessageCommands !== peers)
+          wrapper.getMessageCommandGeneration() > generation + 1)
       ) {
         finish(ambiguous);
         return;
@@ -669,8 +652,6 @@ export class AgentSessionWrapper {
   private listeners: EventListener[] = [];
   private pendingUiRequests = new Map<string, UnsequencedAgentEvent>();
   private uiExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Dialogs keylime itself raised (confirmFromServer): answered here, never forwarded to omp. */
-  private serverUiRequests = new Map<string, (confirmed: boolean) => void>();
   private extensionStatuses = new Map<string, string>();
   private extensionWidgets = new Map<string, ExtensionWidgetItem>();
   private promptRunning = false;
@@ -781,8 +762,6 @@ export class AgentSessionWrapper {
   private pendingHostUris: Map<string, UnsequencedAgentEvent> = new Map();
   /** Callback delivery is not permission to repeat an action after a snapshot/reconnect. */
   private deliveredCallbacks = new Set<string>();
-  /** Message commands other servers wrote to this shared child (PEER_MESSAGE_FRAME markers). */
-  peerMessageCommands = 0;
   /** Resolves once an in-flight destroyAndWait finishes; null when idle. Read
    * by startRpcSession so a replacement spawn awaits the old child's exit. */
   destroyPromise: Promise<void> | null = null;
@@ -890,7 +869,7 @@ export class AgentSessionWrapper {
 
   private notifyAskClosed(): void {
     for (const listener of globalThis.__ompAskClosedListeners ?? [])
-      listener(this._sessionId);
+      listener(this._sessionId, this.host.id);
   }
 
   /** Local history navigation is busy control work, not an interruptible model turn. */
@@ -1115,7 +1094,6 @@ export class AgentSessionWrapper {
         this.clearLiveSnapshots();
         this.recoveringUpdates = false;
         for (const [id, event] of [...this.pendingUiRequests]) {
-          if (this.serverUiRequests.has(id)) continue;
           this.forgetPendingUiRequest(id);
           this.emit({ type: "ui_end", id: event.id });
         }
@@ -1328,10 +1306,7 @@ export class AgentSessionWrapper {
       // Frames omp sent during the handshake are live: its agent tool calls there run normally.
       this.proc.release();
       this.adoptionReplay = undefined;
-      if (
-        this.hostOwnedLifecycle &&
-        loadWebServerSettings().agentToolsEnabled
-      ) {
+      if (this.hostOwnedLifecycle && (await this.agentToolsAllowed())) {
         await this.dispatchCommand({
           type: "set_host_tools",
           tools: this.registeredHostTools ?? [],
@@ -1490,8 +1465,6 @@ export class AgentSessionWrapper {
   private autoTitle(): void {
     const sessionId = this._sessionId;
     if (!sessionId || this._sessionName || this.autoTitleInFlight) return;
-    // Every server sharing the child sees the same turn end: only the elected notifier titles it.
-    if (this.hostOwnedLifecycle && !isNotifier(this.host.id)) return;
     const sessionFile = this._sessionFile;
     if (!sessionFile) return;
     // Held across the async file check so a second agent_end cannot start a parallel run.
@@ -1559,7 +1532,7 @@ export class AgentSessionWrapper {
     sourceProc: RpcProcess = this.proc,
   ): void {
     if (!this._alive || sourceProc === this.expectedExitProc) return;
-    // The shared host stopped it on purpose (abandoned, idle, another server's request): not a crash.
+    // An intentional daemon stop is not a crash.
     const planned = this.hostOwnedLifecycle
       ? sourceProc.transport?.stopReason
       : undefined;
@@ -1571,26 +1544,13 @@ export class AgentSessionWrapper {
     }
     const detail = (stderrTail.trim().split("\n").pop() ?? "").slice(-500);
     const status = signal ? `signal ${signal}` : `code ${code ?? "null"}`;
-    // Spec Rules → Reattach: a run whose child vanished while its host link was
-    // down starts again on that host, like a local run after a restart.
-    const resume: InterruptibleSession | null =
-      !this.hostOwnedLifecycle &&
-      sourceProc.transport?.lost === true &&
-      this._sessionId &&
-      (this.streaming || this.promptRunning)
-        ? {
-            id: this._sessionId,
-            advisor: this.advisorSpawned,
-            hostId: this.host.id,
-          }
-        : null;
     // Recorded before destroy(): its running-change broadcast must carry the
     // record so sidebars that missed the notice below still see the exit.
     if (this._sessionId)
-      getExitedMap().set(this._sessionId, {
+      getExitedMap().set(sessionKey(this._sessionId, this.host.id), {
         id: this._sessionId,
         cwd: this.cwd,
-        ...(this.host.id === LOCAL_HOST_ID ? {} : { hostId: this.host.id }),
+        hostId: this.host.id,
         at: Date.now(),
         code,
         signal,
@@ -1612,20 +1572,18 @@ export class AgentSessionWrapper {
       });
     }
     this.destroy();
-    if (resume && loadWebServerSettings().autoResumeSessions)
-      void resumeSession(resume);
   }
 
   private publishNotifications(frame: Record<string, unknown>): void {
     const session = {
       sessionId: this._sessionId,
+      hostId: this.host.id,
       sessionName:
         this._sessionName ||
         this.cwd.split(/[\\/]/).filter(Boolean).pop() ||
         null,
     };
     const notifications = this.detectNotification(frame, session);
-    if (this.hostOwnedLifecycle && !isNotifier(this.host.id)) return;
     for (const notification of notifications) {
       publishNotification(
         this.movedFromIds.length
@@ -1638,26 +1596,6 @@ export class AgentSessionWrapper {
   private handleFrame(frame: RpcFrame): void {
     this.resetIdleTimer();
     const event = frame;
-    if (event.type === PEER_MESSAGE_FRAME) {
-      this.peerMessageCommands += 1;
-      return;
-    }
-    if (event.type === PEER_PROMPT_OUTCOME_FRAME) {
-      // Another server's prompt ended: only the notification detector reads it (that server owns the prompt's state).
-      const { t: type, ...outcome } = isRecord(event.outcome)
-        ? event.outcome
-        : {};
-      if (type === "prompt_result")
-        this.publishNotifications({ ...outcome, type });
-      else if (type === "prompt_error")
-        this.publishNotifications({
-          ...outcome,
-          type,
-          errorMessage:
-            typeof outcome.error === "string" ? outcome.error : "Prompt failed",
-        });
-      return;
-    }
     if (
       this.hostOwnedLifecycle &&
       (event.type === "host_tool_call" || event.type === "host_uri_request") &&
@@ -1745,8 +1683,6 @@ export class AgentSessionWrapper {
         break;
       case "agent_end":
         if (event.isTerminal !== false) {
-          // A server dialog belongs to a tool call of this run; nobody can answer it after the run.
-          this.dropServerUiRequests();
           this.streaming = false;
           this.promptRunning = false;
           this.awaitingAgentStart = false;
@@ -1834,13 +1770,7 @@ export class AgentSessionWrapper {
         // browser routing, so they work with no tab open. A disabled gate
         // is an explicit error, not a silent hang and not a browser call.
         if (id && toolName && AGENT_TOOL_NAMES.has(toolName)) {
-          // Independent pooled creations have durable native-request identity; other mutations stay unknown.
-          if (
-            this.replaying &&
-            toolName !== "list_sessions" &&
-            (toolName !== "new_session" ||
-              !loadWebServerSettings().agentToolsEnabled)
-          ) {
+          if (this.replaying && toolName !== "list_sessions") {
             this.proc.sendFrame({
               type: "host_tool_result",
               id,
@@ -1849,27 +1779,8 @@ export class AgentSessionWrapper {
                 content: [{ type: "text", text: AGENT_TOOL_UNKNOWN_OUTCOME }],
               },
             });
-          } else if (loadWebServerSettings().agentToolsEnabled) {
-            void this.answerServerAgentTool(event);
           } else {
-            this.proc.sendFrame({
-              type: "host_tool_result",
-              id,
-              isError: true,
-              result: {
-                content: [
-                  {
-                    type: "text",
-                    text: 'Agent tools are disabled. Enable "Agent tools" in keylime Settings (System) first.',
-                  },
-                ],
-              },
-            });
-            this.emit({
-              type: "notice",
-              level: "warning",
-              message: `Rejected disabled agent tool: ${toolName}`,
-            });
+            void this.answerServerAgentTool(event);
           }
           return;
         }
@@ -2000,40 +1911,10 @@ export class AgentSessionWrapper {
 
   private clearPendingUiRequests(): void {
     const hadAsk = this.isAwaitingAsk();
-    this.dropServerUiRequests();
     for (const timer of this.uiExpiryTimers.values()) clearTimeout(timer);
     this.uiExpiryTimers.clear();
     this.pendingUiRequests.clear();
     if (hadAsk) this.notifyAskClosed();
-  }
-
-  /** Settle every server dialog as declined and close it in attached tabs. */
-  private dropServerUiRequests(): void {
-    for (const [id, resolve] of this.serverUiRequests) {
-      this.serverUiRequests.delete(id);
-      this.forgetPendingUiRequest(id);
-      this.emit({ type: "ui_end", id });
-      resolve(false);
-    }
-  }
-
-  /**
-   * Ask this session's user to confirm, as an omp dialog would: same tabs,
-   * replay and input-needed notification. Resolves false when declined, when
-   * the run ends, or when the session stops.
-   */
-  confirmFromServer(title: string): Promise<boolean> {
-    if (!this._alive) return Promise.resolve(false);
-    const id = `keylime:${randomUUID()}`;
-    const { promise, resolve } = Promise.withResolvers<boolean>();
-    this.serverUiRequests.set(id, resolve);
-    this.handleFrame({
-      type: "ui_request",
-      id,
-      method: "confirm",
-      args: [title, ""],
-    });
-    return promise;
   }
 
   /** Records a runner dialog as pending; true when it was answered here (auto-approve) and must not reach the browser. */
@@ -2153,6 +2034,7 @@ export class AgentSessionWrapper {
             type: "host_tool_cancel",
             targetId: id,
             sessionId: pending.crossSessionId,
+            hostId: this.host.id,
           });
         } catch {
           /* ignore listener errors */
@@ -2576,6 +2458,14 @@ export class AgentSessionWrapper {
     });
   }
 
+  private async agentToolsAllowed(): Promise<boolean> {
+    try {
+      return (await this.host.getSettings()).agentToolsEnabled === true;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Answer a server-side agent tool call (#275) from this wrapper's child.
    * Runs on the server, with no browser involved, and answers directly
@@ -2606,9 +2496,8 @@ export class AgentSessionWrapper {
         sourceRequestId: id,
         sourceCwd: this.cwd,
         sourceHostId: this.host.id,
-        enabled: loadWebServerSettings().agentToolsEnabled,
-        guard: getAgentToolGuard(),
-        confirm: (title) => this.confirmFromServer(title),
+        enabled: await this.agentToolsAllowed(),
+        guard: getAgentToolGuard(this.host.id),
       };
       if (this.replaying && toolName === "new_session")
         throw new Error(AGENT_TOOL_UNKNOWN_OUTCOME);
@@ -3206,7 +3095,7 @@ export class AgentSessionWrapper {
               type: "set_host_tools",
               tools: this.registeredHostTools,
             });
-          } else if (loadWebServerSettings().agentToolsEnabled) {
+          } else if (await this.agentToolsAllowed()) {
             // Like initial startup, a runtime that never accepted host tools may reject this optional registration.
             await this.dispatchCommand({
               type: "set_host_tools",
@@ -3312,7 +3201,6 @@ export class AgentSessionWrapper {
       // A restart (the only child swap) advances the generation, so it needs no separate check. An admission
       // completed during the read advances it too; the taint then remains and the answer must be false.
       const generation = this.messageCommandGeneration;
-      const peers = this.peerMessageCommands;
       const state = await this.getStateWithTimeout();
       if (
         state.isSettled !== true ||
@@ -3324,7 +3212,6 @@ export class AgentSessionWrapper {
         state.sessionId !== this._sessionId ||
         state.sessionFile !== this._sessionFile ||
         this.messageCommandGeneration !== generation ||
-        this.peerMessageCommands !== peers ||
         this.restarting ||
         this.messageBoundaryBusy(1) ||
         !this.hasPendingMessageCommands()
@@ -3870,14 +3757,8 @@ export class AgentSessionWrapper {
         if (typeof id !== "number" && typeof id !== "string")
           throw new WebRpcError("Invalid dialog id", "invalid_ui_response");
         const key = String(id);
-        const serverRequest = this.serverUiRequests.get(key);
-        // The runner numbers its dialogs and ignores any other id; only keylime's own confirms keep string ids.
-        const runnerId = serverRequest
-          ? undefined
-          : /^\d+$/.test(key)
-            ? Number(key)
-            : NaN;
-        if (runnerId !== undefined && !Number.isSafeInteger(runnerId))
+        const runnerId = /^\d+$/.test(key) ? Number(key) : NaN;
+        if (!Number.isSafeInteger(runnerId))
           throw new WebRpcError("Invalid dialog id", "invalid_ui_response");
         const method = this.pendingUiRequests.get(key)?.method;
         // A malformed answer would drop the dialog from reconnect replay while omp rejects it.
@@ -3901,12 +3782,7 @@ export class AgentSessionWrapper {
         }
         const wasPending = this.pendingUiRequests.has(key);
         this.forgetPendingUiRequest(key);
-        if (serverRequest) {
-          this.serverUiRequests.delete(key);
-          serverRequest(value === true);
-        } else {
-          this.proc.sendFrame({ type: "ui_response", id: runnerId, value });
-        }
+        this.proc.sendFrame({ type: "ui_response", id: runnerId, value });
         // omp sends no ui_end for a dialog the host answered; other tabs on this
         // session would keep showing it, so settle it for them here.
         if (wasPending) this.emit({ type: "ui_end", id });
@@ -3973,7 +3849,7 @@ export class AgentSessionWrapper {
         // a no-tab session keeps them after its startup registration.
         // With the gate off the registration is exactly what the caller
         // asked for, so existing behavior and tests are unchanged.
-        const merged = loadWebServerSettings().agentToolsEnabled
+        const merged = (await this.agentToolsAllowed())
           ? [
               ...valid,
               ...AGENT_TOOL_DEFINITIONS.filter(
@@ -4052,7 +3928,7 @@ export class AgentSessionWrapper {
           );
           try {
             const tools = this.registeredHostTools ?? [];
-            const merged = loadWebServerSettings().agentToolsEnabled
+            const merged = (await this.agentToolsAllowed())
               ? [
                   ...tools,
                   ...AGENT_TOOL_DEFINITIONS.filter(
@@ -4262,8 +4138,7 @@ function untilHostDown(host: Host, promise: Promise<void>): Promise<void> {
 export interface RunningRpcSession {
   id: string;
   cwd: string;
-  /** Absent on this machine, as on `SessionInfo`: the sidebar groups a placeholder under it. */
-  hostId?: string;
+  hostId: string;
   /** A blocking dialog (ask, confirm, input, …) waits for the user. */
   awaitingInput?: true;
 }
@@ -4291,8 +4166,9 @@ declare global {
   var __ompFrameTaps:
     Set<(wrapper: AgentSessionWrapper, event: AgentEvent) => void> | undefined;
   var __ompSessionMoveListeners:
-    Set<(from: string, to: string) => void> | undefined;
-  var __ompAskClosedListeners: Set<(sessionId: string) => void> | undefined;
+    Set<(from: string, to: string, hostId: string) => void> | undefined;
+  var __ompAskClosedListeners:
+    Set<(sessionId: string, hostId: string) => void> | undefined;
   var __ompNativeWrites: WeakSet<object> | undefined;
 }
 
@@ -4317,13 +4193,17 @@ export function getExitedRpcSessions(): ExitedRpcSession[] {
 
 export function getExitedRpcSession(
   sessionId: string,
+  hostId = LOCAL_HOST_ID,
 ): ExitedRpcSession | undefined {
-  return getExitedMap().get(sessionId);
+  return getExitedMap().get(sessionKey(sessionId, hostId));
 }
 
 /** Clear the visible crash state once a replacement child is ready. */
-export function clearExitedRpcSession(sessionId: string): boolean {
-  const cleared = getExitedMap().delete(sessionId);
+export function clearExitedRpcSession(
+  sessionId: string,
+  hostId = LOCAL_HOST_ID,
+): boolean {
+  const cleared = getExitedMap().delete(sessionKey(sessionId, hostId));
   if (cleared) notifyRunningChange();
   return cleared;
 }
@@ -4333,7 +4213,6 @@ function getRegistry(): Map<string, AgentSessionWrapper> {
     globalThis.__ompSessions = new Map();
     const cleanup = () => {
       // Children dying from here on are the shutdown, not finished runs.
-      markShuttingDown();
       // Every child runs under a host daemon: nothing more reaches it (no kill, no
       // host tool rejection as tabs close on the way out), and the next server adopts them.
       freezeHostLinks();
@@ -4355,30 +4234,33 @@ function getLocks(): Map<
 
 export function getRpcSession(
   sessionId: string,
+  hostId = LOCAL_HOST_ID,
 ): AgentSessionWrapper | undefined {
-  return getRegistry().get(sessionId);
+  return getRegistry().get(sessionKey(sessionId, hostId));
 }
 
 /** Every registry key of the wrapper under `sessionId` (its id and the aliases omp's moves left), else `[sessionId]`. */
-export function getRpcSessionKeys(sessionId: string): string[] {
-  const wrapper = getRegistry().get(sessionId);
+export function getRpcSessionKeys(
+  sessionId: string,
+  hostId = LOCAL_HOST_ID,
+): string[] {
+  const wrapper = getRpcSession(sessionId, hostId);
   if (!wrapper) return [sessionId];
+  const start = hostId.length + 1;
   return [...getRegistry()].flatMap(([key, live]) =>
-    live === wrapper ? [key] : [],
+    live === wrapper ? [key.slice(start)] : [],
   );
 }
 
 export function getRunningRpcSessions(): RunningRpcSession[] {
   const map = new Map<string, RunningRpcSession>();
-  for (const [sessionId, session] of getRegistry()) {
-    if (session.isRunning()) {
-      const id = session.sessionId || sessionId;
-      map.set(id, {
+  for (const session of new Set(getRegistry().values())) {
+    if (session.isRunning() && session.sessionId) {
+      const id = session.sessionId;
+      map.set(sessionKey(id, session.host.id), {
         id,
         cwd: session.cwd,
-        ...(session.host.id === LOCAL_HOST_ID
-          ? {}
-          : { hostId: session.host.id }),
+        hostId: session.host.id,
         ...(session.isAwaitingInput() ? { awaitingInput: true as const } : {}),
       });
     }
@@ -4391,10 +4273,10 @@ export function getRunningRpcSessionIds(): string[] {
 }
 
 /** Ids of sessions with a live omp process (turn running or idle). */
-export function getLiveRpcSessionIds(): string[] {
+export function getLiveRpcSessionIds(hostId = LOCAL_HOST_ID): string[] {
   return [...getRegistry()]
-    .filter(([, session]) => session.isAlive?.())
-    .map(([sessionId]) => sessionId);
+    .filter(([, session]) => session.host.id === hostId && session.isAlive?.())
+    .map(([key]) => key.slice(hostId.length + 1));
 }
 
 /** Stop all live omp children after an explicit runtime update. The browser will
@@ -4452,7 +4334,9 @@ const isAskRequest = (event: UnsequencedAgentEvent | undefined): boolean =>
   event?.method === "askDialog" || event?.method === "formDialog";
 
 /** A session's last open ask closed (answered, cancelled, expired or its child gone): the outbox's held steers may go. */
-export function onAskClosed(listener: (sessionId: string) => void): () => void {
+export function onAskClosed(
+  listener: (sessionId: string, hostId: string) => void,
+): () => void {
   const listeners = (globalThis.__ompAskClosedListeners ??= new Set());
   listeners.add(listener);
   return () => {
@@ -4462,7 +4346,7 @@ export function onAskClosed(listener: (sessionId: string) => void): () => void {
 
 /** Confirmed ownership moves only, after registry aliases exist and before observers see the new identity. */
 export function onSessionMove(
-  listener: (from: string, to: string) => void,
+  listener: (from: string, to: string, hostId: string) => void,
 ): () => void {
   const listeners = (globalThis.__ompSessionMoveListeners ??= new Set());
   listeners.add(listener);
@@ -4514,16 +4398,19 @@ export function notifyRunningChange({
 }: { refreshSessionList?: boolean } = {}): void {
   const runningSessions = getRunningRpcSessions();
   const exitedSessions = getExitedRpcSessions();
-  const ids = runningSessions.map((s) => s.id);
-  const byId = (a: { id: string }, b: { id: string }) =>
-    a.id.localeCompare(b.id);
+  const ids = runningSessions
+    .filter((s) => s.hostId === LOCAL_HOST_ID)
+    .map((s) => s.id);
+  const byId = (
+    a: { id: string; hostId?: string },
+    b: { id: string; hostId?: string },
+  ) => sessionKey(a.id, a.hostId).localeCompare(sessionKey(b.id, b.hostId));
   const snapshot = JSON.stringify([
     runningSessions.slice().sort(byId),
     exitedSessions.slice().sort(byId),
   ]);
   if (snapshot === lastRunningSnapshot && !refreshSessionList) return;
   lastRunningSnapshot = snapshot;
-  syncInterruptibleSessions();
   const update: RunningSessionUpdate = {
     ids,
     runningSessions,
@@ -4539,64 +4426,6 @@ export function notifyRunningChange({
   }
 }
 
-/** Record which sessions are mid-run, for resume after a restart. */
-export function syncInterruptibleSessions(): void {
-  const registry = getRegistry();
-  const running = new Map<string, InterruptibleSession>();
-  for (const session of registry.values()) {
-    if (!session.hostOwnedLifecycle && session.sessionId && session.isRunning())
-      running.set(session.sessionId, {
-        id: session.sessionId,
-        advisor: session.advisorSpawned,
-        hostId: session.host.id,
-      });
-  }
-  recordRunningSessions(
-    [...running.values()],
-    (id) => registry.get(id)?.isAlive() === true,
-  );
-}
-
-/**
- * Restart the sessions that were mid-run when keylime last stopped and ask
- * each to continue. Only runs when the auto-resume setting is on. Each session,
- * this machine's included, waits for its host's hello: a child its daemon still
- * runs is adopted there, and only a dead one resumes, after its orphan's exit.
- */
-export async function resumeInterruptedSessions(): Promise<void> {
-  resumeOnHostLink(takeInterruptedSessions(), resumeSession);
-}
-
-/** Start an interrupted session again on its host and ask it to continue. Never rejects. */
-async function resumeSession({
-  id,
-  advisor,
-  hostId,
-}: InterruptibleSession): Promise<void> {
-  try {
-    const host = getHost(hostId);
-    if (hostOwnsLifecycle(hostId)) return;
-    const target = host && (await sessionSpawnTarget(id, host));
-    if (!host || !target) return;
-    const { session } = await startRpcSession(
-      id,
-      target.sessionFile,
-      target.cwd,
-      undefined,
-      advisor,
-      target.recordedCwd,
-      undefined,
-      host,
-    );
-    await session.send({ type: "prompt", message: RESUME_PROMPT });
-    console.log(`[keylime] resumed interrupted session ${id}`);
-  } catch (error) {
-    console.warn(
-      `[keylime] could not resume session ${id}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
 /**
  * Get or create the omp RPC process for the given session.
  * For new sessions (sessionFile === ""), omp generates its own id.
@@ -4604,16 +4433,15 @@ async function resumeSession({
  * (empty array = all tools disabled); ignored when resuming.
  */
 declare global {
-  var __ompAgentToolGuard: AgentToolGuard | undefined;
+  var __ompAgentToolGuards: Map<string, AgentToolGuard> | undefined;
 }
 
-/** Process-wide loop/spam guard for server agent tools (#275). Stored on
- * globalThis like the session registry so a hot reload does not silently
- * reset the chain depths mid-loop. */
-function getAgentToolGuard(): AgentToolGuard {
-  if (!globalThis.__ompAgentToolGuard)
-    globalThis.__ompAgentToolGuard = new AgentToolGuard();
-  return globalThis.__ompAgentToolGuard;
+/** Loop and rate limits stay on the host that owns the calling session. */
+function getAgentToolGuard(hostId: string): AgentToolGuard {
+  const guards = (globalThis.__ompAgentToolGuards ??= new Map());
+  let guard = guards.get(hostId);
+  if (!guard) guards.set(hostId, (guard = new AgentToolGuard()));
+  return guard;
 }
 
 /** omp's command for each agent-tool delivery; the `Record` makes a new delivery fail to compile until it is mapped. */
@@ -4640,42 +4468,28 @@ function createAgentToolOps(
   replaying: boolean,
 ): AgentToolSessionOps {
   return {
-    async listSessions() {
-      const running = new Set(getRunningRpcSessionIds());
-      const sessions = await listSessionsAllHosts();
+    async listSessions(hostId) {
+      const host = getHost(hostId);
+      if (!host || host.id !== source.sourceHostId || !isLinkUp(host.status()))
+        throw new Error("The calling host is unavailable");
+      const running = new Set(
+        getRunningRpcSessions()
+          .filter((s) => s.hostId === hostId)
+          .map((s) => s.id),
+      );
+      const sessions = await listRegisteredHostSessions(hostId);
       return sessions.map((s) => ({
         id: s.id,
         name: s.name,
         cwd: s.cwd,
         running: running.has(s.id),
-        hostId: s.hostId ?? LOCAL_HOST_ID,
+        host: host.label,
       }));
     },
 
-    listHosts() {
-      const local = getHost(LOCAL_HOST_ID);
-      return [
-        {
-          id: local.id,
-          label: local.label,
-          online: isLinkUp(local.status()),
-        },
-        ...listHosts().map((h) => ({
-          id: h.id,
-          label: h.label,
-          online: isLinkUp(h.status),
-        })),
-      ];
-    },
-
-    async createSession(input, authorize) {
-      const authorizeHost = (host: Host) => {
-        const configured = this.listHosts().find(
-          (candidate) => candidate.id === host.id,
-        );
-        if (!configured) throw new Error(`Unknown host: ${host.id}`);
-        return authorize(configured);
-      };
+    async createSession(input) {
+      if (input.hostId !== source.sourceHostId)
+        throw new Error("Agent tools must stay on the calling host");
       const initialize = async (
         session: AgentSessionWrapper,
         preserveUnknownDelivery: boolean,
@@ -4705,10 +4519,6 @@ function createAgentToolOps(
       if (replaying) throw new Error(AGENT_TOOL_UNKNOWN_OUTCOME);
       const host = getHost(input.hostId);
       if (!host) throw new Error(`Unknown host: ${input.hostId}`);
-      if (!(await authorizeHost(host)))
-        throw new Error(
-          `The user declined to start a session on ${host.label}.`,
-        );
       const preparing = !!(
         input.prompt ||
         input.name ||
@@ -4737,11 +4547,16 @@ function createAgentToolOps(
     },
 
     async deliver(input): Promise<AgentToolDeliverResult> {
-      const live = getRpcSession(input.sessionId);
+      if (input.sourceHostId !== source.sourceHostId)
+        throw new Error("Agent tools must stay on the calling host");
+      const live = getRpcSession(input.sessionId, input.sourceHostId);
       let wrapper = live?.isAlive() ? live : undefined;
       let cold = false;
       if (!wrapper) {
-        const host = await hostForSessionId(input.sessionId);
+        const host = await hostForSessionId(
+          input.sessionId,
+          input.sourceHostId,
+        );
         const target =
           host && (await sessionSpawnTarget(input.sessionId, host));
         if (!host || !target)
@@ -4813,26 +4628,21 @@ function createAgentToolOps(
         responseText: typeof last?.text === "string" ? last.text : null,
       };
     },
-
-    async sessionHostId(sessionId) {
-      const live = getRpcSession(sessionId);
-      if (live?.isAlive()) return live.host.id;
-      return (await hostForSessionId(sessionId))?.id ?? null;
-    },
   };
 }
 
 /** A creation uses the existing startup locks/registry, including a child whose handshake was interrupted. */
 export function getRpcCreationSession(
   creationId: string,
+  hostId = LOCAL_HOST_ID,
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> | null {
-  const key = `__new__${creationId}`;
+  const key = sessionKey(`__new__${creationId}`, hostId);
   const locks = getLocks();
   const pending = locks.get(key);
   if (pending) return pending;
   const session = getRegistry().get(key);
   if (!session?.isAlive()) return null;
-  if (session.sessionId && getRegistry().get(session.sessionId) === session)
+  if (session.sessionId && getRpcSession(session.sessionId, hostId) === session)
     return Promise.resolve({ session, realSessionId: session.sessionId });
   const recovering = session
     .adopt()
@@ -4870,7 +4680,7 @@ export async function startNewRpcSession(
     };
   }
   if (creationId !== undefined) {
-    const existing = getRpcCreationSession(creationId);
+    const existing = getRpcCreationSession(creationId, host.id);
     if (existing) {
       const value = await existing;
       if (value.session.host.id !== host.id || value.session.cwd !== cwd) {
@@ -4945,6 +4755,7 @@ export async function startRpcSession(
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
   const registry = getRegistry();
   const locks = getLocks();
+  const key = sessionKey(sessionId, host.id);
   const launch: SpawnRequest = {
     cwd,
     recordedCwd: recordedCwd ?? null,
@@ -4960,10 +4771,10 @@ export async function startRpcSession(
   // server is being adopted or killed. Waiting here, before the registry and
   // the lock, lets a start join an adopted child; a killed one must exit first:
   // two children must never write one session file. A live wrapper is past that.
-  if (sessionFile && !registry.get(sessionId)?.isAlive())
+  if (sessionFile && !registry.get(key)?.isAlive())
     await orphanExit(host.id, sessionId);
 
-  const existing = registry.get(sessionId);
+  const existing = registry.get(key);
   const checkHost = (session: AgentSessionWrapper) => {
     if (requireHost && session.host.id !== host.id)
       throw new WebRpcError(
@@ -5020,19 +4831,20 @@ export async function startRpcSession(
   if (sessionFile && !existing) {
     for (const candidate of new Set(registry.values())) {
       if (
+        candidate.host.id === host.id &&
         candidate.isAlive() &&
         candidate.sessionFile &&
         samePath(candidate.sessionFile, sessionFile)
       ) {
         checkHost(candidate);
-        registry.set(sessionId, candidate);
+        registry.set(key, candidate);
         notifyRunningChange({ refreshSessionList: true });
         return { session: candidate, realSessionId: candidate.sessionId };
       }
     }
   }
 
-  const inflight = locks.get(sessionId);
+  const inflight = locks.get(key);
   if (inflight) {
     const result = await inflight;
     checkHost(result.session);
@@ -5106,7 +4918,7 @@ export async function startRpcSession(
       // that the way the UI registration does.
       if (
         !created.hostOwnedLifecycle &&
-        loadWebServerSettings().agentToolsEnabled
+        (await host.getSettings().catch(() => null))?.agentToolsEnabled
       ) {
         await created
           .send({ type: "set_host_tools", tools: AGENT_TOOL_DEFINITIONS })
@@ -5115,7 +4927,7 @@ export async function startRpcSession(
     } catch (error) {
       if (creationId !== undefined) {
         // Its daemon may still own the child: reconciliation reuses this native wrapper, never a replacement spawn.
-        registry.set(`__new__${creationId}`, created);
+        registry.set(sessionKey(`__new__${creationId}`, host.id), created);
         throw error;
       }
       // Await the child's full exit before the `finally` releases the startup
@@ -5129,9 +4941,9 @@ export async function startRpcSession(
       // `--resume` child beside it. Chained on destroyPromise (set by the call
       // above), not onDestroy: a child that already exited ran no callback.
       if (sessionFile) {
-        registry.set(sessionId, created);
+        registry.set(key, created);
         void created.destroyPromise?.then(() => {
-          if (registry.get(sessionId) === created) registry.delete(sessionId);
+          if (registry.get(key) === created) registry.delete(key);
         });
       }
       await disposing;
@@ -5140,21 +4952,23 @@ export async function startRpcSession(
 
     const realSessionId = created.sessionId;
     registerSession(created);
-    if (creationId !== undefined) registry.set(`__new__${creationId}`, created);
+    if (creationId !== undefined)
+      registry.set(sessionKey(`__new__${creationId}`, host.id), created);
     // omp can move a resumed session during startup, before identity is known; keep the requested id routable.
     if (sessionFile && realSessionId !== sessionId) {
-      registry.set(sessionId, created);
+      registry.set(key, created);
       created.keepMovedFromId(sessionId);
       for (const listener of globalThis.__ompSessionMoveListeners ?? [])
-        listener(sessionId, realSessionId);
+        listener(sessionId, realSessionId, host.id);
     }
     // A successful respawn supersedes the crash record.
-    clearExitedRpcSession(sessionId);
-    if (realSessionId !== sessionId) clearExitedRpcSession(realSessionId);
+    clearExitedRpcSession(sessionId, host.id);
+    if (realSessionId !== sessionId)
+      clearExitedRpcSession(realSessionId, host.id);
     return { session: created, realSessionId };
-  })().finally(() => locks.delete(sessionId));
+  })().finally(() => locks.delete(key));
 
-  locks.set(sessionId, starting);
+  locks.set(key, starting);
   return starting;
 }
 
@@ -5172,13 +4986,13 @@ function registerSession(created: AgentSessionWrapper): void {
     if (!options?.keepOldId)
       for (const [key, wrapper] of registry)
         if (wrapper === created) registry.delete(key);
-    registry.set(newId, created);
+    registry.set(sessionKey(newId, created.host.id), created);
     if (options?.keepOldId)
       for (const listener of globalThis.__ompSessionMoveListeners ?? [])
-        listener(oldId, newId);
+        listener(oldId, newId, created.host.id);
     notifyRunningChange({ refreshSessionList: true });
   });
-  registry.set(created.sessionId, created);
+  registry.set(sessionKey(created.sessionId, created.host.id), created);
   notifyRunningChange({ refreshSessionList: true });
 }
 
@@ -5216,13 +5030,16 @@ export async function adoptRpcSession({
   }
   const registry = getRegistry();
   const locks = getLocks();
+  const hostKey = sessionKey(sessionId, host.id);
   const creationKey =
-    creationId === undefined ? undefined : `__new__${creationId}`;
+    creationId === undefined
+      ? undefined
+      : sessionKey(`__new__${creationId}`, host.id);
   const keys =
     creationKey === undefined
-      ? [sessionId]
+      ? [hostKey]
       : sessionId
-        ? [creationKey, sessionId]
+        ? [creationKey, hostKey]
         : [creationKey];
   if (keys.some((key) => locks.has(key) || registry.has(key))) {
     if (transport.hostOwnedLifecycle) transport.close?.();
@@ -5258,7 +5075,8 @@ export async function adoptRpcSession({
       // to a session this server already runs would be its second writer.
       if (
         created.sessionId !== sessionId &&
-        (locks.has(created.sessionId) || registry.has(created.sessionId))
+        (locks.has(sessionKey(created.sessionId, host.id)) ||
+          getRpcSession(created.sessionId, host.id))
       ) {
         throw new Error(
           `Session ${created.sessionId} is already started on this server`,
@@ -5273,9 +5091,9 @@ export async function adoptRpcSession({
       const disposing = created.destroyAndWait("adoption-failed");
       // As for a failed resume: until the child really exits, a start for this
       // session waits for it (destroyAndWait returns early behind a dropped link).
-      registry.set(sessionId, created);
+      registry.set(hostKey, created);
       void created.destroyPromise?.then(() => {
-        if (registry.get(sessionId) === created) registry.delete(sessionId);
+        if (registry.get(hostKey) === created) registry.delete(hostKey);
       });
       await disposing;
       throw error;
@@ -5283,9 +5101,9 @@ export async function adoptRpcSession({
     registerSession(created);
     if (creationKey !== undefined) registry.set(creationKey, created);
     // The run goes on: any crash record for the session is stale.
-    clearExitedRpcSession(sessionId);
+    clearExitedRpcSession(sessionId, host.id);
     if (created.sessionId !== sessionId)
-      clearExitedRpcSession(created.sessionId);
+      clearExitedRpcSession(created.sessionId, host.id);
     notifyRunningChange();
     return { session: created, realSessionId: created.sessionId };
   })().finally(() => {

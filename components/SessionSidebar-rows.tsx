@@ -1,5 +1,6 @@
 "use client";
 
+import { sessionKey, sessionUrl } from "@/lib/session-identity";
 import {
   memo,
   useCallback,
@@ -266,16 +267,10 @@ interface ProjectRowProps {
   removeBusy: boolean;
   onSelectSession: (s: SessionInfo) => void;
   onRenamed?: () => void;
-  onSessionDeleted?: (id: string) => void;
+  onSessionDeleted?: (id: string, hostId?: string) => void;
   /** The active search query; each session row can then list its hits. */
   searchQuery?: string;
   onOpenSearchMatch?: (session: SessionInfo, target: SearchMatchTarget) => void;
-  /** A pinned project of a cluster member: its node's name, status text and, while its link is down, why it cannot be used. */
-  node?: {
-    label: string;
-    statusText?: string | null;
-    unavailableReason?: string | null;
-  };
 }
 
 /** One project in the sidebar: a card row matching the session items' visual
@@ -312,11 +307,8 @@ function ProjectRow({
   onSessionDeleted,
   searchQuery,
   onOpenSearchMatch,
-  node,
 }: ProjectRowProps) {
   const { t } = useI18n();
-  // The title is invisible to keyboards and screen readers: say the reason in text too.
-  const reasonId = useId();
   const [hovered, setHovered] = useState(false);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
@@ -361,13 +353,8 @@ function ProjectRow({
     <section
       className="sidebar-project"
       data-active={isActive ? "true" : "false"}
-      style={{ marginBottom: 12, opacity: node?.unavailableReason ? 0.55 : 1 }}
+      style={{ marginBottom: 12 }}
     >
-      {node?.unavailableReason && (
-        <span id={reasonId} className="sr-only">
-          {node.unavailableReason}
-        </span>
-      )}
       <ConfirmDialog
         open={confirmRemove}
         onOpenChange={setConfirmRemove}
@@ -520,7 +507,7 @@ function ProjectRow({
                   <strong style={{ fontFamily: "inherit", fontSize: 11 }}>
                     {t("sessionSidebar.launchConfigDirectory")}
                   </strong>
-                  <span>{project.poolId ? project.origin : project.path}</span>
+                  <span>{project.path}</span>
                   {project.launchConfig?.profile && (
                     <span>profile: {project.launchConfig.profile}</span>
                   )}
@@ -536,16 +523,7 @@ function ProjectRow({
                 className="sidebar-project-identity"
                 onClick={() => onActivate(project)}
                 aria-current={isActive ? "true" : undefined}
-                title={
-                  node?.unavailableReason
-                    ? `${project.poolId ? project.origin : project.path}\n${node.unavailableReason}`
-                    : project.poolId
-                      ? project.origin
-                      : project.path
-                }
-                aria-describedby={
-                  node?.unavailableReason ? reasonId : undefined
-                }
+                title={project.path}
                 style={{
                   flex: "0 1 auto",
                   minWidth: 0,
@@ -594,30 +572,6 @@ function ProjectRow({
                 >
                   {label}
                 </span>
-                {node && (
-                  <>
-                    <span className="sr-only">
-                      {t("hosts.onNode", { node: node.label })}
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      title={t("hosts.onNode", { node: node.label })}
-                      style={{
-                        flexShrink: 1,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        fontSize: 10.5,
-                        color: "var(--text-dim)",
-                      }}
-                    >
-                      {node.statusText
-                        ? `${node.label} · ${node.statusText}`
-                        : node.label}
-                    </span>
-                  </>
-                )}
               </button>
             </Tooltip>
           )}
@@ -883,10 +837,10 @@ function ProjectRow({
           title={
             isExpanded
               ? t("projects.collapseProjectTitle", {
-                  path: project.poolId ? label : project.path,
+                  path: project.path,
                 })
               : t("projects.expandProjectTitle", {
-                  path: project.poolId ? label : project.path,
+                  path: project.path,
                 })
           }
           style={{
@@ -934,7 +888,7 @@ function ProjectRow({
             <>
               {visibleRoots.map((node) => (
                 <SessionTreeItem
-                  key={node.session.id}
+                  key={sessionKey(node.session.id, node.session.hostId)}
                   node={node}
                   selectedSessionId={selectedSessionId}
                   runningSessionIds={runningSessionIds}
@@ -1031,7 +985,7 @@ const SessionTreeItem = memo(
     relativeTimeNow: number;
     onSelectSession: (s: SessionInfo) => void;
     onRenamed?: () => void;
-    onSessionDeleted?: (id: string) => void;
+    onSessionDeleted?: (id: string, hostId?: string) => void;
     searchQuery?: string;
     onOpenSearchMatch?: (
       session: SessionInfo,
@@ -1044,16 +998,19 @@ const SessionTreeItem = memo(
     if (matchesOpen && !searchQuery) setMatchesOpen(false);
     const hasChildren = node.children.length > 0;
     const sessionId = node.session.id;
+    const key = sessionKey(sessionId, node.session.hostId);
+    const canSearchTranscript =
+      !node.session.hostId || node.session.hostId === "local";
 
     // Pre-compute the booleans so SessionItem only sees primitives — its memo
     // check then never re-renders unless this row's flags actually changed.
-    const isSelected = sessionId === selectedSessionId;
-    const isRunning = runningSessionIds.has(sessionId);
-    const isAwaitingInput = awaitingInputIds.has(sessionId);
-    const isUnread = unreadSessionIds.has(sessionId);
+    const isSelected = key === selectedSessionId;
+    const isRunning = runningSessionIds.has(key);
+    const isAwaitingInput = awaitingInputIds.has(key);
+    const isUnread = unreadSessionIds.has(key);
     const isRecentlyCompleted =
-      !isRunning && (recentlyCompletedIds?.has(sessionId) ?? false);
-    const exited = exitedSessions.get(sessionId);
+      !isRunning && (recentlyCompletedIds?.has(key) ?? false);
+    const exited = exitedSessions.get(key);
 
     // Stable callbacks: depend only on primitives / stable parent callbacks so
     // SessionItem's React.memo stays effective across re-renders.
@@ -1062,9 +1019,9 @@ const SessionTreeItem = memo(
     }, [onSelectSession, node.session]);
     const handleDeleted = useCallback(
       (id: string) => {
-        onSessionDeleted?.(id);
+        onSessionDeleted?.(id, node.session.hostId);
       },
-      [onSessionDeleted],
+      [onSessionDeleted, node.session.hostId],
     );
     const handleToggleCollapse = useCallback(() => {
       setCollapsed((v) => !v);
@@ -1114,24 +1071,30 @@ const SessionTreeItem = memo(
             onToggleCollapse={handleToggleCollapse}
             matchesExpanded={matchesOpen}
             onToggleMatches={
-              searchQuery && onOpenSearchMatch ? handleToggleMatches : undefined
+              canSearchTranscript && searchQuery && onOpenSearchMatch
+                ? handleToggleMatches
+                : undefined
             }
           />
         </div>
-        {matchesOpen && searchQuery && onOpenSearchMatch && (
-          <SessionSearchMatches
-            key={searchQuery}
-            sessionId={sessionId}
-            query={searchQuery}
-            depth={depth}
-            onOpen={handleOpenMatch}
-          />
-        )}
+        {canSearchTranscript &&
+          matchesOpen &&
+          searchQuery &&
+          onOpenSearchMatch && (
+            <SessionSearchMatches
+              key={searchQuery}
+              sessionId={sessionId}
+              hostId={node.session.hostId}
+              query={searchQuery}
+              depth={depth}
+              onOpen={handleOpenMatch}
+            />
+          )}
         {hasChildren && !collapsed && (
           <div>
             {node.children.map((child) => (
               <SessionTreeItem
-                key={child.session.id}
+                key={sessionKey(child.session.id, child.session.hostId)}
                 node={child}
                 selectedSessionId={selectedSessionId}
                 runningSessionIds={runningSessionIds}
@@ -1158,22 +1121,22 @@ const SessionTreeItem = memo(
     if (prev.node !== next.node) return false;
     if (prev.selectedSessionId !== next.selectedSessionId) {
       // Only re-render if THIS node's selection state flipped.
-      const id = prev.node.session.id;
+      const id = sessionKey(prev.node.session.id, prev.node.session.hostId);
       if ((id === prev.selectedSessionId) !== (id === next.selectedSessionId))
         return false;
     }
     if (prev.runningSessionIds !== next.runningSessionIds) {
-      const id = prev.node.session.id;
+      const id = sessionKey(prev.node.session.id, prev.node.session.hostId);
       if (prev.runningSessionIds.has(id) !== next.runningSessionIds.has(id))
         return false;
     }
     if (prev.awaitingInputIds !== next.awaitingInputIds) {
-      const id = prev.node.session.id;
+      const id = sessionKey(prev.node.session.id, prev.node.session.hostId);
       if (prev.awaitingInputIds.has(id) !== next.awaitingInputIds.has(id))
         return false;
     }
     if (prev.recentlyCompletedIds !== next.recentlyCompletedIds) {
-      const id = prev.node.session.id;
+      const id = sessionKey(prev.node.session.id, prev.node.session.hostId);
       if (
         (prev.recentlyCompletedIds?.has(id) ?? false) !==
         (next.recentlyCompletedIds?.has(id) ?? false)
@@ -1181,7 +1144,7 @@ const SessionTreeItem = memo(
         return false;
     }
     if (prev.unreadSessionIds !== next.unreadSessionIds) {
-      const id = prev.node.session.id;
+      const id = sessionKey(prev.node.session.id, prev.node.session.hostId);
       if (prev.unreadSessionIds.has(id) !== next.unreadSessionIds.has(id))
         return false;
     }
@@ -1250,12 +1213,14 @@ const SessionItem = memo(function SessionItem({
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const title =
     session.name ||
-    (session.messageCount ? temporarySessionTitle(session.firstMessage) : null) ||
+    (session.messageCount
+      ? temporarySessionTitle(session.firstMessage)
+      : null) ||
     session.id.slice(0, 12);
   // A session's composer draft is keyed by its id (ChatWindow's `draftKey`).
   const hasUnsentDraft = useSyncExternalStore(
     subscribeDrafts,
-    () => hasDraft(session.id),
+    () => hasDraft(sessionKey(session.id, session.hostId)),
     () => false,
   );
   const relativeTime = formatRelativeTime(
@@ -1289,7 +1254,10 @@ const SessionItem = memo(function SessionItem({
     if (name === (session.name ?? "")) return;
     try {
       const response = await fetch(
-        `/api/sessions/${encodeURIComponent(session.id)}`,
+        sessionUrl(
+          `/api/sessions/${encodeURIComponent(session.id)}`,
+          session.hostId,
+        ),
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -1301,13 +1269,16 @@ const SessionItem = memo(function SessionItem({
     } catch {
       // The next refresh remains authoritative if the rename fails.
     }
-  }, [renameValue, session.id, session.name, onRenamed]);
+  }, [renameValue, session.id, session.hostId, session.name, onRenamed]);
 
   const handleArchive = useCallback(async () => {
     setDeleting(true);
     try {
       const response = await fetch(
-        `/api/sessions/${encodeURIComponent(session.id)}/archive`,
+        sessionUrl(
+          `/api/sessions/${encodeURIComponent(session.id)}/archive`,
+          session.hostId,
+        ),
         { method: "POST" },
       );
       if (!response.ok) throw new Error("Session archive failed");
@@ -1316,7 +1287,7 @@ const SessionItem = memo(function SessionItem({
       setDeleting(false);
       toast.error(t("sessionSidebar.archiveFailed"));
     }
-  }, [session.id, onDeleted, t]);
+  }, [session.id, session.hostId, onDeleted, t]);
   const archiveBlocked = hasChildren;
   const archiveTitle = hasChildren
     ? t("sessionSidebar.archiveLeafOnly")
@@ -1328,7 +1299,10 @@ const SessionItem = memo(function SessionItem({
     setDeleting(true);
     try {
       const response = await fetch(
-        `/api/sessions/${encodeURIComponent(session.id)}`,
+        sessionUrl(
+          `/api/sessions/${encodeURIComponent(session.id)}`,
+          session.hostId,
+        ),
         { method: "DELETE" },
       );
       if (!response.ok) throw new Error("Session deletion failed");
@@ -1337,14 +1311,17 @@ const SessionItem = memo(function SessionItem({
       setDeleting(false);
       toast.error(t("sessionSidebar.deleteFailed"));
     }
-  }, [session.id, onDeleted, t, deleting]);
+  }, [session.id, session.hostId, onDeleted, t, deleting]);
   const [copyingTranscript, setCopyingTranscript] = useState(false);
   const handleCopyTranscript = useCallback(async () => {
     if (copyingTranscript) return;
     setCopyingTranscript(true);
     try {
       const response = await fetch(
-        `/api/sessions/${encodeURIComponent(session.id)}`,
+        sessionUrl(
+          `/api/sessions/${encodeURIComponent(session.id)}`,
+          session.hostId,
+        ),
       );
       if (!response.ok) throw new Error("Session transcript fetch failed");
       const data = (await response.json()) as {
@@ -1362,7 +1339,7 @@ const SessionItem = memo(function SessionItem({
     } finally {
       setCopyingTranscript(false);
     }
-  }, [copyingTranscript, session.id, session.cwd, title, t]);
+  }, [copyingTranscript, session.id, session.hostId, session.cwd, title, t]);
 
   const closeConfirmation = useCallback(() => {
     setConfirmDelete(false);

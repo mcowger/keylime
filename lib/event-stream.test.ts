@@ -8,6 +8,9 @@ interface PostedMessage {
   op: string;
   id?: string;
   n?: number;
+  sessionId?: string;
+  hostId?: string;
+  channel?: unknown;
 }
 
 /** What the tab posts to the shared worker, and the port the worker answers on. */
@@ -87,6 +90,7 @@ test("ws routes commands through the worker; sse, or a mode this tab does not kn
     n: posted.at(-1)!.n,
     req: "r-ws",
     sessionId: "s1",
+    hostId: "local",
     advisor: false,
     body: '{"type":"get_state"}',
     type: "get_state",
@@ -104,8 +108,17 @@ test("ws routes commands through the worker; sse, or a mode this tab does not kn
 });
 
 test("bfcache pagehide rejects pending WS uploads; pageshow restores streams and permits Retry without HTTP fallback", async () => {
-  const stream = openEventStream({ kind: "session", sessionId: "bfcache" });
+  const stream = openEventStream({
+    kind: "session",
+    sessionId: "bfcache",
+    hostId: "remote",
+  });
   const subscription = posted.at(-1)!;
+  assert.deepEqual(subscription.channel, {
+    kind: "session",
+    sessionId: "bfcache",
+    hostId: "remote",
+  });
   port.onmessage({ data: { transport: "ws" } });
   port.onmessage({ data: { id: subscription.id, type: "open" } });
   const messages: string[] = [];
@@ -826,7 +839,7 @@ test("outbox prepares Background Sync online, reuses its active registration for
   let online = true;
   const capableWorker = {
     postMessage: (_message: unknown, ports: MessagePort[]) =>
-      ports[0].postMessage({ type: "omp-outbox-capability", version: 2 }),
+      ports[0].postMessage({ type: "omp-outbox-capability", version: 3 }),
   };
   const registration = Object.assign(new EventTarget(), {
     active: capableWorker,
@@ -859,7 +872,7 @@ test("outbox prepares Background Sync online, reuses its active registration for
       Object.defineProperty(window, "isSecureContext", previousSecure);
     else Reflect.deleteProperty(window, "isSecureContext");
   });
-  const unsubscribe = subscribeOutbox(() => {});
+  const unsubscribe = subscribeOutbox("a", () => {});
   t.after(unsubscribe);
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(
@@ -952,7 +965,7 @@ for (const mode of ["upgrading", "offline", "nonresponsive"])
       if (mode === "nonresponsive") return registration;
       replacement = Object.assign(new EventTarget(), {
         postMessage: (_message: unknown, ports: MessagePort[]) =>
-          ports[0].postMessage({ type: "omp-outbox-capability", version: 2 }),
+          ports[0].postMessage({ type: "omp-outbox-capability", version: 3 }),
       });
       registration.installing = replacement;
       setTimeout(() => {
@@ -979,7 +992,7 @@ for (const mode of ["upgrading", "offline", "nonresponsive"])
         Object.defineProperty(window, "isSecureContext", previousSecure);
       else Reflect.deleteProperty(window, "isSecureContext");
     });
-    const unsubscribe = subscribeOutbox(() => {});
+    const unsubscribe = subscribeOutbox("a", () => {});
     t.after(unsubscribe);
     const { waitFor } = await import("@testing-library/react/pure.js");
     if (mode === "upgrading") {
@@ -1013,12 +1026,14 @@ for (const mode of ["upgrading", "offline", "nonresponsive"])
 
 test("outbox drop waits for its committed worker acknowledgement and rejects storage failures", async () => {
   let removed = false;
-  const pending = dropFromOutbox("failed-message").then(() => {
+  const pending = dropFromOutbox("a", "failed-message", "remote").then(() => {
     removed = true;
   });
   const request = posted.at(-1)!;
   assert.equal(request.op, "outbox_drop");
   assert.equal(request.id, "failed-message");
+  assert.equal(request.sessionId, "a");
+  assert.equal(request.hostId, "remote");
   assert.equal(typeof request.n, "number");
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(removed, false);
@@ -1026,7 +1041,7 @@ test("outbox drop waits for its committed worker acknowledgement and rejects sto
   await pending;
   assert.equal(removed, true);
 
-  const failure = dropFromOutbox("another-failed-message");
+  const failure = dropFromOutbox("a", "another-failed-message");
   const rejected = assert.rejects(failure, /storage unavailable/);
   port.onmessage({
     data: { outboxDropped: posted.at(-1)!.n, error: "storage unavailable" },
@@ -1041,6 +1056,7 @@ test("outbox reconciliation awaits durable worker acknowledgement", async () => 
     op: "outbox_reconcile",
     n: request.n,
     sessionId: "session",
+    hostId: "local",
     confirmedIds: ["accepted"],
   });
   port.onmessage({ data: { outboxReconciled: request.n } });
@@ -1051,6 +1067,39 @@ test("outbox reconciliation awaits durable worker acknowledgement", async () => 
     data: { outboxReconciled: posted.at(-1)!.n, error: "storage unavailable" },
   });
   await rejected;
+});
+
+test("outbox subscribers see only their host and raw session ID", () => {
+  const local: string[][] = [];
+  const remote: string[][] = [];
+  const stopLocal = subscribeOutbox("same", (event) => {
+    if ("entries" in event) local.push(event.entries.map((entry) => entry.id));
+  });
+  const stopRemote = subscribeOutbox(
+    "same",
+    (event) => {
+      if ("entries" in event)
+        remote.push(event.entries.map((entry) => entry.id));
+    },
+    "remote",
+  );
+  try {
+    port.onmessage({
+      data: {
+        outbox: [
+          { sessionId: "same", hostId: "local", id: "local-entry" },
+          { sessionId: "same", hostId: "remote", id: "remote-entry" },
+          { sessionId: "other", hostId: "remote", id: "other-entry" },
+        ],
+      },
+    });
+    assert.deepEqual(local.at(-1), ["local-entry"]);
+    assert.deepEqual(remote.at(-1), ["remote-entry"]);
+  } finally {
+    stopLocal();
+    stopRemote();
+    port.onmessage({ data: { outbox: [] } });
+  }
 });
 
 test("pagehide keepalives only each session's oldest pending entry, and none from a partial list", async (t) => {
@@ -1079,14 +1128,18 @@ test("pagehide keepalives only each session's oldest pending entry, and none fro
   const added = [
     entry("k1", "ka", now),
     entry("k2", "ka", now + 1),
-    entry("k3", "kb", now + 2),
+    entry("k3", "ka", now + 2),
   ];
-  for (const item of added) {
-    const saved = addToOutbox(item);
+  for (const [index, item] of added.entries()) {
+    const saved = addToOutbox(item, index === 2 ? "remote" : "local");
     port.onmessage({ data: { outboxAdded: posted.at(-1)!.n } });
     await saved;
   }
-  const list = added.map((item) => ({ ...item, state: "sending" }));
+  const list = added.map((item, index) => ({
+    ...item,
+    hostId: index === 2 ? "remote" : "local",
+    state: "sending",
+  }));
   const pagehide = () =>
     window.dispatchEvent(
       new window.PageTransitionEvent("pagehide", { persisted: true }),
@@ -1104,7 +1157,7 @@ test("pagehide keepalives only each session's oldest pending entry, and none fro
   pagehide();
   assert.deepEqual(
     requests,
-    ["/api/agent/ka k1 true", "/api/agent/kb k3 true"],
+    ["/api/agent/ka k1 true", "/api/agent/ka?hostId=remote k3 true"],
     "k2 waits behind k1: never posted alongside it",
   );
 });
@@ -1143,7 +1196,9 @@ test("upload continuity: pagehide prepares a keepalive with the completed upload
   const saved = addToOutbox(entry);
   port.onmessage({ data: { outboxAdded: posted.at(-1)!.n } });
   await saved;
-  port.onmessage({ data: { outbox: [{ ...entry, state: "sending" }] } });
+  port.onmessage({
+    data: { outbox: [{ ...entry, hostId: "local", state: "sending" }] },
+  });
   const requests: {
     url: Parameters<typeof fetch>[0];
     body: unknown;

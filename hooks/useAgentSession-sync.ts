@@ -1,3 +1,4 @@
+import { sessionUrl } from "@/lib/session-identity";
 import {
   historyCursor,
   type SessionHistoryCursor,
@@ -43,6 +44,7 @@ export const MISSING_BASE_RETRY_MS = 2000;
 /** One durable cursor per selected view. Live ordering is independent of disk pagination. */
 export function createSessionCatchUp(options: {
   sessionId: () => string | null;
+  hostId?: string;
   scope: () => string | null;
   history: (
     context: SessionContext,
@@ -119,41 +121,60 @@ export function createSessionCatchUp(options: {
       const olderPages: SessionContext[] = [];
       const seen = new Set(initial.entryIds);
       const current = () =>
-        options.sessionId() === sid && options.scope() === scope &&
-        revision === version && !view.leafId && !view.includePreCompaction;
+        options.sessionId() === sid &&
+        options.scope() === scope &&
+        revision === version &&
+        !view.leafId &&
+        !view.includePreCompaction;
       try {
         while (current()) {
           const params = new URLSearchParams({
-            tail: "30", before, historyRevision, deferThinking: "1", deferMedia: "1",
+            tail: "30",
+            before,
+            historyRevision,
+            deferThinking: "1",
+            deferMedia: "1",
           });
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 30_000);
           let res: Response;
           try {
-            res = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`, { signal: controller.signal });
+            res = await fetch(
+              sessionUrl(
+                `/api/sessions/${encodeURIComponent(sid)}?${params}`,
+                options.hostId,
+              ),
+              { signal: controller.signal },
+            );
           } finally {
             clearTimeout(timeout);
           }
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const page = (await res.json()) as {
-            context: SessionContext; historyHasMore: boolean; historyRevision: string;
+            context: SessionContext;
+            historyHasMore: boolean;
+            historyRevision: string;
           };
           if (!current()) return;
-          if (page.historyRevision !== historyRevision ||
-              page.context.messages.length !== page.context.entryIds.length ||
-              page.context.entryIds.some((id) => seen.has(id)) ||
-              (page.historyHasMore && page.context.entryIds.length === 0))
+          if (
+            page.historyRevision !== historyRevision ||
+            page.context.messages.length !== page.context.entryIds.length ||
+            page.context.entryIds.some((id) => seen.has(id)) ||
+            (page.historyHasMore && page.context.entryIds.length === 0)
+          )
             throw new Error("Invalid history page");
           for (const id of page.context.entryIds) seen.add(id);
           olderPages.push(page.context);
           if (!page.historyHasMore) {
             // Catch-up can append while these pages are in flight. Only prepend
             // to the same surviving prefix, never replace its newer state.
-            if (!context || context.entryIds[0] !== first) throw new Error("History changed");
+            if (!context || context.entryIds[0] !== first)
+              throw new Error("History changed");
             const messages: SessionContext["messages"] = [];
             const entryIds: string[] = [];
             for (let i = olderPages.length - 1; i >= 0; i--) {
-              for (const message of olderPages[i].messages) messages.push(message);
+              for (const message of olderPages[i].messages)
+                messages.push(message);
               for (const id of olderPages[i].entryIds) entryIds.push(id);
             }
             for (const message of context.messages) messages.push(message);
@@ -180,7 +201,9 @@ export function createSessionCatchUp(options: {
           void request();
         }
       }
-    })().finally(() => { paging = null; });
+    })().finally(() => {
+      paging = null;
+    });
   };
 
   const request = (): Promise<SessionContext | null> => {
@@ -221,7 +244,10 @@ export function createSessionCatchUp(options: {
               let page: SessionSyncResponse;
               try {
                 const res = await fetch(
-                  `/api/sessions/${encodeURIComponent(sid)}/context?${params}`,
+                  sessionUrl(
+                    `/api/sessions/${encodeURIComponent(sid)}/context?${params}`,
+                    options.hostId,
+                  ),
                   { signal: controller.signal },
                 );
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -298,10 +324,15 @@ export function createSessionCatchUp(options: {
               cursor = nextCursor;
               historyComplete = nextComplete;
               loaded = context;
-              options.history(context, page.leafId, {
-                version: metadataVersion,
-                hasLive: page.live !== null,
-              }, historyComplete);
+              options.history(
+                context,
+                page.leafId,
+                {
+                  version: metadataVersion,
+                  hasLive: page.live !== null,
+                },
+                historyComplete,
+              );
               if (page.live) {
                 if (options.subscribe(false)) {
                   requested = false;

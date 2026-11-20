@@ -1,4 +1,4 @@
-// Durable entry identities and per-session revisions are shared by every connection to the outbox.
+// Each destination has its own database: entry identities, aliases and revisions are local to that host.
 export const OUTBOX_SCHEMA = `
 CREATE TABLE IF NOT EXISTS ship_monitor_grants (
   monitor_id TEXT PRIMARY KEY NOT NULL,
@@ -30,13 +30,16 @@ CREATE TABLE IF NOT EXISTS entries (
   done_at INTEGER,
   settlement TEXT,
   replacement_id TEXT,
-  replacement_digest TEXT
+  replacement_digest TEXT,
+  source_host_id TEXT,
+  source_host_credential TEXT,
+  ship_offer_digest TEXT
 );
 CREATE INDEX IF NOT EXISTS entries_session ON entries (session_id, state);
-CREATE TABLE IF NOT EXISTS completed_uploads (id TEXT PRIMARY KEY, owner TEXT NOT NULL, receipt TEXT NOT NULL, at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS entries_source_session ON entries (source_session_id, state);
+CREATE TABLE IF NOT EXISTS completed_uploads (id TEXT PRIMARY KEY, owner TEXT NOT NULL, receipt TEXT NOT NULL, at INTEGER NOT NULL, proof TEXT, scope TEXT);
 `;
 
-// Install after legacy columns are migrated. Triggers also cover writes from older peer binaries.
 export const OUTBOX_CHANGE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS entry_aliases (
   entry_id TEXT NOT NULL,

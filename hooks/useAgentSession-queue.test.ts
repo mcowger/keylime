@@ -20,6 +20,7 @@ const local = (
 ): LocalOutboxEntry => ({
   id,
   sessionId: "s",
+  hostId: "local",
   scope: "scope",
   mode: "followUp",
   message: id,

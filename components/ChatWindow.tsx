@@ -1,4 +1,5 @@
 "use client";
+import { sessionKey } from "@/lib/session-identity";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { registerAbortHandler } from "@/hooks/useKeyboardShortcuts";
 import { useChatWidth } from "@/hooks/useChatWidth";
@@ -113,11 +114,6 @@ interface Props {
   /** Host a fresh chat starts on (this machine when absent). */
   newSessionHostId?: string;
   onBackgroundSessionCreated?: (session: SessionInfo) => void;
-  newSessionCreationId?: string;
-  newSessionPoolId?: string;
-  newSessionProjectId?: string;
-  newSessionInitialization?: string;
-  onNewSessionInitialization?: (body: string) => void;
   /** The chat's host from the `hosts` channel: the source of truth until a
    *  `host_status` frame reports a change, and for a chat opened mid-outage. */
   hostStatus?: HostStatus;
@@ -542,7 +538,15 @@ export const CommittedTranscript = memo(function CommittedTranscript({
   );
 });
 
-export function ChatWindow({
+export function ChatWindow(props: Props) {
+  const hostId =
+    (props.session ? props.session.hostId : props.newSessionHostId) ?? "local";
+  // Remount on host changes to fence late results from the previous authority.
+  // Same-host promotion and edit must keep the composer and run state alive.
+  return <HostChatWindow key={hostId} {...props} />;
+}
+
+function HostChatWindow({
   session,
   shipButtonContainer,
   shipWorkspace,
@@ -556,11 +560,6 @@ export function ChatWindow({
   workspaceBaseSelector,
   newSessionHostId,
   onBackgroundSessionCreated,
-  newSessionCreationId,
-  newSessionPoolId,
-  newSessionProjectId,
-  newSessionInitialization,
-  onNewSessionInitialization,
   hostStatus: channelHostStatus,
   hostLabel,
   newSessionWorkspace,
@@ -600,7 +599,7 @@ export function ChatWindow({
   const chatWidth = useChatWidth();
   const fileSource = useMemo<WorkspaceFileSource>(
     () => ({
-      hostId: session?.hostId ?? newSessionHostId ?? "local",
+      hostId: (session ? session.hostId : newSessionHostId) ?? "local",
       cwd: session?.cwd ?? newSessionCwd,
       sessionId: session?.id ?? null,
     }),
@@ -626,6 +625,7 @@ export function ChatWindow({
         : undefined,
     [onOpenWorkspaceFile, fileSource],
   );
+  const chatHostId = (session ? session.hostId : newSessionHostId) ?? "local";
   const { playDoneSound, unlockAudio } = useAudio();
   const isMobile = useIsMobile();
   const internalChatInputRef = useRef<ChatInputHandle | null>(null);
@@ -641,11 +641,13 @@ export function ChatWindow({
       // A confirmed Edit changes this conversation's owner, not its composer.
       // Keep pending reads, capture and transcription alive while rekeying drafts.
       // Queue HTTP responses can settle before React commits the new draft key.
-      composerRef.current?.retargetPendingRecovery(oldId, newId);
-      setComposerIdentityMove({ from: oldId, to: newId, sourceDraft });
+      const from = sessionKey(oldId, chatHostId);
+      const to = sessionKey(newId, chatHostId);
+      composerRef.current?.retargetPendingRecovery(from, to);
+      setComposerIdentityMove({ from, to, sourceDraft });
       onSessionMoved(oldId, newId);
     },
-    [composerRef, onSessionMoved],
+    [chatHostId, composerRef, onSessionMoved],
   );
 
   // Wrap onAgentEnd to play the completion sound. This is more reliable than
@@ -767,7 +769,6 @@ export function ChatWindow({
     handleToolPresetChange,
     btw,
     askBtw,
-    resolveUploadHost,
   } = useAgentSession({
     session,
     newSessionCwd,
@@ -776,11 +777,6 @@ export function ChatWindow({
     onStartupStage,
     newSessionHostId,
     onBackgroundSessionCreated,
-    newSessionCreationId,
-    newSessionPoolId,
-    newSessionProjectId,
-    newSessionInitialization,
-    onNewSessionInitialization,
     onAgentEnd: wrappedOnAgentEnd,
     onSessionCreated,
     onSessionForked,
@@ -942,14 +938,12 @@ export function ChatWindow({
   // top, load another page while keeping the scroll position stable.
   const [visibleCount, setVisibleCount] = useState(VISIBLE_PAGE_SIZE);
   const prevSessionKeyForPagingRef = useRef<string | null>(null);
-  const draftKey =
-    session?.id ??
-    newSessionDraftKey ??
-    (newSessionPoolId && newSessionProjectId
-      ? `new:pool:${newSessionPoolId}:${newSessionProjectId}`
-      : newSessionCwd
-        ? newChatDraftKey(newSessionCwd, newSessionHostId)
-        : undefined);
+  const draftKey = session
+    ? sessionKey(session.id, chatHostId)
+    : (newSessionDraftKey ??
+      (newSessionCwd
+        ? newChatDraftKey(newSessionCwd, chatHostId)
+        : `new:${chatHostId}:unassigned`));
   const sessionKeyForPaging = draftKey ?? "empty";
   useEffect(() => {
     if (prevSessionKeyForPagingRef.current !== sessionKeyForPaging) {
@@ -1373,7 +1367,7 @@ export function ChatWindow({
     null,
   );
   useEffect(() => {
-    if (!advisorEnabled) {
+    if (!advisorEnabled || chatHostId !== "local") {
       setAdvisorRoleSelector(null);
       return;
     }
@@ -1387,7 +1381,7 @@ export function ChatWindow({
       .then((data) => setAdvisorRoleSelector(data?.roles?.advisor ?? null))
       .catch(() => {});
     return () => controller.abort();
-  }, [advisorEnabled]);
+  }, [advisorEnabled, chatHostId]);
 
   // GitHub repo of the session checkout, so bare `#123` in messages links to it.
   const [githubRepo, setGithubRepo] = useState<string | null>(null);
@@ -1435,24 +1429,29 @@ export function ChatWindow({
       const data = await sendAgentCommand<{ suffix: string | null } | null>(
         sid,
         { type: "predict_word", text, cursor },
+        { hostId: chatHostId },
       );
       return data?.suffix ?? null;
     },
-    [session?.id, sessionIdRef],
+    [chatHostId, session?.id, sessionIdRef],
   );
   const handlePredictWordFeedback = useCallback(
     (text: string, cursor: number, suggestion: string, accepted: boolean) => {
       const sid = session?.id ?? sessionIdRef.current;
       if (!sid) return;
-      sendAgentCommand(sid, {
-        type: "predict_word_feedback",
-        text,
-        cursor,
-        suggestion,
-        accepted,
-      }).catch(() => {});
+      sendAgentCommand(
+        sid,
+        {
+          type: "predict_word_feedback",
+          text,
+          cursor,
+          suggestion,
+          accepted,
+        },
+        { hostId: chatHostId },
+      ).catch(() => {});
     },
-    [session?.id, sessionIdRef],
+    [chatHostId, session?.id, sessionIdRef],
   );
 
   const handleMinimize = useCallback(() => {
@@ -1606,13 +1605,8 @@ export function ChatWindow({
       onBuiltinCommand={handleBuiltinSlashCommand}
       onAudioUnlock={unlockAudio}
       draftKey={draftKey}
-      uploadHostId={session ? session.hostId : newSessionHostId}
-      resolveUploadHost={
-        !session && newSessionPoolId ? resolveUploadHost : undefined
-      }
-      cwd={
-        !session && newSessionPoolId ? null : (session?.cwd ?? newSessionCwd)
-      }
+      uploadHostId={chatHostId}
+      cwd={session?.cwd ?? newSessionCwd}
       /* The pill bar and chevron only render in the non-empty layout; don't
          accept Escape-to-minimize in the fresh-chat branch where there is
          nothing to collapse. */

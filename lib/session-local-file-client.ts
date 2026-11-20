@@ -1,4 +1,5 @@
 import type { SessionLocalFile } from "./api-contracts/http-sessions";
+import { sessionUrl } from "./session-identity";
 
 export type SessionLocalFileResult =
   ({ ok: true } & SessionLocalFile) | { ok: false; error: string };
@@ -11,6 +12,7 @@ export async function resolveSessionLocalFile(
   sessionId: string,
   uri: string,
   signal?: AbortSignal,
+  hostId = "local",
 ): Promise<SessionLocalFileResult> {
   const unanswered = {
     ok: false as const,
@@ -23,7 +25,10 @@ export async function resolveSessionLocalFile(
   const timer = setTimeout(abort, LOCAL_FILE_LOOKUP_TIMEOUT_MS);
   try {
     const response = await fetch(
-      `/api/sessions/${encodeURIComponent(sessionId)}/local-file?uri=${encodeURIComponent(uri)}`,
+      sessionUrl(
+        `/api/sessions/${encodeURIComponent(sessionId)}/local-file?uri=${encodeURIComponent(uri)}`,
+        hostId,
+      ),
       { signal: controller.signal },
     );
     const body: unknown = await response.json().catch(() => null);

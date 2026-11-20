@@ -9,6 +9,7 @@ import type { AgentSessionWrapper as Wrapper } from "./rpc-manager.ts";
 import type { FrameSink } from "./event-stream-hub.ts";
 import type { RpcProcess } from "./omp/rpc-process.ts";
 import type { CrossSessionHostToolEvent } from "./types.ts";
+import { saveBrowserSettings } from "./web-settings.ts";
 
 type Reader = ReadableStreamDefaultReader<Uint8Array>;
 type TestEvent = { type: string; [key: string]: unknown };
@@ -105,10 +106,14 @@ async function connect(signal?: AbortSignal) {
   return { connection, reader };
 }
 
-function withSession(id: string, session: TestSession | Wrapper) {
+function withSession(
+  id: string,
+  session: TestSession | Wrapper,
+  hostId = "local",
+) {
   globalThis.__ompSessions ??= new Map();
-  globalThis.__ompSessions.set(id, session as Wrapper);
-  return () => globalThis.__ompSessions?.delete(id);
+  globalThis.__ompSessions.set(`${hostId}:${id}`, session as Wrapper);
+  return () => globalThis.__ompSessions?.delete(`${hostId}:${id}`);
 }
 
 function emitterSession(onDetach = () => {}) {
@@ -132,9 +137,10 @@ async function subscribeSession(
   reader: Reader,
   sub: string,
   sessionId: string,
+  hostId = "local",
 ) {
   assert.deepEqual(
-    await connection.subscribe(sub, { kind: "session", sessionId }),
+    await connection.subscribe(sub, { kind: "session", sessionId, hostId }),
     { ok: true },
   );
   assert.deepEqual(await readFrame(reader), {
@@ -144,11 +150,34 @@ async function subscribeSession(
   const connected = await readFrame(reader);
   assert.equal(connected.event, sub);
   assert.equal(connected.data.type, "connected");
+  assert.ok("hostId" in connected.data);
+  assert.equal(connected.data.hostId, hostId);
   assert.deepEqual(await readFrame(reader), {
     event: sub,
     data: { type: "outbox_update", entries: [], settledIds: [] },
   });
 }
+
+test("session streams isolate wrappers with the same raw ID", async () => {
+  const local = emitterSession();
+  const remote = emitterSession();
+  const releaseLocal = withSession("same", local);
+  const releaseRemote = withSession("same", remote, "remote");
+  const abort = new AbortController();
+  try {
+    const { connection, reader } = await connect(abort.signal);
+    await subscribeSession(connection, reader, "s1", "same");
+    await subscribeSession(connection, reader, "s2", "same", "remote");
+    remote.emit({ type: "marker" });
+    local.emit({ type: "marker" });
+    assert.equal((await readFrame(reader)).event, "s2");
+    assert.equal((await readFrame(reader)).event, "s1");
+  } finally {
+    abort.abort();
+    releaseLocal();
+    releaseRemote();
+  }
+});
 
 async function postEvents(body: unknown) {
   const res = await route.POST(
@@ -167,7 +196,7 @@ test("open chat channel parsing validates session ids for both transports", () =
   });
   assert.deepEqual(
     parseEventStreamChannel({ kind: "open-chat", sessionId: "chat" }),
-    { kind: "open-chat", sessionId: "chat" },
+    { kind: "open-chat", sessionId: "chat", hostId: "local" },
   );
   for (const sessionId of [undefined, "", 1, "x".repeat(513)]) {
     assert.equal(
@@ -187,7 +216,7 @@ test("open chat channel parsing validates session ids for both transports", () =
       connectionId: "connection",
       subscribe: {
         id: "s1",
-        channel: { kind: "open-chat", sessionId: "chat" },
+        channel: { kind: "open-chat", sessionId: "chat", hostId: "local" },
       },
     },
   );
@@ -217,8 +246,11 @@ test("open chat memberships are shared across connections and independently rele
   try {
     await a.connection.subscribe("s1", { kind: "open-chats" });
     await b.connection.subscribe("s1", { kind: "open-chats" });
-    assert.deepEqual(snapshots(a), [{ sessionIds: [] }]);
-    assert.deepEqual(snapshots(b), [{ sessionIds: [] }]);
+    const local = { sessionId: "alpha", hostId: "local" };
+    const remote = { sessionId: "alpha", hostId: "remote" };
+    const empty = { sessionIds: [], openSessions: [] };
+    assert.deepEqual(snapshots(a), [empty]);
+    assert.deepEqual(snapshots(b), [empty]);
     await a.connection.subscribe("s2", {
       kind: "open-chat",
       sessionId: "alpha",
@@ -229,21 +261,21 @@ test("open chat memberships are shared across connections and independently rele
     });
     await b.connection.subscribe("s3", {
       kind: "open-chat",
-      sessionId: "beta",
+      ...remote,
     });
     a.connection.unsubscribe("s2");
     assert.deepEqual(snapshots(a), [
-      { sessionIds: [] },
-      { sessionIds: ["alpha"] },
-      { sessionIds: ["alpha"] },
-      { sessionIds: ["alpha", "beta"] },
-      { sessionIds: ["alpha", "beta"] },
+      empty,
+      { sessionIds: ["alpha"], openSessions: [local] },
+      { sessionIds: ["alpha"], openSessions: [local] },
+      { sessionIds: ["alpha"], openSessions: [local, remote] },
+      { sessionIds: ["alpha"], openSessions: [local, remote] },
     ]);
     assert.deepEqual(snapshots(b), snapshots(a));
     b.connection.close();
     assert.deepEqual(snapshots(a).slice(-2), [
-      { sessionIds: ["beta"] },
-      { sessionIds: [] },
+      { sessionIds: [], openSessions: [remote] },
+      empty,
     ]);
     a.connection.unsubscribe("s1");
     await a.connection.subscribe("s4", {
@@ -1361,8 +1393,7 @@ test("hello names the connection, the same serverId for every connection, and th
 });
 
 test("hello carries transport sse when sse is stored", async () => {
-  const { saveWebServerSettings } = await import("./web-settings.ts");
-  saveWebServerSettings({ browserTransport: "sse" });
+  saveBrowserSettings({ browserTransport: "sse" });
   const connection = new EventStreamConnection();
   try {
     assert.ok(connection.stream);
@@ -1372,7 +1403,7 @@ test("hello carries transport sse when sse is stored", async () => {
     );
   } finally {
     connection.close();
-    saveWebServerSettings({ browserTransport: "ws" });
+    saveBrowserSettings({ browserTransport: "ws" });
   }
 });
 

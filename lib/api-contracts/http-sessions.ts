@@ -48,6 +48,7 @@ export type SessionLocalFile = Static<typeof sessionLocalFile>;
 const id = pathParameter("id");
 const q = (name: string, description?: string, required = false) =>
   queryParameter(name, str(), required, description);
+const targetHost = q("hostId", "Owning host; omission selects local only.");
 const commands = AgentCommandSchema;
 const commandResults = Type.Union([AgentCommandResultSchema, Type.Null()]);
 const stateResult =
@@ -61,9 +62,15 @@ const agentState = Type.Object({
 const runningSession = Type.Object({
   id: str(),
   cwd: str(),
-  hostId: Type.Optional(str()),
+  hostId: str(),
   awaitingInput: Type.Optional(Type.Literal(true)),
 });
+const transcriptSearchBatch = Type.Object({
+  scores: Type.Array(
+    Type.Object({ hostId: str(), sessionId: str(), score: Type.Number() }),
+  ),
+});
+export type TranscriptSearchBatch = Static<typeof transcriptSearchBatch>;
 const errorWithRecovery = Type.Object({
   ...ApiErrorSchema.properties,
   host: Type.Optional(
@@ -213,6 +220,13 @@ const op = (
   summary,
   security: webSecurity,
   ...options,
+  ...((route === sid ||
+    route.startsWith(`${sid}/`) ||
+    route === aid ||
+    route.startsWith(`${aid}/`)) &&
+  !options.parameters?.some(({ name }) => name === "hostId")
+    ? { parameters: [...(options.parameters ?? []), targetHost] }
+    : {}),
 });
 const sid = "/api/sessions/[id]";
 const aid = "/api/agent/[id]";
@@ -286,8 +300,14 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
     },
   ),
   op("/api/sessions", "get", "listSessions", "List sessions across hosts", {
+    description:
+      "runningSessions is host-qualified; runningSessionIds contains only IDs from the selected host, or local for combined discovery.",
     parameters: [
-      q("id", "Filter by session ID; filtered responses do not use an ETag."),
+      q("id", "Filter to a session on hostId, or local if hostId is omitted."),
+      q(
+        "hostId",
+        "Filter inventories by host. Omit for combined discovery when no ID is supplied.",
+      ),
       { name: "If-None-Match", in: "header", required: false, schema: str() },
     ],
     responses: {
@@ -305,10 +325,10 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
     "/api/sessions/search",
     "get",
     "searchSessions",
-    "Search session transcripts",
+    "Search local session transcripts",
     {
       description:
-        "Pull-driven NDJSON; each line is a batch of session ID to score mappings, including empty batches. Cancellation stops the scan.",
+        "Pull-driven NDJSON. Each batch contains scores for registered sessions on the web host only, identified by hostId and sessionId. Cancellation stops the scan. Metadata search is separate.",
       parameters: [q("q", "Search text, maximum 500 characters.")],
       responses: {
         ...webErrors,
@@ -316,9 +336,7 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
           description: "Stream of newline-delimited JSON batches.",
           content: {
             "application/x-ndjson": {
-              schema: Type.Object({
-                scores: Type.Record(str(), Type.Number()),
-              }),
+              schema: transcriptSearchBatch,
             },
           },
         },
@@ -345,6 +363,12 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
     "listSessionArchives",
     "List archived sessions",
     {
+      parameters: [
+        q(
+          "hostId",
+          "List archives only on this host; omit for combined discovery.",
+        ),
+      ],
       responses: responses(
         Type.Object({
           archives: Type.Array(ArchivedSessionInfoSchema),
@@ -362,17 +386,17 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
     "Restore an archived session",
     {
       description:
-        "Checks every host for conflicting active sessions. An unconfirmed restore may still be running and remains blocked until its owning host confirms it stopped; restorePending archives are discovery evidence, not restore targets.",
+        "Checks the selected host's fresh inventory for an active session with the same ID. An unconfirmed restore may still be running and remains blocked until its owning daemon confirms it stopped; restorePending archives are discovery evidence, not restore targets.",
       requestBody: jsonBody(
         Type.Object({ key: str(), hostId: Type.Optional(str()) }),
       ),
       responses: {
         ...responses(Type.Object({ ok: Type.Literal(true), sessionId: str() })),
         409: err(
-          "archive_restore_unconfirmed, session_host_conflict, or restore already active.",
+          "Session already active on this host, archive_restore_busy, or archive_restore_unconfirmed.",
         ),
         503: err(
-          "Host offline or active inventories unavailable; hostOffline and host identify an offline host when available.",
+          "The target host is offline or its active inventory is unavailable.",
         ),
       },
     },
@@ -587,7 +611,7 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
     "Create and initialize an agent session",
     {
       description:
-        "A registered host and cwd select the target; poolId, creationId, ref and uploads are rejected. ensure_session initializes without submitting a prompt. A host-offline failure after creation includes sessionId and delivery metadata.",
+        "A registered host and cwd select the target. Workspace preparation and uploads are separate operations. ensure_session initializes without submitting a prompt. A host-offline failure after creation includes sessionId and delivery metadata.",
       requestBody: jsonBody(
         Type.Intersect([
           NewAgentCommandSchema,
@@ -647,7 +671,7 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
       parameters: [
         id,
         q("path", "Output path.", true),
-        q("hostId"),
+        targetHost,
         q("download", "1 streams the complete output as an attachment."),
       ],
       responses: {

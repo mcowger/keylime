@@ -21,29 +21,15 @@ export { CREATION_ID_RE } from "./creation-identity";
 import { isValidSessionId } from "../session-file-references-core";
 import { UPLOAD_ID_RE } from "../upload-limits";
 import type { SessionOps } from "./session-ops";
-import type { HostCapacity } from "./capacity";
 import type {
   OpenChannelRequest as SchemaOpenChannelRequest,
   OpenChannelResult as SchemaOpenChannelResult,
 } from "../api-contracts/host-control-models";
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
 
-/** Version 12 adds connection-scoped, non-replayable session PTY attachment frames. */
-/** 13: workspaceBranches returns base source choices; createWorkspace accepts a GitHub PR ref.
- * The optional launch credential fields were removed without changing the v13 frame format.
- * 11: the same wire as 10, renumbered: prerelease daemons already sent 10 with omp RPC channel lines, which this
- * server cannot read. 10: channel stdin/stdout lines are the runner's `{t}` frames (`cmd`/`res`/`hello`/…), no longer omp RPC frames.
- * 9: `open.launch.shareCredentials`. 8: pool capacity reports, creation identity and project preparation. 7: shared host-owned channels, lifecycle,
- * dialogs and callbacks. 6: composer uploads
- * `upload_ack` up message, the `uploadStart`/`uploadAbort`/`uploadAttach` ops. 5: a line over `pieceBytes` goes as
- * `part` messages and a large result as several binary frames, both sent fair across channels
- * (docs/specs/2026-10-31-websocket-link-design.md, D7). 4: the link is one WebSocket: text frames carry the messages,
- * binary frames large results, `ack` messages replace the ack header and the POST answer.
- * Rules for changing it: docs/specs/2026-10-28-remote-hosts-design.md, "Protocol versions and compatibility". */
-export const LINK_PROTOCOL_VERSION = 13;
-/** The oldest daemon protocol the server still links (older ones get close 4426). Dropping one is an explicit decision:
- * 11 dropped all older ones, whose channel lines mean (or, for prerelease 10, may mean) omp RPC frames. */
-export const MIN_LINK_PROTOCOL_VERSION = 13;
+/** v14 hard cut: single controller, no election or scheduler samples. */
+export const LINK_PROTOCOL_VERSION = 14;
+export const MIN_LINK_PROTOCOL_VERSION = 14;
 // CREATION_ID_RE is shared with the host-link schema.
 
 export const LINK_LIMITS = {
@@ -121,7 +107,7 @@ export const HISTORY_MUTATING_COMMANDS = new Set([
   "set_auto_retry",
   "abort_retry",
 ]);
-/** Commands whose user message a peer's identical echo could be mistaken for. */
+/** Commands retaining ownership until their prompt result arrives. */
 export const MESSAGE_COMMANDS = new Set([
   "prompt",
   "prompt_literal",
@@ -130,11 +116,6 @@ export const MESSAGE_COMMANDS = new Set([
   "followUp",
   "abort_and_prompt",
 ]);
-/** Shared-channel marker a daemon puts in the other members' output when one link writes a message command. */
-export const PEER_MESSAGE_FRAME = "peer_message_command";
-/** Shared-channel frame `{t, outcome}` a daemon puts in the other members' output for one link's `prompt_result` or
- * `prompt_error` (its command id dropped): the elected notifier must hear a run failed whichever server prompted it. */
-export const PEER_PROMPT_OUTCOME_FRAME = "peer_prompt_outcome";
 export type HostUriScheme = SchemaHostUriScheme;
 
 /** Named `req.args` keys for each session op, in parameter order. Named, not
@@ -187,7 +168,9 @@ export const HOST_OP_NAMES = [
   "stageHostArtifact",
   "activateHostArtifact",
   "hostArtifactActivationStatus",
-  "setUploadRetention",
+  "hostSettingsGet",
+  "hostSettingsSet",
+  "modelsList",
   "ptySessions",
 ] as const;
 
@@ -356,12 +339,10 @@ const UP_TYPES: readonly string[] = [
   "stderr",
   "exit",
   "resync",
-  "notifier",
   "sessions_changed",
   "ship_pr_digest",
   "channels_changed",
   "stats",
-  "capacity",
   "res",
   "upload_ack",
   "terminal_event",
@@ -563,32 +544,6 @@ function channels(o: Obj): HelloChannel[] {
   });
 }
 
-function capacitySample(value: unknown): HostCapacity {
-  if (!isObj(value)) fail("capacity sample must be an object");
-  const nonnegative = (key: string): number => {
-    const n = value[key];
-    if (typeof n !== "number" || !Number.isFinite(n) || n < 0)
-      fail(`${key} must be finite and non-negative`);
-    return n;
-  };
-  const effectiveCpus = nonnegative("effectiveCpus");
-  const load1 = nonnegative("load1");
-  const busyFraction = nonnegative("busyFraction");
-  const stealFraction = nonnegative("stealFraction");
-  const availableMemoryBytes = nonnegative("availableMemoryBytes");
-  const activeSessions = seqNum(value, "activeSessions");
-  if (effectiveCpus === 0 || busyFraction + stealFraction > 1)
-    fail("Invalid capacity CPU values");
-  return {
-    effectiveCpus,
-    load1,
-    busyFraction,
-    stealFraction,
-    availableMemoryBytes,
-    activeSessions,
-  };
-}
-
 /** One sample's fixed fields, or null when one is missing or out of range. Extra fields are dropped. */
 function statSample(s: unknown): LinkStatSample | null {
   if (!isObj(s)) return null;
@@ -656,11 +611,6 @@ function res(o: Obj): UpMessage {
   return fail("ok must be true or false");
 }
 
-function helloLink(value: unknown): { id: string; notifier: boolean } {
-  if (!isObj(value)) fail("link must be an object");
-  return { id: str(value, "id"), notifier: bool(value, "notifier") };
-}
-
 export function decodeUp(line: string): UpMessage | UnknownMessage {
   const o = parseLine(line);
   switch (o.type) {
@@ -692,7 +642,6 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
         ...(o.canActivateArtifact === undefined
           ? {}
           : { canActivateArtifact: bool(o, "canActivateArtifact") }),
-        ...(o.link === undefined ? {} : { link: helloLink(o.link) }),
         platform: str(o, "platform"),
         ...(o.arch === undefined ? {} : { arch: str(o, "arch") }),
         home: str(o, "home"),
@@ -725,8 +674,6 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
       };
     case "resync":
       return { type: "resync", seq: seqNum(o, "seq"), ch: str(o, "ch") };
-    case "notifier":
-      return { type: "notifier", seq: seqNum(o, "seq"), on: bool(o, "on") };
     case "sessions_changed":
       return { type: "sessions_changed", seq: seqNum(o, "seq") };
     case "ship_pr_digest":
@@ -746,8 +693,6 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
       };
     case "stats":
       return stats(o);
-    case "capacity":
-      return { type: "capacity", sample: capacitySample(o.sample) };
     case "upload_ack": {
       const attempt = str(o, "attempt");
       if (!UPLOAD_ID_RE.test(attempt)) fail("attempt must be a UUIDv4");

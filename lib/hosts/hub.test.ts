@@ -84,7 +84,6 @@ function hello(overrides: HelloOverrides = {}) {
     autoApproveExtension: false,
     ack: 0,
     channels: [],
-    link: { id: "l1", notifier: true },
     ...overrides,
   };
 }
@@ -860,13 +859,31 @@ test("export, session and context results must have the fields the routes read",
     (await answer(() => ops.readSession("s1", options), session)).value,
     session,
   );
-  const continuation = { context: { messages: [], entryIds: [] }, historyHasMore: false, historyRevision: "revision" };
+  const continuation = {
+    context: { messages: [], entryIds: [] },
+    historyHasMore: false,
+    historyRevision: "revision",
+  };
   assert.deepEqual(
-    (await answer(() => ops.readSession("s1", { ...options, tail: 30, before: "e1", historyRevision: "revision" }), continuation)).value,
+    (
+      await answer(
+        () =>
+          ops.readSession("s1", {
+            ...options,
+            tail: 30,
+            before: "e1",
+            historyRevision: "revision",
+          }),
+        continuation,
+      )
+    ).value,
     continuation,
   );
   await assert.rejects(
-    answer(() => ops.readSession("s1", options), { context: {}, historyHasMore: false }),
+    answer(() => ops.readSession("s1", options), {
+      context: {},
+      historyHasMore: false,
+    }),
     badResult,
   );
   const page = { history: { messages: [] }, leafId: "e1", tipId: "e1" };
@@ -1047,7 +1064,7 @@ test("on hello a listed child is adopted by its own identity, in its spawn cwd: 
     ],
   });
   t.after(async () => {
-    const disposing = getRpcSession(ADOPTED)?.destroyAndWait();
+    const disposing = getRpcSession(ADOPTED, link.id)?.destroyAndWait();
     await link.post({ type: "exit", ch: "live", code: 0, signal: null });
     await disposing;
     hub.closeHostLink(link.id);
@@ -1059,8 +1076,8 @@ test("on hello a listed child is adopted by its own identity, in its spawn cwd: 
     seen.push(message);
     return omp(message);
   });
-  await until(() => getRpcSession(ADOPTED), "the adopted session");
-  const session = getRpcSession(ADOPTED);
+  await until(() => getRpcSession(ADOPTED, link.id), "the adopted session");
+  const session = getRpcSession(ADOPTED, link.id);
   assert.ok(session);
   assert.equal(session.adopted, true);
   assert.equal(session.host, hub.getHost(link.id));
@@ -1087,7 +1104,7 @@ test("a start while the adoption re-syncs joins it: no kill, no second child", a
   });
   t.after(async () => {
     // The child below exits on its kill.
-    await getRpcSession(sessionId)?.destroyAndWait();
+    await getRpcSession(sessionId, link.id)?.destroyAndWait();
     hub.closeHostLink(link.id);
   });
   const release = Promise.withResolvers<void>();
@@ -1149,7 +1166,7 @@ test("a start while the adoption re-syncs joins it: no kill, no second child", a
   release.resolve();
   const { session } = await starting;
   assert.equal(session.adopted, true);
-  assert.equal(getRpcSession(sessionId), session);
+  assert.equal(getRpcSession(sessionId, link.id), session);
   assert.deepEqual(starts, []);
   assert.deepEqual(kills, []);
 });
@@ -1162,11 +1179,11 @@ test("a start of a live adopted session does not wait on its listed child: no 50
   });
   t.after(async () => {
     // Offline: returns at once; closing the link then exits the channel.
-    await getRpcSession(sessionId)?.destroyAndWait();
+    await getRpcSession(sessionId, link.id)?.destroyAndWait();
     hub.closeHostLink(link.id);
   });
   link.serve({ open: joinListed }, ompChild(link, sessionId));
-  await until(() => getRpcSession(sessionId), "the adoption");
+  await until(() => getRpcSession(sessionId, link.id), "the adoption");
   // The host goes quiet: offline, with its child still running there.
   hub.linkTimings.offlineMs = 30;
   await link.post();
@@ -1186,7 +1203,7 @@ test("a start of a live adopted session does not wait on its listed child: no 50
     undefined,
     host,
   );
-  assert.equal(session, getRpcSession(sessionId));
+  assert.equal(session, getRpcSession(sessionId, link.id));
   assert.equal(session.isAlive(), true);
 });
 
@@ -1235,7 +1252,9 @@ test("freezeHostLinks closes every link socket with 1001, answers upgrades 503 a
   );
   assert.ok(refused);
   assert.equal(refused.status, 503);
-  assert.deepEqual(await refused.json(), { error: "key lime is shutting down" });
+  assert.deepEqual(await refused.json(), {
+    error: "key lime is shutting down",
+  });
 });
 
 for (const [op, call, value] of [
@@ -1615,163 +1634,6 @@ test("RemoteHost opens a channel over the link and its transport holds output se
   await link.down.cancel();
 });
 
-const capacitySample = {
-  effectiveCpus: 4,
-  load1: 0.5,
-  busyFraction: 0.1,
-  stealFraction: 0.05,
-  availableMemoryBytes: 8 * 1024 ** 3,
-  activeSessions: 1,
-};
-
-test("capacity accessors do not create links for unknown or never-linked hosts", () => {
-  const unknown = "unknown-capacity-host";
-  const { host } = createHost("Not linked");
-  for (const id of [unknown, host.id]) {
-    assert.equal(hub.getHostCapacity(id), null);
-    assert.equal(hub.getHostLinkProtocol(id), null);
-    assert.equal(globalThis.__ompHostHub?.links.has(id), false);
-  }
-});
-
-test("current capacity is volatile, monotonic, and independent of the sequence window", async (t) => {
-  const link = await linkedHost("Capacity");
-  t.after(() => hub.closeHostLink(link.id));
-  let hostChanges = 0;
-  const unsubscribe = hub.onHostsChange(() => hostChanges++);
-  t.after(unsubscribe);
-  assert.equal(hub.getHostLinkProtocol(link.id), LINK_PROTOCOL_VERSION);
-  assert.equal(hub.getHostCapacity(link.id), null);
-  linkPost(link, [
-    { type: "stdout", seq: 500, ch: "absent", line: "old output" },
-  ]);
-  const before = performance.now();
-  assert.deepEqual(
-    linkPost(link, [{ type: "capacity", sample: capacitySample }]),
-    [500],
-  );
-  const first = hub.getHostCapacity(link.id);
-  assert.ok(first);
-  assert.deepEqual(first.sample, capacitySample);
-  assert.ok(
-    first.receivedAt >= before && first.receivedAt <= performance.now(),
-  );
-
-  await sleep(10);
-  t.mock.method(Date, "now", () => 1);
-  linkPost(link, [
-    { type: "pong" },
-    { type: "stats", seq: 501, samples: [upSample] },
-    { type: "stdout", seq: 500, ch: "absent", line: "replayed output" },
-  ]);
-  assert.deepEqual(
-    hub.getHostCapacity(link.id),
-    first,
-    "liveness, stats and replay cannot renew a sample",
-  );
-  const nextSample = {
-    ...capacitySample,
-    availableMemoryBytes: 6 * 1024 ** 3,
-    activeSessions: 2,
-  };
-  const nextBefore = performance.now();
-  assert.deepEqual(
-    linkPost(link, [{ type: "capacity", sample: nextSample }]),
-    [501],
-  );
-  const next = hub.getHostCapacity(link.id);
-  assert.ok(next);
-  assert.deepEqual(next.sample, nextSample);
-  assert.ok(
-    next.receivedAt >= nextBefore && next.receivedAt > first.receivedAt,
-    "receipt uses the server's monotonic clock",
-  );
-  // Capacity must not consume a sequence number needed by the next reliable message.
-  assert.deepEqual(
-    linkPost(link, [
-      { type: "stdout", seq: 502, ch: "absent", line: "next output" },
-    ]),
-    [502],
-  );
-  assert.equal(
-    hostChanges,
-    0,
-    "capacity updates are internal scheduling facts, not host-change broadcasts",
-  );
-  hub.closeHostLink(link.id);
-  assert.ok(
-    hostChanges > 0,
-    "ordinary link/status changes still reach subscribers",
-  );
-});
-
-test("replacement and disconnect clear capacity; a late obsolete socket cannot restore it", async (t) => {
-  const old = await linkedHost("Capacity replacement");
-  t.after(() => hub.closeHostLink(old.id));
-  const child = await spawnOverLink(old, [], {}, CHILD_SESSION);
-  child.post([
-    { type: "res", seq: 1, id: child.req.id, ok: true, result: child.result },
-  ]);
-  const original = (await child.spawning).transport;
-  linkPost(old, [{ type: "capacity", sample: capacitySample }]);
-  assert.notEqual(hub.getHostCapacity(old.id), null);
-  const current = {
-    ...old,
-    ...(await openLink(old.token, {
-      ack: child.req.seq,
-      channels: [
-        {
-          ch: child.ch,
-          sessionId: null,
-          cwd: "/w",
-          pending: [],
-        },
-      ],
-    })),
-  };
-  assert.equal(
-    globalThis.__ompHostHub?.links.get(old.id)?.channels.get(child.ch),
-    original,
-    "capacity invalidation does not change child ownership",
-  );
-  assert.equal(
-    hub.getHostCapacity(old.id),
-    null,
-    "a new socket must provide its own sample",
-  );
-  linkPost(old, [{ type: "capacity", sample: capacitySample }]);
-  assert.equal(hub.getHostCapacity(old.id), null);
-  const sample = { ...capacitySample, load1: 2 };
-  linkPost(current, [{ type: "capacity", sample }]);
-  assert.deepEqual(hub.getHostCapacity(old.id)?.sample, sample);
-  // The old close callback is also unable to clear the current socket's report.
-  hub.hostLinkSocket.close(old.down.socket);
-  assert.deepEqual(hub.getHostCapacity(old.id)?.sample, sample);
-  await current.down.cancel();
-  assert.equal(hub.getHostCapacity(old.id), null);
-  linkPost(current, [{ type: "capacity", sample }]);
-  assert.equal(
-    hub.getHostCapacity(old.id),
-    null,
-    "a closed socket cannot revive capacity",
-  );
-});
-
-test("freezing links clears capacity and ignores reports already in flight", async (t) => {
-  const link = await linkedHost("Frozen capacity");
-  t.after(() => {
-    assert.ok(globalThis.__ompHostHub);
-    globalThis.__ompHostHub.frozen = false;
-    hub.closeHostLink(link.id);
-  });
-  linkPost(link, [{ type: "capacity", sample: capacitySample }]);
-  assert.notEqual(hub.getHostCapacity(link.id), null);
-  hub.freezeHostLinks();
-  assert.equal(hub.getHostCapacity(link.id), null);
-  linkPost(link, [{ type: "capacity", sample: capacitySample }]);
-  assert.equal(hub.getHostCapacity(link.id), null);
-});
-
 test("invalid creation identities are rejected before a channel or request is allocated", async (t) => {
   hub.linkTimings.opTimeoutMs = 30;
   const link = await linkedHost("Invalid creation");
@@ -1874,17 +1736,32 @@ test("buffered terminal input keeps the host link and pauses until drain", async
   const link = await linkedHost("Terminal backpressure");
   const { socket } = link.down;
   const send = socket.send.bind(socket);
-  socket.send = (data) => { send(data); return -1; };
-  assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "hello"), true);
-  assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "input"), false);
-  assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", '{"type":"detach"}'), true);
+  socket.send = (data) => {
+    send(data);
+    return -1;
+  };
+  assert.equal(
+    hub.sendPtyFrame(link.id, "attachment", "session", "hello"),
+    true,
+  );
+  assert.equal(
+    hub.sendPtyFrame(link.id, "attachment", "session", "input"),
+    false,
+  );
+  assert.equal(
+    hub.sendPtyFrame(link.id, "attachment", "session", '{"type":"detach"}'),
+    true,
+  );
   const beforeDrain = socket.frames.length;
   socket.send = send;
   hub.hostLinkSocket.drain(socket);
   const detached = JSON.parse(String(socket.frames[beforeDrain]));
   assert.equal(detached.type, "pty_attach");
   assert.equal(JSON.parse(detached.payload).type, "detach");
-  assert.equal(hub.sendPtyFrame(link.id, "attachment", "session", "resize"), true);
+  assert.equal(
+    hub.sendPtyFrame(link.id, "attachment", "session", "resize"),
+    true,
+  );
   await link.down.cancel();
 });
 
@@ -3007,7 +2884,7 @@ test("an op that fails while its req still waits to go out is never sent", async
     (error) => error instanceof HostOpError && error.status === 504,
   );
   const daemon = reader(link.down.socket);
-  const messages = [];
+  const messages: DownMessage[] = [];
   for (
     let rounds = 0;
     !messages.some((m) => m.type === "part" && m.end);

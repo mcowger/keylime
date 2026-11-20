@@ -807,7 +807,7 @@ function onCommand(
   message: Record<string, unknown>,
   lineBytes: number,
 ): void {
-  const { rid, session } = message;
+  const { rid, session, hostId = "local" } = message;
   if (typeof rid !== "string" || !rid || rid.length > MAX_RID_LENGTH)
     return ws.close(CLOSE.invalidData, "Invalid rid");
   const recvAt = Date.now();
@@ -816,7 +816,7 @@ function onCommand(
       ? message.command.type
       : "";
   // One key per session, as the worker sends them: its commands and replies keep their order.
-  const key = `cmd:${typeof session === "string" ? session : ""}`;
+  const key = `cmd:${JSON.stringify([hostId, session])}`;
   const reply = ({ status, body }: Reply, deduped: boolean) => {
     queue(
       link,
@@ -828,7 +828,10 @@ function onCommand(
   if (
     typeof session !== "string" ||
     !session ||
-    session.length > MAX_SESSION_ID_LENGTH
+    session.length > MAX_SESSION_ID_LENGTH ||
+    typeof hostId !== "string" ||
+    !hostId ||
+    hostId.length > MAX_SESSION_ID_LENGTH
   )
     return reply({ status: 400, body: INVALID_REQUEST }, false);
   // The route's cap on the request body, on the command: the line's cap leaves room for the envelope, and only a joined
@@ -858,12 +861,14 @@ function onCommand(
       message.command,
       message.advisor === true,
       link.owner,
+      undefined,
+      { hostId },
     );
     return { status: response.status, body: await response.json() };
   };
   const started = isIdempotentCommand(type)
     ? { result: run(), deduped: false }
-    : runOnce(JSON.stringify([session, rid]), run);
+    : runOnce(JSON.stringify([hostId, session, rid]), run);
   // Every remembered command is still inside its window: forgetting one would let its resend run it twice.
   if (!started)
     return reply(

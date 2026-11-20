@@ -16,7 +16,6 @@ import {
   PluginScopeSchema as PluginScope,
   PluginsResponseSchema as PluginsResponse,
   ProviderUsageSnapshotSchema as ProviderUsageSnapshot,
-  ModelsDataSchema as ModelsData,
   ModelDefinitionSchema as ModelDefinition,
   ProviderConfigSchema as ProviderConfig,
   ModelsFileConfigSchema as ModelsFileConfig,
@@ -25,7 +24,10 @@ import {
   AgentInfoSchema as AgentInfo,
   AgentDiagnosticSchema as AgentDiagnostic,
   NativeSettingsSchema as NativeSettings,
-  WebServerSettingsSchema as webSettings,
+  BrowserSettingsSchema as BrowserSettings,
+  HostSettingsSchema as HostSettings,
+  HostSettingsPatchSchema as HostSettingsPatch,
+  HostModelsSchema as HostModels,
   McpLiveServerSchema as liveServer,
 } from "./configuration-models";
 
@@ -187,23 +189,25 @@ const mcpResponse = Type.Object({
       }),
     }),
   ),
-  user: opt(Type.Object({
-    path: S,
-    disabledServers: strings,
-    error: opt(S),
-    servers: Type.Array(
-      Type.Object({
-        name: S,
-        status: Type.Union([
-          Type.Literal("disabled"),
-          Type.Literal("configured"),
-        ]),
-        type: S,
-        enabled: B,
-        valid: B,
-      }),
-    ),
-  })),
+  user: opt(
+    Type.Object({
+      path: S,
+      disabledServers: strings,
+      error: opt(S),
+      servers: Type.Array(
+        Type.Object({
+          name: S,
+          status: Type.Union([
+            Type.Literal("disabled"),
+            Type.Literal("configured"),
+          ]),
+          type: S,
+          enabled: B,
+          valid: B,
+        }),
+      ),
+    }),
+  ),
   inventory: Type.Array(liveServer),
   liveServers: opt(Type.Array(liveServer)),
   liveError: opt(S),
@@ -450,20 +454,35 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
       },
     },
   ),
-  op(
-    "/api/models",
-    "get",
-    "getModels",
-    "List available models",
-    Type.Intersect([ModelsData, Type.Object({ anthropicSlowMode: B })]),
-  ),
+  op("/api/models", "get", "getModels", "List available models", HostModels, {
+    parameters: [
+      queryParameter("hostId", S, false, "Selected daemon; defaults to local."),
+    ],
+    responses: {
+      404: error("Unknown daemon."),
+      503: error("Daemon unavailable."),
+    },
+  }),
   op(
     "/api/models",
     "post",
     "refreshModels",
     "Refresh available models",
-    Type.Intersect([ModelsData, Type.Object({ anthropicSlowMode: B })]),
-    { responses: { 503: error("Model discovery or refresh failed.") } },
+    HostModels,
+    {
+      parameters: [
+        queryParameter(
+          "hostId",
+          S,
+          false,
+          "Selected daemon; defaults to local.",
+        ),
+      ],
+      responses: {
+        404: error("Unknown daemon."),
+        503: error("Daemon unavailable or model refresh failed."),
+      },
+    },
   ),
   op(
     "/api/models-config",
@@ -854,45 +873,56 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
     "/api/web-settings",
     "get",
     "getWebSettings",
-    "Read web server settings",
-    webSettings,
+    "Read daemon policy or browser settings",
+    Type.Union([HostSettings, BrowserSettings]),
+    {
+      parameters: [
+        queryParameter(
+          "hostId",
+          S,
+          false,
+          "Select the daemon; omit for local. Not valid with browser scope.",
+        ),
+        queryParameter(
+          "scope",
+          Type.Literal("browser"),
+          false,
+          "Select web-server browser settings instead of daemon policy.",
+        ),
+      ],
+      responses: {
+        400: error("Invalid scope."),
+        404: error("Unknown daemon."),
+        503: error("Daemon unavailable."),
+      },
+    },
   ),
   op(
     "/api/web-settings",
     "put",
     "putWebSettings",
-    "Update web server settings",
-    webSettings,
+    "Update daemon policy or browser settings",
+    Type.Union([HostSettings, BrowserSettings]),
     {
-      requestBody: body(
-        Type.Partial(
-          Type.Object({
-            autoResumeSessions: B,
-            agentToolsEnabled: B,
-            browserTransport: Type.Union([
-              Type.Literal("sse"),
-              Type.Literal("ws"),
-            ]),
-            uploadRetentionDays: Type.Union([N, Type.Null()]),
-            agentEnv: Type.Union([S, Type.Record(S, S)]),
-          }),
+      parameters: [
+        queryParameter(
+          "hostId",
+          S,
+          false,
+          "Select the daemon; omit for local. Not valid with browser scope.",
         ),
-      ),
-      description:
-        "Agent environment variable names are validated against the reserved-name policy.",
+        queryParameter(
+          "scope",
+          Type.Literal("browser"),
+          false,
+          "Select web-server browser settings instead of daemon policy.",
+        ),
+      ],
+      requestBody: body(Type.Union([HostSettingsPatch, BrowserSettings])),
       responses: {
-        400: jsonResponse(
-          Type.Object({
-            error: S,
-            code: Type.Union([
-              Type.Literal("invalid_json"),
-              Type.Literal("invalid_settings"),
-              Type.Literal("invalid_agent_env"),
-            ]),
-            errors: opt(strings),
-          }),
-          "Invalid JSON, settings or environment variables.",
-        ),
+        400: error("Invalid scope or settings patch."),
+        404: error("Unknown daemon."),
+        503: error("Daemon unavailable."),
       },
     },
   ),

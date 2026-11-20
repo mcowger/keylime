@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { sessionUrl } from "@/lib/session-identity";
 import {
   MAX_SEARCH_MATCHES,
   SEARCH_MATCH_PAGE_SIZE,
@@ -11,6 +12,7 @@ import {
 /** The hit the chat should scroll to and mark as current; a new object per click. */
 export interface SearchMatchTarget {
   sessionId: string;
+  hostId?: string;
   entryId: string;
   ordinal: number;
 }
@@ -34,11 +36,13 @@ const rowStyle = (depth: number): React.CSSProperties => ({
  */
 export function SessionSearchMatches({
   sessionId,
+  hostId,
   query,
   depth,
   onOpen,
 }: {
   sessionId: string;
+  hostId?: string;
   query: string;
   depth: number;
   onOpen: (target: SearchMatchTarget) => void;
@@ -59,7 +63,10 @@ export function SessionSearchMatches({
       setFailed(false);
       try {
         const res = await fetch(
-          `/api/sessions/${encodeURIComponent(sessionId)}/matches?q=${encodeURIComponent(query)}&limit=${limit}`,
+          sessionUrl(
+            `/api/sessions/${encodeURIComponent(sessionId)}/matches?q=${encodeURIComponent(query)}&limit=${limit}`,
+            hostId,
+          ),
           { signal: controller.signal },
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -67,6 +74,7 @@ export function SessionSearchMatches({
           matches: SessionSearchMatch[];
           total: number;
         };
+        if (controller.signal.aborted) return;
         setMatches(page.matches);
         setTotal(page.total);
       } catch {
@@ -75,7 +83,7 @@ export function SessionSearchMatches({
       }
       setLoading(false);
     },
-    [sessionId, query],
+    [sessionId, hostId, query],
   );
 
   useEffect(() => {
@@ -116,6 +124,7 @@ export function SessionSearchMatches({
             onClick={() =>
               onOpen({
                 sessionId,
+                hostId,
                 entryId: match.entryId,
                 ordinal: match.ordinal,
               })

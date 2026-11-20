@@ -140,7 +140,7 @@ function hasMessage(frames: EventFrame[], role: string, text: string) {
 }
 
 test(
-  "two real web servers share one host process and one live conversation",
+  "two browser streams share one live conversation through one controller",
   { timeout: 90_000 },
   async (t) => {
     // Keep the daemon's runner and .attach socket paths short on Darwin.
@@ -224,49 +224,33 @@ test(
       for (const child of children.reverse()) await stop(child);
       rmSync(scratch, { recursive: true, force: true });
     });
-    const server = async () => {
-      const state = launch([join(fixture, "multi-server-app.ts")], {
-        KEYLIME_PACKAGE_DIR: site,
-      });
-      const port = await until(
-        () => /MULTI_SERVER_PORT=(\d+)/.exec(state.output)?.[1],
-        "server ready",
-        () => logs,
-      );
-      return { child: state.child, base: `http://127.0.0.1:${port}` };
-    };
-    const a = await server();
-    const b = await server();
-    const daemon = launch([join(root, "bin", "keylime-host.ts")], {
+    const server = launch([join(fixture, "multi-server-app.ts")], {
+      KEYLIME_PACKAGE_DIR: site,
+    });
+    const port = await until(
+      () => /MULTI_SERVER_PORT=(\d+)/.exec(server.output)?.[1],
+      "server ready",
+      () => logs,
+    );
+    const base = `http://127.0.0.1:${port}`;
+    launch([join(root, "bin", "keylime-host.ts")], {
       KEYLIME_HOST_SOCKET: join(scratch, "host.sock"),
     });
     await until(
-      async () => {
-        const [ah, bh] = await Promise.all([
-          json(a.base, "/api/hosts"),
-          json(b.base, "/api/hosts"),
-        ]);
-        return (
-          ah.hosts.some(
-            (h: { id: string; status: string }) =>
-              h.id === "local" && h.status === "online",
-          ) &&
-          bh.hosts.some(
-            (h: { id: string; status: string }) =>
-              h.id === "local" && h.status === "online",
-          )
-        );
-      },
-      "both servers linked to the same daemon",
+      async () =>
+        (await json(base, "/api/hosts")).hosts.some(
+          (h: { id: string; status: string }) =>
+            h.id === "local" && h.status === "online",
+        ),
+      "local daemon linked",
       () => logs,
     );
-    const daemonPid = daemon.child.pid;
-    await json(a.base, `/api/agent/${ID}`, { type: "get_state" });
-    await json(b.base, `/api/agent/${ID}`, { type: "get_state" });
-    const sa = await sessionStream(a.base);
-    const sb = await sessionStream(b.base);
+    const command = (body: object) => json(base, `/api/agent/${ID}`, body);
+    await command({ type: "get_state" });
+    const sa = await sessionStream(base);
+    const sb = await sessionStream(base);
     streams.push(sa, sb);
-    await json(a.base, `/api/agent/${ID}`, {
+    await command({
       type: "prompt",
       message: "from A",
     });
@@ -284,7 +268,7 @@ test(
       "same assistant result on both",
       () => logs,
     );
-    await json(b.base, `/api/agent/${ID}`, {
+    await command({
       type: "prompt",
       message: "from B",
     });
@@ -296,7 +280,11 @@ test(
       () => logs,
     );
     await until(
-      () => sb.frames.filter((f) => f.type === "agent_end").length >= 2,
+      () =>
+        [sa, sb].every(
+          ({ frames }) =>
+            frames.filter((f) => f.type === "agent_end").length >= 2,
+        ),
       "B turn settled",
       () => logs,
     );
@@ -316,7 +304,6 @@ test(
       1,
       `session must spawn once: ${JSON.stringify(pids)}`,
     );
-    assert.equal(daemon.child.pid, daemonPid);
     assert.equal(
       sa.frames.filter((f) => f.type === "tool_execution_end").length,
       2,
@@ -335,7 +322,7 @@ test(
         "both peers receive the 1.1 MB native tool result whole",
       );
     }
-    await json(a.base, `/api/agent/${ID}`, { type: "prompt", message: "ask" });
+    await command({ type: "prompt", message: "ask" });
     await until(
       () =>
         sa.frames.some(
@@ -351,7 +338,7 @@ test(
       (f) => f.type === "ui_request" && f.method === "askDialog",
     );
     assert.ok(question);
-    await json(b.base, `/api/agent/${ID}`, {
+    await command({
       type: "ui_response",
       id: question.id,
       value: {
@@ -387,7 +374,7 @@ test(
       ).length,
       1,
     );
-    await json(b.base, `/api/agent/${ID}`, { type: "prompt", message: "slow" });
+    await command({ type: "prompt", message: "slow" });
     await until(
       () =>
         sb.frames.some(
@@ -396,32 +383,15 @@ test(
       "stream starts before reconnect",
       () => logs,
     );
-    await stop(a.child);
-    await sleep(1200);
-    const a2 = await server();
-    await until(
-      async () =>
-        (await json(a2.base, "/api/hosts")).hosts.some(
-          (h: { id: string; status: string }) =>
-            h.id === "local" && h.status === "online",
-        ),
-      "restarted server linked",
-      () => logs,
-    );
-    await json(a2.base, `/api/agent/${ID}`, { type: "get_state" });
-    const sa2 = await sessionStream(a2.base);
+    await sa.close();
+    const sa2 = await sessionStream(base);
     streams.push(sa2);
-    await until(
-      () =>
-        sa2.frames.some(
-          (f) =>
-            f.type === "message_update" &&
-            f.message?.content &&
-            Array.isArray(f.message.content) &&
-            f.message.content.some((c) => c.text === "one"),
-        ),
-      "rejoined server receives current whole message",
-      () => `${sa2.log()}\n${logs}`,
+    const context = await json(base, `/api/sessions/${ID}/context?sync=1`);
+    const partial = context.live?.streamingMessage as EventFrame["message"];
+    assert.ok(
+      Array.isArray(partial?.content) &&
+        partial.content.some((block) => block.text === "one"),
+      "rejoined browser receives the current partial message in its context",
     );
     writeFileSync(join(scratch, "release-stream"), "");
     await until(
@@ -429,12 +399,12 @@ test(
       "rejoined stream finishes without missing text",
       () => logs,
     );
-    await json(b.base, `/api/agent/${ID}`, {
+    await command({
       type: "prompt",
-      message: "B after A restarts",
+      message: "B after A reconnects",
     });
     await until(
-      () => hasMessage(sb.frames, "user", "B after A restarts"),
+      () => hasMessage(sb.frames, "user", "B after A reconnects"),
       "B still drives the same session",
       () => logs,
     );
@@ -447,14 +417,14 @@ test(
 
     await until(
       async () =>
-        !(await json(b.base, `/api/sessions/${ID}/state`)).state?.isStreaming,
+        !(await json(base, `/api/sessions/${ID}/state`)).state?.isStreaming,
       "B turn finished before outbox send",
       () => logs,
     );
     const {
       data: { scope },
-    } = await json(b.base, `/api/agent/${ID}`, { type: "outbox_scope" });
-    await json(b.base, `/api/agent/${ID}`, {
+    } = await command({ type: "outbox_scope" });
+    await command({
       type: "outbox_add",
       id: "peer-delivered-message",
       scope,
@@ -477,7 +447,7 @@ test(
               frame.nativeSettledIds?.includes("peer-delivered-message"),
           ),
         ),
-      "both servers retire the delivered outbox row without resubscribing",
+      "both browser streams retire the delivered outbox row without resubscribing",
       () => `${sa2.log()}\n${sb.log()}\n${logs}`,
     );
     for (const { frames } of [sa2, sb]) {
@@ -488,7 +458,7 @@ test(
       );
       assert.ok(
         echo,
-        "both real server links preserve the exact native outbox echo ID",
+        "both browser streams preserve the exact native outbox echo ID",
       );
       assert.ok(echo.message);
       assert.equal(

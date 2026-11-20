@@ -10,11 +10,10 @@ type Write = { op: string; tools?: { name: string }[] };
 function harness({ defer = false } = {}) {
   const delivered: Delivered[] = [],
     writes: Write[] = [],
-    links = ["a", "b"],
-    up = new Set(links),
+    up = new Set(["a"]),
     replies: (() => void)[] = [];
   const shared = new SharedRequests({
-    members: () => links,
+    member: () => "a",
     isUp: (id) => up.has(id),
     deliver: (id, lines) =>
       delivered.push({ id, frames: lines.map((line) => JSON.parse(line)) }),
@@ -39,12 +38,13 @@ test("first dialog answer wins and native cancellation prevents a late answer", 
   const h = harness();
   const q = { t: "ui_request", id: 1, method: "formDialog", args: [] };
   h.shared.note(q, JSON.stringify(q));
-  assert.equal(h.shared.answer("b", { t: "ui_response", id: 1 }), true);
+  assert.equal(h.shared.answer("a", { t: "ui_response", id: 1 }), true);
   assert.equal(h.shared.answer("a", { t: "ui_response", id: 1 }), false);
-  assert.deepEqual(h.delivered.at(-1), {
-    id: "a",
-    frames: [{ t: "ui_end", id: 1 }],
-  });
+  assert.deepEqual(
+    h.shared.pending("a"),
+    [],
+    "settled dialogs are not replayed",
+  );
   const cancelled = { ...q, id: 2 };
   h.shared.note(cancelled, JSON.stringify(cancelled));
   h.shared.note({ t: "ui_end", id: 2 }, "");
@@ -60,36 +60,18 @@ test("first dialog answer wins and native cancellation prevents a late answer", 
   );
 });
 
-test("callback executes once on last eligible prompter and remains pinned after disconnect", () => {
+test("callbacks wait for the controller and cannot be answered by a stale link", () => {
   const h = harness();
-  for (const id of ["a", "b"])
-    h.shared.setTools(
-      id,
-      [{ name: "open_url" }],
-      [{ scheme: "browser", writable: false }],
-    );
-  h.shared.prompt("b");
+  h.shared.setTools("a", [{ name: "open_url" }], []);
+  h.up.delete("a");
   const call = { t: "host_tool_call", id: "t", toolName: "open_url" };
   h.shared.note(call, JSON.stringify(call));
-  assert.equal(h.delivered.at(-1)!.id, "b");
-  h.up.delete("b");
+  assert.deepEqual(h.delivered, []);
+  h.up.add("a");
   h.shared.linkChanged();
-  h.shared.remove("b");
-  assert.equal(h.delivered.length, 1);
-  assert.equal(h.shared.answer("a", { t: "host_tool_result", id: "t" }), false);
-  assert.equal(h.shared.answer("b", { t: "host_tool_result", id: "t" }), true);
-  assert.deepEqual(
-    h.writes
-      .filter((frame) => frame.op === "set_host_tools")
-      .at(-1)!
-      .tools!.map((t) => t.name),
-    ["open_url"],
-  );
-  h.shared.remove("a");
-  assert.deepEqual(
-    h.writes.filter((frame) => frame.op === "set_host_tools").at(-1)!.tools,
-    [],
-  );
+  assert.deepEqual(h.delivered, [{ id: "a", frames: [call] }]);
+  assert.equal(h.shared.answer("b", { t: "host_tool_result", id: "t" }), false);
+  assert.equal(h.shared.answer("a", { t: "host_tool_result", id: "t" }), true);
 });
 
 test("unregistered callback waits, malformed registrations do not replace the union", () => {
@@ -122,47 +104,15 @@ test("a repeated completed native callback never executes a second time", () => 
   assert.equal(h.delivered.length, 1);
 });
 
-test("writes reach only a writable registration and calls only a server advertising omp's definition", () => {
+test("a read-only URI registration cannot answer a write request", () => {
   const h = harness();
-  h.shared.setTools(
-    "a",
-    [{ name: "open_url", description: "advertised" }],
-    [{ scheme: "browser", writable: false }],
-  );
-  h.shared.setTools(
-    "b",
-    [{ name: "open_url", description: "other version" }],
-    [{ scheme: "browser", writable: true }],
-  );
-  assert.deepEqual(h.writes.at(-1), {
-    op: "set_host_uri_schemes",
-    schemes: [{ scheme: "browser", writable: true }],
-  });
-  h.shared.prompt("a");
-  const write = {
-      t: "host_uri_request",
-      id: "w",
-      url: "browser:x",
-      operation: "write",
-    },
-    read = { ...write, id: "r", operation: "read" };
+  h.shared.setTools("a", [], [{ scheme: "browser", writable: false }]);
+  const request = { t: "host_uri_request", url: "browser:x" };
+  const write = { ...request, id: "w", operation: "write" };
+  const read = { ...request, id: "r", operation: "read" };
   h.shared.note(write, JSON.stringify(write));
   h.shared.note(read, JSON.stringify(read));
-  assert.deepEqual(
-    h.delivered.map((item) => [item.id, item.frames[0].id]),
-    [
-      ["b", "w"],
-      ["a", "r"],
-    ],
-  );
-  h.shared.prompt("b");
-  const call = { t: "host_tool_call", id: "t", toolName: "open_url" };
-  h.shared.note(call, JSON.stringify(call));
-  assert.deepEqual(
-    h.delivered.at(-1),
-    { id: "a", frames: [call] },
-    "the last prompter's different schema does not qualify it",
-  );
+  assert.deepEqual(h.delivered, [{ id: "a", frames: [read] }]);
 });
 
 test("a call that arrives while its registration is briefly missing dispatches once it is restored", () => {
@@ -185,7 +135,7 @@ test("a pending call never dispatches to a different definition registered under
   h.shared.setTools("a", [], []);
   const call = { t: "host_tool_call", id: "late", toolName: "open_url" };
   h.shared.note(call, JSON.stringify(call));
-  h.shared.setTools("b", [other], []);
+  h.shared.setTools("a", [other], []);
   assert.deepEqual(
     h.delivered,
     [],
@@ -202,7 +152,7 @@ test("a call omp made before it read a replacement definition keeps the old one,
   h.shared.setTools("a", [original], []);
   h.reply();
   h.shared.setTools("a", [], []);
-  h.shared.setTools("b", [other], []); // omp has not answered either union yet
+  h.shared.setTools("a", [other], []); // omp has not confirmed the replacement yet
   const early = { t: "host_tool_call", id: "early", toolName: "open_url" };
   h.shared.note(early, JSON.stringify(early));
   assert.deepEqual(
@@ -215,7 +165,7 @@ test("a call omp made before it read a replacement definition keeps the old one,
   h.shared.note(late, JSON.stringify(late));
   assert.deepEqual(
     h.delivered,
-    [{ id: "b", frames: [late] }],
+    [{ id: "a", frames: [late] }],
     "after omp's reply, calls use the new definition",
   );
   h.shared.setTools("a", [original], []);

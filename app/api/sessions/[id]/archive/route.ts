@@ -13,18 +13,19 @@ import { clearExitedRpcSession, getRpcSession } from "@/lib/rpc-manager";
 /**
  * @apiContract archiveSession
  * @apiUsage Move a session and its sibling artifacts into its host's native archive.
- * @apiInputs id selects the active session; no body is used.
+ * @apiInputs id selects the active session; no body is used. Optional hostId selects the host; omission selects local.
  * @apiInvariants Archive child sessions first: a parent with active children is rejected. The host must be online and a live child must flush before the move.
  * @apiEffects Stops the session process as needed, archives its files, clears exited state and invalidates the host inventory.
  * @apiRecovery After an uncertain response inspect both active and archive inventories on the owning host; an unavailable host's omission is not proof of absence.
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
   try {
-    const resolved = await resolveSessionHostOr404(id);
+    const resolved = await resolveSessionHostOr404(id, hostId);
     if ("response" in resolved) return resolved.response;
     const { sessionOps } = resolved.host;
     // Parent-session paths are native branch metadata. Moving only a parent
@@ -48,13 +49,13 @@ export async function POST(
     // Disposing a child behind a down link would wait for the link to return.
     const offline = hostOfflineResponse(resolved.host);
     if (offline) return offline;
-    const live = getRpcSession(id);
+    const live = getRpcSession(id, hostId);
     if (!live?.hostOwnedLifecycle)
       await live?.destroyAndWait?.("archive", true);
     const result = await sessionOps.archiveSession(id);
     if (!result.ok) return opErrorResponse(result);
     invalidateHostSessionList(resolved.host.id);
-    clearExitedRpcSession(id);
+    clearExitedRpcSession(id, hostId);
     return Response.json({
       ok: true,
       archived: true,

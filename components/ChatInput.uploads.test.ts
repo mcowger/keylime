@@ -349,100 +349,10 @@ test("a .zip becomes a file chip, uploads on attach, and its id goes with the pr
   );
 });
 
-test("a pooled file waits for its owner before any upload begins, then persists bytes only on that owner", async (t) => {
-  const worker = await uploadOwner(t);
-  const file = binaryFile("pool-owned.zip");
-  const { promise: owner, resolve: resolveOwner } =
-    Promise.withResolvers<string>();
-  const ref = renderComposer("new:pool:workers:app", [], {
-    resolveUploadHost: () => owner,
-  });
-  await act(async () => {
-    ref.current!.addFiles([file]);
-  });
-  assert.ok(
-    screen.getByText("pool-owned.zip"),
-    "the pending file remains visible",
-  );
-  assert.equal(
-    requests.filter((request) => request.url.startsWith("/api/uploads")).length,
-    0,
-    "not even upload begin may default to the Mac",
-  );
-  await act(async () => {
-    resolveOwner(worker.hostId);
-  });
-  const upload = await opened("pool-owned.zip");
-  await putOf(upload.id);
-  await waitFor(() =>
-    assert.equal(
-      (screen.getByRole("button", { name: SEND }) as HTMLButtonElement)
-        .disabled,
-      false,
-    ),
-  );
-  assert.equal(upload.host, worker.hostId);
-  assert.deepEqual(
-    worker.staged(upload.id),
-    Buffer.from(await file.arrayBuffer()),
-  );
-});
-
-test("failed pool owner resolution leaves a retryable file and never uploads locally", async () => {
-  const { promise: owner, reject: resolveOwner } =
-    Promise.withResolvers<string>();
-  const ref = renderComposer("new:pool:workers:unavailable", [], {
-    resolveUploadHost: () => owner,
-  });
-  await act(async () => {
-    ref.current!.addFiles([binaryFile("unplaced.zip")]);
-  });
-  await act(async () => {
-    resolveOwner(new Error("No eligible pool worker"));
-  });
-  await waitFor(() =>
-    assert.ok(
-      within(chipOf("unplaced.zip")).getByRole("button", { name: RETRY }),
-    ),
-  );
-  assert.equal(
-    requests.filter((request) => request.url.startsWith("/api/uploads")).length,
-    0,
-  );
-  assert.equal(
-    (screen.getByRole("button", { name: SEND }) as HTMLButtonElement).disabled,
-    true,
-  );
-});
-
-test("removing a file while its pool owner resolves cannot start a late upload", async () => {
-  const { promise: owner, resolve: resolveOwner } =
-    Promise.withResolvers<string>();
-  const ref = renderComposer("new:pool:workers:cancelled", [], {
-    resolveUploadHost: () => owner,
-  });
-  await act(async () => {
-    ref.current!.addFiles([binaryFile("cancelled-owner.zip")]);
-  });
-  await act(async () => {
-    within(chipOf("cancelled-owner.zip"))
-      .getByRole("button", { name: REMOVE_FILE })
-      .click();
-  });
-  await act(async () => {
-    resolveOwner("h2");
-  });
-  assert.equal(screen.queryByText("cancelled-owner.zip"), null);
-  assert.equal(
-    requests.filter((request) => request.url.startsWith("/api/uploads")).length,
-    0,
-  );
-});
-
 test("a session with a known owner persists file uploads on that host", async (t) => {
   const worker = await uploadOwner(t);
   const file = binaryFile("known-owner.zip");
-  const ref = renderComposer("known-pool-session", [], {
+  const ref = renderComposer("known-owner-session", [], {
     uploadHostId: worker.hostId,
   });
   await act(async () => {
@@ -490,7 +400,9 @@ test("an image over the inline budget goes As file with a notice, and Send waits
   });
   assert.deepEqual([opened.name, opened.size], ["big.png", image.size]);
   await waitFor(() => {
-    const button = screen.getByRole("button", { name: SEND }) as HTMLButtonElement;
+    const button = screen.getByRole("button", {
+      name: SEND,
+    }) as HTMLButtonElement;
     assert.equal(button.disabled, true);
     assert.match(button.textContent!, UPLOADING);
   });
@@ -660,7 +572,9 @@ test("Retry on a failed chip resumes the same upload, then the chip finishes", a
   });
   assert.equal((await opened("data.zip")).id, id, "resumed under the same id");
   await waitFor(() => {
-    const button = screen.getByRole("button", { name: SEND }) as HTMLButtonElement;
+    const button = screen.getByRole("button", {
+      name: SEND,
+    }) as HTMLButtonElement;
     assert.equal(button.disabled, true);
     assert.match(button.textContent!, UPLOADING);
   });
@@ -804,7 +718,9 @@ test("small non-image attachments upload their original bytes regardless of MIME
   const ref = renderComposer("uploads-text-and-har", sent);
   const files = [
     new File(["small text contents"], "notes.txt", { type: "text/plain" }),
-    new File(['{"log":{"entries":[]}}'], "network.har", { type: "application/json" }),
+    new File(['{"log":{"entries":[]}}'], "network.har", {
+      type: "application/json",
+    }),
     new File(['{"log":{"entries":[]}}'], "empty-mime.har"),
     new File(["plain ascii body"], "report.pdf", { type: "application/pdf" }),
   ];
@@ -814,20 +730,34 @@ test("small non-image attachments upload their original bytes regardless of MIME
   const uploads = await Promise.all(files.map((file) => opened(file.name)));
   for (const [index, upload] of uploads.entries()) {
     const request = await putOf(upload.id);
-    assert.equal(await (request.body as Blob).text(), await files[index].text());
+    assert.equal(
+      await (request.body as Blob).text(),
+      await files[index].text(),
+    );
     assert.equal(upload.size, files[index].size);
   }
   const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
   fireEvent.change(textbox, { target: { value: "inspect these" } });
   await waitFor(() =>
-    assert.equal((screen.getByRole("button", { name: SEND }) as HTMLButtonElement).disabled, false),
+    assert.equal(
+      (screen.getByRole("button", { name: SEND }) as HTMLButtonElement)
+        .disabled,
+      false,
+    ),
   );
   await act(async () => {
     screen.getByRole("button", { name: SEND }).click();
   });
   assert.equal(sent.length, 1);
-  assert.equal(sent[0][0], "inspect these", "file contents are not inserted into the prompt");
-  assert.deepEqual(sent[0][2], uploads.map((upload) => upload.id));
+  assert.equal(
+    sent[0][0],
+    "inspect these",
+    "file contents are not inserted into the prompt",
+  );
+  assert.deepEqual(
+    sent[0][2],
+    uploads.map((upload) => upload.id),
+  );
 });
 
 test("a file over 2 GiB is refused, its sibling attaches", async () => {

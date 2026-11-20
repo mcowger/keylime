@@ -2,6 +2,11 @@ import type { RpcTransport } from "../omp/rpc-transport";
 import type { SessionOps } from "./session-ops";
 import type { WorkspaceOps } from "../workspace-types";
 import type { SpawnRequest as SchemaSpawnRequest } from "../api-contracts/host-control-models";
+import type {
+  HostModels,
+  HostSettings,
+  HostSettingsPatch,
+} from "../api-contracts/configuration-models";
 
 export type HostStatus = "online" | "offline" | "needs-upgrade" | "omp-missing";
 
@@ -34,6 +39,9 @@ export interface Host {
   readonly label: string;
   status(): HostStatus;
   onStatus(listener: (status: HostStatus) => void): () => void;
+  getSettings(): Promise<HostSettings>;
+  setSettings(patch: HostSettingsPatch): Promise<HostSettings>;
+  listModels(refresh?: boolean): Promise<HostModels>;
   /** `env`: extra child environment, over the agentEnv setting; only this machine's host honours it. */
   spawnRpc(
     request: SpawnRequest,

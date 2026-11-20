@@ -223,12 +223,20 @@ export function ShipDialog({
           setMode(value.pr?.state === "open" ? "pr-auto" : "pr");
         if (value.issues.length) return;
         // The session stream observes an existing wrapper; it does not start one.
-        await sendAgentCommand(sessionId, { type: "get_state" });
+        await sendAgentCommand(
+          sessionId,
+          { type: "get_state" },
+          { hostId: host },
+        );
         if (generation.current !== current || abort.signal.aborted) return;
         const requestId = browserUUID();
         let stream;
         try {
-          stream = openEventStream({ kind: "commit-plan-progress", sessionId });
+          stream = openEventStream({
+            kind: "commit-plan-progress",
+            sessionId,
+            hostId: host,
+          });
         } catch {
           setProgress(["Live progress is unavailable."]);
           const result = await sendAgentCommand<{ plan: CommitPlan | null }>(
@@ -237,6 +245,7 @@ export function ShipDialog({
               type: "commit_plan",
               requestId,
             },
+            { hostId: host },
           );
           if (generation.current === current) setPlan(result.plan);
           return;
@@ -290,10 +299,14 @@ export function ShipDialog({
           if (started || settled || abort.signal.aborted) return;
           started = true;
           clearTimeout(timeout);
-          void sendAgentCommand<{ plan: CommitPlan | null }>(sessionId, {
-            type: "commit_plan",
-            requestId,
-          }).then(
+          void sendAgentCommand<{ plan: CommitPlan | null }>(
+            sessionId,
+            {
+              type: "commit_plan",
+              requestId,
+            },
+            { hostId: host },
+          ).then(
             (result) => {
               if (!settled && generation.current === current)
                 setPlan(result.plan);
@@ -347,11 +360,15 @@ export function ShipDialog({
       return;
     const current = generation.current;
     setPrLoading(true);
-    void sendAgentCommand<PrDescription>(sessionId, {
-      type: "generate_pr_description",
-      base: preview.base,
-      plannedMessages: plan?.commits.map((commit) => commit.message) ?? [],
-    })
+    void sendAgentCommand<PrDescription>(
+      sessionId,
+      {
+        type: "generate_pr_description",
+        base: preview.base,
+        plannedMessages: plan?.commits.map((commit) => commit.message) ?? [],
+      },
+      { hostId: host },
+    )
       .then((value) => {
         if (generation.current === current) setPr(value);
       })
@@ -364,7 +381,7 @@ export function ShipDialog({
       .finally(() => {
         if (generation.current === current) setPrLoading(false);
       });
-  }, [open, mode, preview, plan, pr, prLoading, sessionId]);
+  }, [open, mode, preview, plan, pr, prLoading, sessionId, host]);
 
   async function ship() {
     if (
@@ -384,7 +401,11 @@ export function ShipDialog({
     try {
       if (plan) {
         try {
-          await sendAgentCommand(sessionId, { type: "commit_apply", plan });
+          await sendAgentCommand(
+            sessionId,
+            { type: "commit_apply", plan },
+            { hostId: host },
+          );
         } catch (e) {
           if (!signal.aborted) {
             setCommitError(

@@ -251,7 +251,11 @@ export async function showSystemNotification(
     icon: "/icon-192.png",
     badge: "/badge-96.png",
     tag: notification.tag,
-    data: { url: notification.url, sessionId: notification.sessionId },
+    data: {
+      url: notification.url,
+      sessionId: notification.sessionId,
+      hostId: notification.hostId,
+    },
   };
   try {
     const registration =
@@ -267,9 +271,14 @@ export async function showSystemNotification(
     fallback.onclick = () => {
       fallback.close();
       window.focus();
-      window.dispatchEvent(
-        new CustomEvent(OPEN_SESSION_EVENT, { detail: notification.sessionId }),
-      );
+      const { sessionId, hostId } = notification;
+      if (sessionId && hostId) {
+        window.dispatchEvent(
+          new CustomEvent(OPEN_SESSION_EVENT, {
+            detail: { sessionId, hostId },
+          }),
+        );
+      }
     };
     return true;
   } catch {

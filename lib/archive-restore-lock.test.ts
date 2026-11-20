@@ -26,18 +26,18 @@ async function withDir(run: (dir: string) => Promise<void>) {
 test("restore lock releases a rejected callback and restricts store permissions", async () => {
   await withDir(async (dir) => {
     await assert.rejects(
-      withArchiveRestoreLock("session", async () => {
+      withArchiveRestoreLock("host-a", "session", async () => {
         throw new Error("failed restore");
       }),
       /failed restore/,
     );
     assert.equal(
-      await withArchiveRestoreLock("session", async () => "released"),
+      await withArchiveRestoreLock("host-a", "session", async () => "released"),
       "released",
     );
     assert.equal(statSync(join(dir, "keylime")).mode & 0o777, 0o700);
     assert.equal(
-      statSync(join(dir, "keylime", "archive-restore-locks.sqlite")).mode &
+      statSync(join(dir, "keylime", "archive-restore-host-locks.sqlite")).mode &
         0o777,
       0o600,
     );
@@ -50,7 +50,7 @@ test("two Bun processes sharing an agent directory cannot claim the same session
       join(import.meta.dir, "archive-restore-lock.ts"),
     ).href;
     const source = `import { withArchiveRestoreLock } from ${JSON.stringify(moduleUrl)};
-      await withArchiveRestoreLock("session", async () => {
+      await withArchiveRestoreLock("host-a", "session", async () => {
         console.log("claimed");
         for await (const chunk of Bun.stdin.stream()) break;
       });`;
@@ -73,7 +73,7 @@ test("two Bun processes sharing an agent directory cannot claim the same session
       ]);
       assert.equal(ready.value, "claimed");
       await assert.rejects(
-        withArchiveRestoreLock("session", async () =>
+        withArchiveRestoreLock("host-a", "session", async () =>
           assert.fail("must not enter"),
         ),
         (error) =>
@@ -81,10 +81,22 @@ test("two Bun processes sharing an agent directory cannot claim the same session
           error.status === 409 &&
           error.code === "archive_restore_busy",
       );
+      assert.equal(
+        await withArchiveRestoreLock(
+          "host-b",
+          "session",
+          async () => "independent",
+        ),
+        "independent",
+      );
       child.stdin.end("release\n");
       await exited;
       assert.equal(
-        await withArchiveRestoreLock("session", async () => "released"),
+        await withArchiveRestoreLock(
+          "host-a",
+          "session",
+          async () => "released",
+        ),
         "released",
       );
     } finally {
@@ -98,17 +110,21 @@ test("two Bun processes sharing an agent directory cannot claim the same session
 
 test("restore lock reclaims an expired lease whatever its owner, and leaves a fresh one busy", async () => {
   await withDir(async (dir) => {
-    await withArchiveRestoreLock("initialize", async () => {});
+    await withArchiveRestoreLock("host-a", "initialize", async () => {});
     const db = new Database(
-      join(dir, "keylime", "archive-restore-locks.sqlite"),
+      join(dir, "keylime", "archive-restore-host-locks.sqlite"),
     );
     try {
       // A crashed holder whose PID now belongs to a live process: only the lease decides.
       db.prepare(
-        "INSERT INTO restore_claims (session_id, owner, renewed_at) VALUES (?, ?, ?)",
+        "INSERT INTO restore_claims (host_id, session_id, owner, renewed_at) VALUES ('host-a', ?, ?, ?)",
       ).run("stale", "crashed", Date.now() - 31_000);
       assert.equal(
-        await withArchiveRestoreLock("stale", async () => "reclaimed"),
+        await withArchiveRestoreLock(
+          "host-a",
+          "stale",
+          async () => "reclaimed",
+        ),
         "reclaimed",
       );
       assert.equal(
@@ -119,10 +135,14 @@ test("restore lock reclaims an expired lease whatever its owner, and leaves a fr
       );
       // Written by a clock running an hour fast: it must lapse too.
       db.prepare(
-        "INSERT INTO restore_claims (session_id, owner, renewed_at) VALUES (?, ?, ?)",
+        "INSERT INTO restore_claims (host_id, session_id, owner, renewed_at) VALUES ('host-a', ?, ?, ?)",
       ).run("future", "fast-clock", Date.now() + 3_600_000);
       assert.equal(
-        await withArchiveRestoreLock("future", async () => "reclaimed"),
+        await withArchiveRestoreLock(
+          "host-a",
+          "future",
+          async () => "reclaimed",
+        ),
         "reclaimed",
       );
       assert.equal(
@@ -132,10 +152,10 @@ test("restore lock reclaims an expired lease whatever its owner, and leaves a fr
         null,
       );
       db.prepare(
-        "INSERT INTO restore_claims (session_id, owner, renewed_at) VALUES (?, ?, ?)",
+        "INSERT INTO restore_claims (host_id, session_id, owner, renewed_at) VALUES ('host-a', ?, ?, ?)",
       ).run("fresh", "other", Date.now());
       await assert.rejects(
-        withArchiveRestoreLock("fresh", async () =>
+        withArchiveRestoreLock("host-a", "fresh", async () =>
           assert.fail("fresh lease entered"),
         ),
         (error) =>
@@ -161,19 +181,19 @@ test("a holder renews its lease, so a restore running past the lease stays claim
   await withDir(async (dir) => {
     t.mock.timers.enable({ apis: ["setInterval", "Date"], now: Date.now() });
     const { promise: gate, resolve: release } = Promise.withResolvers<string>();
-    const holding = withArchiveRestoreLock("long", () => gate);
+    const holding = withArchiveRestoreLock("host-a", "long", () => gate);
     const db = new Database(
-      join(dir, "keylime", "archive-restore-locks.sqlite"),
+      join(dir, "keylime", "archive-restore-host-locks.sqlite"),
     );
     try {
       // Another session's lease: renewal and release must touch only the holder's own row.
       const foreign = Date.now();
       db.prepare(
-        "INSERT INTO restore_claims (session_id, owner, renewed_at) VALUES (?, ?, ?)",
+        "INSERT INTO restore_claims (host_id, session_id, owner, renewed_at) VALUES ('host-a', ?, ?, ?)",
       ).run("other", "other-owner", foreign);
       for (let i = 0; i < 6; i++) t.mock.timers.tick(10_000);
       await assert.rejects(
-        withArchiveRestoreLock("long", async () =>
+        withArchiveRestoreLock("host-a", "long", async () =>
           assert.fail("renewed lease entered"),
         ),
         (error) =>
@@ -192,7 +212,7 @@ test("a holder renews its lease, so a restore running past the lease stays claim
         { owner: "other-owner", renewed_at: foreign },
       );
       assert.equal(
-        await withArchiveRestoreLock("long", async () => "released"),
+        await withArchiveRestoreLock("host-a", "long", async () => "released"),
         "released",
       );
     } finally {
@@ -204,12 +224,12 @@ test("a holder renews its lease, so a restore running past the lease stays claim
 test("a held claim outlives its request and the lease clock, and ends only by its host's fence", async () => {
   await withDir(async (dir) => {
     let token: string | undefined;
-    await withArchiveRestoreLock("held", async (claim) => {
+    await withArchiveRestoreLock("host-a", "held", async (claim) => {
       token = claim.token;
-      claim.hold("host-a", "daemon-1");
+      claim.hold("daemon-1");
     });
     const db = new Database(
-      join(dir, "keylime", "archive-restore-locks.sqlite"),
+      join(dir, "keylime", "archive-restore-host-locks.sqlite"),
     );
     const held = () =>
       db
@@ -229,8 +249,17 @@ test("a held claim outlives its request and the lease clock, and ends only by it
       db.prepare(
         "UPDATE restore_claims SET renewed_at = ? WHERE session_id = ?",
       ).run(Date.now() - 3_600_000, "held");
+      assert.equal(
+        await withArchiveRestoreLock(
+          "host-b",
+          "held",
+          async () => "independent",
+          async () => assert.fail("must not fence a different host's claim"),
+        ),
+        "independent",
+      );
       await assert.rejects(
-        withArchiveRestoreLock("held", async () =>
+        withArchiveRestoreLock("host-a", "held", async () =>
           assert.fail("a held claim was reclaimed by the clock"),
         ),
         (error) =>
@@ -242,6 +271,7 @@ test("a held claim outlives its request and the lease clock, and ends only by it
       const refusal = new Error("still running");
       await assert.rejects(
         withArchiveRestoreLock(
+          "host-a",
           "held",
           async () => assert.fail("entered unconfirmed"),
           async (asked) => {
@@ -262,6 +292,7 @@ test("a held claim outlives its request and the lease clock, and ends only by it
       // Fenced and stopped: the claim is taken over, and ends with its new holder.
       assert.equal(
         await withArchiveRestoreLock(
+          "host-a",
           "held",
           async (claim) => claim.token !== token && "taken over",
           async () => {},
@@ -279,14 +310,19 @@ test("a held claim whose request is still waiting is busy, and its host is not a
   await withDir(async () => {
     const { promise: gate, resolve: release } = Promise.withResolvers<void>();
     // Held on the way in, as before an op leaves for a host; renewing while it waits.
-    const waiting = withArchiveRestoreLock("waiting", async (claim) => {
-      claim.hold("host-a", "daemon-1");
-      await gate;
-      claim.release();
-    });
+    const waiting = withArchiveRestoreLock(
+      "host-a",
+      "waiting",
+      async (claim) => {
+        claim.hold("daemon-1");
+        await gate;
+        claim.release();
+      },
+    );
     let asked = false;
     await assert.rejects(
       withArchiveRestoreLock(
+        "host-a",
         "waiting",
         async () => assert.fail("entered"),
         async () => {
@@ -301,7 +337,7 @@ test("a held claim whose request is still waiting is busy, and its host is not a
     await waiting;
     // The answer released it.
     assert.equal(
-      await withArchiveRestoreLock("waiting", async () => "free"),
+      await withArchiveRestoreLock("host-a", "waiting", async () => "free"),
       "free",
     );
   });
@@ -310,9 +346,9 @@ test("a held claim whose request is still waiting is busy, and its host is not a
 test("hold refuses a request whose lease another one already took over, before an op can leave", async () => {
   await withDir(async (dir) => {
     await assert.rejects(
-      withArchiveRestoreLock("lost", async (claim) => {
+      withArchiveRestoreLock("host-a", "lost", async (claim) => {
         const db = new Database(
-          join(dir, "keylime", "archive-restore-locks.sqlite"),
+          join(dir, "keylime", "archive-restore-host-locks.sqlite"),
         );
         try {
           db.prepare(
@@ -321,7 +357,7 @@ test("hold refuses a request whose lease another one already took over, before a
         } finally {
           db.close(true);
         }
-        claim.hold("host-a", "daemon-1");
+        claim.hold("daemon-1");
       }),
       (error) =>
         error instanceof HostOpError &&
@@ -329,19 +365,19 @@ test("hold refuses a request whose lease another one already took over, before a
         error.code === "archive_restore_busy",
     );
     const db = new Database(
-      join(dir, "keylime", "archive-restore-locks.sqlite"),
+      join(dir, "keylime", "archive-restore-host-locks.sqlite"),
     );
     try {
       // The taker's claim is untouched, and nothing was held for the refused request.
       assert.deepEqual(
         {
           ...db
-            .prepare<{ owner: string; host_id: string | null }, [string]>(
-              "SELECT owner, host_id FROM restore_claims WHERE session_id = ?",
+            .prepare<{ owner: string; instance: string | null }, [string]>(
+              "SELECT owner, instance FROM restore_claims WHERE session_id = ?",
             )
             .get("lost"),
         },
-        { owner: "taker", host_id: null },
+        { owner: "taker", instance: null },
       );
     } finally {
       db.close(true);
@@ -352,30 +388,33 @@ test("hold refuses a request whose lease another one already took over, before a
 test("publish holds the store's write lock across the publishing step, so nothing takes the session over mid-publish", async () => {
   await withDir(async (dir) => {
     let blocked = null;
-    const result = await withArchiveRestoreLock("pub", async (claim) =>
-      claim.publish(() => {
-        const other = new Database(
-          join(dir, "keylime", "archive-restore-locks.sqlite"),
-        );
-        try {
-          other.exec("PRAGMA busy_timeout = 0");
+    const result = await withArchiveRestoreLock(
+      "host-a",
+      "pub",
+      async (claim) =>
+        claim.publish(() => {
+          const other = new Database(
+            join(dir, "keylime", "archive-restore-host-locks.sqlite"),
+          );
           try {
-            other.exec("BEGIN IMMEDIATE");
-            blocked = false;
-          } catch {
-            blocked = true;
+            other.exec("PRAGMA busy_timeout = 0");
+            try {
+              other.exec("BEGIN IMMEDIATE");
+              blocked = false;
+            } catch {
+              blocked = true;
+            }
+          } finally {
+            other.close(true);
           }
-        } finally {
-          other.close(true);
-        }
-        return "published";
-      }),
+          return "published";
+        }),
     );
     assert.equal(result, "published");
     assert.equal(blocked, true);
     // Committed: the next request is free to claim the session.
     assert.equal(
-      await withArchiveRestoreLock("pub", async () => "free"),
+      await withArchiveRestoreLock("host-a", "pub", async () => "free"),
       "free",
     );
   });
@@ -383,7 +422,7 @@ test("publish holds the store's write lock across the publishing step, so nothin
 
 test("a publish step that throws rolls back and frees the store at once, and its error reaches the caller", async () => {
   await withDir(async (dir) => {
-    await withArchiveRestoreLock("failing", async (claim) => {
+    await withArchiveRestoreLock("host-a", "failing", async (claim) => {
       assert.throws(
         () =>
           claim.publish(() => {
@@ -392,7 +431,7 @@ test("a publish step that throws rolls back and frees the store at once, and its
         /destination exists/,
       );
       const other = new Database(
-        join(dir, "keylime", "archive-restore-locks.sqlite"),
+        join(dir, "keylime", "archive-restore-host-locks.sqlite"),
       );
       try {
         other.exec("PRAGMA busy_timeout = 0");
@@ -414,7 +453,7 @@ test("a holder suspended past its lease publishes only if nobody took the sessio
   await withDir(async (dir) => {
     const age = (session: string) => {
       const db = new Database(
-        join(dir, "keylime", "archive-restore-locks.sqlite"),
+        join(dir, "keylime", "archive-restore-host-locks.sqlite"),
       );
       try {
         db.prepare(
@@ -426,7 +465,7 @@ test("a holder suspended past its lease publishes only if nobody took the sessio
     };
     // Suspended past the lease, and untaken: the claim is still its own, so it may publish.
     assert.equal(
-      await withArchiveRestoreLock("slow", async (claim) => {
+      await withArchiveRestoreLock("host-a", "slow", async (claim) => {
         age("slow");
         return claim.publish(() => "published");
       }),
@@ -436,9 +475,10 @@ test("a holder suspended past its lease publishes only if nobody took the sessio
     let ran = false;
     let tookOver: string | undefined;
     await assert.rejects(
-      withArchiveRestoreLock("taken", async (claim) => {
+      withArchiveRestoreLock("host-a", "taken", async (claim) => {
         age("taken");
         tookOver = await withArchiveRestoreLock(
+          "host-a",
           "taken",
           async () => "took over",
         );
@@ -456,181 +496,38 @@ test("a holder suspended past its lease publishes only if nobody took the sessio
   });
 });
 
-test("a table from an earlier build of this branch moves into the claims table, keeping its claims, and the old name stops accepting writes", async () => {
+test("the new store neither migrates nor modifies the old restore claims", async () => {
   await withDir(async (dir) => {
     mkdirSync(join(dir, "keylime"), { recursive: true });
     const path = join(dir, "keylime", "archive-restore-locks.sqlite");
     const old = new Database(path);
     try {
       old.exec(
-        "CREATE TABLE restore_leases (session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, renewed_at INTEGER NOT NULL)",
+        "CREATE TABLE restore_claims (session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, renewed_at INTEGER NOT NULL, host_id TEXT, instance TEXT)",
       );
+      const row = [
+        "live",
+        "old-owner",
+        Date.now(),
+        "host-a",
+        "old-daemon",
+      ] as const;
       old
-        .prepare(
-          "INSERT INTO restore_leases (session_id, owner, renewed_at) VALUES (?, ?, ?)",
-        )
-        .run("live", "old-build", Date.now());
-      old
-        .prepare(
-          "INSERT INTO restore_leases (session_id, owner, renewed_at) VALUES (?, ?, ?)",
-        )
-        .run("lapsed", "old-build", Date.now() - 31_000);
+        .prepare("INSERT INTO restore_claims VALUES (?, ?, ?, ?, ?)")
+        .run(...row);
+      assert.equal(
+        await withArchiveRestoreLock(
+          "host-a",
+          "live",
+          async () => "independent",
+        ),
+        "independent",
+      );
+      assert.deepEqual(old.prepare("SELECT * FROM restore_claims").values(), [
+        [...row],
+      ]);
     } finally {
       old.close(true);
-    }
-    // The live claim still blocks; the lapsed one lapses as it did; held claims work on the migrated table.
-    await assert.rejects(
-      withArchiveRestoreLock("live", async () =>
-        assert.fail("entered a live claim"),
-      ),
-      (error) =>
-        error instanceof HostOpError &&
-        error.status === 409 &&
-        error.code === "archive_restore_busy",
-    );
-    assert.equal(
-      await withArchiveRestoreLock("lapsed", async (claim) => {
-        claim.hold("host-a", "daemon-1");
-        return "held";
-      }),
-      "held",
-    );
-    // A second open finds the view and migrates nothing.
-    assert.equal(await withArchiveRestoreLock("again", async () => "ok"), "ok");
-    const db = new Database(path);
-    try {
-      assert.deepEqual(
-        {
-          ...db
-            .prepare<{ owner: string; host_id: string | null }, [string]>(
-              "SELECT owner, host_id FROM restore_claims WHERE session_id = ?",
-            )
-            .get("live"),
-        },
-        { owner: "old-build", host_id: null },
-      );
-      assert.equal(
-        db
-          .prepare<{ host_id: string | null }, [string]>(
-            "SELECT host_id FROM restore_claims WHERE session_id = ?",
-          )
-          .get("lapsed")?.host_id,
-        "host-a",
-      );
-    } finally {
-      db.close(true);
-    }
-    // An earlier build still running against this file: its reads work, but it cannot delete (lapse by its clock) a row or
-    // claim past one, so it fails closed instead of lapsing a held claim.
-    const oldBuild = new Database(path);
-    try {
-      // Its CREATE TABLE IF NOT EXISTS is a no-op on the view's name (or an error); either way it stops there or at its first write.
-      try {
-        oldBuild.exec(
-          "CREATE TABLE IF NOT EXISTS restore_leases (session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, renewed_at INTEGER NOT NULL)",
-        );
-      } catch {
-        /* also closed */
-      }
-      assert.equal(
-        oldBuild
-          .prepare<{ owner: string }, [string]>(
-            "SELECT owner FROM restore_leases WHERE session_id = ?",
-          )
-          .get("live")?.owner,
-        "old-build",
-      );
-      assert.throws(
-        () =>
-          oldBuild
-            .prepare("DELETE FROM restore_leases WHERE session_id = ?")
-            .run("lapsed"),
-        /view/,
-      );
-      assert.throws(
-        () =>
-          oldBuild
-            .prepare(
-              "INSERT INTO restore_leases (session_id, owner, renewed_at) VALUES (?, ?, ?)",
-            )
-            .run("new", "old-build", Date.now()),
-        /view/,
-      );
-    } finally {
-      oldBuild.close(true);
-    }
-  });
-});
-
-test("a claims table made without the instance column gains it in place, keeps its held row, and that row names no process to confirm", async () => {
-  await withDir(async (dir) => {
-    mkdirSync(join(dir, "keylime"), { recursive: true });
-    const path = join(dir, "keylime", "archive-restore-locks.sqlite");
-    const earlier = new Database(path);
-    try {
-      // The schema an earlier build of this branch left: the claims table and the legacy view, no `instance`, no user_version.
-      earlier.exec(
-        "CREATE TABLE restore_claims (session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, renewed_at INTEGER NOT NULL, host_id TEXT)",
-      );
-      earlier.exec(
-        "CREATE VIEW restore_leases AS SELECT session_id, owner, renewed_at FROM restore_claims",
-      );
-      earlier
-        .prepare(
-          "INSERT INTO restore_claims (session_id, owner, renewed_at, host_id) VALUES (?, ?, ?, ?)",
-        )
-        .run("pushed", "pushed-owner", Date.now() - 3_600_000, "host-a");
-    } finally {
-      earlier.close(true);
-    }
-    const refusal = new Error("cannot confirm");
-    await assert.rejects(
-      withArchiveRestoreLock(
-        "pushed",
-        async () => assert.fail("entered a held claim"),
-        async (asked) => {
-          // A row with no recorded process is handed on as such: the route cannot match any answer to it, so it never confirms.
-          assert.deepEqual(
-            [asked.hostId, asked.claim, asked.instance],
-            ["host-a", "pushed-owner", null],
-          );
-          throw refusal;
-        },
-      ),
-      (error) => error === refusal,
-    );
-    const db = new Database(path);
-    try {
-      assert.ok(
-        db
-          .prepare<{ name: string }, []>("PRAGMA table_info(restore_claims)")
-          .all()
-          .some((column) => column.name === "instance"),
-      );
-      assert.deepEqual(
-        {
-          ...db
-            .prepare<
-              {
-                owner: string;
-                host_id: string | null;
-                instance: string | null;
-              },
-              [string]
-            >(
-              "SELECT owner, host_id, instance FROM restore_claims WHERE session_id = ?",
-            )
-            .get("pushed"),
-        },
-        { owner: "pushed-owner", host_id: "host-a", instance: null },
-      );
-      assert.equal(
-        db.prepare<{ user_version: number }, []>("PRAGMA user_version").get()
-          ?.user_version,
-        2,
-      );
-    } finally {
-      db.close(true);
     }
   });
 });

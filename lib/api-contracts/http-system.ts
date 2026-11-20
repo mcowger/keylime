@@ -23,7 +23,6 @@ import {
   NotificationHistoryEntrySchema,
   NotificationPrefsSchema,
 } from "./notification-models";
-import { ProjectRegistryEntrySchema } from "./host-session-operations";
 
 const S = Type.String(),
   N = Type.Number(),
@@ -46,26 +45,6 @@ const errors = {
   502: fail("Upstream push or host request failed."),
 };
 const noContent = { description: "No content." };
-const poolProject = Type.Intersect([
-  Type.Omit(ProjectRegistryEntrySchema, ["path"]),
-  obj({
-    id: S,
-    name: S,
-    origin: S,
-    defaultRef: Type.Optional(S),
-    clonePaths: Type.Record(S, S),
-  }),
-]);
-const pool = obj({
-  id: S,
-  label: S,
-  enabled: B,
-  members: Type.Array(
-    obj({ hostId: S, projectsRoot: S, provisioned: B, draining: B }),
-  ),
-  projects: Type.Array(poolProject),
-});
-const pools = Type.Array(pool);
 const hostBase = {
   id: S,
   label: S,
@@ -83,8 +62,17 @@ const hostBase = {
         "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
     }),
   ),
-  canActivateArtifact: Type.Optional(Type.Boolean({ description: "The linked standalone daemon advertised artifact activation." })),
-  arch: Type.Optional(Type.String({ description: "CPU architecture for selecting a compatible host release." })),
+  canActivateArtifact: Type.Optional(
+    Type.Boolean({
+      description:
+        "The linked standalone daemon advertised artifact activation.",
+    }),
+  ),
+  arch: Type.Optional(
+    Type.String({
+      description: "CPU architecture for selecting a compatible host release.",
+    }),
+  ),
 };
 const host = Type.Union([
   obj({
@@ -98,7 +86,6 @@ const host = Type.Union([
     ...hostBase,
   }),
 ]);
-const poolResult = obj({ pools });
 const history = NotificationHistoryEntrySchema;
 const prefs = NotificationPrefsSchema;
 const subscription = obj({ endpoint: S, keys: obj({ p256dh: S, auth: S }) });
@@ -338,13 +325,19 @@ add(
   "/api/hosts",
   "get",
   "getHosts",
-  "List hosts and pools",
+  "List independent hosts",
   obj({
     hosts: Type.Array(host),
-    pools,
   }),
 );
-add("/api/hosts/[id]/terminal-sessions", "get", "getHostsIdTerminalSessions", "List live session terminals", obj({ sessionIds: Type.Array(S) }), { parameters: [id] });
+add(
+  "/api/hosts/[id]/terminal-sessions",
+  "get",
+  "getHostsIdTerminalSessions",
+  "List live session terminals",
+  obj({ sessionIds: Type.Array(S) }),
+  { parameters: [id] },
+);
 add(
   "/api/hosts/[id]/artifacts",
   "post",
@@ -375,7 +368,9 @@ add(
     status: 202,
     responses: {
       501: fail("The selected daemon does not support artifact activation."),
-      503: fail("The link is unavailable; if the request was sent, reconcile by operation ID."),
+      503: fail(
+        "The link is unavailable; if the request was sent, reconcile by operation ID.",
+      ),
       504: fail("Activation was not confirmed; reconcile by operation ID."),
     },
   },
@@ -387,30 +382,55 @@ add(
   "Read a standalone daemon activation outcome",
   HostArtifactActivationResultSchema,
   {
-    parameters: [id, queryParameter("operationId", HostArtifactActivationArgsSchema.properties.operationId, true)],
+    parameters: [
+      id,
+      queryParameter(
+        "operationId",
+        HostArtifactActivationArgsSchema.properties.operationId,
+        true,
+      ),
+    ],
     responses: {
-      501: fail("The selected daemon does not support artifact activation status."),
+      501: fail(
+        "The selected daemon does not support artifact activation status.",
+      ),
       503: fail("The link is unavailable. Retry the read, not the install."),
       504: fail("The daemon did not confirm the status in time."),
     },
   },
 );
 add(
-  "/api/hosts/[id]/releases", "get", "listHostReleases",
-  "List compatible standalone host releases", HostReleaseListSchema,
-  { parameters: [id], responses: { 501: fail("This host does not support paired releases."), 503: fail("The host is offline.") } },
+  "/api/hosts/[id]/releases",
+  "get",
+  "listHostReleases",
+  "List compatible standalone host releases",
+  HostReleaseListSchema,
+  {
+    parameters: [id],
+    responses: {
+      501: fail("This host does not support paired releases."),
+      503: fail("The host is offline."),
+    },
+  },
 );
 add(
-  "/api/hosts/[id]/releases", "post", "deployHostRelease",
-  "Deploy a matched daemon and runner to a linked host", null,
+  "/api/hosts/[id]/releases",
+  "post",
+  "deployHostRelease",
+  "Deploy a matched daemon and runner to a linked host",
+  null,
   {
-    parameters: [id], body: DeployHostReleaseArgsSchema,
+    parameters: [id],
+    body: DeployHostReleaseArgsSchema,
     responses: {
       200: {
-        description: "NDJSON deployment updates, one JSON object per line. Failures after streaming begins are error frames, not HTTP status changes.",
+        description:
+          "NDJSON deployment updates, one JSON object per line. Failures after streaming begins are error frames, not HTTP status changes.",
         content: {
           "application/x-ndjson": {
-            schema: Type.String({ description: "Each line is one HostReleaseDeployFrame." }),
+            schema: Type.String({
+              description: "Each line is one HostReleaseDeployFrame.",
+            }),
             "x-item-schema": HostReleaseDeployFrameSchema,
           },
         },
@@ -418,14 +438,21 @@ add(
     },
   },
 );
-add("/api/terminal/attach", "get", "getTerminalAttach", "Attach to a session terminal", null, {
-  parameters: [queryParameter("hostId", S, true), queryParameter("sessionId", S, true)],
-  status: 101,
-  responses: { 426: fail("WebSocket upgrade required.") },
-});
-add("/api/hosts", "put", "putHosts", "Replace pools", poolResult, {
-  body: poolResult,
-});
+add(
+  "/api/terminal/attach",
+  "get",
+  "getTerminalAttach",
+  "Attach to a session terminal",
+  null,
+  {
+    parameters: [
+      queryParameter("hostId", S, true),
+      queryParameter("sessionId", S, true),
+    ],
+    status: 101,
+    responses: { 426: fail("WebSocket upgrade required.") },
+  },
+);
 add(
   "/api/hosts",
   "post",
@@ -438,14 +465,9 @@ add(
   "/api/hosts",
   "patch",
   "patchHosts",
-  "Rename host or pool",
-  Type.Union([obj({ host: Type.Optional(host) }), poolResult]),
-  {
-    body: Type.Union([
-      obj({ id: S, label: S }),
-      obj({ poolId: S, label: S }),
-    ]),
-  },
+  "Rename host",
+  obj({ host: Type.Optional(host) }),
+  { body: obj({ id: S, label: S }) },
 );
 add("/api/hosts", "delete", "deleteHosts", "Revoke host", ok, {
   parameters: [queryParameter("id", S, true)],
@@ -556,6 +578,7 @@ add(
       clientId: S,
       deviceId: S,
       visible: B,
+      hostId: Type.Optional(ns),
       sessionId: Type.Optional(ns),
       seq: Type.Integer(),
     }),

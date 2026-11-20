@@ -34,13 +34,34 @@ test("pushing the same session again is a no-op that keeps the identity", async 
   assert.equal(same.entries.length, 1);
 });
 
-test("session entries compare by id only; cwd changes do not fork history", async () => {
+test("cwd changes do not fork history for one session", async () => {
   const { createNavigationHistory, pushNavigationEntry } = await loadSubject();
   const seeded = pushNavigationEntry(
     createNavigationHistory(),
     session("a", "/one"),
   );
   assert.equal(pushNavigationEntry(seeded, session("a", "/two")), seeded);
+});
+
+test("the same session id on different hosts has distinct back and forward entries", async () => {
+  const {
+    createNavigationHistory,
+    pushNavigationEntry,
+    stepNavigationHistory,
+    currentNavigationEntry,
+  } = await loadSubject();
+  const local = session("same");
+  const remote = { ...local, hostId: "remote" };
+  const history = pushNavigationEntry(
+    pushNavigationEntry(createNavigationHistory(), local),
+    remote,
+  );
+  const back = stepNavigationHistory(history, -1);
+  assert.deepEqual(currentNavigationEntry(back), local);
+  assert.deepEqual(
+    currentNavigationEntry(stepNavigationHistory(back, 1)),
+    remote,
+  );
 });
 
 test("new-chat entries compare by cwd", async () => {
@@ -69,50 +90,6 @@ test("new-chat entries on two hosts are different views even for the same path",
   assert.equal(
     pushNavigationEntry(remote, { ...newChat("/one"), hostId: "h1" }),
     remote,
-  );
-});
-
-test("freezing a pooled creation intent enriches its current view without losing forward history or replacing the intent", async () => {
-  const {
-    createNavigationHistory,
-    pushNavigationEntry,
-    stepNavigationHistory,
-    currentNavigationEntry,
-    canGoNavigationForward,
-  } = await loadSubject();
-  const composer = {
-    sessionId: null,
-    cwd: null,
-    poolId: "workers",
-    projectId: "app",
-    creationId: "original-creation",
-  };
-  let history = pushNavigationEntry(createNavigationHistory(), composer);
-  history = pushNavigationEntry(history, session("other"));
-  history = stepNavigationHistory(history, -1);
-  const frozen = pushNavigationEntry(history, {
-    ...composer,
-    initialization: '{"type":"ensure_session","modelId":"original"}',
-  });
-  assert.equal(frozen.entries.length, 2);
-  assert.equal(frozen.index, 0);
-  assert.equal(canGoNavigationForward(frozen), true);
-  assert.equal(
-    currentNavigationEntry(frozen)?.initialization,
-    '{"type":"ensure_session","modelId":"original"}',
-  );
-  assert.equal(
-    currentNavigationEntry(history)?.initialization,
-    undefined,
-    "the prior snapshot is not mutated",
-  );
-  assert.equal(
-    pushNavigationEntry(frozen, {
-      ...composer,
-      initialization: '{"modelId":"changed"}',
-    }),
-    frozen,
-    "an already-used creation intent is immutable",
   );
 });
 

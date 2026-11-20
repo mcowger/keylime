@@ -6,6 +6,7 @@ import test, { after } from "node:test";
 import type { TestContext } from "node:test";
 import type { DownMessage, OpenChannelRequest } from "./hosts/link-protocol.ts";
 import type { LinkDriver } from "./hosts/link-driver.test-helper.ts";
+import { sessionKey } from "./session-identity.ts";
 
 type Launch = OpenChannelRequest["launch"];
 type Command = Record<string, unknown> & { type: string };
@@ -144,11 +145,11 @@ function useRegistry(
   const previousSessions = globalThis.__ompSessions;
   const previousLocks = globalThis.__ompStartLocks;
   globalThis.__ompSessions = new Map(
-    Object.entries(wrappers),
+    Object.entries(wrappers).map(([id, wrapper]) => [sessionKey(id), wrapper]),
   ) as unknown as NonNullable<typeof globalThis.__ompSessions>;
   globalThis.__ompStartLocks = new Map();
   t.after(async () => {
-    await globalThis.__ompSessions?.get(SAVED_ID)?.destroyAndWait();
+    await globalThis.__ompSessions?.get(sessionKey(SAVED_ID))?.destroyAndWait();
     globalThis.__ompSessions = previousSessions;
     globalThis.__ompStartLocks = previousLocks;
   });
@@ -516,12 +517,15 @@ for (const originalPresent of [true, false]) {
   });
 }
 
-test("get_state resumes on the explicitly selected host and strips the routing hint", async (t) => {
+test("get_state independently resumes identical IDs on both selected hosts", async (t) => {
   useRegistry(t);
   const remote = await linkHost("Selected session host");
   t.after(() => hub.closeHostLink(remote.id));
   const remoteSpawns: Launch[] = [];
-  const remoteSession = { ...listedSession(SAVED_ID), path: `/remote/selected/${SAVED_ID}.jsonl` };
+  const remoteSession = {
+    ...listedSession(SAVED_ID),
+    path: `/remote/selected/${SAVED_ID}.jsonl`,
+  };
   remote.serve(
     {
       open: openOp(remoteSpawns),
@@ -529,30 +533,57 @@ test("get_state resumes on the explicitly selected host and strips the routing h
       sessionFileExists: () => true,
       invalidateSessionLists: () => null,
     },
-    (message) => message.type === "kill"
-      ? remote.post({ type: "exit", ch: message.ch, code: null, signal: "SIGTERM" })
-      : respond(message, remote),
+    (message) =>
+      message.type === "kill"
+        ? remote.post({
+            type: "exit",
+            ch: message.ch,
+            code: null,
+            signal: "SIGTERM",
+          })
+        : respond(message, remote),
   );
-  await jsonOf(await post(SAVED_ID, { type: "get_state", hostId: remote.id }));
+  await jsonOf(
+    await post(
+      SAVED_ID,
+      { type: "get_state" },
+      undefined,
+      `?hostId=${remote.id}`,
+    ),
+  );
   assert.equal(spawns.length, 0);
   assert.equal(remoteSpawns.length, 1);
   assert.equal(remoteSpawns[0].sessionFile, remoteSession.path);
-  assert.equal(getRpcSession(SAVED_ID)?.host.id, remote.id);
+  const remoteWrapper = getRpcSession(SAVED_ID, remote.id);
+  assert.equal(remoteWrapper?.host.id, remote.id);
   assert.ok(stdin.some((command) => command.type === "get_state"));
   assert.ok(stdin.every((command) => !("hostId" in command)));
-  const conflict = await jsonOf(await post(SAVED_ID, { type: "get_state", hostId: "local" }), 409);
-  assert.equal(conflict.code, "session_host_conflict");
-  assert.equal(spawns.length, 0);
+  await jsonOf(await post(SAVED_ID, { type: "get_state" }));
+  const localWrapper = getRpcSession(SAVED_ID);
+  assert.equal(localWrapper?.host.id, "local");
+  assert.notEqual(localWrapper, remoteWrapper);
+  assert.equal(spawns.length, 1);
   assert.equal(remoteSpawns.length, 1);
 });
 
 test("get_state refuses unknown hosts and sessions absent on the selected host", async (t) => {
   useRegistry(t);
-  const unknown = await jsonOf(await post(SAVED_ID, { type: "get_state", hostId: "missing-host" }), 404);
+  const unknown = await jsonOf(
+    await post(
+      SAVED_ID,
+      { type: "get_state" },
+      undefined,
+      "?hostId=missing-host",
+    ),
+    404,
+  );
   assert.equal(unknown.code, "host_not_found");
   child.sessions = [];
   invalidateHostSessionList("local");
-  const missing = await jsonOf(await post(SAVED_ID, { type: "get_state", hostId: "local" }), 404);
+  const missing = await jsonOf(
+    await post(SAVED_ID, { type: "get_state" }),
+    404,
+  );
   assert.equal(missing.code, "session_not_found");
   assert.equal(spawns.length, 0);
 });
@@ -590,17 +621,32 @@ test("an Advisor replacement through a remote startup alias stays on its host wh
         : respond(message, remote),
   );
   invalidateHostSessionList("local");
-  await jsonOf(await post(SAVED_ID, { type: "get_state" }));
-  assert.equal(getRpcSession(SAVED_ID)?.host.id, remote.id);
+  await jsonOf(
+    await post(
+      SAVED_ID,
+      { type: "get_state" },
+      undefined,
+      `?hostId=${remote.id}`,
+    ),
+  );
+  assert.equal(getRpcSession(SAVED_ID, remote.id)?.host.id, remote.id);
 
   await jsonOf(
-    await post(SAVED_ID, { type: "get_state" }, undefined, "?advisor=1"),
+    await post(
+      SAVED_ID,
+      { type: "get_state" },
+      undefined,
+      `?advisor=1&hostId=${remote.id}`,
+    ),
   );
   assert.equal(launches(), 0, "the local copy must never be resumed");
   assert.equal(remoteSpawns.length, 2);
   assert.equal(remoteSpawns[1].sessionFile, moved.path);
-  assert.equal(getRpcSession(SAVED_ID)?.host.id, remote.id);
-  assert.equal(getRpcSession(SAVED_ID), getRpcSession(movedId));
+  assert.equal(getRpcSession(SAVED_ID, remote.id)?.host.id, remote.id);
+  assert.equal(
+    getRpcSession(SAVED_ID, remote.id),
+    getRpcSession(movedId, remote.id),
+  );
 });
 
 test("a busy child is not replaced for an advisor mismatch and gets the body verbatim", async (t) => {

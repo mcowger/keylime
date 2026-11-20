@@ -2,6 +2,7 @@ import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import React from "react";
 import test from "node:test";
+import { sessionKey } from "@/lib/session-identity";
 import type { SessionInfo } from "../lib/types";
 import { noSystemsSidebar } from "../tests/systems-sidebar-fixture";
 const { render, cleanup, fireEvent, screen, waitFor } =
@@ -66,7 +67,7 @@ test("the activity filter reveals a collapsed Repo and restores it afterward", a
         searchQuery: "",
         matchedSessionIds: null,
         runningOnly,
-        runningSessionIds: new Set(["active"]),
+        runningSessionIds: new Set([sessionKey("active")]),
         awaitingInputIds: new Set<string>(),
         unreadSessionIds: new Set<string>(),
         hasUndismissedExit: () => false,
@@ -590,7 +591,7 @@ test("registered chats appear only as search results and remain selectable", asy
       React.createElement(HierarchySidebar, {
         ...props,
         searchQuery: "saved",
-        matchedSessionIds: new Set(["chat-1"]),
+        matchedSessionIds: new Set([sessionKey("chat-1")]),
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Saved chat" }));
@@ -837,7 +838,7 @@ test("session unregister cancellation leaves the registration unchanged", async 
         onProjects() {},
         onSnapshots() {},
         searchQuery: "saved",
-        matchedSessionIds: new Set(["chat-1"]),
+        matchedSessionIds: new Set([sessionKey("chat-1")]),
         runningOnly: false,
         runningSessionIds: new Set<string>(),
         awaitingInputIds: new Set<string>(),

@@ -1,3 +1,4 @@
+import { sessionKey } from "@/lib/session-identity";
 import { isLinkUp, type HostStatus } from "@/lib/hosts/host";
 import type { SessionInfo } from "@/lib/types";
 import { LOCAL_HOST_ID, type ProjectSortMode } from "@/lib/project-ordering";
@@ -165,13 +166,17 @@ function buildSessionTree(
 ): SessionTreeNode[] {
   const byId = new Map<string, SessionTreeNode>();
   for (const s of sessions) {
-    byId.set(s.id, { session: s, children: [] });
+    byId.set(sessionKey(s.id, s.hostId), { session: s, children: [] });
   }
 
   // Build a map of parentSessionId chains so we can resolve missing ancestors
   const parentOf = new Map<string, string>();
   for (const s of sessions) {
-    if (s.parentSessionId) parentOf.set(s.id, s.parentSessionId);
+    if (s.parentSessionId)
+      parentOf.set(
+        sessionKey(s.id, s.hostId),
+        sessionKey(s.parentSessionId, s.hostId),
+      );
   }
 
   // Walk up the parentSessionId chain to find the nearest ancestor that exists in byId
@@ -189,7 +194,9 @@ function buildSessionTree(
 
   const roots: SessionTreeNode[] = [];
   for (const node of byId.values()) {
-    const ancestor = resolveAncestor(node.session.id);
+    const ancestor = resolveAncestor(
+      sessionKey(node.session.id, node.session.hostId),
+    );
     if (ancestor) {
       byId.get(ancestor)!.children.push(node);
     } else {
@@ -201,7 +208,8 @@ function buildSessionTree(
   const sort = (nodes: SessionTreeNode[]) => {
     nodes.sort(
       (a, b) =>
-        (scores?.get(b.session.id) ?? 0) - (scores?.get(a.session.id) ?? 0) ||
+        (scores?.get(sessionKey(b.session.id, b.session.hostId)) ?? 0) -
+          (scores?.get(sessionKey(a.session.id, a.session.hostId)) ?? 0) ||
         b.session.modified.localeCompare(a.session.modified),
     );
     nodes.forEach((n) => sort(n.children));
@@ -213,8 +221,6 @@ function buildSessionTree(
 interface LivePlace {
   cwd: string;
   hostId?: string;
-  poolId?: string;
-  projectId?: string;
   projectKey?: string;
   /** Running entries only: a blocking dialog waits for the user. */
   awaitingInput?: boolean;
@@ -232,7 +238,9 @@ function livePlace(
   selected: LivePlace,
 ): LivePlace {
   return (
-    (optimistic?.id === id ? optimistic : undefined) ??
+    (optimistic && sessionKey(optimistic.id, optimistic.hostId) === id
+      ? optimistic
+      : undefined) ??
     running[id] ??
     exited.get(id) ??
     known.get(id) ??

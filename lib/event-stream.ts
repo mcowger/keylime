@@ -8,6 +8,7 @@ import type {
 } from "./event-stream-protocol";
 import { registerNotificationWorker } from "./notification-client";
 import type { OutboxEntry, OutboxMode } from "./types";
+import { sessionKey, sessionUrl } from "./session-identity";
 
 export type { EventStreamChannel } from "./event-stream-protocol";
 
@@ -86,6 +87,7 @@ const DIAGNOSTICS_TIMEOUT_MS = 2000;
 export interface LocalOutboxEntry {
   id: string;
   sessionId: string;
+  hostId: string;
   /** Captured at submission: never rebound to a later installation or sign-in. */
   scope: string;
   mode: OutboxMode;
@@ -105,12 +107,16 @@ export interface LocalOutboxEntry {
   error?: string;
 }
 
-/** Every local entry (on subscribe once known, then on every change), or one the server answered 200 for. */
+/** The scoped local snapshot or a receipt, potentially with a same-host canonical session ID. */
 export type OutboxEvent =
-  { entries: LocalOutboxEntry[] } | { stored: StoredOutboxEntry };
+  | { entries: LocalOutboxEntry[] }
+  | { stored: StoredOutboxEntry; outboxSessionId: string };
 
 /** A receipt's retry root is server-confirmed or locally proven. */
-export type StoredOutboxEntry = OutboxEntry & { replaces?: string };
+export type StoredOutboxEntry = OutboxEntry & {
+  hostId: string;
+  replaces?: string;
+};
 
 /** The worker about the outbox: an add committed, the whole list, or one the server stored. */
 type OutboxMessage =
@@ -118,7 +124,7 @@ type OutboxMessage =
   | { outboxDropped: number; error?: string }
   | { outboxReconciled: number; error?: string }
   | { outbox: LocalOutboxEntry[]; partial?: true }
-  | { outboxStored: StoredOutboxEntry };
+  | { outboxStored: StoredOutboxEntry; outboxSessionId: string };
 
 type WakeReason = "init" | "visible" | "hidden" | "online" | "network";
 
@@ -207,7 +213,10 @@ class Transport {
           listener({ entries: message.outbox });
       } else if ("outboxStored" in message) {
         for (const listener of outboxListeners)
-          listener({ stored: message.outboxStored });
+          listener({
+            stored: message.outboxStored,
+            outboxSessionId: message.outboxSessionId,
+          });
       } else this.streams.get(message.id)?.receive(message);
     };
     this.holdLifetimeLock();
@@ -279,6 +288,7 @@ class Transport {
     body: string,
     advisor: boolean,
     type: string,
+    hostId: string,
   ): Promise<CommandReply | null> {
     return new Promise((resolve) => {
       const n = this.nextId++;
@@ -288,6 +298,7 @@ class Transport {
         n,
         req,
         sessionId,
+        hostId,
         advisor,
         body,
         type,
@@ -303,15 +314,19 @@ class Transport {
     });
   }
 
-  dropFromOutbox(id: string): Promise<void> {
+  dropFromOutbox(sessionId: string, id: string, hostId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const n = this.nextId++;
       this.outboxWrites.set(n, { resolve, reject });
-      this.port.postMessage({ op: "outbox_drop", n, id });
+      this.port.postMessage({ op: "outbox_drop", n, sessionId, id, hostId });
     });
   }
 
-  reconcileOutbox(sessionId: string, confirmedIds: string[]): Promise<void> {
+  reconcileOutbox(
+    sessionId: string,
+    confirmedIds: string[],
+    hostId: string,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const n = this.nextId++;
       this.outboxWrites.set(n, { resolve, reject });
@@ -319,6 +334,7 @@ class Transport {
         op: "outbox_reconcile",
         n,
         sessionId,
+        hostId,
         confirmedIds,
       });
     });
@@ -505,6 +521,7 @@ function postOutboxOnExit(): void {
   for (const {
     id,
     sessionId,
+    hostId,
     scope,
     advisor,
     mode,
@@ -516,16 +533,17 @@ function postOutboxOnExit(): void {
     state,
     createdAt,
   } of outboxEntries ?? []) {
+    const key = sessionKey(sessionId, hostId);
     if (
       state !== "sending" ||
       typeof scope !== "string" ||
       !scope ||
       Date.now() - createdAt > 7 * 24 * 60 * 60 * 1000 ||
-      sessions.has(sessionId)
+      sessions.has(key)
     )
       continue;
-    sessions.add(sessionId);
-    if (!addedHere.has(id)) continue;
+    sessions.add(key);
+    if (!addedHere.has(JSON.stringify([key, id]))) continue;
     const body = JSON.stringify({
       type: "outbox_add",
       id,
@@ -541,7 +559,10 @@ function postOutboxOnExit(): void {
     if (bytes > left) continue;
     left -= bytes;
     fetch(
-      `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
+      sessionUrl(
+        `/api/agent/${encodeURIComponent(sessionId)}${advisor === true ? "?advisor=1" : ""}`,
+        hostId,
+      ),
       {
         method: "POST",
         keepalive: true,
@@ -573,7 +594,13 @@ function connectTransport(): Transport {
 /** Open a live-event stream multiplexed over the browser's shared socket. */
 export function openEventStream(channel: EventStreamChannel): EventStream {
   transport ??= connectTransport();
-  return transport.open(channel);
+  return transport.open(
+    channel.kind === "session" ||
+      channel.kind === "commit-plan-progress" ||
+      channel.kind === "open-chat"
+      ? { ...channel, hostId: channel.hostId ?? "local" }
+      : channel,
+  );
 }
 
 /** Hands a transport sample (spec D6) to the worker, which tags and stores it; without a transport it is dropped. */
@@ -595,9 +622,10 @@ export function sendSessionCommand(
   body: string,
   advisor: boolean,
   type: string,
+  hostId = "local",
 ): Promise<CommandReply | null> | null {
   return transport?.mode === "ws"
-    ? transport.command(sessionId, req, body, advisor, type)
+    ? transport.command(sessionId, req, body, advisor, type, hostId)
     : null;
 }
 
@@ -609,11 +637,14 @@ export function newOutboxId(): string {
 /** Resolves once the worker has committed the entry to IndexedDB: the composer clears only then. Rejects when storage
  * is unavailable or fails, or if the worker dies first; the composer keeps its draft. Starts the transport if none. */
 export async function addToOutbox(
-  entry: Omit<LocalOutboxEntry, "state" | "error">,
+  entry: Omit<LocalOutboxEntry, "state" | "error" | "hostId">,
+  hostId = "local",
 ): Promise<void> {
   transport ??= connectTransport();
-  addedHere.add(entry.id);
-  await transport.addToOutbox(entry);
+  await transport.addToOutbox({ ...entry, hostId });
+  addedHere.add(
+    JSON.stringify([sessionKey(entry.sessionId, hostId), entry.id]),
+  );
   void registerOutboxSync();
 }
 
@@ -621,9 +652,10 @@ export async function addToOutbox(
 export async function reconcileOutbox(
   sessionId: string,
   confirmedIds: string[],
+  hostId = "local",
 ): Promise<void> {
   transport ??= connectTransport();
-  await transport.reconcileOutbox(sessionId, confirmedIds);
+  await transport.reconcileOutbox(sessionId, confirmedIds, hostId);
 }
 
 function supportsOutboxSync(worker: ServiceWorker | null): Promise<boolean> {
@@ -638,7 +670,7 @@ function supportsOutboxSync(worker: ServiceWorker | null): Promise<boolean> {
     };
     const timer = setTimeout(() => finish(false), 1_000);
     channel.port1.onmessage = ({ data }) =>
-      finish(data?.type === "omp-outbox-capability" && data.version === 2);
+      finish(data?.type === "omp-outbox-capability" && data.version === 3);
     try {
       worker.postMessage({ type: "omp-outbox-capability" }, [channel.port2]);
     } catch {
@@ -713,23 +745,39 @@ async function registerOutboxSync(): Promise<void> {
 }
 
 /** Resolves only once a browser-held entry is durably removed; Edit/Delete must keep it until this succeeds. */
-export function dropFromOutbox(id: string): Promise<void> {
+export function dropFromOutbox(
+  sessionId: string,
+  id: string,
+  hostId = "local",
+): Promise<void> {
   transport ??= connectTransport();
-  return transport.dropFromOutbox(id);
+  return transport.dropFromOutbox(sessionId, id, hostId);
 }
 
-/** Every local entry of every session in submission order: at once if the worker already told this tab, then on every
- * change; `{ stored }` when the server answered 200 for one (its entry leaves `entries` in the same or next event).
- * Starts the transport if none, so a chat view alone starts the worker that resends IndexedDB's entries. */
+/** Watch one host/session pair, including the browser's first-leg storage and server receipts. */
 export function subscribeOutbox(
+  sessionId: string,
   listener: (event: OutboxEvent) => void,
+  hostId = "local",
 ): () => void {
   transport ??= connectTransport();
   void registerOutboxSync();
-  outboxListeners.add(listener);
-  if (outboxEntries) listener({ entries: outboxEntries });
+  const matches = (entry: { sessionId: string; hostId: string }) =>
+    entry.sessionId === sessionId && entry.hostId === hostId;
+  const scoped = (event: OutboxEvent) => {
+    if ("entries" in event)
+      listener({ entries: event.entries.filter(matches) });
+    else if (
+      event.stored.hostId === hostId &&
+      (event.outboxSessionId === sessionId ||
+        event.stored.sessionId === sessionId)
+    )
+      listener(event);
+  };
+  outboxListeners.add(scoped);
+  if (outboxEntries) scoped({ entries: outboxEntries });
   return () => {
-    outboxListeners.delete(listener);
+    outboxListeners.delete(scoped);
   };
 }
 

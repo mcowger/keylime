@@ -35,6 +35,7 @@ export interface NotificationPresence {
   clientId: string;
   deviceId: string;
   visible: boolean;
+  hostId: string | null;
   sessionId: string | null;
   /** Per-tab report counter: requests can arrive out of order, and only the newest counts. */
   seq: number;
@@ -115,10 +116,14 @@ function isOnScreen(
   event: NotificationEvent,
   presence: NotificationPresence[],
 ): boolean {
+  if (!event.hostId) return false;
   const viewedAs = new Set([event.sessionId, ...(event.aliases ?? [])]);
   return presence.some(
     (tab) =>
-      tab.visible && tab.sessionId !== null && viewedAs.has(tab.sessionId),
+      tab.visible &&
+      tab.hostId === event.hostId &&
+      tab.sessionId !== null &&
+      viewedAs.has(tab.sessionId),
   );
 }
 

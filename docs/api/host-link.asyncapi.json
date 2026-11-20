@@ -13,9 +13,6 @@
         "HostLinkAck": {
           "$ref": "#/components/messages/HostLinkAck"
         },
-        "HostLinkCapacity": {
-          "$ref": "#/components/messages/HostLinkCapacity"
-        },
         "HostLinkChannelsChanged": {
           "$ref": "#/components/messages/HostLinkChannelsChanged"
         },
@@ -36,9 +33,6 @@
         },
         "HostLinkKill": {
           "$ref": "#/components/messages/HostLinkKill"
-        },
-        "HostLinkNotifier": {
-          "$ref": "#/components/messages/HostLinkNotifier"
         },
         "HostLinkPart": {
           "$ref": "#/components/messages/HostLinkPart"
@@ -187,6 +181,12 @@
         "HostReply_hostArtifactActivationStatus": {
           "$ref": "#/components/messages/HostReply_hostArtifactActivationStatus"
         },
+        "HostReply_hostSettingsGet": {
+          "$ref": "#/components/messages/HostReply_hostSettingsGet"
+        },
+        "HostReply_hostSettingsSet": {
+          "$ref": "#/components/messages/HostReply_hostSettingsSet"
+        },
         "HostReply_inspectUploads": {
           "$ref": "#/components/messages/HostReply_inspectUploads"
         },
@@ -213,6 +213,9 @@
         },
         "HostReply_listWorktrees": {
           "$ref": "#/components/messages/HostReply_listWorktrees"
+        },
+        "HostReply_modelsList": {
+          "$ref": "#/components/messages/HostReply_modelsList"
         },
         "HostReply_open": {
           "$ref": "#/components/messages/HostReply_open"
@@ -285,9 +288,6 @@
         },
         "HostReply_sessionFileExists": {
           "$ref": "#/components/messages/HostReply_sessionFileExists"
-        },
-        "HostReply_setUploadRetention": {
-          "$ref": "#/components/messages/HostReply_setUploadRetention"
         },
         "HostReply_shipFinish": {
           "$ref": "#/components/messages/HostReply_shipFinish"
@@ -436,6 +436,12 @@
         "HostRequest_hostArtifactActivationStatus": {
           "$ref": "#/components/messages/HostRequest_hostArtifactActivationStatus"
         },
+        "HostRequest_hostSettingsGet": {
+          "$ref": "#/components/messages/HostRequest_hostSettingsGet"
+        },
+        "HostRequest_hostSettingsSet": {
+          "$ref": "#/components/messages/HostRequest_hostSettingsSet"
+        },
         "HostRequest_inspectUploads": {
           "$ref": "#/components/messages/HostRequest_inspectUploads"
         },
@@ -462,6 +468,9 @@
         },
         "HostRequest_listWorktrees": {
           "$ref": "#/components/messages/HostRequest_listWorktrees"
+        },
+        "HostRequest_modelsList": {
+          "$ref": "#/components/messages/HostRequest_modelsList"
         },
         "HostRequest_open": {
           "$ref": "#/components/messages/HostRequest_open"
@@ -534,9 +543,6 @@
         },
         "HostRequest_sessionFileExists": {
           "$ref": "#/components/messages/HostRequest_sessionFileExists"
-        },
-        "HostRequest_setUploadRetention": {
-          "$ref": "#/components/messages/HostRequest_setUploadRetention"
         },
         "HostRequest_shipFinish": {
           "$ref": "#/components/messages/HostRequest_shipFinish"
@@ -615,15 +621,6 @@
         },
         "title": "HostLinkAck"
       },
-      "HostLinkCapacity": {
-        "contentType": "application/json",
-        "description": "Unsequenced advisory capacity sample, not retained for replay.",
-        "name": "HostLinkCapacity",
-        "payload": {
-          "$ref": "#/components/schemas/HostLinkCapacity"
-        },
-        "title": "HostLinkCapacity"
-      },
       "HostLinkChannelsChanged": {
         "contentType": "application/json",
         "description": "Host channel metadata changed.",
@@ -686,15 +683,6 @@
           "$ref": "#/components/schemas/HostLinkKill"
         },
         "title": "HostLinkKill"
-      },
-      "HostLinkNotifier": {
-        "contentType": "application/json",
-        "description": "Notifier election for this link changed.",
-        "name": "HostLinkNotifier",
-        "payload": {
-          "$ref": "#/components/schemas/HostLinkNotifier"
-        },
-        "title": "HostLinkNotifier"
       },
       "HostLinkPart": {
         "contentType": "application/json",
@@ -1221,6 +1209,30 @@
         },
         "title": "HostReply_hostArtifactActivationStatus"
       },
+      "HostReply_hostSettingsGet": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to hostSettingsGet; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read this daemon's Keylime policy.\nInputs: None.\nInvariants: Does not include environment or provider secrets.\nEffects: Reads local policy.\nRecovery: Retry on the same host after reconnect.",
+        "name": "HostReply_hostSettingsGet",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_hostSettingsGet"
+        },
+        "title": "HostReply_hostSettingsGet"
+      },
+      "HostReply_hostSettingsSet": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to hostSettingsSet; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Patch this daemon's Keylime policy.\nInputs: Supply the fields to change; retention uses whole days or null to keep uploads.\nInvariants: Settings do not propagate to any other host.\nEffects: Saves locally and applies to subsequent daemon activity.\nRecovery: Read back the host's policy after an uncertain reply.",
+        "name": "HostReply_hostSettingsSet",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_hostSettingsSet"
+        },
+        "title": "HostReply_hostSettingsSet"
+      },
       "HostReply_inspectUploads": {
         "contentType": "application/json",
         "correlationId": {
@@ -1328,6 +1340,18 @@
           "$ref": "#/components/schemas/HostReply_listWorktrees"
         },
         "title": "HostReply_listWorktrees"
+      },
+      "HostReply_modelsList": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to modelsList; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Load the target daemon's model choices.\nInputs: Set refresh to rediscover models.\nInvariants: Uses the daemon's OMP settings and credentials; returns no credential values.\nEffects: Reads the host cache or queries the host's OMP runner.\nRecovery: Retry on the same host, or inspect that host's OMP configuration.",
+        "name": "HostReply_modelsList",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_modelsList"
+        },
+        "title": "HostReply_modelsList"
       },
       "HostReply_open": {
         "contentType": "application/json",
@@ -1616,18 +1640,6 @@
           "$ref": "#/components/schemas/HostReply_sessionFileExists"
         },
         "title": "HostReply_sessionFileExists"
-      },
-      "HostReply_setUploadRetention": {
-        "contentType": "application/json",
-        "correlationId": {
-          "location": "$message.payload#/id"
-        },
-        "description": "Reply to setUploadRetention; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Set upload retention policy.\nInputs: Supply positive days or null for never.\nInvariants: A sweep checks the latest policy before deletion.\nEffects: Persists policy and schedules retention without waiting for a sweep.\nRecovery: Read policy after uncertain delivery before changing it again.",
-        "name": "HostReply_setUploadRetention",
-        "payload": {
-          "$ref": "#/components/schemas/HostReply_setUploadRetention"
-        },
-        "title": "HostReply_setUploadRetention"
       },
       "HostReply_shipFinish": {
         "contentType": "application/json",
@@ -2217,6 +2229,30 @@
         },
         "title": "HostRequest_hostArtifactActivationStatus"
       },
+      "HostRequest_hostSettingsGet": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Read this daemon's Keylime policy.\nInputs: None.\nInvariants: Does not include environment or provider secrets.\nEffects: Reads local policy.\nRecovery: Retry on the same host after reconnect.",
+        "name": "HostRequest_hostSettingsGet",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_hostSettingsGet"
+        },
+        "title": "HostRequest_hostSettingsGet"
+      },
+      "HostRequest_hostSettingsSet": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Patch this daemon's Keylime policy.\nInputs: Supply the fields to change; retention uses whole days or null to keep uploads.\nInvariants: Settings do not propagate to any other host.\nEffects: Saves locally and applies to subsequent daemon activity.\nRecovery: Read back the host's policy after an uncertain reply.",
+        "name": "HostRequest_hostSettingsSet",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_hostSettingsSet"
+        },
+        "title": "HostRequest_hostSettingsSet"
+      },
       "HostRequest_inspectUploads": {
         "contentType": "application/json",
         "correlationId": {
@@ -2324,6 +2360,18 @@
           "$ref": "#/components/schemas/HostRequest_listWorktrees"
         },
         "title": "HostRequest_listWorktrees"
+      },
+      "HostRequest_modelsList": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Load the target daemon's model choices.\nInputs: Set refresh to rediscover models.\nInvariants: Uses the daemon's OMP settings and credentials; returns no credential values.\nEffects: Reads the host cache or queries the host's OMP runner.\nRecovery: Retry on the same host, or inspect that host's OMP configuration.",
+        "name": "HostRequest_modelsList",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_modelsList"
+        },
+        "title": "HostRequest_modelsList"
       },
       "HostRequest_open": {
         "contentType": "application/json",
@@ -2613,18 +2661,6 @@
         },
         "title": "HostRequest_sessionFileExists"
       },
-      "HostRequest_setUploadRetention": {
-        "contentType": "application/json",
-        "correlationId": {
-          "location": "$message.payload#/id"
-        },
-        "description": "Usage: Set upload retention policy.\nInputs: Supply positive days or null for never.\nInvariants: A sweep checks the latest policy before deletion.\nEffects: Persists policy and schedules retention without waiting for a sweep.\nRecovery: Read policy after uncertain delivery before changing it again.",
-        "name": "HostRequest_setUploadRetention",
-        "payload": {
-          "$ref": "#/components/schemas/HostRequest_setUploadRetention"
-        },
-        "title": "HostRequest_setUploadRetention"
-      },
       "HostRequest_shipFinish": {
         "contentType": "application/json",
         "correlationId": {
@@ -2896,55 +2932,6 @@
         "title": "HostLinkAck",
         "type": "object"
       },
-      "HostLinkCapacity": {
-        "description": "Unsequenced advisory capacity sample, not retained for replay.",
-        "properties": {
-          "sample": {
-            "description": "Advisory host resource sample; active sessions are active turns.",
-            "properties": {
-              "activeSessions": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "availableMemoryBytes": {
-                "description": "Available memory in bytes.",
-                "type": "number"
-              },
-              "busyFraction": {
-                "type": "number"
-              },
-              "effectiveCpus": {
-                "description": "Effective CPU capacity available to the host.",
-                "type": "number"
-              },
-              "load1": {
-                "type": "number"
-              },
-              "stealFraction": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "effectiveCpus",
-              "load1",
-              "busyFraction",
-              "stealFraction",
-              "availableMemoryBytes",
-              "activeSessions"
-            ],
-            "title": "HostCapacity",
-            "type": "object"
-          },
-          "type": {
-            "const": "capacity",
-            "type": "string"
-          }
-        },
-        "required": ["type", "sample"],
-        "title": "HostLinkCapacity",
-        "type": "object"
-      },
       "HostLinkChannelsChanged": {
         "description": "Host channel metadata changed.",
         "properties": {
@@ -3179,18 +3166,6 @@
           "keylimeVersion": {
             "type": "string"
           },
-          "link": {
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "notifier": {
-                "type": "boolean"
-              }
-            },
-            "required": ["id", "notifier"],
-            "type": "object"
-          },
           "ompVersion": {
             "anyOf": [
               {
@@ -3321,26 +3296,6 @@
         },
         "required": ["type", "seq", "ch", "force"],
         "title": "HostLinkKill",
-        "type": "object"
-      },
-      "HostLinkNotifier": {
-        "description": "Notifier election for this link changed.",
-        "properties": {
-          "on": {
-            "type": "boolean"
-          },
-          "seq": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": {
-            "const": "notifier",
-            "type": "string"
-          }
-        },
-        "required": ["type", "seq", "on"],
-        "title": "HostLinkNotifier",
         "type": "object"
       },
       "HostLinkPart": {
@@ -43012,10 +42967,6 @@
                             "description": "Set when pinned: position among pinned workspaces (lower first). Pins\nonly apply while the sidebar sorts by name or activity.",
                             "type": "number"
                           },
-                          "poolId": {
-                            "description": "Logical pool target; path/hostId, when present, are diagnostic only.",
-                            "type": "string"
-                          },
                           "projectId": {
                             "type": "string"
                           },
@@ -43184,10 +43135,6 @@
                         "pinOrder": {
                           "description": "Set when pinned: position among pinned workspaces (lower first). Pins\nonly apply while the sidebar sorts by name or activity.",
                           "type": "number"
-                        },
-                        "poolId": {
-                          "description": "Logical pool target; path/hostId, when present, are diagnostic only.",
-                          "type": "string"
                         },
                         "projectId": {
                           "type": "string"
@@ -48775,13 +48722,6 @@
                                   "description": "Session file path local to its owning host.",
                                   "type": "string"
                                 },
-                                "poolId": {
-                                  "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                                  "type": "string"
-                                },
-                                "projectId": {
-                                  "type": "string"
-                                },
                                 "projectKey": {
                                   "description": "Stable identity key for grouping and comparison.",
                                   "type": "string"
@@ -49278,13 +49218,6 @@
                                 "description": "Session file path local to its owning host.",
                                 "type": "string"
                               },
-                              "poolId": {
-                                "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                                "type": "string"
-                              },
-                              "projectId": {
-                                "type": "string"
-                              },
                               "projectKey": {
                                 "description": "Stable identity key for grouping and comparison.",
                                 "type": "string"
@@ -49755,6 +49688,334 @@
         ],
         "description": "Reply to hostArtifactActivationStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read the outcome of a standalone host activation.\nInputs: Supply the original operation ID.\nInvariants: State belongs to the daemon and the server relationship that requested the activation. A missing receipt does not prove that the operation ran or failed.\nEffects: Reads durable state without installing, restarting or retrying.\nRecovery: Poll after the link returns. If the outcome stays unknown, inspect the service and backup on the host before retrying.",
         "title": "HostReply_hostArtifactActivationStatus"
+      },
+      "HostReply_hostSettingsGet": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "additionalProperties": false,
+                "description": "Operator-editable policy for one daemon. Never includes environment variables.",
+                "properties": {
+                  "agentToolsEnabled": {
+                    "description": "Enable cross-session agent tools on this daemon.",
+                    "type": "boolean"
+                  },
+                  "autoResumeSessions": {
+                    "description": "Resume sessions interrupted on this daemon.",
+                    "type": "boolean"
+                  },
+                  "uploadRetentionDays": {
+                    "anyOf": [
+                      {
+                        "maximum": 3650,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Days to retain sent uploads; null retains them indefinitely."
+                  }
+                },
+                "required": [
+                  "autoResumeSessions",
+                  "agentToolsEnabled",
+                  "uploadRetentionDays"
+                ],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "additionalProperties": false,
+              "description": "Operator-editable policy for one daemon. Never includes environment variables.",
+              "properties": {
+                "agentToolsEnabled": {
+                  "description": "Enable cross-session agent tools on this daemon.",
+                  "type": "boolean"
+                },
+                "autoResumeSessions": {
+                  "description": "Resume sessions interrupted on this daemon.",
+                  "type": "boolean"
+                },
+                "uploadRetentionDays": {
+                  "anyOf": [
+                    {
+                      "maximum": 3650,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Days to retain sent uploads; null retains them indefinitely."
+                }
+              },
+              "required": [
+                "autoResumeSessions",
+                "agentToolsEnabled",
+                "uploadRetentionDays"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to hostSettingsGet; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read this daemon's Keylime policy.\nInputs: None.\nInvariants: Does not include environment or provider secrets.\nEffects: Reads local policy.\nRecovery: Retry on the same host after reconnect.",
+        "title": "HostReply_hostSettingsGet"
+      },
+      "HostReply_hostSettingsSet": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "additionalProperties": false,
+                "description": "Operator-editable policy for one daemon. Never includes environment variables.",
+                "properties": {
+                  "agentToolsEnabled": {
+                    "description": "Enable cross-session agent tools on this daemon.",
+                    "type": "boolean"
+                  },
+                  "autoResumeSessions": {
+                    "description": "Resume sessions interrupted on this daemon.",
+                    "type": "boolean"
+                  },
+                  "uploadRetentionDays": {
+                    "anyOf": [
+                      {
+                        "maximum": 3650,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Days to retain sent uploads; null retains them indefinitely."
+                  }
+                },
+                "required": [
+                  "autoResumeSessions",
+                  "agentToolsEnabled",
+                  "uploadRetentionDays"
+                ],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "additionalProperties": false,
+              "description": "Operator-editable policy for one daemon. Never includes environment variables.",
+              "properties": {
+                "agentToolsEnabled": {
+                  "description": "Enable cross-session agent tools on this daemon.",
+                  "type": "boolean"
+                },
+                "autoResumeSessions": {
+                  "description": "Resume sessions interrupted on this daemon.",
+                  "type": "boolean"
+                },
+                "uploadRetentionDays": {
+                  "anyOf": [
+                    {
+                      "maximum": 3650,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Days to retain sent uploads; null retains them indefinitely."
+                }
+              },
+              "required": [
+                "autoResumeSessions",
+                "agentToolsEnabled",
+                "uploadRetentionDays"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to hostSettingsSet; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Patch this daemon's Keylime policy.\nInputs: Supply the fields to change; retention uses whole days or null to keep uploads.\nInvariants: Settings do not propagate to any other host.\nEffects: Saves locally and applies to subsequent daemon activity.\nRecovery: Read back the host's policy after an uncertain reply.",
+        "title": "HostReply_hostSettingsSet"
       },
       "HostReply_inspectUploads": {
         "anyOf": [
@@ -51166,13 +51427,6 @@
                       "description": "Session file path local to its owning host.",
                       "type": "string"
                     },
-                    "poolId": {
-                      "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                      "type": "string"
-                    },
-                    "projectId": {
-                      "type": "string"
-                    },
                     "projectKey": {
                       "description": "Stable identity key for grouping and comparison.",
                       "type": "string"
@@ -51286,13 +51540,6 @@
                   },
                   "path": {
                     "description": "Session file path local to its owning host.",
-                    "type": "string"
-                  },
-                  "poolId": {
-                    "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                    "type": "string"
-                  },
-                  "projectId": {
                     "type": "string"
                   },
                   "projectKey": {
@@ -51650,6 +51897,328 @@
         ],
         "description": "Reply to listWorktrees; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List worktrees for a checkout.\nInputs: cwd is a host path.\nInvariants: Results distinguish the main checkout and current worktree; branch may be null.\nEffects: Reads Git worktree state.\nRecovery: Refresh after worktrees or branches change.",
         "title": "HostReply_listWorktrees"
+      },
+      "HostReply_modelsList": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "description": "The selected daemon's model catalog and current slow-mode preference.",
+                "properties": {
+                  "anthropicSlowMode": {
+                    "description": "Whether Claude low-priority mode is configured on the selected daemon.",
+                    "type": "boolean"
+                  },
+                  "connectedProviders": {
+                    "items": {
+                      "properties": {
+                        "disabled": {
+                          "type": "boolean"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "name", "disabled"],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "defaultModel": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "modelId": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["provider", "modelId"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "modelError": {
+                    "type": "string"
+                  },
+                  "modelList": {
+                    "items": {
+                      "properties": {
+                        "contextWindow": {
+                          "type": "number"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "maxTokens": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "supportsFastMode": {
+                          "type": "boolean"
+                        },
+                        "supportsSlowMode": {
+                          "type": "boolean"
+                        },
+                        "thinkingLevels": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": ["id", "name", "provider"],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "models": {
+                    "patternProperties": {
+                      "^(.*)$": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "thinkingLevels": {
+                    "patternProperties": {
+                      "^(.*)$": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "models",
+                  "modelList",
+                  "defaultModel",
+                  "thinkingLevels",
+                  "anthropicSlowMode"
+                ],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "description": "The selected daemon's model catalog and current slow-mode preference.",
+              "properties": {
+                "anthropicSlowMode": {
+                  "description": "Whether Claude low-priority mode is configured on the selected daemon.",
+                  "type": "boolean"
+                },
+                "connectedProviders": {
+                  "items": {
+                    "properties": {
+                      "disabled": {
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "name", "disabled"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "defaultModel": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "modelId": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["provider", "modelId"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "modelError": {
+                  "type": "string"
+                },
+                "modelList": {
+                  "items": {
+                    "properties": {
+                      "contextWindow": {
+                        "type": "number"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "maxTokens": {
+                        "type": "number"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "supportsFastMode": {
+                        "type": "boolean"
+                      },
+                      "supportsSlowMode": {
+                        "type": "boolean"
+                      },
+                      "thinkingLevels": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": ["id", "name", "provider"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "models": {
+                  "patternProperties": {
+                    "^(.*)$": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "thinkingLevels": {
+                  "patternProperties": {
+                    "^(.*)$": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "models",
+                "modelList",
+                "defaultModel",
+                "thinkingLevels",
+                "anthropicSlowMode"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to modelsList; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Load the target daemon's model choices.\nInputs: Set refresh to rediscover models.\nInvariants: Uses the daemon's OMP settings and credentials; returns no credential values.\nEffects: Reads the host cache or queries the host's OMP runner.\nRecovery: Retry on the same host, or inspect that host's OMP configuration.",
+        "title": "HostReply_modelsList"
       },
       "HostReply_open": {
         "anyOf": [
@@ -59732,13 +60301,6 @@
                                   "path": {
                                     "description": "Session file path local to its owning host.",
                                     "type": "string"
-                                  },
-                                  "poolId": {
-                                    "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                                    "type": "string"
-                                  },
-                                  "projectId": {
-                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -63655,13 +64217,6 @@
                                 },
                                 "path": {
                                   "description": "Session file path local to its owning host.",
-                                  "type": "string"
-                                },
-                                "poolId": {
-                                  "description": "Registered logical identity; physical owner/cwd/projectRoot remain unchanged.",
-                                  "type": "string"
-                                },
-                                "projectId": {
                                   "type": "string"
                                 }
                               },
@@ -70855,110 +71410,6 @@
         ],
         "description": "Reply to sessionFileExists; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Check whether a session transcript exists.\nInputs: Supply its daemon-local path.\nInvariants: Paths outside session roots are refused.\nEffects: Reads the filesystem; no process is started.\nRecovery: Correct the path or restore access before retrying a failed check.",
         "title": "HostReply_sessionFileExists"
-      },
-      "HostReply_setUploadRetention": {
-        "anyOf": [
-          {
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": true,
-                "type": "boolean"
-              },
-              "result": {
-                "type": "null"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "result"],
-            "type": "object"
-          },
-          {
-            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
-            "properties": {
-              "blob": {
-                "properties": {
-                  "bytes": {
-                    "minimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "required": ["bytes"],
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": true,
-                "type": "boolean"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "blob"],
-            "type": "object",
-            "x-decoded-result": {
-              "type": "null"
-            }
-          },
-          {
-            "properties": {
-              "error": {
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  },
-                  "status": {
-                    "type": "number"
-                  }
-                },
-                "required": ["status", "code", "message"],
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": false,
-                "type": "boolean"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "error"],
-            "type": "object"
-          }
-        ],
-        "description": "Reply to setUploadRetention; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Set upload retention policy.\nInputs: Supply positive days or null for never.\nInvariants: A sweep checks the latest policy before deletion.\nEffects: Persists policy and schedules retention without waiting for a sweep.\nRecovery: Read policy after uncertain delivery before changing it again.",
-        "title": "HostReply_setUploadRetention"
       },
       "HostReply_shipFinish": {
         "anyOf": [
@@ -80706,6 +81157,86 @@
         "title": "HostRequest_hostArtifactActivationStatus",
         "type": "object"
       },
+      "HostRequest_hostSettingsGet": {
+        "description": "Usage: Read this daemon's Keylime policy.\nInputs: None.\nInvariants: Does not include environment or provider secrets.\nEffects: Reads local policy.\nRecovery: Retry on the same host after reconnect.",
+        "properties": {
+          "args": {
+            "properties": {},
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "hostSettingsGet",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_hostSettingsGet",
+        "type": "object"
+      },
+      "HostRequest_hostSettingsSet": {
+        "description": "Usage: Patch this daemon's Keylime policy.\nInputs: Supply the fields to change; retention uses whole days or null to keep uploads.\nInvariants: Settings do not propagate to any other host.\nEffects: Saves locally and applies to subsequent daemon activity.\nRecovery: Read back the host's policy after an uncertain reply.",
+        "properties": {
+          "args": {
+            "additionalProperties": false,
+            "description": "Patch one daemon's policy, preserving omitted fields.",
+            "properties": {
+              "agentToolsEnabled": {
+                "description": "Enable cross-session agent tools on this daemon.",
+                "type": "boolean"
+              },
+              "autoResumeSessions": {
+                "description": "Resume sessions interrupted on this daemon.",
+                "type": "boolean"
+              },
+              "uploadRetentionDays": {
+                "anyOf": [
+                  {
+                    "maximum": 3650,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Days to retain sent uploads; null retains them indefinitely."
+              }
+            },
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "hostSettingsSet",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_hostSettingsSet",
+        "type": "object"
+      },
       "HostRequest_inspectUploads": {
         "description": "Usage: Inspect upload destination conflicts.\nInputs: directory is a host path; names are destination basenames and owner supplies session context.\nInvariants: Protected targets are rejected; nonReplaceable includes directories and symbolic links among conflicts.\nEffects: Reads destination metadata without publishing files.\nRecovery: Reinspect immediately before a decision; filesystem state can change.",
         "properties": {
@@ -81104,6 +81635,38 @@
         },
         "required": ["type", "seq", "id", "op", "args"],
         "title": "HostRequest_listWorktrees",
+        "type": "object"
+      },
+      "HostRequest_modelsList": {
+        "description": "Usage: Load the target daemon's model choices.\nInputs: Set refresh to rediscover models.\nInvariants: Uses the daemon's OMP settings and credentials; returns no credential values.\nEffects: Reads the host cache or queries the host's OMP runner.\nRecovery: Retry on the same host, or inspect that host's OMP configuration.",
+        "properties": {
+          "args": {
+            "properties": {
+              "refresh": {
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "modelsList",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_modelsList",
         "type": "object"
       },
       "HostRequest_open": {
@@ -83236,47 +83799,6 @@
         "title": "HostRequest_sessionFileExists",
         "type": "object"
       },
-      "HostRequest_setUploadRetention": {
-        "description": "Usage: Set upload retention policy.\nInputs: Supply positive days or null for never.\nInvariants: A sweep checks the latest policy before deletion.\nEffects: Persists policy and schedules retention without waiting for a sweep.\nRecovery: Read policy after uncertain delivery before changing it again.",
-        "properties": {
-          "args": {
-            "properties": {
-              "days": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["days"],
-            "type": "object"
-          },
-          "id": {
-            "type": "string"
-          },
-          "op": {
-            "const": "setUploadRetention",
-            "type": "string"
-          },
-          "seq": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": {
-            "const": "req",
-            "type": "string"
-          }
-        },
-        "required": ["type", "seq", "id", "op", "args"],
-        "title": "HostRequest_setUploadRetention",
-        "type": "object"
-      },
       "HostRequest_shipFinish": {
         "description": "Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Finishing checks shipping and PR state before cleanup; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
         "properties": {
@@ -84867,9 +85389,9 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 83 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 14, minimum 14; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 85 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
-    "version": "13"
+    "version": "14"
   },
   "operations": {
     "operation_activateHostArtifact": {
@@ -85516,6 +86038,52 @@
       },
       "summary": "hostArtifactActivationStatus"
     },
+    "operation_hostSettingsGet": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read this daemon's Keylime policy.\nInputs: None.\nInvariants: Does not include environment or provider secrets.\nEffects: Reads local policy.\nRecovery: Retry on the same host after reconnect.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_hostSettingsGet"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_hostSettingsGet"
+          }
+        ]
+      },
+      "summary": "hostSettingsGet"
+    },
+    "operation_hostSettingsSet": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Patch this daemon's Keylime policy.\nInputs: Supply the fields to change; retention uses whole days or null to keep uploads.\nInvariants: Settings do not propagate to any other host.\nEffects: Saves locally and applies to subsequent daemon activity.\nRecovery: Read back the host's policy after an uncertain reply.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_hostSettingsSet"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_hostSettingsSet"
+          }
+        ]
+      },
+      "summary": "hostSettingsSet"
+    },
     "operation_inspectUploads": {
       "action": "send",
       "channel": {
@@ -85722,6 +86290,29 @@
         ]
       },
       "summary": "listWorktrees"
+    },
+    "operation_modelsList": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Load the target daemon's model choices.\nInputs: Set refresh to rediscover models.\nInvariants: Uses the daemon's OMP settings and credentials; returns no credential values.\nEffects: Reads the host cache or queries the host's OMP runner.\nRecovery: Retry on the same host, or inspect that host's OMP configuration.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_modelsList"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_modelsList"
+          }
+        ]
+      },
+      "summary": "modelsList"
     },
     "operation_open": {
       "action": "send",
@@ -86275,29 +86866,6 @@
       },
       "summary": "sessionFileExists"
     },
-    "operation_setUploadRetention": {
-      "action": "send",
-      "channel": {
-        "$ref": "#/channels/link"
-      },
-      "description": "Usage: Set upload retention policy.\nInputs: Supply positive days or null for never.\nInvariants: A sweep checks the latest policy before deletion.\nEffects: Persists policy and schedules retention without waiting for a sweep.\nRecovery: Read policy after uncertain delivery before changing it again.",
-      "messages": [
-        {
-          "$ref": "#/channels/link/messages/HostRequest_setUploadRetention"
-        }
-      ],
-      "reply": {
-        "channel": {
-          "$ref": "#/channels/link"
-        },
-        "messages": [
-          {
-            "$ref": "#/channels/link/messages/HostReply_setUploadRetention"
-          }
-        ]
-      },
-      "summary": "setUploadRetention"
-    },
     "operation_shipFinish": {
       "action": "send",
       "channel": {
@@ -86806,9 +87374,6 @@
           "$ref": "#/channels/link/messages/HostLinkResync"
         },
         {
-          "$ref": "#/channels/link/messages/HostLinkNotifier"
-        },
-        {
           "$ref": "#/channels/link/messages/HostLinkSessionsChanged"
         },
         {
@@ -86819,9 +87384,6 @@
         },
         {
           "$ref": "#/channels/link/messages/HostLinkStats"
-        },
-        {
-          "$ref": "#/channels/link/messages/HostLinkCapacity"
         },
         {
           "$ref": "#/channels/link/messages/HostLinkUploadAck"

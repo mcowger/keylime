@@ -47,6 +47,7 @@ import { MarkdownBody } from "./MarkdownBody";
 import { ThinkingMarkdown } from "./ThinkingMarkdown";
 import { JavaScriptIcon, PythonIcon } from "./FileIcons";
 import { WorkspaceFileContext } from "@/lib/workspace-file-context";
+import { sessionUrl } from "@/lib/session-identity";
 import { AgentLinkContext, agentLinkIds } from "../lib/agent-links";
 import { MessageCopyActions } from "./MessageCopyActions";
 import { useSpeechContext } from "@/hooks/useSpeechSynthesis";
@@ -300,8 +301,14 @@ function loadThinkingContent(
   sessionId: string,
   entryId: string,
   blockIndex: number,
+  hostId: string | undefined,
 ): Promise<string> {
-  const key = `${sessionId}:${entryId}:${blockIndex}`;
+  const key = JSON.stringify([
+    hostId ?? "local",
+    sessionId,
+    entryId,
+    blockIndex,
+  ]);
   const cached = thinkingContentCache.get(key);
   if (cached) {
     thinkingContentCache.delete(key);
@@ -310,7 +317,10 @@ function loadThinkingContent(
   }
 
   const request = fetch(
-    `/api/sessions/${encodeURIComponent(sessionId)}/entries/${encodeURIComponent(entryId)}/thinking?blockIndex=${blockIndex}`,
+    sessionUrl(
+      `/api/sessions/${encodeURIComponent(sessionId)}/entries/${encodeURIComponent(entryId)}/thinking?blockIndex=${blockIndex}`,
+      hostId,
+    ),
   )
     .then(async (response) => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -529,7 +539,12 @@ export const MessageView = memo(function MessageView({
         cwd={cwd}
         onOpenFile={onOpenFile}
         sessionId={sessionId}
-        defaultCollapsed={custom.customType === "async-result" || IRC_CUSTOM_TYPES.has(custom.customType) ? toolCallsDefaultCollapsed : true}
+        defaultCollapsed={
+          custom.customType === "async-result" ||
+          IRC_CUSTOM_TYPES.has(custom.customType)
+            ? toolCallsDefaultCollapsed
+            : true
+        }
       />
     );
     const prompt = getSkillPromptText(custom);
@@ -538,7 +553,11 @@ export const MessageView = memo(function MessageView({
     return (
       <>
         <UserMessageView
-          message={{ role: "user", content: prompt, timestamp: custom.timestamp }}
+          message={{
+            role: "user",
+            content: prompt,
+            timestamp: custom.timestamp,
+          }}
           cwd={cwd}
           onOpenFile={onOpenFile}
           sessionId={sessionId}
@@ -1752,6 +1771,7 @@ const ThinkingBlock = memo(
     isLatest: boolean;
   }) {
     const { t } = useI18n();
+    const hostId = useContext(WorkspaceFileContext)?.hostId;
     const [expanded, setExpanded] = useState(
       followLatest ? isLatest : expandByDefault,
     );
@@ -1777,7 +1797,7 @@ const ThinkingBlock = memo(
       loadingRef.current = true;
       setLoading(true);
       setError(null);
-      void loadThinkingContent(sessionId, entryId, blockIndex)
+      void loadThinkingContent(sessionId, entryId, blockIndex, hostId)
         .then((text) => setContent(text))
         .catch((err) =>
           setError(err instanceof Error ? err.message : String(err)),
@@ -1786,7 +1806,7 @@ const ThinkingBlock = memo(
           loadingRef.current = false;
           setLoading(false);
         });
-    }, [block.deferred, blockIndex, content, entryId, sessionId, t]);
+    }, [block.deferred, blockIndex, content, entryId, sessionId, hostId, t]);
 
     const handleOpenChange = (nextOpen: boolean) => {
       setExpanded(nextOpen);
@@ -1949,6 +1969,7 @@ const ToolCallBlock = memo(
     sessionId?: string;
   }) {
     const { t } = useI18n();
+    const hostId = useContext(WorkspaceFileContext)?.hostId;
     const openAgentLink = useContext(AgentLinkContext);
     // `partial` results are omp's live snapshots for a tool that is still
     // executing (see lib/types.ts); the committed toolResult replaces them.
@@ -2003,11 +2024,23 @@ const ToolCallBlock = memo(
     const path = typeof block.input?.path === "string" ? block.input.path : "";
     const isWrite = block.toolName.toLowerCase() === "write";
     const agentMessage = isWrite && /^agent:\/\//i.test(path);
-    const device = isWrite ? /^xd:\/\/([a-z][a-z0-9_]*)(?:[?#].*)?$/i.exec(path)?.[1] : undefined;
-    const toolName = agentMessage ? "agent" : device ?? block.toolName;
+    const device = isWrite
+      ? /^xd:\/\/([a-z][a-z0-9_]*)(?:[?#].*)?$/i.exec(path)?.[1]
+      : undefined;
+    const toolName = agentMessage ? "agent" : (device ?? block.toolName);
     const displayName = toolName.replace(/^mcp__/i, "");
-    const iconOnly = /^(?:read|file_read|grep|glob|search|ast_grep|web_search|edit|write|ast_edit|bash|terminal|exec|shell|cmd|todo|task|agent|eval|browser|hub)(?:)$/i.test(toolName) || /^(?:functions|tools)\.(?:read|grep|glob|edit|write|todo|task|eval|agent)$/i.test(toolName);
-    const displayCategory = agentMessage ? "agent-message" : device ? getToolCategory(device) : category;
+    const iconOnly =
+      /^(?:read|file_read|grep|glob|search|ast_grep|web_search|edit|write|ast_edit|bash|terminal|exec|shell|cmd|todo|task|agent|eval|browser|hub)(?:)$/i.test(
+        toolName,
+      ) ||
+      /^(?:functions|tools)\.(?:read|grep|glob|edit|write|todo|task|eval|agent)$/i.test(
+        toolName,
+      );
+    const displayCategory = agentMessage
+      ? "agent-message"
+      : device
+        ? getToolCategory(device)
+        : category;
     const semantic = getSemanticToolLabel(block);
     const todoSummary =
       category === "todo" ? getTodoSummary(block.input) : null;
@@ -2048,7 +2081,7 @@ const ToolCallBlock = memo(
       : hubJobs
         ? hubJobs.map((job) => job.label).join(" · ")
         : null;
-    const rowPreview = category === "code" ? "" : hubPreview ?? preview;
+    const rowPreview = category === "code" ? "" : (hubPreview ?? preview);
 
     const rawFilePath =
       semantic.isFile &&
@@ -2076,13 +2109,25 @@ const ToolCallBlock = memo(
             {!isError && (isRunning || !result) && (
               <span className="activity-row-indicator" aria-hidden>
                 {isRunning || isStreaming ? (
-                  <LoaderCircle size={12} strokeWidth={1.8} className="activity-row-spinner" />
+                  <LoaderCircle
+                    size={12}
+                    strokeWidth={1.8}
+                    className="activity-row-spinner"
+                  />
                 ) : (
-                  <CircleSlash size={12} strokeWidth={1.8} style={{ opacity: 0.5 }} />
+                  <CircleSlash
+                    size={12}
+                    strokeWidth={1.8}
+                    style={{ opacity: 0.5 }}
+                  />
                 )}
               </span>
             )}
-            <span className="activity-tool-icon" title={displayName} aria-hidden>
+            <span
+              className="activity-tool-icon"
+              title={displayName}
+              aria-hidden
+            >
               <ToolCategoryIcon
                 category={displayCategory}
                 size={14}
@@ -2090,19 +2135,49 @@ const ToolCallBlock = memo(
               />
             </span>
             {hubTool || !iconOnly ? (
-              <span className="activity-row-tool">{hubTool ?? displayName}</span>
+              <span className="activity-row-tool">
+                {hubTool ?? displayName}
+              </span>
             ) : (
               <span className="sr-only">{displayName}</span>
             )}
-            {isError && <span className="sr-only">{` (${t("messageView.toolFailed")}) `}</span>}
+            {isError && (
+              <span className="sr-only">{` (${t("messageView.toolFailed")}) `}</span>
+            )}
             {evalLanguage && (
-              <span className="activity-row-language" role="img" aria-label={evalLanguage === "py" ? "Python" : evalLanguage === "js" ? "JavaScript" : evalLanguage} title={evalLanguage === "py" ? "Python" : evalLanguage === "js" ? "JavaScript" : evalLanguage}>
-                {evalLanguage === "py" ? <PythonIcon size={14} /> : evalLanguage === "js" ? <JavaScriptIcon size={14} /> : <Code2 size={14} />}
+              <span
+                className="activity-row-language"
+                role="img"
+                aria-label={
+                  evalLanguage === "py"
+                    ? "Python"
+                    : evalLanguage === "js"
+                      ? "JavaScript"
+                      : evalLanguage
+                }
+                title={
+                  evalLanguage === "py"
+                    ? "Python"
+                    : evalLanguage === "js"
+                      ? "JavaScript"
+                      : evalLanguage
+                }
+              >
+                {evalLanguage === "py" ? (
+                  <PythonIcon size={14} />
+                ) : evalLanguage === "js" ? (
+                  <JavaScriptIcon size={14} />
+                ) : (
+                  <Code2 size={14} />
+                )}
               </span>
             )}
             <span className="activity-row-preview">
               {intent && intent !== rowPreview && (
-                <>{intent}{rowPreview && " · "}</>
+                <>
+                  {intent}
+                  {rowPreview && " · "}
+                </>
               )}
               {agentIds.length > 0 && openAgentLink ? (
                 <span
@@ -2243,10 +2318,25 @@ const ToolCallBlock = memo(
               </div>
               {agentMessage && typeof block.input?.content === "string" && (
                 <div className="tool-call-output">
-                  <div className="tool-call-output-text" data-tool-output="true">
-                    {result && !isRunning && !isError && /^Delivered to .+\.$/.test((resultText ?? "").trim()) && (
-                      <Check size={14} aria-label="Delivered" style={{ display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
-                    )}{block.input.content}
+                  <div
+                    className="tool-call-output-text"
+                    data-tool-output="true"
+                  >
+                    {result &&
+                      !isRunning &&
+                      !isError &&
+                      /^Delivered to .+\.$/.test((resultText ?? "").trim()) && (
+                        <Check
+                          size={14}
+                          aria-label="Delivered"
+                          style={{
+                            display: "inline",
+                            verticalAlign: "text-bottom",
+                            marginRight: 6,
+                          }}
+                        />
+                      )}
+                    {block.input.content}
                   </div>
                 </div>
               )}
@@ -2291,10 +2381,20 @@ const ToolCallBlock = memo(
                             key={i}
                             src={
                               img.url
-                                ? `${img.url}?thumb=1`
+                                ? sessionUrl(
+                                    `${img.url}?thumb=1`,
+                                    /^\/api\/media\/[a-f0-9]{64}$/.test(img.url)
+                                      ? hostId
+                                      : undefined,
+                                  )
                                 : imageBlockSrc(img)
                             }
-                            fullSrc={img.url}
+                            fullSrc={
+                              img.url &&
+                              /^\/api\/media\/[a-f0-9]{64}$/.test(img.url)
+                                ? sessionUrl(img.url, hostId)
+                                : img.url
+                            }
                             alt=""
                             style={{
                               maxWidth: 240,
@@ -2310,7 +2410,12 @@ const ToolCallBlock = memo(
                       </div>
                     )}
                     {!(hubJobs || (hubSend && !isError)) &&
-                      !(agentMessage && typeof block.input?.content === "string" && !isError && /^Delivered to .+\.$/.test((resultText ?? "").trim())) &&
+                      !(
+                        agentMessage &&
+                        typeof block.input?.content === "string" &&
+                        !isError &&
+                        /^Delivered to .+\.$/.test((resultText ?? "").trim())
+                      ) &&
                       !(resultIsEmpty && resultImages.length > 0) &&
                       (block.toolName === "wait" && !resultIsEmpty ? (
                         <div
@@ -2378,34 +2483,95 @@ const ToolCallBlock = memo(
     prev.sessionId === next.sessionId,
 );
 
-function CompactionMessageView({ message, sessionId }: {
+function CompactionMessageView({
+  message,
+  sessionId,
+}: {
   message: CustomMessage;
   sessionId?: string;
 }) {
   const { t, locale } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const summary = getMessageText(message.content);
-  const parsedSummary = useMemo(() => parseCompactionSummary(summary), [summary]);
-  const details = (message.details ?? null) as { tokensBefore?: unknown; tokensAfter?: unknown; method?: unknown } | null;
-  const before = typeof details?.tokensBefore === "number" ? formatCompactNumber(details.tokensBefore, locale) : null;
-  const after = typeof details?.tokensAfter === "number" ? formatCompactNumber(details.tokensAfter, locale) : null;
+  const parsedSummary = useMemo(
+    () => parseCompactionSummary(summary),
+    [summary],
+  );
+  const details = (message.details ?? null) as {
+    tokensBefore?: unknown;
+    tokensAfter?: unknown;
+    method?: unknown;
+  } | null;
+  const before =
+    typeof details?.tokensBefore === "number"
+      ? formatCompactNumber(details.tokensBefore, locale)
+      : null;
+  const after =
+    typeof details?.tokensAfter === "number"
+      ? formatCompactNumber(details.tokensAfter, locale)
+      : null;
   const method = typeof details?.method === "string" ? details.method : null;
   const time = formatTime(message.timestamp, locale);
   return (
-    <div className="activity-row" data-selection-scope="message" tabIndex={-1} style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", margin: "8px 0" }}>
+    <div
+      className="activity-row"
+      data-selection-scope="message"
+      tabIndex={-1}
+      style={{
+        borderTop: "1px solid var(--border)",
+        borderBottom: "1px solid var(--border)",
+        margin: "8px 0",
+      }}
+    >
       <Collapsible open={expanded} onOpenChange={setExpanded}>
         <CollapsibleTrigger className="activity-row-trigger">
-          <span className="activity-row-tool">{t("messageView.conversationCompacted")}</span>
+          <span className="activity-row-tool">
+            {t("messageView.conversationCompacted")}
+          </span>
           {method && <span className="activity-row-preview">{method}</span>}
-          {before !== null && <span className="activity-row-preview">{after !== null ? t("messageView.compactionTokenDelta", { before, after }) : `${before} tokens`}</span>}
-          <ChevronDown size={12} strokeWidth={1.8} aria-hidden style={{ flexShrink: 0, transform: expanded ? "none" : "rotate(-90deg)" }} />
+          {before !== null && (
+            <span className="activity-row-preview">
+              {after !== null
+                ? t("messageView.compactionTokenDelta", { before, after })
+                : `${before} tokens`}
+            </span>
+          )}
+          <ChevronDown
+            size={12}
+            strokeWidth={1.8}
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              transform: expanded ? "none" : "rotate(-90deg)",
+            }}
+          />
         </CollapsibleTrigger>
-        {expanded && <div className="tool-call-details">
-          {time && <div style={{ color: "var(--text-dim)", fontSize: 10 }}>{time}</div>}
-          <div>{t("messageView.compactionDescription")}</div>
-          {parsedSummary.body ? <MarkdownBody className="markdown-compaction-message" sourceSessionId={sessionId}>{parsedSummary.body}</MarkdownBody> : <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{t("messageView.noSummary")}</span>}
-          <CompactionFileMetadata readFiles={parsedSummary.readFiles} modifiedFiles={parsedSummary.modifiedFiles} />
-        </div>}
+        {expanded && (
+          <div className="tool-call-details">
+            {time && (
+              <div style={{ color: "var(--text-dim)", fontSize: 10 }}>
+                {time}
+              </div>
+            )}
+            <div>{t("messageView.compactionDescription")}</div>
+            {parsedSummary.body ? (
+              <MarkdownBody
+                className="markdown-compaction-message"
+                sourceSessionId={sessionId}
+              >
+                {parsedSummary.body}
+              </MarkdownBody>
+            ) : (
+              <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
+                {t("messageView.noSummary")}
+              </span>
+            )}
+            <CompactionFileMetadata
+              readFiles={parsedSummary.readFiles}
+              modifiedFiles={parsedSummary.modifiedFiles}
+            />
+          </div>
+        )}
       </Collapsible>
     </div>
   );
@@ -2560,30 +2726,60 @@ function friendlyHiddenLabel(
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-
 function LateDiagnostics({ body }: { body: string }) {
   const lines = body.split("\n");
-  const diagnostic = /^(.*?):(\d+):(\d+)\s+\[(error|warning|info|hint)\](?:\s+\[([^\]]+)\])?\s*(.*)$/i;
-  const blocks: { heading?: string; severity?: string; source?: string; text: string[] }[] = [];
+  const diagnostic =
+    /^(.*?):(\d+):(\d+)\s+\[(error|warning|info|hint)\](?:\s+\[([^\]]+)\])?\s*(.*)$/i;
+  const blocks: {
+    heading?: string;
+    severity?: string;
+    source?: string;
+    text: string[];
+  }[] = [];
   for (const line of lines) {
     const match = diagnostic.exec(line);
     if (match) {
-      blocks.push({ heading: `${match[1]}:${match[2]}:${match[3]}`, severity: match[4].toLowerCase(), source: match[5], text: [match[6]] });
+      blocks.push({
+        heading: `${match[1]}:${match[2]}:${match[3]}`,
+        severity: match[4].toLowerCase(),
+        source: match[5],
+        text: [match[6]],
+      });
     } else if (blocks.length) {
       blocks[blocks.length - 1].text.push(line);
     } else {
       blocks.push({ text: [line] });
     }
   }
-  return <div className="late-diagnostics">{blocks.map((block, i) =>
-    <div className="late-diagnostic" key={i}>
-      {block.heading && <div className="late-diagnostic-heading"><span className={`late-diagnostic-severity late-diagnostic-severity-${block.severity}`}>{block.severity}</span>{block.source && <span>{block.source}</span>}<span className="late-diagnostic-path">{block.heading}</span></div>}
-      <div className="late-diagnostic-text">{block.text.join("\n")}</div>
+  return (
+    <div className="late-diagnostics">
+      {blocks.map((block, i) => (
+        <div className="late-diagnostic" key={i}>
+          {block.heading && (
+            <div className="late-diagnostic-heading">
+              <span
+                className={`late-diagnostic-severity late-diagnostic-severity-${block.severity}`}
+              >
+                {block.severity}
+              </span>
+              {block.source && <span>{block.source}</span>}
+              <span className="late-diagnostic-path">{block.heading}</span>
+            </div>
+          )}
+          <div className="late-diagnostic-text">{block.text.join("\n")}</div>
+        </div>
+      ))}
     </div>
-  )}</div>;
+  );
 }
 
-function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollapsed }: {
+function CustomActivityRow({
+  message,
+  cwd,
+  onOpenFile,
+  sessionId,
+  defaultCollapsed,
+}: {
   message: CustomMessage;
   cwd?: string;
   onOpenFile?: (filePath: string) => void;
@@ -2602,54 +2798,210 @@ function CustomActivityRow({ message, cwd, onOpenFile, sessionId, defaultCollaps
   const isDiagnostic = message.customType === "lsp-late-diagnostic";
   const wrapper = isDeveloper ? parseLeadingWrapper(text) : null;
   const envelope = isIrc ? parseIrcEnvelope(text) : null;
-  const body = envelope ? envelope.body : isAsync || isDeveloper || message.customType === "lsp-late-diagnostic" || isHidden ? stripHiddenWrappers(text) : text;
-  const label = envelope ? `IRC ← ${envelope.sender ?? formatCustomType(message.customType)}` : wrapper ? wrapperTitle(wrapper) : isHidden ? friendlyHiddenLabel(message.customType, t) : formatCustomType(message.customType);
+  const body = envelope
+    ? envelope.body
+    : isAsync ||
+        isDeveloper ||
+        message.customType === "lsp-late-diagnostic" ||
+        isHidden
+      ? stripHiddenWrappers(text)
+      : text;
+  const label = envelope
+    ? `IRC ← ${envelope.sender ?? formatCustomType(message.customType)}`
+    : wrapper
+      ? wrapperTitle(wrapper)
+      : isHidden
+        ? friendlyHiddenLabel(message.customType, t)
+        : formatCustomType(message.customType);
   const images = getMessageImages(message.content);
   const time = formatTime(message.timestamp, locale);
-  const jobs = isJobResult && message.details && typeof message.details === "object" &&
-    "jobs" in message.details && Array.isArray(message.details.jobs)
-    ? message.details.jobs.map((job: unknown) =>
-        job && typeof job === "object" && "jobId" in job && typeof job.jobId === "string"
-          ? { ...job, id: job.jobId } : job)
-    : null;
+  const jobs =
+    isJobResult &&
+    message.details &&
+    typeof message.details === "object" &&
+    "jobs" in message.details &&
+    Array.isArray(message.details.jobs)
+      ? message.details.jobs.map((job: unknown) =>
+          job &&
+          typeof job === "object" &&
+          "jobId" in job &&
+          typeof job.jobId === "string"
+            ? { ...job, id: job.jobId }
+            : job,
+        )
+      : null;
   const jobRows = jobs !== null ? getHubJobs({ op: "jobs", jobs }) : null;
   const hasJobs = jobRows !== null;
-  const failed = (jobRows?.some((job) => job.status === "failed") ?? false) || (message.customType === "lsp-late-diagnostic" && /\b[1-9]\d*\s+error\(s\)|\[error\]/i.test(body));
+  const failed =
+    (jobRows?.some((job) => job.status === "failed") ?? false) ||
+    (message.customType === "lsp-late-diagnostic" &&
+      /\b[1-9]\d*\s+error\(s\)|\[error\]/i.test(body));
   const cancelled = jobRows?.some((job) => job.status === "cancelled") ?? false;
-  const running = jobRows?.some((job) => ["running", "started", "waiting"].includes(job.status)) ?? false;
-  const warning = message.customType === "lsp-late-diagnostic" && /\b[1-9]\d*\s+warning\(s\)|\[warning\]/i.test(body);
-  const indicator = failed ? <CircleAlert size={14} strokeWidth={1.8} />
-    : cancelled ? <Ban size={14} strokeWidth={1.8} />
-    : running ? <LoaderCircle size={14} strokeWidth={1.8} className="activity-row-spinner" />
-    : warning ? <CircleAlert size={14} strokeWidth={1.8} style={{ color: "var(--status-modified)" }} />
-    : null;
-  const preview = previewText(body.split("\n").find((line) => line.trim()) ?? "");
+  const running =
+    jobRows?.some((job) =>
+      ["running", "started", "waiting"].includes(job.status),
+    ) ?? false;
+  const warning =
+    message.customType === "lsp-late-diagnostic" &&
+    /\b[1-9]\d*\s+warning\(s\)|\[warning\]/i.test(body);
+  const indicator = failed ? (
+    <CircleAlert size={14} strokeWidth={1.8} />
+  ) : cancelled ? (
+    <Ban size={14} strokeWidth={1.8} />
+  ) : running ? (
+    <LoaderCircle
+      size={14}
+      strokeWidth={1.8}
+      className="activity-row-spinner"
+    />
+  ) : warning ? (
+    <CircleAlert
+      size={14}
+      strokeWidth={1.8}
+      style={{ color: "var(--status-modified)" }}
+    />
+  ) : null;
+  const preview = previewText(
+    body.split("\n").find((line) => line.trim()) ?? "",
+  );
   return (
-    <div className="activity-row transcript-message-spacing" data-selection-scope="message" tabIndex={-1}>
+    <div
+      className="activity-row transcript-message-spacing"
+      data-selection-scope="message"
+      tabIndex={-1}
+    >
       <Collapsible open={expanded} onOpenChange={setExpanded}>
         <CollapsibleTrigger className="activity-row-trigger">
           {indicator ? (
-            <span className={`activity-row-indicator${failed ? " activity-row-indicator-error" : ""}`} aria-hidden>{indicator}</span>
+            <span
+              className={`activity-row-indicator${failed ? " activity-row-indicator-error" : ""}`}
+              aria-hidden
+            >
+              {indicator}
+            </span>
           ) : (
             <span className="activity-tool-icon" aria-hidden>
-              {isHidden ? <EyeOff size={14} /> : isJobResult ? <Clock size={14} /> : <MessagesSquare size={14} />}
+              {isHidden ? (
+                <EyeOff size={14} />
+              ) : isJobResult ? (
+                <Clock size={14} />
+              ) : (
+                <MessagesSquare size={14} />
+              )}
             </span>
           )}
-          {(!isJobResult || isHidden) && <span className="activity-row-tool" style={{ minWidth: 0, maxWidth: "55%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${label}${isHidden ? " · hidden" : ""}`}>{label}{isHidden ? " · hidden" : ""}</span>}
-          <span className="activity-row-preview">{preview || (isJobResult && !isHidden ? label : "")}</span>
-          <ChevronDown size={12} strokeWidth={1.8} aria-hidden style={{ flexShrink: 0, transform: expanded ? "none" : "rotate(-90deg)" }} />
+          {(!isJobResult || isHidden) && (
+            <span
+              className="activity-row-tool"
+              style={{
+                minWidth: 0,
+                maxWidth: "55%",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={`${label}${isHidden ? " · hidden" : ""}`}
+            >
+              {label}
+              {isHidden ? " · hidden" : ""}
+            </span>
+          )}
+          <span className="activity-row-preview">
+            {preview || (isJobResult && !isHidden ? label : "")}
+          </span>
+          <ChevronDown
+            size={12}
+            strokeWidth={1.8}
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              transform: expanded ? "none" : "rotate(-90deg)",
+            }}
+          />
         </CollapsibleTrigger>
-        {expanded && <div className="tool-call-details">
-          {time && <div style={{ color: "var(--text-dim)", fontSize: 10 }}>{time}</div>}
-          {wrapper && <div style={{ color: "var(--text-dim)", fontSize: 11, overflowWrap: "anywhere" }}>{wrapperTitle(wrapper)}</div>}
-          {images.map((image, i) => { const src = imageSource(image); return src ? <ClickableImage key={i} src={src} alt="" style={{ maxWidth: 240, maxHeight: 240 }} /> : null; })}
-          {isDiagnostic ? <LateDiagnostics body={body} /> : isAsync ? <pre className="activity-result-text">{body}</pre> : <MarkdownBody className="markdown-custom-message" cwd={cwd} onOpenFile={onOpenFile} sourceSessionId={sessionId}>{body}</MarkdownBody>}
-          {hasJobs && <HubResultPanel input={{ op: "jobs" }} result={{ role: "toolResult", toolCallId: "", toolName: "hub", content: [], details: { op: "jobs", jobs } }} />}
-          <div className="advisor-message-actions">
-            {(text || message.details !== undefined) && <button className="message-copy-action" aria-label={copied ? t("messageView.copied") : t("messageView.copy")} title={copied ? t("messageView.copied") : t("messageView.copy")} onClick={() => copy(body || safeJson(message.details))}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>}
-            {message.details !== undefined && <details className="advisor-message-details"><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
+        {expanded && (
+          <div className="tool-call-details">
+            {time && (
+              <div style={{ color: "var(--text-dim)", fontSize: 10 }}>
+                {time}
+              </div>
+            )}
+            {wrapper && (
+              <div
+                style={{
+                  color: "var(--text-dim)",
+                  fontSize: 11,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {wrapperTitle(wrapper)}
+              </div>
+            )}
+            {images.map((image, i) => {
+              const src = imageSource(image);
+              return src ? (
+                <ClickableImage
+                  key={i}
+                  src={src}
+                  alt=""
+                  style={{ maxWidth: 240, maxHeight: 240 }}
+                />
+              ) : null;
+            })}
+            {isDiagnostic ? (
+              <LateDiagnostics body={body} />
+            ) : isAsync ? (
+              <pre className="activity-result-text">{body}</pre>
+            ) : (
+              <MarkdownBody
+                className="markdown-custom-message"
+                cwd={cwd}
+                onOpenFile={onOpenFile}
+                sourceSessionId={sessionId}
+              >
+                {body}
+              </MarkdownBody>
+            )}
+            {hasJobs && (
+              <HubResultPanel
+                input={{ op: "jobs" }}
+                result={{
+                  role: "toolResult",
+                  toolCallId: "",
+                  toolName: "hub",
+                  content: [],
+                  details: { op: "jobs", jobs },
+                }}
+              />
+            )}
+            <div className="advisor-message-actions">
+              {(text || message.details !== undefined) && (
+                <button
+                  className="message-copy-action"
+                  aria-label={
+                    copied ? t("messageView.copied") : t("messageView.copy")
+                  }
+                  title={
+                    copied ? t("messageView.copied") : t("messageView.copy")
+                  }
+                  onClick={() => copy(body || safeJson(message.details))}
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              )}
+              {message.details !== undefined && (
+                <details className="advisor-message-details">
+                  <summary>JSON</summary>
+                  <pre
+                    style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+                  >
+                    {safeJson(message.details)}
+                  </pre>
+                </details>
+              )}
+            </div>
           </div>
-        </div>}
+        )}
       </Collapsible>
     </div>
   );
@@ -2660,26 +3012,80 @@ function AdvisorMessageView({ message }: { message: CustomMessage }) {
   const text = getMessageText(message.content);
   const images = getMessageImages(message.content);
   const details = message.details;
-  const notes = details && typeof details === "object" && "notes" in details && Array.isArray(details.notes)
-    ? details.notes.filter((note: unknown): note is { note: string; severity?: string } =>
-        !!note && typeof note === "object" && "note" in note && typeof note.note === "string")
-    : [];
+  const notes =
+    details &&
+    typeof details === "object" &&
+    "notes" in details &&
+    Array.isArray(details.notes)
+      ? details.notes.filter(
+          (note: unknown): note is { note: string; severity?: string } =>
+            !!note &&
+            typeof note === "object" &&
+            "note" in note &&
+            typeof note.note === "string",
+        )
+      : [];
   const { copied, copy } = useCopyFeedback();
   return (
     <div className="chat-message advisor-message">
-      <div className="advisor-message-label">{t("messageView.advisorLabel")}</div>
+      <div className="advisor-message-label">
+        {t("messageView.advisorLabel")}
+      </div>
       <div data-selection-scope="message" tabIndex={-1}>
-        {images.map((image, i) => { const src = imageSource(image); return src ? <ClickableImage key={i} src={src} alt="" style={{ maxWidth: 240, maxHeight: 240 }} /> : null; })}
-        {notes.length > 0 ? notes.map((note, i) => {
-          const severity = note.severity === "blocker" || note.severity === "concern" || note.severity === "nit" ? note.severity : undefined;
-          return <div className="advisor-finding" key={i}>
-            {severity && <div className={`advisor-severity advisor-severity-${severity}`}>{severity}</div>}
-            <ThinkingMarkdown>{note.note}</ThinkingMarkdown>
-          </div>;
-        }) : text && <ThinkingMarkdown>{text}</ThinkingMarkdown>}
+        {images.map((image, i) => {
+          const src = imageSource(image);
+          return src ? (
+            <ClickableImage
+              key={i}
+              src={src}
+              alt=""
+              style={{ maxWidth: 240, maxHeight: 240 }}
+            />
+          ) : null;
+        })}
+        {notes.length > 0
+          ? notes.map((note, i) => {
+              const severity =
+                note.severity === "blocker" ||
+                note.severity === "concern" ||
+                note.severity === "nit"
+                  ? note.severity
+                  : undefined;
+              return (
+                <div className="advisor-finding" key={i}>
+                  {severity && (
+                    <div
+                      className={`advisor-severity advisor-severity-${severity}`}
+                    >
+                      {severity}
+                    </div>
+                  )}
+                  <ThinkingMarkdown>{note.note}</ThinkingMarkdown>
+                </div>
+              );
+            })
+          : text && <ThinkingMarkdown>{text}</ThinkingMarkdown>}
         <div className="advisor-message-actions">
-          {(text || message.details !== undefined) && <button className="message-copy-action" aria-label={copied ? t("messageView.copied") : t("messageView.copy")} title={copied ? t("messageView.copied") : t("messageView.copy")} onClick={() => copy(text || safeJson(message.details))}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>}
-          {message.details !== undefined && <details className="advisor-message-details"><summary>JSON</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{safeJson(message.details)}</pre></details>}
+          {(text || message.details !== undefined) && (
+            <button
+              className="message-copy-action"
+              aria-label={
+                copied ? t("messageView.copied") : t("messageView.copy")
+              }
+              title={copied ? t("messageView.copied") : t("messageView.copy")}
+              onClick={() => copy(text || safeJson(message.details))}
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          )}
+          {message.details !== undefined && (
+            <details className="advisor-message-details">
+              <summary>JSON</summary>
+              <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                {safeJson(message.details)}
+              </pre>
+            </details>
+          )}
         </div>
       </div>
     </div>

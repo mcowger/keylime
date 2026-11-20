@@ -1,4 +1,4 @@
-// Pure semver ordering: browser-importable (Settings' cluster rules use it), no node:* modules.
+// Pure semver ordering usable in the browser.
 
 function parseVersion(
   version: string,

@@ -18,6 +18,7 @@ type WorkerEvent = {
   ports?: { postMessage: (message: unknown) => void }[];
   tag?: string;
   waitUntil?: (promise: Promise<unknown>) => void;
+  notification?: { data: unknown; close(): void };
 };
 type WorkerGlobals = {
   indexedDB?: ReturnType<typeof fakeIndexedDB>;
@@ -49,6 +50,7 @@ function loadWorker(
   const listeners: Record<string, (event: WorkerEvent) => void> = {};
   const shown: { title: string; options: NotificationOptions }[] = [];
   const self = {
+    location: { origin: "https://keylime.example" },
     addEventListener: (
       type: string,
       listener: (event: WorkerEvent) => void,
@@ -74,6 +76,16 @@ function loadWorker(
   return {
     shown,
     message: (event: WorkerEvent) => listeners.message(event),
+    click: async (url: string) => {
+      let done: Promise<unknown> | undefined;
+      listeners.notificationclick({
+        notification: { data: { url }, close() {} },
+        waitUntil: (promise) => {
+          done = promise;
+        },
+      });
+      await done;
+    },
     push: async (payload: unknown) => {
       let done: Promise<unknown> | undefined;
       listeners.push({
@@ -142,9 +154,26 @@ test("an unreadable push still shows a notification and reports it as info", asy
   });
 });
 
+test("notification clicks open only host-qualified sessions", async () => {
+  const messages: unknown[] = [];
+  const tab = {
+    url: "https://keylime.example/",
+    focused: true,
+    focus: async () => {},
+    postMessage: (message: unknown) => messages.push(structuredClone(message)),
+  };
+  const worker = loadWorker([tab]);
+  await worker.click("/?session=s1");
+  await worker.click("/?session=s1&hostId=remote");
+  assert.deepEqual(messages, [
+    { type: "omp-open-session", sessionId: "s1", hostId: "remote" },
+  ]);
+});
+
 const outboxEntry = (id: string, sessionId = "session") => ({
   id,
   sessionId,
+  hostId: "local",
   scope: "original-installation",
   mode: "prompt",
   message: "Keep this message",
@@ -158,6 +187,7 @@ const accepted = {
     entry: {
       id: "accepted",
       sessionId: "canonical",
+      hostId: "local",
       mode: "prompt",
       message: "Stored on server",
       state: "held",
@@ -173,7 +203,7 @@ test("the active service worker explicitly reports its outbox capability", () =>
     data: { type: "omp-outbox-capability" },
     ports: [{ postMessage: (reply) => replies.push(structuredClone(reply)) }],
   });
-  assert.deepEqual(replies, [{ type: "omp-outbox-capability", version: 2 }]);
+  assert.deepEqual(replies, [{ type: "omp-outbox-capability", version: 3 }]);
 });
 
 test("Background Sync accepts a matching delivered tombstone with an empty message", async () => {
@@ -185,6 +215,7 @@ test("Background Sync accepts a matching delivered tombstone with an empty messa
       entry: {
         id: "accepted",
         sessionId: "canonical-session",
+        hostId: "local",
         mode: "prompt",
         message: "",
         state: "delivered",
@@ -264,6 +295,7 @@ test("upload continuity: restarted Background Sync authorizes persisted uploads 
             entry: {
               id: "proof-first",
               sessionId: "session",
+              hostId: "local",
               mode: "prompt",
               message: "Keep this message",
               uploads: ["completed-upload"],
@@ -336,7 +368,10 @@ for (const reply of [
     });
     await assert.rejects(worker.sync(), /entries left to send/);
     assert.deepEqual(requests, ["unconfirmed", "accepted"]);
-    assert.deepEqual([...indexedDB.entries.keys()], ["unconfirmed", "later"]);
+    assert.deepEqual(
+      [...indexedDB.entries.values()].map((entry) => entry.id),
+      ["unconfirmed", "later"],
+    );
   });
 }
 
@@ -506,6 +541,7 @@ test("Background Sync retries authentication failures without overtaking that se
             entry: {
               id: "other",
               sessionId: "other-session",
+              hostId: "local",
               mode: "prompt",
               message: "Stored",
               state: "held",
@@ -572,6 +608,7 @@ test("Background Sync forwards a Retry copy's replaces and retires both rows onl
             entry: {
               id: "retry",
               sessionId: "session",
+              hostId: "local",
               mode: "prompt",
               message: "Keep this message",
               state: "held",
@@ -600,7 +637,7 @@ test("Background Sync forwards a Retry copy's replaces and retires both rows onl
     },
   ]);
   assert.deepEqual(
-    [...indexedDB.entries.keys()],
+    [...indexedDB.entries.values()].map((entry) => entry.id),
     ["failed-original", "retry"],
     "neither row disappears before commit",
   );
@@ -608,7 +645,7 @@ test("Background Sync forwards a Retry copy's replaces and retires both rows onl
   indexedDB.release();
   await syncing;
   assert.deepEqual(
-    [...indexedDB.entries.keys()],
+    [...indexedDB.entries.values()].map((entry) => entry.id),
     [],
     "the accepted retry and its original are both retired",
   );
@@ -673,6 +710,7 @@ test("Background Sync flattens legacy retry chains and atomically retires same-s
             entry: {
               id: body.id,
               sessionId: stored.sessionId,
+              hostId: "local",
               mode: body.mode,
               message: stored.message,
               state: "held",
@@ -696,10 +734,10 @@ test("Background Sync flattens legacy retry chains and atomically retires same-s
     root.uploadProofs,
     "flattening does not strip or re-prove attachments",
   );
-  assert.deepEqual([...indexedDB.entries.keys()].sort(), [
-    "sw-other-session",
-    "sw-unrelated",
-  ]);
+  assert.deepEqual(
+    [...indexedDB.entries.values()].map((entry) => entry.id).sort(),
+    ["sw-other-session", "sw-unrelated"],
+  );
   assert.deepEqual(indexedDB.entries.get("sw-other-session")?.uploadProofs, {
     "other-file": "other-proof",
   });
@@ -775,6 +813,7 @@ test("Background Sync retires browser-only lineage after a lost acknowledgement"
             entry: {
               id: body.id,
               sessionId,
+              hostId: "local",
               mode: body.mode,
               message: "",
               state: "delivered",
@@ -816,11 +855,10 @@ test("Background Sync retires browser-only lineage after a lost acknowledgement"
     root.uploadProofs,
     "Background Sync keeps the accepted retry's original upload proof",
   );
-  assert.deepEqual([...indexedDB.entries.keys()].sort(), [
-    "sw-different-intent",
-    "sw-different-upload",
-    "sw-same-text-unrelated",
-  ]);
+  assert.deepEqual(
+    [...indexedDB.entries.values()].map((entry) => entry.id).sort(),
+    ["sw-different-intent", "sw-different-upload", "sw-same-text-unrelated"],
+  );
 });
 
 test("Background Sync keeps missing and cross-session ancestors as independent server references", async () => {
@@ -852,6 +890,7 @@ test("Background Sync keeps missing and cross-session ancestors as independent s
             entry: {
               id: body.id,
               sessionId: stored.sessionId,
+              hostId: "local",
               mode: body.mode,
               message: stored.message,
               state: "held",
@@ -872,7 +911,7 @@ test("Background Sync keeps missing and cross-session ancestors as independent s
     ],
   );
   assert.deepEqual(
-    [...indexedDB.entries.keys()],
+    [...indexedDB.entries.values()].map((entry) => entry.id),
     ["sw-cross-root"],
     "unconfirmed roots are not deleted with independent copies",
   );

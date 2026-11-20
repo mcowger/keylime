@@ -8,6 +8,7 @@ type Command = {
   n: number;
   req: string;
   sessionId: string;
+  hostId: string;
   advisor: boolean;
   body: string;
   type: string;
@@ -128,6 +129,7 @@ test("ws goes through the worker and maps errors like HTTP", async () => {
     n: sent.n,
     req: sent.req,
     sessionId: "s 1",
+    hostId: "local",
     advisor: true,
     body: '{"type":"get_state"}',
     type: "get_state",
@@ -167,8 +169,8 @@ test("ws goes through the worker and maps errors like HTTP", async () => {
   assert.deepEqual(requests, []);
 });
 
-test("http: true falls back to POST /api/agent/<id>?advisor=1", async () => {
-  setSessionAdvisorSpawn("s1", true);
+test("HTTP fallback keeps the command's host and its advisor flag", async () => {
+  setSessionAdvisorSpawn("s1", true, "remote");
   answerWith = () => ({ http: true });
   respond = () => ({
     ok: true,
@@ -177,13 +179,14 @@ test("http: true falls back to POST /api/agent/<id>?advisor=1", async () => {
     json: async () => ({ success: true, data: "over http" }),
   });
   assert.equal(
-    await sendAgentCommand("s1", { type: "get_state" }),
+    await sendAgentCommand("s1", { type: "get_state" }, { hostId: "remote" }),
     "over http",
   );
-  setSessionAdvisorSpawn("s1", false);
+  assert.equal(commands.at(-1)!.hostId, "remote");
+  setSessionAdvisorSpawn("s1", false, "remote");
   assert.deepEqual(
     requests.map(({ url, init }) => [url, init.method, init.body]),
-    [["/api/agent/s1?advisor=1", "POST", commands.at(-1)!.body]],
+    [["/api/agent/s1?advisor=1&hostId=remote", "POST", commands.at(-1)!.body]],
   );
 });
 

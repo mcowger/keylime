@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -10,221 +11,107 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import {
+  loadBrowserSettings,
+  loadHostSettings,
+  loadLocalAgentEnv,
+  saveBrowserSettings,
+  saveHostSettings,
+} from "./web-settings";
 
-const { loadWebServerSettings, saveWebServerSettings } =
-  await import("./web-settings.ts");
-
-function withAgentDir<T>(run: (dir: string) => T): T {
-  const dir = mkdtempSync(join(tmpdir(), "keylime-web-settings-"));
+function withAgentDir(run: (dir: string) => void): void {
+  const dir = mkdtempSync(join(tmpdir(), "keylime-settings-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = dir;
   try {
-    return run(dir);
+    run(dir);
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;
-    globalThis.__keylimeSettingsCache = undefined;
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
-test("defaults apply when no settings file exists yet", () => {
-  withAgentDir(() => {
-    assert.deepEqual(loadWebServerSettings(), {
-      autoResumeSessions: false,
-      agentToolsEnabled: false,
-      agentEnv: {},
-      browserTransport: "ws",
-      uploadRetentionDays: 30,
-    });
-  });
-});
+const defaults = {
+  autoResumeSessions: false,
+  agentToolsEnabled: false,
+  uploadRetentionDays: null,
+};
 
-test("agentEnv round-trips through the settings file", () => {
+test("host policy and browser transport have independent defaults and writes", () => {
   withAgentDir((dir) => {
-    saveWebServerSettings({ agentEnv: { OBSIDIAN_API_KEY: "secret" } });
-    const written = JSON.parse(
-      readFileSync(join(dir, "keylime-settings.json"), "utf8"),
+    assert.deepEqual(loadHostSettings(), defaults);
+    assert.deepEqual(loadBrowserSettings(), { browserTransport: "ws" });
+    saveBrowserSettings({ browserTransport: "sse" });
+    saveHostSettings({ autoResumeSessions: true, agentToolsEnabled: true });
+    saveHostSettings({ uploadRetentionDays: null });
+    assert.deepEqual(loadHostSettings(), {
+      autoResumeSessions: true,
+      agentToolsEnabled: true,
+      uploadRetentionDays: null,
+    });
+    assert.deepEqual(
+      JSON.parse(
+        readFileSync(join(dir, "keylime-browser-settings.json"), "utf8"),
+      ),
+      { browserTransport: "sse" },
     );
-    assert.deepEqual(written.agentEnv, { OBSIDIAN_API_KEY: "secret" });
-
-    // Re-read from disk (the cache is keyed by path, so a fresh dir proves the read path).
-    const fresh = mkdtempSync(join(tmpdir(), "keylime-web-settings-"));
-    writeFileSync(
-      join(fresh, "keylime-settings.json"),
-      JSON.stringify(written),
-      "utf8",
-    );
-    globalThis.__keylimeSettingsCache = undefined;
-    process.env.PI_CODING_AGENT_DIR = fresh;
-    try {
-      assert.deepEqual(loadWebServerSettings(), {
-        autoResumeSessions: false,
-        agentToolsEnabled: false,
-        agentEnv: { OBSIDIAN_API_KEY: "secret" },
-        browserTransport: "ws",
-        uploadRetentionDays: 30,
-      });
-    } finally {
-      rmSync(fresh, { recursive: true, force: true });
-    }
+    assert.equal(loadBrowserSettings().browserTransport, "sse");
   });
 });
 
-test("the settings file, which holds agentEnv, is readable by its user only, even where it was wider before", () => {
+test("host policy preserves private operator environment and rejects attempts to change it", () => {
   withAgentDir((dir) => {
     const file = join(dir, "keylime-settings.json");
-    writeFileSync(file, "{}\n");
+    const agentEnv = {
+      OBSIDIAN_API_KEY: "local-secret",
+      PATH: "untrusted",
+      INVALID_VALUE: 123,
+    };
+    writeFileSync(file, JSON.stringify({ agentEnv, browserTransport: "sse" }));
     chmodSync(file, 0o644);
-    saveWebServerSettings({ agentEnv: { OBSIDIAN_API_KEY: "secret" } });
+    assert.deepEqual(loadBrowserSettings(), { browserTransport: "ws" });
+    for (const patch of [
+      { agentEnv: {} },
+      { browserTransport: "sse" },
+      { uploadRetentionDays: 0 },
+      { autoResumeSessions: "true" },
+      { agentToolsEnabled: null },
+    ]) {
+      assert.throws(
+        () => saveHostSettings(patch),
+        /Invalid host settings patch/,
+      );
+    }
+    assert.deepEqual(saveHostSettings({ autoResumeSessions: true }), {
+      ...defaults,
+      autoResumeSessions: true,
+    });
+    assert.deepEqual(loadLocalAgentEnv(), { OBSIDIAN_API_KEY: "local-secret" });
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")).agentEnv, agentEnv);
     assert.equal(statSync(file).mode & 0o777, 0o600);
   });
 });
 
-test("a patch leaves the other keys untouched", () => {
-  withAgentDir(() => {
-    saveWebServerSettings({ autoResumeSessions: true, agentEnv: { A: "1" } });
-    saveWebServerSettings({ agentEnv: { B: "2" } });
-    assert.deepEqual(loadWebServerSettings(), {
-      autoResumeSessions: true,
-      agentToolsEnabled: false,
-      agentEnv: { B: "2" },
-      browserTransport: "ws",
-      uploadRetentionDays: 30,
-    });
+test("retention preserves the locally stored policy until a host patch overrides it", () => {
+  withAgentDir((dir) => {
+    mkdirSync(join(dir, "keylime"));
+    const old = join(dir, "keylime", "upload-retention.json");
+    writeFileSync(old, JSON.stringify({ days: null }));
+    assert.equal(loadHostSettings().uploadRetentionDays, null);
+    saveHostSettings({ uploadRetentionDays: 90 });
+    assert.equal(loadHostSettings().uploadRetentionDays, 90);
+    assert.deepEqual(JSON.parse(readFileSync(old, "utf8")), { days: null });
   });
 });
 
-test("corrupt files fall back to defaults instead of throwing", () => {
+test("manually edited or malformed settings are read without a stale cache", () => {
   withAgentDir((dir) => {
-    writeFileSync(join(dir, "keylime-settings.json"), "{ not json", "utf8");
-    assert.deepEqual(loadWebServerSettings(), {
-      autoResumeSessions: false,
-      agentToolsEnabled: false,
-      agentEnv: {},
-      browserTransport: "ws",
-      uploadRetentionDays: 30,
-    });
-  });
-});
-
-test("agentToolsEnabled round-trips, and a non-boolean value falls back to false (#275)", () => {
-  withAgentDir(() => {
-    saveWebServerSettings({ agentToolsEnabled: true });
-    assert.equal(loadWebServerSettings().agentToolsEnabled, true);
-  });
-  withAgentDir((dir) => {
-    writeFileSync(
-      join(dir, "keylime-settings.json"),
-      JSON.stringify({ agentToolsEnabled: "yes" }),
-      "utf8",
-    );
-    assert.equal(loadWebServerSettings().agentToolsEnabled, false);
-  });
-});
-
-test("a missing browserTransport reads as ws, sse and ws round-trip, and unknown values (the experiment's ws-* included) read as ws with the pool numbers dropped", () => {
-  withAgentDir((dir) => {
-    writeFileSync(
-      join(dir, "keylime-settings.json"),
-      JSON.stringify({ autoResumeSessions: true }),
-      "utf8",
-    );
-    assert.equal(loadWebServerSettings().browserTransport, "ws");
-  });
-  for (const transport of ["sse", "ws"] as const) {
-    withAgentDir(() => {
-      saveWebServerSettings({ browserTransport: transport });
-      assert.equal(loadWebServerSettings().browserTransport, transport);
-    });
-  }
-  for (const value of [
-    "ws-client",
-    "ws-client-split",
-    "ws-session",
-    "ws-pool",
-    "websocket",
-    true,
-  ]) {
-    withAgentDir((dir) => {
-      writeFileSync(
-        join(dir, "keylime-settings.json"),
-        JSON.stringify({
-          browserTransport: value,
-          browserTransportPerSocket: 8,
-          browserTransportMaxSockets: 3,
-        }),
-        "utf8",
-      );
-      assert.deepEqual(
-        loadWebServerSettings(),
-        {
-          autoResumeSessions: false,
-          agentToolsEnabled: false,
-          agentEnv: {},
-          browserTransport: "ws",
-          uploadRetentionDays: 30,
-        },
-        `${JSON.stringify(value)} reads as ws`,
-      );
-    });
-  }
-});
-
-test("only string-valued agentEnv entries are kept", () => {
-  withAgentDir((dir) => {
-    writeFileSync(
-      join(dir, "keylime-settings.json"),
-      JSON.stringify({
-        autoResumeSessions: "yes",
-        agentEnv: { GOOD: "1", BAD: 2, WORSE: null, NESTED: { a: 1 } },
-      }),
-      "utf8",
-    );
-    assert.deepEqual(loadWebServerSettings(), {
-      autoResumeSessions: false,
-      agentToolsEnabled: false,
-      agentEnv: { GOOD: "1" },
-      browserTransport: "ws",
-      uploadRetentionDays: 30,
-    });
-  });
-});
-
-test("uploadRetentionDays defaults to 30, null and 1..3650 round-trip, and anything else stored reads as 30", () => {
-  withAgentDir((dir) => {
-    for (const days of [null, 1, 7, 90, 3650]) {
-      saveWebServerSettings({ uploadRetentionDays: days });
-      globalThis.__keylimeSettingsCache = undefined;
-      assert.equal(
-        loadWebServerSettings().uploadRetentionDays,
-        days,
-        `${days} round-trips through the file`,
-      );
-    }
-    for (const stored of [0, -5, 3651, 1.5, "7", true, {}, [7], undefined]) {
-      writeFileSync(
-        join(dir, "keylime-settings.json"),
-        JSON.stringify({ uploadRetentionDays: stored }),
-        "utf8",
-      );
-      globalThis.__keylimeSettingsCache = undefined;
-      assert.equal(
-        loadWebServerSettings().uploadRetentionDays,
-        30,
-        `${JSON.stringify(stored)} reads as 30`,
-      );
-    }
-  });
-});
-
-test("a non-object agentEnv is dropped", () => {
-  withAgentDir((dir) => {
-    writeFileSync(
-      join(dir, "keylime-settings.json"),
-      JSON.stringify({ agentEnv: "A=1" }),
-      "utf8",
-    );
-    assert.deepEqual(loadWebServerSettings().agentEnv, {});
+    const file = join(dir, "keylime-settings.json");
+    assert.deepEqual(loadHostSettings(), defaults);
+    writeFileSync(file, JSON.stringify({ autoResumeSessions: true }));
+    assert.equal(loadHostSettings().autoResumeSessions, true);
+    writeFileSync(file, "{ not json");
+    assert.deepEqual(loadHostSettings(), defaults);
   });
 });

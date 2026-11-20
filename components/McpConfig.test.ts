@@ -99,3 +99,39 @@ test("MCP management cannot mutate configuration without a selected session", as
     true,
   );
 });
+
+test("remote MCP reads only the selected live session and hides the project editor", async (t) => {
+  const requests: URL[] = [];
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async (url: RequestInfo | URL, options?: RequestInit) => {
+      assert.equal(options?.method, undefined);
+      requests.push(new URL(String(url), "http://localhost"));
+      return Response.json({
+        liveServers: [
+          { name: "demo", source: "Project level", status: "disabled" },
+        ],
+      });
+    },
+  );
+  const view = render(
+    createElement(McpConfig, {
+      cwd: "/remote/project",
+      hostId: "east",
+      sessionId: "same-id",
+    }),
+  );
+  await waitFor(() => assert.equal(requests.length, 1));
+  assert.deepEqual(Object.fromEntries(requests[0]!.searchParams), {
+    hostId: "east",
+    sessionId: "same-id",
+    attach: "1",
+    live: "1",
+  });
+  assert.equal(view.container.querySelector(".mcp-editor-card"), null);
+  assert.ok(
+    (screen.getByRole("button", { name: "Reload MCP" }) as HTMLButtonElement)
+      .disabled,
+  );
+});

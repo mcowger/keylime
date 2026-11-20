@@ -15,23 +15,23 @@ Thanks to [omercnet](https://github.com/omercnet) and the [Paseo shared browser 
 - Run persistent terminal shells on the workspace's host. Switching tabs or restarting the web server does not stop them; restarting the host daemon does.
 - Attach to the same live OMP session from the browser and the native terminal with `klc`, including across linked hosts. Multiple terminal clients share the host-owned screen and input. See [terminal attachment](#terminal-attachment-with-klc).
 - Inspect files, upload attachments, search sessions, view tool output and subagent activity, and follow todo progress. Ship changes from a workspace using the Git and pull request workflow.
-- Link remote hosts and run sessions on the machine that owns the project. A trusted cluster can share provider credentials and OMP configuration; it does not move projects or automatically place sessions.
+- Link independent remote hosts and choose where each session runs. Each host uses its own settings, plugins, environment, and provider logins.
 - Configure models, provider logins, MCP servers, skills, plugins, and agent settings. Get browser notifications for completed runs, requests for input, and failures.
 - Use the responsive interface on desktop or mobile, including an installable web app, light and dark themes, and per-browser display settings.
 
 ## Screenshots
 
-| View | Screenshot |
-| --- | --- |
-| A conversation alongside the project and workspace sidebar. | ![Conversation and project sidebar](docs/screenshots/50-17.png) |
-| Tool calls and commit output in a conversation. | ![Conversation showing tool activity](docs/screenshots/50-37.png) |
-| An advisor finding in an active coding session. | ![Advisor concern in a coding session](docs/screenshots/50-43.png) |
-| Model selection and reasoning effort controls. | ![Model picker and reasoning controls](docs/screenshots/51-09.png) |
-| Context usage, session statistics, and compaction. | ![Context usage and session statistics](docs/screenshots/51-21.png) |
-| Running services and their output in the Jobs panel. | ![Service details and output](docs/screenshots/51-28.png) |
-| Tasks and subagents in the Activity panel. | ![Task list and subagent activity](docs/screenshots/51-42.png) |
-| A subagent's task and result. | ![Subagent task and result](docs/screenshots/51-46.png) |
-| The same subagent with its transcript expanded. | ![Expanded subagent transcript](docs/screenshots/51-50.png) |
+| View                                                        | Screenshot                                                          |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| A conversation alongside the project and workspace sidebar. | ![Conversation and project sidebar](docs/screenshots/50-17.png)     |
+| Tool calls and commit output in a conversation.             | ![Conversation showing tool activity](docs/screenshots/50-37.png)   |
+| An advisor finding in an active coding session.             | ![Advisor concern in a coding session](docs/screenshots/50-43.png)  |
+| Model selection and reasoning effort controls.              | ![Model picker and reasoning controls](docs/screenshots/51-09.png)  |
+| Context usage, session statistics, and compaction.          | ![Context usage and session statistics](docs/screenshots/51-21.png) |
+| Running services and their output in the Jobs panel.        | ![Service details and output](docs/screenshots/51-28.png)           |
+| Tasks and subagents in the Activity panel.                  | ![Task list and subagent activity](docs/screenshots/51-42.png)      |
+| A subagent's task and result.                               | ![Subagent task and result](docs/screenshots/51-46.png)             |
+| The same subagent with its transcript expanded.             | ![Expanded subagent transcript](docs/screenshots/51-50.png)         |
 
 ## Requirements
 
@@ -106,9 +106,9 @@ On reconnect, `klc` restores a fresh screen snapshot rather than replaying input
 
 Password authentication is optional on every bind address. Without it, anyone who can reach the server can use its agent and file capabilities. Set `KEYLIME_PASSWORD_HASH` to the output of `keylime hash-password`, and use HTTPS through a trusted reverse proxy or VPN for remote access. Never put a plaintext password in a command-line argument.
 
-The browser connects through `/api/events/link`; host daemons connect through `/api/hosts/link`. A reverse proxy must forward WebSocket upgrades. Browser connections can fall back to server-sent events. Hosts sharing credentials or cluster configuration also need access to the broker and cluster configuration endpoints without proxy authentication or redirects; those endpoints authenticate host tokens themselves.
+The browser connects through `/api/events/link`; host daemons connect through `/api/hosts/link`. A reverse proxy must forward WebSocket upgrades. Browser connections can fall back to server-sent events. `/api/hosts/link` authenticates daemon tokens itself.
 
-To add a machine without installing the web server or browser assets, follow the [remote host deployment guide](docs/remote-host-deployment.md). The daemon connects outward and keeps runs alive across web-server restarts. Only join machines you trust to a cluster: members receive shared provider credentials and executable OMP configuration.
+To add a machine without installing the web server or browser assets, follow the [remote host deployment guide](docs/remote-host-deployment.md). A daemon connects to one controller and keeps runs alive across controller restarts. The controller can manage several hosts and deploy binaries without sharing their configuration.
 
 ## Deployment and development
 

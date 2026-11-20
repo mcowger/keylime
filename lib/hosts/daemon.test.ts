@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -689,142 +688,6 @@ test("unsafe creation identities are rejected before launching a child", async (
   }
 });
 
-test("capacity follows real turns, reconnects with fresh unsequenced samples, and stops sampling off-link", () => {
-  // Builtin replacements are confined to this child; daemon, sampler, WS, and omp subprocesses remain real.
-  const script = `
-    const assert = require("node:assert/strict");
-    const fs = require("node:fs");
-    const os = require("node:os");
-    const { syncBuiltinESMExports } = require("node:module");
-    const scratch = ${JSON.stringify(scratch)};
-    const servers = [];
-    const decoder = new TextDecoder();
-    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    const files = {
-      "/proc/self/cgroup": "0::/omp\\n",
-      "/proc/self/mountinfo": "31 22 0:28 / /sys/fs/cgroup rw - cgroup2 cgroup rw\\n",
-      "/proc/meminfo": "MemAvailable: 8388608 kB\\n",
-      "/sys/fs/cgroup/omp/cpu.max": "250000 100000\\n",
-      "/sys/fs/cgroup/omp/cpuset.cpus.effective": "0-3\\n",
-      "/sys/fs/cgroup/omp/memory.max": "8589934592\\n",
-      "/sys/fs/cgroup/omp/memory.current": "2147483648\\n",
-      "/sys/fs/cgroup/cpu.max": "max 100000\\n",
-      "/sys/fs/cgroup/cpuset.cpus.effective": "0-7\\n",
-      "/sys/fs/cgroup/memory.max": "max\\n",
-      "/sys/fs/cgroup/memory.current": "0\\n",
-    };
-    const readFileSync = fs.readFileSync;
-    let reads = 0, load1 = 0.75, failProc = false;
-    fs.readFileSync = (path, ...args) => {
-      if (typeof path !== "string" || (!path.startsWith("/proc/") && !path.startsWith("/sys/fs/cgroup/"))) return readFileSync(path, ...args);
-      if (path === "/proc/stat") {
-        reads += 1;
-        if (failProc) throw Object.assign(new Error("Counter unavailable"), { code: "EIO" });
-        return "cpu " + (100 + reads * 10) + " 0 0 " + (900 + reads * 90) + " 0 0 0 0\\n";
-      }
-      if (!(path in files)) throw Object.assign(new Error("No fixture file: " + path), { code: "ENOENT" });
-      return files[path];
-    };
-    os.availableParallelism = () => 8;
-    os.loadavg = () => [load1, 0, 0];
-    syncBuiltinESMExports();
-    const capacityUrl = ${JSON.stringify(new URL("./capacity.ts", import.meta.url).href)};
-    const capacity = await import(capacityUrl);
-    const sampleHostCapacity = capacity.sampleHostCapacity;
-    const { mock } = await import("bun:test");
-    mock.module(capacityUrl, () => ({ ...capacity, sampleHostCapacity(activeSessions) {
-      const platform = process.platform;
-      Object.defineProperty(process, "platform", { value: "linux" });
-      try { return sampleHostCapacity(activeSessions); }
-      finally { Object.defineProperty(process, "platform", { value: platform }); }
-    } }));
-    // Accelerate only the five-second cadence, preserving watchdog/redial/child timers.
-    const interval = globalThis.setInterval;
-    globalThis.setInterval = (fn, ms, ...args) => interval(fn, ms === 5000 ? 25 : ms, ...args);
-    const { runHostDaemon } = await import(${JSON.stringify(new URL("./daemon.ts", import.meta.url).href)});
-    const { decodeBlobFrame, LINK_PROTOCOL_VERSION, PartJoiner } = await import(${JSON.stringify(new URL("./link-protocol.ts", import.meta.url).href)});
-    ${waitFor.toString()}
-    ${scriptedServer.toString()}
-    ${start.toString()}
-    ${spawnChannel.toString()}
-    const server = scriptedServer();
-    const daemon = start(server);
-    const capacities = () => server.up.filter((m) => m.type === "capacity");
-    const nextCapacity = async (activeSessions) => {
-      const before = capacities().length;
-      await waitFor(() => capacities().length > before, "a fresh capacity report", 2000);
-      const message = capacities().at(-1);
-      assert.equal("seq" in message, false, "capacity is never replay-sequenced");
-      assert.deepEqual(message.sample, {
-        effectiveCpus: 2.5, load1, busyFraction: 0.1, stealFraction: 0,
-        availableMemoryBytes: 6442450944, activeSessions,
-      });
-    };
-    const emit = async (ch, frame, big = false) => {
-      const before = server.up.filter((m) => m.type === "stdout" && m.ch === server.chs[ch]).length;
-      server.stdin(ch, "frame", { frame, big });
-      // A following plain echo is a barrier after the entire big frame was read.
-      server.stdin(ch, "echo");
-      await waitFor(() => server.up.filter((m) => m.type === "stdout" && m.ch === server.chs[ch]).slice(before).some((m) => m.line === '{"t":"echoed"}'), "the emitted turn frame");
-    };
-    try {
-      await waitFor(() => server.hellos.length === 1, "the hello");
-      await spawnChannel(server, "c1");
-      await spawnChannel(server, "c2");
-      await nextCapacity(0);
-      await emit("c1", { type: "agent_start" });
-      await emit("c1", { type: "agent_start" });
-      await nextCapacity(1);
-      await emit("c2", { type: "agent_start" }, true);
-      await nextCapacity(2);
-      await emit("c1", { type: "agent_end" });
-      await emit("c1", { type: "agent_end" });
-      await nextCapacity(1);
-      await emit("c2", { type: "agent_end" }, true);
-      await nextCapacity(0);
-      await emit("c1", { type: "agent_start" });
-      await nextCapacity(1);
-      failProc = true;
-      await sleep(60);
-      const missingAt = capacities().length;
-      await sleep(80);
-      assert.equal(capacities().length, missingAt, "unavailable counters cannot become fabricated capacity");
-      failProc = false;
-      await nextCapacity(1);
-      server.holdAcks = true;
-      await nextCapacity(1);
-      server.refuse = () => 503;
-      server.drop();
-      await waitFor(() => server.diagnoses > 0, "the refused redial");
-      const disconnectedReads = reads;
-      await sleep(100);
-      assert.equal(reads, disconnectedReads, "disconnected sampling timers stop");
-      load1 = 1.25;
-      server.refuse = () => null;
-      server.holdAcks = false;
-      await waitFor(() => server.hellos.length === 2, "the relink");
-      await nextCapacity(1);
-      const sinceHello = server.up.slice(server.upAtHello[1]).filter((m) => m.type === "capacity");
-      assert.ok(sinceHello.length > 0);
-      assert.ok(sinceHello.every((m) => m.sample.load1 === 1.25 && !("seq" in m)), "old samples cannot be replayed as fresh ones");
-      server.stdin("c1", "exit");
-      await waitFor(() => server.up.some((m) => m.type === "exit" && m.ch === server.chs.c1), "the active child's exit");
-      await nextCapacity(0);
-    } finally {
-      await daemon.stop();
-      for (const server of servers) server.stop();
-    }
-    const stoppedReads = reads;
-    await sleep(100);
-    assert.equal(reads, stoppedReads, "stopped daemons retain no sampling timer");
-  `;
-  const child = spawnSync(process.execPath, ["--eval", script], {
-    encoding: "utf8",
-    timeout: 25_000,
-  });
-  assert.equal(child.status, 0, child.stderr || child.error?.message);
-});
-
 function captureLog() {
   const lines: string[] = [];
   const original = console.error;
@@ -1012,7 +875,7 @@ test("an unknown op gets a 501 res, not a refused line", async () => {
   }
 });
 
-test("setUploadRetention validates days, persists them under the agent dir and sweeps; the next daemon sweeps with them at start", async () => {
+test("hostSettingsSet persists retention and sweeps both on patch and on restart", async () => {
   const log = captureLog();
   const upload = (name: string, ageDays: number) => {
     const file = join(
@@ -1032,27 +895,30 @@ test("setUploadRetention validates days, persists them under the agent dir and s
   };
   const stored = join(
     process.env.PI_CODING_AGENT_DIR!,
-    "keylime",
-    "upload-retention.json",
+    "keylime-settings.json",
   );
-  const old = upload("old.bin", 40);
+  const old = upload("old.bin", 20);
   const fresh = upload("fresh.bin", 1);
   const server = scriptedServer();
   const daemon = start(server);
   try {
     await waitFor(() => server.hellos.length === 1, "the hello");
-    assert.equal(existsSync(old), true, "no stored value yet: no sweep");
+    assert.equal(
+      existsSync(old),
+      true,
+      "the default retention keeps a 20-day-old file",
+    );
     for (const [id, days] of [
       ["bad0", 0],
       ["bad1", "7"],
       ["bad2", 3651],
-      ["bad3", undefined],
+      ["bad3", {}],
     ] as const) {
       server.send({
         type: "req",
         id,
-        op: "setUploadRetention",
-        args: { days },
+        op: "hostSettingsSet",
+        args: { uploadRetentionDays: days },
       });
       await waitFor(() => server.res(id), "the refusal");
       const result = server.res(id);
@@ -1064,12 +930,15 @@ test("setUploadRetention validates days, persists them under the agent dir and s
     server.send({
       type: "req",
       id: "ok",
-      op: "setUploadRetention",
-      args: { days: 7 },
+      op: "hostSettingsSet",
+      args: { uploadRetentionDays: 7 },
     });
     await waitFor(() => server.res("ok"), "the answer");
     assert.equal(server.res("ok")?.ok, true);
-    assert.deepEqual(JSON.parse(readFileSync(stored, "utf8")), { days: 7 });
+    assert.equal(
+      JSON.parse(readFileSync(stored, "utf8")).uploadRetentionDays,
+      7,
+    );
     await waitFor(() => !existsSync(old), "the sweep");
     assert.equal(existsSync(fresh), true);
   } finally {
@@ -1493,6 +1362,36 @@ test("uplink messages unacked when the socket drops are resent after the next we
   }
 });
 
+test("the v14 daemon rejects a v13 welcome before executing channel requests", async () => {
+  const log = captureLog();
+  const cwd = mkdtempSync(join(scratch, "v13-welcome-"));
+  const server = scriptedServer({ version: 13 });
+  server.onHello = () => [
+    {
+      type: "req",
+      seq: 1,
+      id: "old-open",
+      op: "open",
+      args: openCreation(cwd),
+    },
+  ];
+  const daemon = start(server);
+  try {
+    await waitFor(
+      () => server.hellos.length >= 2,
+      "a redial after the rejected welcome",
+    );
+    assert.ok(server.hellos.every((hello) => hello.v === 14));
+    assert.equal(daemon.control("status").linked, false);
+    assert.equal(server.res("old-open"), undefined);
+    assert.deepEqual(childrenIn(cwd), []);
+  } finally {
+    await daemon.stop();
+    rmSync(cwd, { recursive: true, force: true });
+    log.restore();
+  }
+});
+
 test("close 4426 exits 1 naming the side to update; close 4409 exits 0", async () => {
   const log = captureLog();
   try {
@@ -1501,7 +1400,7 @@ test("close 4426 exits 1 naming the side to update; close 4409 exits 0", async (
         2,
         "this host's keylime is newer than the server's: update keylime on the server",
       ],
-      [10, "update keylime on the server"],
+      [13, "update keylime on the server"],
       [LINK_PROTOCOL_VERSION + 1, "update keylime on this host"],
     ] as const) {
       log.lines.length = 0;
@@ -2054,7 +1953,6 @@ test("a primary loopback link caps at 3 s; every other link caps at 30 s", () =>
   assert.equal(nextRedialDelay(2_000, "http://localhost:30178"), 3_000);
   assert.equal(nextRedialDelay(2_000, "https://main.example.com"), 4_000);
   assert.equal(nextRedialDelay(40_000, "https://main.example.com"), 30_000);
-  assert.equal(nextRedialDelay(2_000, "http://localhost:30178", false), 4_000);
 });
 
 test("a daemon stopped before its first dial never dials", async () => {

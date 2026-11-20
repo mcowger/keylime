@@ -12,7 +12,7 @@ import { parseLocalUri } from "@/lib/local-uri";
 /**
  * @apiContract resolveSessionLocalFile
  * @apiUsage Resolve a session-local URI to an existing path on the owning host for the file viewer.
- * @apiInputs uri must have valid local:// syntax; id can be a live alias which is followed to its owning session.
+ * @apiInputs uri must have valid local:// syntax; id can be a live alias which is followed to its owning session. Optional hostId selects the host; omission selects local.
  * @apiInvariants The host applies its own confinement and filename rules and stats the file without reading it. The returned sessionId is the owner, not necessarily the requested alias.
  * @apiEffects Reads host filesystem metadata; no file contents are returned and no agent process is started.
  * @apiRecovery Use the returned owner when opening the file, since a temporary alias can disappear; resolve again if the file moves or the host reconnects.
@@ -22,6 +22,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(request.url).searchParams.get("hostId") ?? "local";
   const uri = new URL(request.url).searchParams.get("uri") ?? "";
   // Main checks only shared URI syntax; the owning daemon applies its platform's filename rules.
   const parsed = parseLocalUri(uri);
@@ -31,7 +32,7 @@ export async function GET(
       { status: 400 },
     );
   try {
-    const resolved = await resolveWorkspaceHost(undefined, id, {
+    const resolved = await resolveWorkspaceHost(hostId, id, {
       followAlias: true,
     });
     if ("response" in resolved) return resolved.response;

@@ -12,6 +12,7 @@ import type { PushSubscription } from "web-push";
 import { getAgentDir } from "./omp/paths";
 import {
   isValidNotificationId,
+  notificationId,
   parseNotificationPrefs,
   type NotificationEvent,
   type NotificationHistoryEntry,
@@ -356,13 +357,13 @@ export function listHistory(): NotificationHistoryEntry[] {
   });
 }
 
-/** A reused id (`<sessionId>:<type>`) replaces its entry: it is a new notification, unread unless `read` says it was seen. */
+/** A reused host/session/type tag replaces its entry and starts with a fresh read state. */
 export function recordHistory(
   event: NotificationEvent,
   { at = Date.now(), read = false }: { at?: number; read?: boolean } = {},
 ): NotificationHistoryEntry {
   const database = db();
-  const id = `${event.sessionId}:${event.type}`;
+  const id = notificationId(event);
   transaction(database, () => {
     database.prepare("DELETE FROM history WHERE id = ?").run(id);
     database

@@ -43,7 +43,7 @@ import {
 export interface ArchiveBrowserProps {
   open: boolean;
   onClose: () => void;
-  onRestored: (sessionId: string) => void;
+  onRestored: (sessionId: string, hostId: string) => void;
 }
 
 /** Identity across hosts: two hosts can hold an archive under the same key. */
@@ -413,7 +413,7 @@ export function ArchiveBrowser({
               archive.id.slice(0, 10),
           }),
         );
-        onRestored(restoredId);
+        onRestored(restoredId, archive.hostId ?? "local");
         onClose();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

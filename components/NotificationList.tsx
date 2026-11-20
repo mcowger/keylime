@@ -156,16 +156,19 @@ export function NotificationList() {
 function NotificationRow({ entry }: { entry: NotificationHistoryEntry }) {
   const { t, locale } = useI18n();
   const { title, body } = renderNotification(entry.event, t);
-  const { sessionId } = entry.event;
-  // Following a notification is reading it.
-  const open = sessionId
-    ? () => {
-        notificationHistory.markRead(entry.id);
-        window.dispatchEvent(
-          new CustomEvent(OPEN_SESSION_EVENT, { detail: sessionId }),
-        );
-      }
-    : undefined;
+  const { sessionId, hostId } = entry.event;
+  // Legacy history has no reliable click target.
+  const open =
+    sessionId && hostId
+      ? () => {
+          notificationHistory.markRead(entry.id);
+          window.dispatchEvent(
+            new CustomEvent(OPEN_SESSION_EVENT, {
+              detail: { sessionId, hostId },
+            }),
+          );
+        }
+      : undefined;
   const clickGuard = useDragClickGuard();
   const drag = useRef<{
     id: number;

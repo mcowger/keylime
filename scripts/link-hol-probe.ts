@@ -28,6 +28,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
 import { percentile } from "../lib/transport-stats";
+import { sessionUrl } from "../lib/session-identity";
 
 const SMALL_EVERY_MS = 200;
 const SETTLE_MS = 70_000;
@@ -130,7 +131,7 @@ const command = (
   session: string,
   body: Record<string, unknown>,
   allow?: number[],
-) => api(`/api/agent/${session}`, { body, allow });
+) => api(sessionUrl(`/api/agent/${session}`, hostId), { body, allow });
 
 /** A valid PNG of random pixels: 8-bit RGB, or 1-bit gray. */
 function noisePng(side: number, rgb: boolean): Buffer {
@@ -303,7 +304,7 @@ try {
   // aborted before the model answers, omp may never write the session file (a slow uplink makes that the rule).
   await command(b, storedPrompt);
   await waitIdle(b, SETUP_TIMEOUT_MS);
-  const read = await api(`/api/sessions/${b}`);
+  const read = await api(sessionUrl(`/api/sessions/${b}`, hostId));
   console.log(`a read of B is ${(read.bytes / 1e6).toFixed(1)} MB`);
   // Under 1 MiB the read is one inline line, not a large frame: the up phase would time something else.
   if (read.bytes < 1024 * 1024)
@@ -323,7 +324,7 @@ try {
     await phase(
       "up",
       async () => {
-        await api(`/api/sessions/${b}`);
+        await api(sessionUrl(`/api/sessions/${b}`, hostId));
       },
       c,
     );
@@ -340,7 +341,7 @@ try {
   // Only what this run made. A session never written (C) answers 404 once its omp is stopped.
   for (const id of created) {
     try {
-      await api(`/api/sessions/${id}`, {
+      await api(sessionUrl(`/api/sessions/${id}`, hostId), {
         method: "DELETE",
         allow: [404],
         cleanup: true,

@@ -10,6 +10,13 @@ import {
 import { randomUUID } from "node:crypto";
 import { Value } from "@sinclair/typebox/value";
 import {
+  HostModelsSchema,
+  HostSettingsSchema,
+  type HostModels,
+  type HostSettings,
+  type HostSettingsPatch,
+} from "../api-contracts/configuration-models";
+import {
   HostArtifactActivationResultSchema,
   type ActivateHostArtifactArgs,
   type HostArtifactActivationArgs,
@@ -43,7 +50,6 @@ import {
   transportMetricsPath,
 } from "../transport-metrics";
 import { isRecord } from "../type-guards";
-import type { HostCapacity } from "./capacity";
 import type { ArchivedSessionInfo, SessionInfo } from "../types";
 import {
   isLinkUp,
@@ -93,7 +99,6 @@ import {
   type HostRecord,
 } from "./registry";
 import type { SessionOps } from "./session-ops";
-import { loadPools, type HostPool } from "./pools";
 import { validateHostTools } from "./shared-requests";
 import {
   WORKSPACE_OP_PARAMS,
@@ -132,12 +137,6 @@ export type UploadAck = Omit<
   Extract<UpMessage, { type: "upload_ack" }>,
   "type" | "seq"
 >;
-
-/** The current socket's latest resource report, timed by the server's monotonic clock. */
-export interface CapacitySnapshot {
-  sample: HostCapacity;
-  receivedAt: number;
-}
 
 interface PendingOp {
   op: HostOpName;
@@ -183,7 +182,6 @@ interface Link {
   hostVersion: number | null;
   /** Shared lifecycle (v7) is advertised independently of the v8 pool extensions. */
   shared: boolean;
-  capacity: CapacitySnapshot | null;
   ompVersion: string | null;
   keylimeVersion: string | null;
   workspaceOps: Set<string>;
@@ -193,7 +191,6 @@ interface Link {
   releaseArch?: string;
   lastSeenAt: string | null;
   autoApprove: boolean;
-  notifier: boolean;
   /** The socket whose hello this link took; null while the daemon has none. */
   socket: LinkSocket | null;
   shipCredential?: string;
@@ -415,7 +412,6 @@ function linkFor(id: string): Link {
       status: "offline",
       hostVersion: null,
       shared: false,
-      capacity: null,
       ompVersion: null,
       keylimeVersion: null,
       workspaceOps: new Set(),
@@ -424,7 +420,6 @@ function linkFor(id: string): Link {
       platform: null,
       lastSeenAt: null,
       autoApprove: false,
-      notifier: true,
       socket: null,
       downSeq: 0,
       sender: new LinkSender(),
@@ -708,7 +703,6 @@ function failAllOps(link: Link, error: () => Error): void {
 /** The socket is gone: ops in flight fail now rather than at their timeout. */
 function endSocket(link: Link): void {
   link.socket = null;
-  link.capacity = null;
   recordDropped(link);
   // Upload bytes not sent yet go nowhere now: each upload resumes from the host's offset (uploadStart).
   link.sender.dropBlobs();
@@ -785,7 +779,6 @@ const stopping = () => json({ error: "key lime is shutting down" }, 503);
 export function freezeHostLinks(): void {
   hub().frozen = true;
   for (const link of hub().links.values()) {
-    link.capacity = null;
     recordDropped(link);
     link.socket?.close(LINK_CLOSE.goingAway, "keylime is restarting");
   }
@@ -986,7 +979,6 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
   // One link per host: the newest wins and the previous daemon exits.
   const previous = link.socket;
   link.socket = ws;
-  link.capacity = null;
   previous?.close(LINK_CLOSE.replaced, "replaced by a newer link");
   if (previous) {
     // Upload bytes the old socket may have lost must not be followed by later ones on this socket: they resume instead.
@@ -1009,7 +1001,6 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
   link.unknownLog.reset();
   link.hostVersion = hello.v;
   link.shared = true;
-  link.notifier = hello.link?.notifier === true;
   enqueue(link, encodeLine({ type: "welcome", v: hello.v, hostId: link.id }));
   // Resend what the daemon has not applied, in order and paced, before anything new.
   link.sentSeq = hello.ack;
@@ -1241,10 +1232,6 @@ function applyUp(
     message.type === "ack"
   )
     return;
-  if (message.type === "capacity") {
-    link.capacity = { sample: message.sample, receivedAt: performance.now() };
-    return;
-  }
   if (message.type === "pty_event") {
     const listener = hub().ptyListeners.get(
       JSON.stringify([link.id, message.id]),
@@ -1289,9 +1276,6 @@ function applyUp(
     }
     case "res":
       return settle(link, message);
-    case "notifier":
-      link.notifier = message.on;
-      return;
     case "channels_changed":
       reattach(link, message.channels, false);
       return;
@@ -2188,11 +2172,6 @@ export function hostOwnsLifecycle(hostId: string): boolean {
   return hub().links.get(hostId)?.shared === true;
 }
 
-export function isNotifier(hostId: string): boolean {
-  const link = hub().links.get(hostId);
-  return !link || !link.shared || link.notifier;
-}
-
 /** A linked machine: the `Host` calls go over its link. */
 export class RemoteHost implements Host {
   readonly id: string;
@@ -2203,6 +2182,18 @@ export class RemoteHost implements Host {
     this.id = id;
     this.sessionOps = remoteSessionOps(id);
     this.workspaceOps = remoteWorkspaceOps(id);
+  }
+
+  getSettings() {
+    return getRemoteHostSettings(this.id);
+  }
+
+  setSettings(patch: HostSettingsPatch) {
+    return setRemoteHostSettings(this.id, patch);
+  }
+
+  listModels(refresh?: boolean) {
+    return listRemoteHostModels(this.id, refresh);
   }
 
   supportsWorkspaceOp(name: keyof WorkspaceOps): boolean {
@@ -2437,11 +2428,9 @@ export interface LocalHostRow {
 
 export type HostRow = LocalHostRow | LinkedHostRow;
 
-/** Settings → Hosts payload (`GET /api/hosts` and the `hosts` channel): this machine first, then linked hosts. This machine's status is its daemon link's.
- * `pools` is left out while pools.json cannot be read: a client keeps the last it had. */
+/** This machine first, then linked hosts; shared by GET /api/hosts and its live stream. */
 export function hostsSnapshot(): {
   hosts: HostRow[];
-  pools?: HostPool[];
 } {
   const link = hub().links.get(LOCAL_HOST_ID);
   const local: LocalHostRow = {
@@ -2459,19 +2448,10 @@ export function hostsSnapshot(): {
     serverPlatform: process.platform,
     daemonManaged: process.env.NODE_ENV !== "development",
   };
-  let pools: HostPool[] | undefined;
-  try {
-    pools = loadPools();
-  } catch {
-    // Left out; see above.
-  }
-  return {
-    hosts: [local, ...listHosts()],
-    ...(pools && { pools }),
-  };
+  return { hosts: [local, ...listHosts()] };
 }
 
-/** Tell `hosts` subscribers the registry changed (rename, toggle, revoke); link changes notify on their own. */
+/** Publish enrollment, rename, and revocation. Links also publish their own changes. */
 export function notifyHostsChange(): void {
   notify(hub().changeListeners);
 }
@@ -2480,11 +2460,6 @@ export function notifyHostsChange(): void {
 export function lastUplinkAt(hostId: string): number | null {
   const lastSeenAt = hub().links.get(hostId)?.lastSeenAt;
   return lastSeenAt ? Date.parse(lastSeenAt) : null;
-}
-
-/** Link telemetry is internal scheduling state; reading it never creates a link or broadcasts a change. */
-export function getHostCapacity(hostId: string): CapacitySnapshot | null {
-  return hub().links.get(hostId)?.capacity ?? null;
 }
 
 export function getHostLinkProtocol(hostId: string): number | null {
@@ -2528,15 +2503,14 @@ export async function adoptedChild(
   );
 }
 
-/** Whether a host still runs a child of `sessionId`, joined by this server or not (a failed join leaves it running). */
-export function hostListsChild(sessionId: string): boolean {
-  for (const link of hub().links.values()) {
-    // A link kept across `bun --hot` from older code lacks the set: its listing is unknown, so stay retryable.
-    const listed: Set<string> | undefined = link.listedSessions;
-    if (isLinkUp(link.status) && (listed ? listed.has(sessionId) : true))
-      return true;
-  }
-  return false;
+/** Whether this host may still run the session. Missing listing data does not prove absence. */
+export function hostListsChild(sessionId: string, hostId = "local"): boolean {
+  const link = hub().links.get(hostId);
+  return (
+    !!link &&
+    isLinkUp(link.status) &&
+    (link.listedSessions?.has(sessionId) ?? true)
+  );
 }
 
 /** Resolves once every child of `sessionId` the host listed in a hello has exited or been adopted.
@@ -2693,33 +2667,90 @@ export async function hostArtifactActivationOp(
   if (hostId === LOCAL_HOST_ID || !getHost(hostId))
     throw new HostOpError(404, "host_not_found", "Select a linked remote host");
   const link = hub().links.get(hostId);
-  if (op === "activateHostArtifact" && link?.socket && isLinkUp(link.status) && !link.canActivateArtifact)
-    throw new HostOpError(501, "host_activation_unsupported", "This daemon does not support artifact activation");
+  if (
+    op === "activateHostArtifact" &&
+    link?.socket &&
+    isLinkUp(link.status) &&
+    !link.canActivateArtifact
+  )
+    throw new HostOpError(
+      501,
+      "host_activation_unsupported",
+      "This daemon does not support artifact activation",
+    );
   const result = await request(hostId, op, args);
   if (!Value.Check(HostArtifactActivationResultSchema, result))
-    throw new HostOpError(502, "host_bad_result", "The host did not send a valid activation result");
+    throw new HostOpError(
+      502,
+      "host_bad_result",
+      "The host did not send a valid activation result",
+    );
   return result;
 }
 
 /** Releases are available only to live standalone hosts that can install a pair. */
-export function hostReleaseTarget(hostId: string): { platform: string; arch: string } {
+export function hostReleaseTarget(hostId: string): {
+  platform: string;
+  arch: string;
+} {
   if (hostId === LOCAL_HOST_ID || !getHost(hostId))
     throw new HostOpError(404, "host_not_found", "Select a linked remote host");
   const link = hub().links.get(hostId);
   if (!link?.socket || !isLinkUp(link.status))
     throw new HostOpError(503, "host_offline", "The selected host is offline");
   const { platform, releaseArch: arch } = link;
-  if (!link.canActivateArtifact || (platform !== "linux" && platform !== "darwin") || (arch !== "x64" && arch !== "arm64"))
-    throw new HostOpError(501, "host_activation_unsupported", "This host does not support release deployment");
+  if (
+    !link.canActivateArtifact ||
+    (platform !== "linux" && platform !== "darwin") ||
+    (arch !== "x64" && arch !== "arm64")
+  )
+    throw new HostOpError(
+      501,
+      "host_activation_unsupported",
+      "This host does not support release deployment",
+    );
   return { platform, arch };
 }
 
-/** Tell `hostId`'s daemon how many days to keep sent uploads (null: for ever). A daemon from before the op answers 501. */
-export function setHostUploadRetention(
+export async function getRemoteHostSettings(
   hostId: string,
-  days: number | null,
-): Promise<unknown> {
-  return request(hostId, "setUploadRetention", { days });
+): Promise<HostSettings> {
+  const result = await request(hostId, "hostSettingsGet", {});
+  if (!Value.Check(HostSettingsSchema, result))
+    throw new HostOpError(
+      502,
+      "invalid_host_result",
+      "Invalid host settings response",
+    );
+  return result;
+}
+
+export async function setRemoteHostSettings(
+  hostId: string,
+  patch: HostSettingsPatch,
+): Promise<HostSettings> {
+  const result = await request(hostId, "hostSettingsSet", patch);
+  if (!Value.Check(HostSettingsSchema, result))
+    throw new HostOpError(
+      502,
+      "invalid_host_result",
+      "Invalid host settings response",
+    );
+  return result;
+}
+
+export async function listRemoteHostModels(
+  hostId: string,
+  refresh = false,
+): Promise<HostModels> {
+  const result = await request(hostId, "modelsList", { refresh }, 180_000);
+  if (!Value.Check(HostModelsSchema, result))
+    throw new HostOpError(
+      502,
+      "invalid_host_result",
+      "Invalid host models response",
+    );
+  return result;
 }
 
 /** Queue upload bytes (at most pieceBytes) for `hostId`'s daemon, fair with its other traffic; false when it has no socket. */

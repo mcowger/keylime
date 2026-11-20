@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { sessionKey } from "./session-identity";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import type { AgentSessionWrapper } from "./rpc-manager.ts";
 import {
+  linkHost,
   linkLocalHost,
   listedSession,
   ompChild,
@@ -71,7 +73,14 @@ function setRegistry(wrapper: LiveWrapper | AgentSessionWrapper | undefined) {
   spawns.length = 0;
   invalidateHostSessionList("local");
   globalThis.__ompSessions = new Map(
-    wrapper ? [[SESSION, wrapper as unknown as AgentSessionWrapper]] : [],
+    wrapper
+      ? [
+          [
+            sessionKey(SESSION, "local"),
+            wrapper as unknown as AgentSessionWrapper,
+          ],
+        ]
+      : [],
   );
   globalThis.__ompStartLocks = new Map();
 }
@@ -137,12 +146,14 @@ function nativeReply(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function ask(id = SESSION, clientMessageIds = ASKED) {
+async function ask(id = SESSION, clientMessageIds = ASKED, hostId = "local") {
   const response = await runAgentCommand(
     id,
     { type: "get_client_message_status", clientMessageIds },
     false,
     "owner",
+    undefined,
+    { hostId },
   );
   return { status: response.status, body: await response.json() };
 }
@@ -231,10 +242,11 @@ const OLD_SESSION = "01a0e6b0-d916-7610-8343-f4a766ba0051";
 
 /** An outbox row that a native identity move re-homed: first under `source`, now owned by `canonical`. */
 function movedEntry(id: string, source: string, canonical: string) {
-  outboxEntries(source); // opens the store
+  outboxEntries(source, "local"); // opens the store
   const now = Date.now();
   globalThis
-    .__ompOutboxStore!.db.prepare(
+    .__keylimeHostOutboxes!.get("local")!
+    .store!.db.prepare(
       "INSERT INTO entries (id, session_id, source_session_id, mode, message, owner, advisor, state, created_at, done_at) VALUES (?, ?, ?, 'prompt', '', 'owner', 0, 'delivered', ?, ?)",
     )
     .run(id, canonical, source, now, now);
@@ -432,7 +444,9 @@ test("a wrapper whose child is still shutting down is a retryable 503 until the 
   );
   setRegistry(wrapper);
   // As registerSession does: the registry drops the wrapper once the child has really exited.
-  wrapper.onDestroy(() => globalThis.__ompSessions!.delete(SESSION));
+  wrapper.onDestroy(() =>
+    globalThis.__ompSessions!.delete(sessionKey(SESSION, "local")),
+  );
   const disposing = wrapper.destroyAndWait("test");
   assert.equal(wrapper.isAlive(), false);
   let { status, body } = await ask();
@@ -474,6 +488,17 @@ test("a registry miss while the session's host is offline is a retryable 503, ne
   assert.equal(status, 503, JSON.stringify(body));
   assert.equal(body.code, "host_offline");
   assert.equal(spawns.length, 0);
+});
+
+test("handoff never asks a different host's live child with the same session ID", async (t) => {
+  const local = live(() => nativeReply());
+  setRegistry(local);
+  const remote = await linkHost("Same session ID");
+  t.after(() => hub.closeHostLink(remote.id));
+  const { status, body } = await ask(SESSION, ASKED, remote.id);
+  assert.equal(status, 409, JSON.stringify(body));
+  assert.equal(body.code, "handoff_child_unavailable");
+  assert.deepEqual(local.sent, []);
 });
 
 test("a child another server started is awaited while this server adopts it, then asked", async (t) => {

@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test, { after, before } from "node:test";
 import type { TestContext } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -22,7 +22,9 @@ import type { LinkSocketData } from "./hosts/hub.ts";
 import type { LinkDriver } from "./hosts/link-driver.test-helper.ts";
 import type { DownMessage } from "./hosts/link-protocol.ts";
 import type { MessageReplacementWatch } from "./rpc-manager.ts";
+import { invalidateHostSessionList } from "./hosts/session-index.ts";
 import type { UploadSink, UploadStartRequest } from "./uploads.ts";
+import { sessionKey } from "./session-identity.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "keylime-uploads-"));
 const previous = {
@@ -353,7 +355,13 @@ test("workspace publication enforces upload owner and host and cannot also attac
         e.code === "upload_destination_conflict",
     );
     assert.throws(
-      () => uploads.takeUploads({ type: "prompt", uploads: [id] }, OWNER),
+      () =>
+        uploads.takeUploads(
+          { type: "prompt", uploads: [id] },
+          OWNER,
+          undefined,
+          hostId,
+        ),
       (e) =>
         e != null &&
         typeof e === "object" &&
@@ -1425,7 +1433,10 @@ test("a prompt with uploads reaches the session with the Attached files block, a
   };
   const previous = globalThis.__ompSessions;
   globalThis.__ompSessions = new Map([
-    [s.sessionId, live as unknown as InstanceType<typeof AgentSessionWrapper>],
+    [
+      sessionKey(s.sessionId, hostId),
+      live as unknown as InstanceType<typeof AgentSessionWrapper>,
+    ],
   ]);
   t.after(() => {
     globalThis.__ompSessions = previous;
@@ -1436,6 +1447,8 @@ test("a prompt with uploads reaches the session with the Attached files block, a
     { type: "prompt", message: "read it", uploads: [id] },
     false,
     OWNER,
+    undefined,
+    { hostId },
   );
   assert.equal(response.status, 200, await response.clone().text());
   const path = join(uploadsDir(s), "e2e.txt");
@@ -1448,7 +1461,7 @@ test("a prompt with uploads reaches the session with the Attached files block, a
   assert.equal("uploads" in sent[0], false, "omp never sees the field");
 });
 
-test("a Stop sent behind a prompt still attaching reaches the session after the prompt; another session is not delayed", async (t) => {
+test("Stop waits for an attaching prompt on its host, but the same session ID on another host is not delayed", async (t) => {
   const host = await linkHost("Fence");
   const s = {
     host: { id: host.id },
@@ -1456,8 +1469,8 @@ test("a Stop sent behind a prompt still attaching reaches the session after the 
     sessionFile: "/remote/fence.jsonl",
   };
   const other = {
-    host: { id: host.id },
-    sessionId: randomUUID(),
+    host: { id: "local" },
+    sessionId: s.sessionId,
     sessionFile: "/remote/other.jsonl",
   };
   const id = randomUUID();
@@ -1482,18 +1495,18 @@ test("a Stop sent behind a prompt still attaching reaches the session after the 
     withPendingCommand: async (callback: () => Promise<unknown>) =>
       await callback(),
     send: async (command: { type: string }) => {
-      sent.push(`${session.sessionId}:${command.type}`);
+      sent.push(`${session.host.id}:${command.type}`);
       return {};
     },
   });
   const previous = globalThis.__ompSessions;
   globalThis.__ompSessions = new Map([
     [
-      s.sessionId,
+      sessionKey(s.sessionId, host.id),
       live(s) as unknown as InstanceType<typeof AgentSessionWrapper>,
     ],
     [
-      other.sessionId,
+      sessionKey(other.sessionId, other.host.id),
       live(other) as unknown as InstanceType<typeof AgentSessionWrapper>,
     ],
   ]);
@@ -1506,6 +1519,8 @@ test("a Stop sent behind a prompt still attaching reaches the session after the 
     { type: "prompt", message: "go", uploads: [id] },
     false,
     OWNER,
+    undefined,
+    { hostId: host.id },
   );
   const req = await until(() => takeReqs(host)[0], "the attach request");
   assert.equal(req.op, "uploadAttach");
@@ -1514,6 +1529,8 @@ test("a Stop sent behind a prompt still attaching reaches the session after the 
     { type: "abort_and_restore_queue" },
     false,
     OWNER,
+    undefined,
+    { hostId: host.id },
   );
   assert.equal(
     (await runAgentCommand(other.sessionId, { type: "abort" }, false, OWNER))
@@ -1523,8 +1540,8 @@ test("a Stop sent behind a prompt still attaching reaches the session after the 
   await sleep(50);
   assert.deepEqual(
     sent,
-    [`${other.sessionId}:abort`],
-    "the Stop waits for the prompt; the other session does not",
+    [`${other.host.id}:abort`],
+    "the Stop waits for the prompt only on its own host",
   );
   await host.answer(req, {
     path: "/remote/fence/local/uploads/h.bin",
@@ -1533,8 +1550,8 @@ test("a Stop sent behind a prompt still attaching reaches the session after the 
   assert.equal((await prompt).status, 200);
   assert.equal((await stop).status, 200);
   assert.deepEqual(sent.slice(1), [
-    `${s.sessionId}:prompt`,
-    `${s.sessionId}:abort_and_restore_queue`,
+    `${s.host.id}:prompt`,
+    `${s.host.id}:abort_and_restore_queue`,
   ]);
   assert.equal(
     globalThis.__ompSendFences!.size,
@@ -1549,11 +1566,21 @@ test("a Stop sent behind a prompt still attaching reaches the session after the 
     { type: "prompt", message: "x", uploads: [failing] },
     false,
     OWNER,
+    undefined,
+    { hostId: host.id },
   );
   assert.equal((await bad).status, 404);
   assert.equal(
-    (await runAgentCommand(s.sessionId, { type: "abort" }, false, OWNER))
-      .status,
+    (
+      await runAgentCommand(
+        s.sessionId,
+        { type: "abort" },
+        false,
+        OWNER,
+        undefined,
+        { hostId: host.id },
+      )
+    ).status,
     200,
   );
   host.drop();
@@ -1606,9 +1633,12 @@ test("an advisor toggle cannot replace an idle wrapper while a prompt attaches; 
   };
   const previous = globalThis.__ompSessions;
   globalThis.__ompSessions = new Map([
-    [s.sessionId, live as unknown as InstanceType<typeof AgentSessionWrapper>],
     [
-      otherId,
+      sessionKey(s.sessionId, host.id),
+      live as unknown as InstanceType<typeof AgentSessionWrapper>,
+    ],
+    [
+      sessionKey(otherId, host.id),
       {
         ...live,
         send: async () => {
@@ -1627,6 +1657,8 @@ test("an advisor toggle cannot replace an idle wrapper while a prompt attaches; 
     { type: "prompt", message: "go", uploads: [id] },
     false,
     OWNER,
+    undefined,
+    { hostId: host.id },
   );
   try {
     const req = await until(
@@ -1639,10 +1671,20 @@ test("an advisor toggle cannot replace an idle wrapper while a prompt attaches; 
       { type: "get_state" },
       true,
       OWNER,
+      undefined,
+      { hostId: host.id },
     );
     assert.equal(
-      (await runAgentCommand(otherId, { type: "get_state" }, false, OWNER))
-        .status,
+      (
+        await runAgentCommand(
+          otherId,
+          { type: "get_state" },
+          false,
+          OWNER,
+          undefined,
+          { hostId: host.id },
+        )
+      ).status,
       200,
     );
     await sleep(50);
@@ -1679,7 +1721,10 @@ test("an advisor toggle cannot replace an idle wrapper while a prompt attaches; 
     host.drop();
     assert.equal((await prompt).status, 200);
   }
-  assert.equal(globalThis.__ompSendFences!.has(s.sessionId), false);
+  assert.equal(
+    globalThis.__ompSendFences!.has(sessionKey(s.sessionId, host.id)),
+    false,
+  );
 });
 
 test("the attach fence holds a command sent through another alias of the same wrapper", async (t) => {
@@ -1723,8 +1768,14 @@ test("the attach fence holds a command sent through another alias of the same wr
   const previous = globalThis.__ompSessions;
   // omp moved the session: the old id stays an alias of the same wrapper.
   globalThis.__ompSessions = new Map([
-    [s.sessionId, live as unknown as InstanceType<typeof AgentSessionWrapper>],
-    [movedId, live as unknown as InstanceType<typeof AgentSessionWrapper>],
+    [
+      sessionKey(s.sessionId, host.id),
+      live as unknown as InstanceType<typeof AgentSessionWrapper>,
+    ],
+    [
+      sessionKey(movedId, host.id),
+      live as unknown as InstanceType<typeof AgentSessionWrapper>,
+    ],
   ]);
   t.after(() => {
     globalThis.__ompSessions = previous;
@@ -1735,9 +1786,18 @@ test("the attach fence holds a command sent through another alias of the same wr
     { type: "prompt", message: "go", uploads: [id] },
     false,
     OWNER,
+    undefined,
+    { hostId: host.id },
   );
   const req = await until(() => takeReqs(host)[0], "the alias attach request");
-  const state = runAgentCommand(movedId, { type: "get_state" }, true, OWNER);
+  const state = runAgentCommand(
+    movedId,
+    { type: "get_state" },
+    true,
+    OWNER,
+    undefined,
+    { hostId: host.id },
+  );
   await sleep(50);
   assert.equal(
     destroyed,
@@ -1790,7 +1850,7 @@ test("a failed attach frees the fence and the waiting command selects the latest
   const previous = globalThis.__ompSessions;
   globalThis.__ompSessions = new Map([
     [
-      s.sessionId,
+      sessionKey(s.sessionId, host.id),
       live("old") as unknown as InstanceType<typeof AgentSessionWrapper>,
     ],
   ]);
@@ -1803,6 +1863,8 @@ test("a failed attach frees the fence and the waiting command selects the latest
     { type: "prompt", message: "go", uploads: [id] },
     false,
     OWNER,
+    undefined,
+    { hostId: host.id },
   );
   const req = await until(
     () => takeReqs(host)[0],
@@ -1814,9 +1876,11 @@ test("a failed attach frees the fence and the waiting command selects the latest
     { type: "get_state" },
     false,
     OWNER,
+    undefined,
+    { hostId: host.id },
   );
   globalThis.__ompSessions!.set(
-    s.sessionId,
+    sessionKey(s.sessionId, host.id),
     live("new") as unknown as InstanceType<typeof AgentSessionWrapper>,
   );
   await host.post({
@@ -1834,7 +1898,10 @@ test("a failed attach frees the fence and the waiting command selects the latest
     ["new:get_state"],
     "selection happens after the predecessor finishes, not before waiting",
   );
-  assert.equal(globalThis.__ompSendFences!.has(s.sessionId), false);
+  assert.equal(
+    globalThis.__ompSendFences!.has(sessionKey(s.sessionId, host.id)),
+    false,
+  );
 });
 
 const loginHeaders = (cookie: string) => ({
@@ -2007,11 +2074,11 @@ function continuitySession(
   };
   globalThis.__ompSessions ??= new Map();
   globalThis.__ompSessions.set(
-    s.sessionId,
+    sessionKey(s.sessionId, hostId),
     live as unknown as InstanceType<typeof AgentSessionWrapper>,
   );
   t.after(() => {
-    globalThis.__ompSessions!.delete(s.sessionId);
+    globalThis.__ompSessions!.delete(sessionKey(s.sessionId, hostId));
   });
   return live;
 }
@@ -2023,31 +2090,38 @@ async function continuityAdd(
   overrides = {},
 ) {
   return agentRoute.POST(
-    new Request(`http://main.test/api/agent/${live.sessionId}`, {
-      method: "POST",
-      headers: loginHeaders(cookie),
-      body: JSON.stringify({
-        type: "outbox_add",
-        scope: outbox.outboxScope(),
-        id: randomUUID(),
-        mode: "followUp",
-        message: "read it",
-        uploads: [file.id],
-        uploadProofs: { [file.id]: file.proof },
-        ...overrides,
-      }),
-    }),
+    new Request(
+      `http://main.test/api/agent/${live.sessionId}?hostId=${encodeURIComponent(live.host.id)}`,
+      {
+        method: "POST",
+        headers: loginHeaders(cookie),
+        body: JSON.stringify({
+          type: "outbox_add",
+          scope: outbox.outboxScope(),
+          id: randomUUID(),
+          mode: "followUp",
+          message: "read it",
+          uploads: [file.id],
+          uploadProofs: { [file.id]: file.proof },
+          ...overrides,
+        }),
+      },
+    ),
     { params: Promise.resolve({ id: live.sessionId }) },
   );
+}
+
+function uploadFixtureDb() {
+  const store = globalThis.__keylimeHostOutboxes?.get(hostId)?.store;
+  assert.ok(store, "upload's owning host has an open store");
+  return store.db;
 }
 
 test("upload continuity: HTTP completion and concurrent completed starts return one durable proof without renewing its age", async () => {
   const file = await continuityFile("initial-login");
   assert.match(file.proof, /^[A-Za-z0-9_-]{43}$/);
-  const row = globalThis
-    .__ompOutboxStore!.db.prepare(
-      "SELECT at FROM completed_uploads WHERE id = ?",
-    )
+  const row = uploadFixtureDb()
+    .prepare("SELECT at FROM completed_uploads WHERE id = ?")
     .get(file.id);
   assert.ok(row && typeof row === "object" && "at" in row);
   const at = row.at;
@@ -2068,10 +2142,8 @@ test("upload continuity: HTTP completion and concurrent completed starts return 
     replies.map(({ proof }) => proof),
     [file.proof, file.proof, file.proof],
   );
-  const latest = globalThis
-    .__ompOutboxStore!.db.prepare(
-      "SELECT at FROM completed_uploads WHERE id = ?",
-    )
+  const latest = uploadFixtureDb()
+    .prepare("SELECT at FROM completed_uploads WHERE id = ?")
     .get(file.id);
   assert.ok(latest && typeof latest === "object" && "at" in latest);
   assert.equal(latest.at, at);
@@ -2085,13 +2157,13 @@ test("upload continuity: a renewed cookie attaches the completed bytes through t
   await until(
     () =>
       live.sent.length ||
-      outbox.outboxEntries(live.sessionId)[0]?.state === "failed",
+      outbox.outboxEntries(live.sessionId, hostId)[0]?.state === "failed",
     "proof-authorized dispatch",
   );
   assert.equal(
     live.sent.length,
     1,
-    JSON.stringify(outbox.outboxEntries(live.sessionId)),
+    JSON.stringify(outbox.outboxEntries(live.sessionId, hostId)),
   );
   assert.equal(
     readFileSync(join(uploadsDir(live), "continuity.txt"), "utf8"),
@@ -2114,12 +2186,13 @@ test("upload continuity: mixed original owners survive acceptance then SQLite an
   assert.equal(response.status, 200, await response.clone().text());
   const receipt = await response.json();
   await until(
-    () => outbox.outboxEntries(live.sessionId)[0]?.state === "waiting_host",
+    () =>
+      outbox.outboxEntries(live.sessionId, hostId)[0]?.state === "waiting_host",
     "held attachment",
   );
   const publicJson = JSON.stringify([
     receipt,
-    outbox.outboxEntries(live.sessionId),
+    outbox.outboxEntries(live.sessionId, hostId),
   ]);
   for (const secret of [
     old.proof,
@@ -2139,7 +2212,6 @@ test("upload continuity: mixed original owners survive acceptance then SQLite an
     "acceptance never transfers ownership",
   );
   outbox.closeOutboxStore();
-  globalThis.__ompOutbox = undefined;
   globalThis.__ompUploads!.clear();
   const previous = process.env.KEYLIME_TRUSTED_HEADER_SHA256;
   process.env.KEYLIME_TRUSTED_HEADER_SHA256 = "a".repeat(64);
@@ -2149,17 +2221,17 @@ test("upload continuity: mixed original owners survive acceptance then SQLite an
     else process.env.KEYLIME_TRUSTED_HEADER_SHA256 = previous;
   });
   live.offline = false;
-  outbox.pumpOutbox(live.sessionId);
+  outbox.pumpOutbox(live.sessionId, hostId);
   await until(
     () =>
       live.sent.length ||
-      outbox.outboxEntries(live.sessionId)[0]?.state === "failed",
+      outbox.outboxEntries(live.sessionId, hostId)[0]?.state === "failed",
     "accepted private authority after restart",
   );
   assert.equal(
     live.sent.length,
     1,
-    JSON.stringify(outbox.outboxEntries(live.sessionId)),
+    JSON.stringify(outbox.outboxEntries(live.sessionId, hostId)),
   );
   assert.equal(
     readFileSync(join(uploadsDir(live), "old.txt"), "utf8"),
@@ -2187,6 +2259,8 @@ test("upload continuity: legacy original-owner sends remain proof-free while ren
       },
       false,
       loginOwner("direct-new"),
+      undefined,
+      { hostId },
     );
     assert.equal(response.status, 200, await response.clone().text());
     assert.equal(
@@ -2201,6 +2275,8 @@ test("upload continuity: legacy original-owner sends remain proof-free while ren
     { type: "prompt", message: "old client", uploads: [legacy.id] },
     false,
     loginOwner("same-owner"),
+    undefined,
+    { hostId },
   );
   assert.equal(response.status, 200, await response.clone().text());
   assert.equal(
@@ -2226,7 +2302,7 @@ test("upload continuity: missing, tampered and swapped proofs refuse acceptance 
       response.status >= 400 && response.status < 500,
       await response.clone().text(),
     );
-    assert.deepEqual(outbox.outboxEntries(live.sessionId), []);
+    assert.deepEqual(outbox.outboxEntries(live.sessionId, hostId), []);
     assert.deepEqual(live.sent, []);
   }
   const response = await runAgentCommand(
@@ -2234,6 +2310,8 @@ test("upload continuity: missing, tampered and swapped proofs refuse acceptance 
     { type: "prompt", message: "recover", uploads: [a.id] },
     false,
     loginOwner("private-a"),
+    undefined,
+    { hostId },
   );
   assert.equal(response.status, 200);
   assert.equal(
@@ -2256,7 +2334,7 @@ test("upload continuity: malformed claims and forged JSON receipts never supply 
       uploadProofs,
     });
     assert.equal(response.status, 400, await response.clone().text());
-    assert.deepEqual(outbox.outboxEntries(live.sessionId), []);
+    assert.deepEqual(outbox.outboxEntries(live.sessionId, hostId), []);
   }
   const forged = await continuityAdd(live, file, "intruder", {
     uploadProofs: undefined,
@@ -2276,10 +2354,8 @@ test("upload continuity: expired and changed-scope proofs cannot authorize a new
   for (const condition of ["expired", "scope"]) {
     const file = await continuityFile("scope-old", `${condition}.txt`);
     if (condition === "expired") {
-      globalThis
-        .__ompOutboxStore!.db.prepare(
-          "UPDATE completed_uploads SET at = ? WHERE id = ?",
-        )
+      uploadFixtureDb()
+        .prepare("UPDATE completed_uploads SET at = ? WHERE id = ?")
         .run(Date.now() - 24 * 60 * 60 * 1000 - 1, file.id);
     }
     globalThis.__ompUploads!.clear();
@@ -2293,7 +2369,7 @@ test("upload continuity: expired and changed-scope proofs cannot authorize a new
         response.status >= 400 && response.status < 500,
         await response.clone().text(),
       );
-      assert.deepEqual(outbox.outboxEntries(live.sessionId), []);
+      assert.deepEqual(outbox.outboxEntries(live.sessionId, hostId), []);
       assert.deepEqual(live.sent, []);
     } finally {
       if (previous === undefined)
@@ -2310,13 +2386,12 @@ test("upload continuity: known message IDs dedupe before their upload proofs exp
   const first = await continuityAdd(live, file, "dedupe-new", { id });
   assert.equal(first.status, 200);
   await until(
-    () => outbox.outboxEntries(live.sessionId)[0]?.state === "waiting_host",
+    () =>
+      outbox.outboxEntries(live.sessionId, hostId)[0]?.state === "waiting_host",
     "dedupe held",
   );
-  globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE completed_uploads SET at = ? WHERE id = ?",
-    )
+  uploadFixtureDb()
+    .prepare("UPDATE completed_uploads SET at = ? WHERE id = ?")
     .run(Date.now() - 24 * 60 * 60 * 1000 - 1, file.id);
   globalThis.__ompUploads!.clear();
   const repeated = await continuityAdd(live, file, "another-renewed-cookie", {
@@ -2324,7 +2399,7 @@ test("upload continuity: known message IDs dedupe before their upload proofs exp
   });
   assert.equal(repeated.status, 200, await repeated.clone().text());
   assert.equal((await repeated.json()).data.entry.id, id);
-  assert.equal(outbox.outboxEntries(live.sessionId).length, 1);
+  assert.equal(outbox.outboxEntries(live.sessionId, hostId).length, 1);
 });
 
 test("upload continuity: proofs do not grant start, chunk or cancellation and canceled IDs get unrelated authority on reuse", async (t) => {
@@ -2387,21 +2462,22 @@ test("upload continuity: valid proofs retain host confinement and attach the sam
   const file = await continuityFile("host-owner");
   const live = continuitySession(t);
   const otherHost = createHost("Wrong upload destination").host.id;
-  live.host.id = otherHost;
-  const response = await continuityAdd(live, file);
-  if (response.status === 200) {
-    await until(
-      () => outbox.outboxEntries(live.sessionId)[0]?.state === "failed",
-      "wrong-host dispatch refusal",
-    );
-  } else {
-    assert.ok(
-      response.status >= 400 && response.status < 500,
-      await response.clone().text(),
-    );
-  }
+  const other = { ...live, host: { ...live.host, id: otherHost } };
+  const key = sessionKey(live.sessionId, otherHost);
+  globalThis.__ompSessions!.set(
+    key,
+    other as unknown as InstanceType<typeof AgentSessionWrapper>,
+  );
+  t.after(() => {
+    globalThis.__ompSessions?.delete(key);
+  });
+  const response = await continuityAdd(other, file);
+  assert.ok(
+    response.status >= 400 && response.status < 500,
+    await response.clone().text(),
+  );
+  assert.deepEqual(outbox.outboxEntries(live.sessionId, otherHost), []);
   assert.deepEqual([...live.sent], []);
-  live.host.id = hostId;
   const original = session();
   mkdirSync(uploadsDir(original), { recursive: true });
   writeFileSync(
@@ -2418,6 +2494,8 @@ test("upload continuity: valid proofs retain host confinement and attach the sam
     },
     false,
     loginOwner("renewed-login"),
+    undefined,
+    { hostId },
   );
   assert.equal(moved.status, 200, await moved.clone().text());
   assert.equal(live.sent.length, 1);
@@ -2441,7 +2519,7 @@ test("upload continuity: valid proofs retain host confinement and attach the sam
 
 test("upload continuity: durable receipt failure cannot publish a completed bearer proof", async () => {
   // Ensure the database exists before installing the actual SQLite write refusal.
-  outbox.outboxEntries("receipt-failure");
+  outbox.outboxEntries("receipt-failure", hostId);
   const id = randomUUID();
   const body = {
     id,
@@ -2457,7 +2535,7 @@ test("upload continuity: durable receipt failure cannot publish a completed bear
     }),
   );
   assert.equal(started.status, 200);
-  globalThis.__ompOutboxStore!.db.exec(
+  uploadFixtureDb().exec(
     "CREATE TRIGGER refuse_completion BEFORE INSERT ON completed_uploads BEGIN SELECT RAISE(FAIL, 'controlled disk refusal'); END",
   );
   try {
@@ -2472,9 +2550,9 @@ test("upload continuity: durable receipt failure cannot publish a completed bear
     const failed = await response.json();
     assert.equal(failed.code, "upload_receipt_failed");
     assert.equal("proof" in failed, false);
-    assert.equal(outbox.completedUpload(id), null);
+    assert.equal(outbox.completedUpload(id, hostId), null);
   } finally {
-    globalThis.__ompOutboxStore!.db.exec("DROP TRIGGER refuse_completion");
+    uploadFixtureDb().exec("DROP TRIGGER refuse_completion");
   }
 });
 
@@ -2492,13 +2570,13 @@ test("upload continuity: completed proof survives a server restart before renewe
   await until(
     () =>
       live.sent.length ||
-      outbox.outboxEntries(live.sessionId)[0]?.state === "failed",
+      outbox.outboxEntries(live.sessionId, hostId)[0]?.state === "failed",
     "restored receipt dispatch",
   );
   assert.equal(
     live.sent.length,
     1,
-    JSON.stringify(outbox.outboxEntries(live.sessionId)),
+    JSON.stringify(outbox.outboxEntries(live.sessionId, hostId)),
   );
   assert.equal(
     readFileSync(join(uploadsDir(live), "restart.txt"), "utf8"),
@@ -2519,6 +2597,8 @@ test("upload continuity: native refusal preserves original ownership, file and p
     },
     false,
     loginOwner("refusal-new"),
+    undefined,
+    { hostId },
   );
   assert.equal(response.status, 400, await response.clone().text());
   assert.equal((await response.json()).error, "Controlled native refusal");
@@ -2545,6 +2625,8 @@ test("upload continuity: native refusal preserves original ownership, file and p
     },
     false,
     loginOwner("refusal-new"),
+    undefined,
+    { hostId },
   );
   assert.equal(recovered.status, 200, await recovered.clone().text());
   assert.equal(
@@ -2593,6 +2675,8 @@ test("upload continuity: an already-attached ID replays only within its original
     },
     false,
     loginOwner("bound-renewed"),
+    undefined,
+    { hostId },
   );
   assert.equal(response.status, 404, await response.clone().text());
   assert.equal((await response.json()).code, "upload_missing");
@@ -2614,7 +2698,8 @@ test("upload continuity: an accepted intent cannot consume replacement bytes aft
   const accepted = await continuityAdd(live, file);
   assert.equal(accepted.status, 200);
   await until(
-    () => outbox.outboxEntries(live.sessionId)[0]?.state === "waiting_host",
+    () =>
+      outbox.outboxEntries(live.sessionId, hostId)[0]?.state === "waiting_host",
     "the retained intent",
   );
   await uploads.abortUpload(file.id, loginOwner("retained-owner"), hostId);
@@ -2645,11 +2730,11 @@ test("upload continuity: an accepted intent cannot consume replacement bytes aft
   outbox.closeOutboxStore();
   live.offline = false;
   outbox.startOutbox();
-  outbox.pumpOutbox(live.sessionId);
+  outbox.pumpOutbox(live.sessionId, hostId);
   await until(
     () =>
       live.sent.length ||
-      outbox.outboxEntries(live.sessionId)[0]?.state === "failed",
+      outbox.outboxEntries(live.sessionId, hostId)[0]?.state === "failed",
     "the original intent's outcome",
   );
   if (live.sent.length) {
@@ -2660,7 +2745,7 @@ test("upload continuity: an accepted intent cannot consume replacement bytes aft
     );
   } else {
     assert.equal(
-      outbox.outboxEntries(live.sessionId)[0].state,
+      outbox.outboxEntries(live.sessionId, hostId)[0].state,
       "failed",
       "the old intent remains visible if its file was canceled",
     );
@@ -2676,7 +2761,7 @@ test("upload continuity: direct attachment preparation cannot consume a later up
   const live = continuitySession(t);
   const { promise: prior, resolve: release } = Promise.withResolvers<void>();
   globalThis.__ompSendFences ??= new Map();
-  globalThis.__ompSendFences.set(live.sessionId, prior);
+  globalThis.__ompSendFences.set(sessionKey(live.sessionId, hostId), prior);
   const sending = runAgentCommand(
     live.sessionId,
     {
@@ -2687,6 +2772,8 @@ test("upload continuity: direct attachment preparation cannot consume a later up
     },
     false,
     loginOwner("direct-generation-renewed"),
+    undefined,
+    { hostId },
   );
   try {
     await uploads.abortUpload(
@@ -2726,6 +2813,30 @@ test("upload continuity: proof authority is current when a new outbox entry is c
     "first bytes",
   );
   const live = continuitySession(t, { offline: true });
+  globalThis.__ompSessions!.delete(sessionKey(live.sessionId, hostId));
+  const host = hub.getHost(hostId)!;
+  const listSessions = host.sessionOps.listSessions;
+  const requested = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  host.sessionOps.listSessions = async () => {
+    requested.resolve();
+    await resume.promise;
+    return [
+      {
+        cwd: dirname(live.sessionFile),
+        id: live.sessionId,
+        path: live.sessionFile,
+        created: "",
+        modified: "",
+        messageCount: 0,
+        firstMessage: "",
+      },
+    ];
+  };
+  t.after(() => {
+    host.sessionOps.listSessions = listSessions;
+  });
+  invalidateHostSessionList(hostId);
   const id = randomUUID();
   const accepting = outbox.runOutboxCommand(
     live.sessionId,
@@ -2740,20 +2851,23 @@ test("upload continuity: proof authority is current when a new outbox entry is c
     },
     false,
     loginOwner("admission-renewed"),
+    { hostId },
   );
-  const canceling = uploads.abortUpload(
-    file.id,
-    loginOwner("admission-owner"),
-    hostId,
-  );
+  await requested.promise;
+  try {
+    await uploads.abortUpload(file.id, loginOwner("admission-owner"), hostId);
+  } finally {
+    resume.resolve();
+  }
   const response = await accepting;
-  await canceling;
   assert.ok(
     response.status >= 400 && response.status < 500,
     "a canceled proof cannot be accepted after the asynchronous session lookup",
   );
   assert.equal(
-    outbox.outboxEntries(live.sessionId).some((entry) => entry.id === id),
+    outbox
+      .outboxEntries(live.sessionId, hostId)
+      .some((entry) => entry.id === id),
     false,
   );
   assert.deepEqual(live.sent, []);
@@ -2791,6 +2905,8 @@ test("upload continuity: a fresh proof cannot reuse another main instance's stal
     },
     false,
     loginOwner("cached-renewed"),
+    undefined,
+    { hostId },
   );
   assert.equal(response.status, 200, await response.clone().text());
   const fresh = readdirSync(uploadsDir(live)).filter(
@@ -2833,6 +2949,8 @@ test("upload continuity: cached attachment receipts still require a regular file
     },
     false,
     loginOwner("missing-target-renewed"),
+    undefined,
+    { hostId },
   );
   assert.equal(response.status, 404, await response.clone().text());
   assert.equal((await response.json()).code, "upload_missing");
@@ -2882,7 +3000,7 @@ test("upload continuity: a completed proof is not reused after the host loses it
     await until(
       () =>
         live.sent.length ||
-        outbox.outboxEntries(live.sessionId)[0]?.state === "failed",
+        outbox.outboxEntries(live.sessionId, hostId)[0]?.state === "failed",
       "the lost stage outcome",
     );
   } else {
@@ -2924,6 +3042,8 @@ test("upload continuity: an older native reply cannot forget a newer upload gene
     },
     false,
     loginOwner("reply-renewed"),
+    undefined,
+    { hostId },
   );
   let replacement;
   try {
@@ -2949,6 +3069,8 @@ test("upload continuity: an older native reply cannot forget a newer upload gene
     },
     false,
     loginOwner("reply-another-cookie"),
+    undefined,
+    { hostId },
   );
   assert.equal(response.status, 200, await response.clone().text());
   const fresh = readdirSync(uploadsDir(live)).filter(
@@ -2957,188 +3079,4 @@ test("upload continuity: an older native reply cannot forget a newer upload gene
   );
   assert.equal(fresh.length, 1);
   assert.ok(live.sent[1].message.includes(join(uploadsDir(live), fresh[0])));
-});
-
-test("upload continuity: legacy acceptance survives first proof issuance for the same completed file", async (t) => {
-  const file = await continuityFile(
-    "legacy-upgrade-owner",
-    "legacy-upgrade.txt",
-    "original bytes",
-  );
-  globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE completed_uploads SET proof = NULL, scope = NULL WHERE id = ?",
-    )
-    .run(file.id);
-  globalThis.__ompUploads!.clear();
-  const live = continuitySession(t, { offline: true });
-  const accepted = await continuityAdd(live, file, "legacy-upgrade-owner", {
-    uploadProofs: undefined,
-  });
-  assert.equal(accepted.status, 200, await accepted.clone().text());
-  await until(
-    () => outbox.outboxEntries(live.sessionId)[0]?.state === "waiting_host",
-    "legacy owner acceptance",
-  );
-  // A receipt already accepted by a pre-continuity server has no generation binding.
-  const entryId = (await accepted.json()).data.entry.id;
-  globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE entries SET upload_receipts = json_remove(upload_receipts, '$[0].completionKey') WHERE id = ?",
-    )
-    .run(entryId);
-  globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE completed_uploads SET proof = NULL, scope = NULL WHERE id = ?",
-    )
-    .run(file.id);
-  globalThis.__ompUploads!.clear();
-  const completed = await uploadsRoute.POST(
-    new Request("http://main.test/api/uploads", {
-      method: "POST",
-      headers: loginHeaders("legacy-upgrade-owner"),
-      body: JSON.stringify(file.body),
-    }),
-  );
-  assert.equal(completed.status, 200, await completed.clone().text());
-  assert.match((await completed.json()).proof, /^[A-Za-z0-9_-]{43}$/);
-  globalThis.__ompUploads!.clear();
-  outbox.closeOutboxStore();
-  live.offline = false;
-  outbox.startOutbox();
-  outbox.pumpOutbox(live.sessionId);
-  await until(
-    () =>
-      live.sent.length ||
-      outbox.outboxEntries(live.sessionId)[0]?.state === "failed",
-    "legacy accepted delivery",
-  );
-  assert.equal(
-    live.sent.length,
-    1,
-    JSON.stringify(outbox.outboxEntries(live.sessionId)),
-  );
-  assert.equal(
-    readFileSync(join(uploadsDir(live), "legacy-upgrade.txt"), "utf8"),
-    "original bytes",
-  );
-});
-
-test("upload continuity: direct legacy preparation survives first proof issuance while fenced", async (t) => {
-  const file = await continuityFile(
-    "legacy-direct-owner",
-    "legacy-direct.txt",
-    "original bytes",
-  );
-  globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE completed_uploads SET proof = NULL, scope = NULL WHERE id = ?",
-    )
-    .run(file.id);
-  globalThis.__ompUploads!.clear();
-  const live = continuitySession(t);
-  const { promise: prior, resolve: release } = Promise.withResolvers<void>();
-  globalThis.__ompSendFences ??= new Map();
-  globalThis.__ompSendFences.set(live.sessionId, prior);
-  const sending = runAgentCommand(
-    live.sessionId,
-    {
-      type: "follow_up",
-      message: "read it",
-      uploads: [file.id],
-    },
-    false,
-    loginOwner("legacy-direct-owner"),
-  );
-  try {
-    const completed = await uploadsRoute.POST(
-      new Request("http://main.test/api/uploads", {
-        method: "POST",
-        headers: loginHeaders("legacy-direct-owner"),
-        body: JSON.stringify(file.body),
-      }),
-    );
-    assert.equal(completed.status, 200, await completed.clone().text());
-  } finally {
-    release();
-  }
-  const response = await sending;
-  assert.equal(response.status, 200, await response.clone().text());
-  assert.equal(
-    readFileSync(join(uploadsDir(live), "legacy-direct.txt"), "utf8"),
-    "original bytes",
-  );
-  assert.equal(live.sent.length, 1);
-});
-
-test("upload continuity: first proof issuance during held transcript preparation preserves the file", async (t) => {
-  const cookie = "active-legacy-owner";
-  const file = await continuityFile(
-    cookie,
-    "active-legacy.txt",
-    "original legacy bytes",
-  );
-  const live = continuitySession(t, { offline: true });
-  const accepted = await continuityAdd(live, file, cookie, {
-    uploadProofs: undefined,
-  });
-  assert.equal(accepted.status, 200);
-  await until(
-    () => outbox.outboxEntries(live.sessionId)[0]?.state === "waiting_host",
-    "legacy held intent",
-  );
-  const entryId = (await accepted.json()).data.entry.id;
-  globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE entries SET upload_receipts = json_remove(upload_receipts, '$[0].completionKey', '$[0].owner', '$[0].completedAt') WHERE id = ?",
-    )
-    .run(entryId);
-  globalThis
-    .__ompOutboxStore!.db.prepare(
-      "UPDATE completed_uploads SET proof = NULL, scope = NULL WHERE id = ?",
-    )
-    .run(file.id);
-  globalThis.__ompUploads!.clear();
-  const { promise: preparing, resolve: observed } =
-    Promise.withResolvers<void>();
-  const { promise: gate, resolve: release } = Promise.withResolvers<void>();
-  live.isRunning = () => false;
-  live.host.sessionOps = {
-    readContext: async () => {
-      observed();
-      await gate;
-      return { ok: true, value: { entryIds: [] } };
-    },
-  };
-  live.offline = false;
-  outbox.pumpOutbox(live.sessionId);
-  await preparing;
-  try {
-    const replay = await uploadsRoute.POST(
-      new Request("http://main.test/api/uploads", {
-        method: "POST",
-        headers: loginHeaders(cookie),
-        body: JSON.stringify(file.body),
-      }),
-    );
-    assert.equal(replay.status, 200, await replay.clone().text());
-    assert.match((await replay.json()).proof, /^[A-Za-z0-9_-]{43}$/);
-  } finally {
-    release();
-  }
-  await until(
-    () =>
-      live.sent.length ||
-      outbox.outboxEntries(live.sessionId)[0]?.state === "failed",
-    "active legacy outcome",
-  );
-  assert.equal(
-    live.sent.length,
-    1,
-    JSON.stringify(outbox.outboxEntries(live.sessionId)),
-  );
-  assert.equal(
-    readFileSync(join(uploadsDir(live), "active-legacy.txt"), "utf8"),
-    "original legacy bytes",
-  );
 });

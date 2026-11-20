@@ -17,7 +17,7 @@ import {
 /**
  * @apiContract getSessionContext
  * @apiUsage Read the selected transcript context, synchronize display history, or obtain the current persisted boundary.
- * @apiInputs leafId selects a branch; presence of deferThinking, deferMedia or includePreCompaction enables each option. sync=1 accepts an opaque cursor and a positive limit up to 200; boundary=1 excludes sync, leafId, includePreCompaction, cursor and limit.
+ * @apiInputs leafId selects a branch; presence of deferThinking, deferMedia or includePreCompaction enables each option. sync=1 accepts an opaque cursor and a positive limit up to 200; boundary=1 excludes sync, leafId, includePreCompaction, cursor and limit. Optional hostId selects the host; omission selects local.
  * @apiInvariants Sync pages append or replace when a branch or compaction invalidates the cursor; use the returned cursor in the same session and view. Live output is sampled after the disk read only for the current tip, so it is not an atomic disk snapshot. Boundary returns current active entry IDs only.
  * @apiEffects Reads persisted history and samples an existing live wrapper; it never spawns one. Sync and boundary responses are no-store. A live session without a file can return an empty initial boundary or sync history.
  * @apiRecovery Honor replace and hasMore when applying pages; do not discard confirmed history merely because a file is temporarily missing. Restart synchronization when the cursor is invalidated.
@@ -27,6 +27,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const hostId = new URL(req.url).searchParams.get("hostId") ?? "local";
   const url = new URL(req.url);
   const leafId = url.searchParams.get("leafId") ?? undefined;
   const deferThinking = url.searchParams.has("deferThinking");
@@ -90,7 +91,7 @@ export async function GET(
   }
 
   try {
-    const resolved = await resolveSessionHostOr404(id);
+    const resolved = await resolveSessionHostOr404(id, hostId);
     // A live session resolves to its host even before its file exists; the host then answers 404.
     const result =
       "response" in resolved
@@ -115,7 +116,7 @@ export async function GET(
         notFound &&
         (boundary === "1" ||
           (sync === "1" && !cursor?.lastEntryId && leafId === undefined))
-          ? getRpcSession(id)
+          ? getRpcSession(id, hostId)
           : undefined;
       if (
         session?.isAlive() &&
@@ -152,7 +153,7 @@ export async function GET(
       };
       // Sample AFTER the disk read: a quiet active run still supplies its most
       // recent partial output, and events arriving during the read win.
-      const session = getRpcSession(id);
+      const session = getRpcSession(id, hostId);
       const live =
         session?.isAlive() && (leafId === undefined || leafId === page.tipId)
           ? session.getStreamSnapshot()

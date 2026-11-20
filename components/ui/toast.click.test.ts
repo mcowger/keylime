@@ -32,6 +32,7 @@ function deliverNotification(message: {
   kind: string;
   event: {
     type: string;
+    hostId?: string;
     sessionId: string;
     sessionName: string;
     detail?: string;
@@ -200,12 +201,13 @@ test("a toast without an action keeps the default cursor", () => {
 });
 
 test("a session notification toast opens its session from a card click; one without a session does not", () => {
-  const sessions: string[] = [];
+  const sessions: [string, string][] = [];
   render(React.createElement(ToastProvider, null));
   renderHook(() =>
     useNotifications({
-      sessionId: null,
-      onOpenSession: (id) => sessions.push(id),
+      visibleSessionId: null,
+      visibleHostId: null,
+      onOpenSession: (id, hostId) => sessions.push([id, hostId]),
     }),
   );
   // Toasts closed by earlier tests can still be leaving the shared manager, so
@@ -214,7 +216,7 @@ test("a session notification toast opens its session from a card click; one with
     act(() => {
       deliverNotification({
         kind: "toast",
-        event: { type: "completed", sessionId, sessionName },
+        event: { type: "completed", hostId: "remote", sessionId, sessionName },
       });
     });
     return Array.from(
@@ -231,13 +233,15 @@ test("a session notification toast opens its session from a card click; one with
     withSession.querySelectorAll("button:not(.toast-close-button), a").length,
     0,
   );
-  act(() => withSession.querySelector<HTMLElement>(".display-heading")!.click());
-  assert.deepEqual(sessions, ["s1"]);
+  act(() =>
+    withSession.querySelector<HTMLElement>(".display-heading")!.click(),
+  );
+  assert.deepEqual(sessions, [["s1", "remote"]]);
   // Session notifications are listed; opening one from its toast reads it.
   assert.deepEqual(
     notificationHistory
       .get()
-      .filter((e) => e.id === "s1:completed")
+      .filter((e) => e.id === '["remote","s1","completed"]')
       .map((e) => e.read),
     [true],
   );
@@ -247,7 +251,7 @@ test("a session notification toast opens its session from a card click; one with
   act(() =>
     withoutSession.querySelector<HTMLElement>(".display-heading")!.click(),
   );
-  assert.deepEqual(sessions, ["s1"]);
+  assert.deepEqual(sessions, [["s1", "remote"]]);
 });
 
 test("a notification the OS showed is listed in history", async () => {
@@ -262,7 +266,8 @@ test("a notification the OS showed is listed in history", async () => {
   try {
     renderHook(() =>
       useNotifications({
-        sessionId: null,
+        visibleSessionId: null,
+        visibleHostId: null,
         onOpenSession: () => {},
       }),
     );
@@ -299,6 +304,7 @@ test("a push the service worker showed reloads the list from the server; other m
     configurable: true,
     value: worker,
   });
+  const opened: [string, string][] = [];
   const requests: [string, string][] = [];
   const previousFetch = globalThis.fetch;
   globalThis.fetch = (async (
@@ -319,8 +325,9 @@ test("a push the service worker showed reloads the list from the server; other m
   try {
     renderHook(() =>
       useNotifications({
-        sessionId: null,
-        onOpenSession: () => {},
+        visibleSessionId: null,
+        visibleHostId: null,
+        onOpenSession: (id, hostId) => opened.push([id, hostId]),
       }),
     );
     await act(async () => {
@@ -334,6 +341,10 @@ test("a push the service worker showed reloads the list from the server; other m
       });
     await post("junk");
     await post({ type: "something-else" });
+    await post({ type: "omp-open-session", sessionId: "s7" });
+    assert.deepEqual(opened, []);
+    await post({ type: "omp-open-session", sessionId: "s7", hostId: "remote" });
+    assert.deepEqual(opened, [["s7", "remote"]]);
     assert.deepEqual(requests, []);
     await post({
       type: "omp-notification-shown",

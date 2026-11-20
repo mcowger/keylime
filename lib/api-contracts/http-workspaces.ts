@@ -852,6 +852,7 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
       parameters: [
         pathParameter("hash", Type.String({ pattern: "^[a-f0-9]{64}$" })),
         queryParameter("thumb", s),
+        queryParameter("hostId", s),
       ],
       responses: {
         200: {

@@ -85,27 +85,40 @@ async function allowedCwd(cwd: unknown): Promise<string> {
 /**
  * @apiContract getMcp
  * @apiUsage Inspect local user/project MCP configuration and optionally a session's live inventory.
- * @apiInputs cwd is optional and must be allowed; live=0 disables live lookup, attach=1 avoids starting a session, and advisor=1 applies only to a fresh spawn.
+ * @apiInputs cwd is optional and must be allowed; live=0 disables live lookup, attach=1 avoids starting a session, and advisor=1 applies only to a fresh local spawn. Optional hostId selects the host for live status.
  * @apiInvariants Without cwd there is no project config. User secrets are not returned and project server configuration is redacted; live errors are sanitized.
- * @apiEffects With attach=1 returns only live status, never local configuration or a new process. Otherwise reads local files and may start a local session.
+ * @apiEffects With attach=1 or a remote host, returns only live status and never starts a process. Otherwise reads local files and may start a local session.
  * @apiRecovery Inspect liveError separately from configuration; use attach=1 to avoid spawning while retrying.
  */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const sessionId = params.get("sessionId");
+    const hostId = params.get("hostId") ?? LOCAL_HOST_ID;
     const includeLive = params.get("live") !== "0";
-    if (params.get("attach") === "1") {
-      const empty = { root: null, path: null, exists: false, servers: [], inventory: [] };
+    if (params.get("attach") === "1" || hostId !== LOCAL_HOST_ID) {
+      const empty = {
+        root: null,
+        path: null,
+        exists: false,
+        servers: [],
+        inventory: [],
+      };
       if (!includeLive || !sessionId) return Response.json(empty);
-      const session = getRpcSession(sessionId);
+      const session = getRpcSession(sessionId, hostId);
       if (!session?.isAlive())
-        return Response.json({ ...empty, liveError: "The session is not running" });
+        return Response.json({
+          ...empty,
+          liveError: "The session is not running",
+        });
       try {
         const liveServers = parseMcpListOutput(await session.getMcpList());
         return Response.json({ ...empty, liveServers });
       } catch (error) {
-        return Response.json({ ...empty, liveError: sanitizeMcpLiveError(error) });
+        return Response.json({
+          ...empty,
+          liveError: sanitizeMcpLiveError(error),
+        });
       }
     }
     const requestedCwd = params.get("cwd");
@@ -196,7 +209,7 @@ export async function GET(request: Request) {
     let liveError: string | undefined;
     if (includeLive && sessionId) {
       try {
-        let session = getRpcSession(sessionId);
+        let session = getRpcSession(sessionId, LOCAL_HOST_ID);
         if (!session?.isAlive()) {
           // MCP settings are this machine's only.
           const host = getHost(LOCAL_HOST_ID);
@@ -327,8 +340,8 @@ export async function DELETE(request: Request) {
 /** Native local commands only: never a model prompt or shell command. */
 /**
  * @apiContract patchMcp
- * @apiUsage Enable, disable or reload MCP servers in a selected local session.
- * @apiInputs Provide sessionId and action; enable and disable also require a validated server name.
+ * @apiUsage Enable, disable or reload MCP servers in a selected session.
+ * @apiInputs Provide sessionId and action; enable and disable also require a validated server name. Optional hostId selects the live session host; only local sessions can be started here.
  * @apiInvariants A running turn returns 409; no arbitrary cwd, shell command or model prompt is accepted.
  * @apiEffects May start the selected local session and sends a native MCP command to it.
  * @apiRecovery Wait for a busy turn to finish; after an uncertain response inspect live inventory before repeating.
@@ -356,8 +369,12 @@ export async function PATCH(request: Request) {
       throw new Error("Invalid MCP server name");
     // Load the selected session through the same validated path as inventory.
     // Do not create a different session or apply the caller's arbitrary cwd.
-    let session = getRpcSession(body.sessionId);
+    const hostId =
+      new URL(request.url).searchParams.get("hostId") ?? LOCAL_HOST_ID;
+    let session = getRpcSession(body.sessionId, hostId);
     if (!session?.isAlive()) {
+      if (hostId !== LOCAL_HOST_ID)
+        throw new Error("The session is not running");
       const host = getHost(LOCAL_HOST_ID);
       const target = await sessionSpawnTarget(body.sessionId, host);
       if (!target) throw new Error("Session not found");

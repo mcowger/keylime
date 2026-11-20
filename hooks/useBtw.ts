@@ -24,7 +24,7 @@ const CANCELLED_BEFORE_START = "cancelled before it started";
 
 // An omp without the btw commands answers "Unknown command": background
 // history refreshes pause instead of failing on every SSE connect.
-let unsupportedUntil = 0;
+const unsupportedUntilByHost = new Map<string, number>();
 
 /** An omp without the btw RPC commands gets an upgrade hint, not its raw error. */
 export function toastBtwError(error: unknown): void {
@@ -39,7 +39,10 @@ type BtwFrame = { type: string; [key: string]: unknown };
 /** Side questions (omp `/btw`) for one chat: the session's BTW history fed by
  * `btw_record`/`btw_delta` frames, the record shown in the composer panel, and
  * the history dialog. Never touches the main transcript. */
-export function useBtw(sessionIdRef: RefObject<string | null>) {
+export function useBtw(
+  sessionIdRef: RefObject<string | null>,
+  hostId = "local",
+) {
   const [records, setRecords] = useState<BtwRecord[]>([]);
   // Synchronous mirror of `records`: what this tab already knows decides
   // auto-opening and which running records a history snapshot may interrupt.
@@ -92,7 +95,8 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
    * without the commands is not asked again for a while. */
   const refreshHistory = useCallback(
     async (sid: string, explicit = false) => {
-      if (!explicit && Date.now() < unsupportedUntil) return;
+      if (!explicit && Date.now() < (unsupportedUntilByHost.get(hostId) ?? 0))
+        return;
       const knownBefore = new Set(
         recordsRef.current.map((record) => record.id),
       );
@@ -100,8 +104,9 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
         const data = await sendAgentCommand<{ records?: unknown[] } | null>(
           sid,
           { type: "get_btw_history" },
+          { hostId },
         );
-        unsupportedUntil = 0;
+        unsupportedUntilByHost.delete(hostId);
         if (sessionIdRef.current !== sid) return;
         const snapshot = (data?.records ?? []).filter(isBtwRecord);
         // Frames already received go first: the staleness rules then keep
@@ -117,11 +122,11 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
         if (running) setActiveId((id) => id ?? running.id);
       } catch (error) {
         if (error instanceof Error && error.message.includes("Unknown command"))
-          unsupportedUntil = Date.now() + UNSUPPORTED_RETRY_MS;
+          unsupportedUntilByHost.set(hostId, Date.now() + UNSUPPORTED_RETRY_MS);
         if (explicit) toastBtwError(error);
       }
     },
-    [commit, flushFrames, sessionIdRef],
+    [hostId, commit, flushFrames, sessionIdRef],
   );
 
   /** Half-open SSE recovery: re-read the history while an answer is still running. */
@@ -134,7 +139,7 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
       )
         void refreshHistory(sid);
     },
-    [refreshHistory],
+    [hostId, refreshHistory],
   );
 
   /** `/btw` alone: the history dialog. Unlike background reads, this starts omp. */
@@ -142,14 +147,14 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
     async (sid: string) => {
       setHistoryOpen(true);
       try {
-        await sendAgentCommand(sid, { type: "get_state" });
+        await sendAgentCommand(sid, { type: "get_state" }, { hostId });
       } catch (error) {
         toastBtwError(error);
         return;
       }
       await refreshHistory(sid, true);
     },
-    [refreshHistory],
+    [hostId, refreshHistory],
   );
 
   /** Resolves once omp accepted the question (true), or it was cancelled
@@ -163,11 +168,15 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
     ): Promise<boolean> => {
       let data: { record?: unknown } | null;
       try {
-        data = await sendAgentCommand<{ record?: unknown } | null>(sid, {
-          type: "btw",
-          question,
-          ...(recordId ? { recordId } : {}),
-        });
+        data = await sendAgentCommand<{ record?: unknown } | null>(
+          sid,
+          {
+            type: "btw",
+            question,
+            ...(recordId ? { recordId } : {}),
+          },
+          { hostId },
+        );
       } catch (error) {
         if (
           error instanceof Error &&
@@ -183,7 +192,7 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
       setActiveId(record.id);
       return true;
     },
-    [commit, sessionIdRef],
+    [hostId, commit, sessionIdRef],
   );
 
   const cancel = useCallback(
@@ -194,6 +203,7 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
         const data = await sendAgentCommand<{ cancelled?: boolean } | null>(
           sid,
           { type: "btw_cancel", recordId },
+          { hostId },
         );
         // Nothing was running: the shown state is stale (missed frame, lost child).
         if (data?.cancelled === false) await refreshHistory(sid);
@@ -201,7 +211,7 @@ export function useBtw(sessionIdRef: RefObject<string | null>) {
         toastBtwError(error);
       }
     },
-    [refreshHistory, sessionIdRef],
+    [hostId, refreshHistory, sessionIdRef],
   );
 
   return {

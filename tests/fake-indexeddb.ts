@@ -1,4 +1,24 @@
 type Entry = { id: string; [key: string]: unknown };
+
+function entryKey(entry: Entry): string {
+  return JSON.stringify([entry.hostId, entry.sessionId, entry.id]);
+}
+
+class FixtureEntries extends Map<string, Entry> {
+  override set(_id: string, entry: Entry): this {
+    return super.set(entryKey(entry), entry);
+  }
+  override get(id: string): Entry | undefined {
+    return super.get(id) ?? [...this.values()].find((entry) => entry.id === id);
+  }
+  override has(id: string): boolean {
+    return this.get(id) !== undefined;
+  }
+  override delete(id: string): boolean {
+    const entry = this.get(id);
+    return entry !== undefined && super.delete(entryKey(entry));
+  }
+}
 type FakeRequest = {
   result?: unknown;
   error?: unknown;
@@ -9,7 +29,7 @@ type FakeRequest = {
 /** One IDB store: queued transactions, read-your-writes, unique adds, and atomic commit/abort. */
 export function fakeIndexedDB() {
   const idb = {
-    entries: new Map<string, Entry>(),
+    entries: new FixtureEntries(),
     hold: false,
     held: [] as (() => void)[],
     upgraded: false,
@@ -112,24 +132,27 @@ export function fakeIndexedDB() {
           put: (value: Entry) => {
             const copy = structuredClone(value);
             return request(() => {
-              data.set(copy.id, copy);
-              return copy.id;
+              const key = entryKey(copy);
+              data.set(key, copy);
+              return key;
             }, true);
           },
           add: (value: Entry) => {
             const copy = structuredClone(value);
             return request(() => {
-              if (data.has(copy.id))
+              const key = entryKey(copy);
+              if (data.has(key))
                 throw new DOMException("Key already exists", "ConstraintError");
-              data.set(copy.id, copy);
-              return copy.id;
+              data.set(key, copy);
+              return key;
             }, true);
           },
-          delete: (id: string) =>
+          delete: (key: string[]) =>
             request(() => {
-              data.delete(id);
+              data.delete(JSON.stringify(key));
             }, true),
-          get: (id: string) => request(() => structuredClone(data.get(id))),
+          get: (key: string[]) =>
+            request(() => structuredClone(data.get(JSON.stringify(key)))),
           getAll: () =>
             request(() =>
               [...data]

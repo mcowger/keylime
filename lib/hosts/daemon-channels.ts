@@ -14,8 +14,6 @@ import {
   HostOpError,
   LINK_LIMITS,
   MESSAGE_COMMANDS,
-  PEER_MESSAGE_FRAME,
-  PEER_PROMPT_OUTCOME_FRAME,
   type HelloChannel,
   type HostUriScheme,
   type OpenChannelRequest,
@@ -62,7 +60,7 @@ type Channel = {
   snapshot: StreamSnapshot;
   lifecycle?: ChannelLifecycle;
   shared?: SharedRequests;
-  members: Map<string, Member>;
+  member?: Member;
   aliases: Set<string>;
   files: Set<string>;
   /** Daemon cmd id -> the link that sent it (null once it left) and that link's own id: links number their commands alike. */
@@ -176,12 +174,6 @@ export class ChannelTable {
     for (const channel of this.channels.values())
       this.stopChannel(channel, reason);
   }
-  get activeTurns(): number {
-    let active = 0;
-    for (const channel of this.channels.values())
-      if (channel.lifecycle?.activeTurn ?? channel.pending.activeTurn) active++;
-    return active;
-  }
   cwdForSession(id: string): string | undefined {
     for (const channel of this.channels.values())
       if (channel.pending.sessionId === id) return channel.cwd;
@@ -191,56 +183,120 @@ export class ChannelTable {
   async browserCommand(sessionId: string, tabId?: string): Promise<unknown> {
     if (!isValidSessionId(sessionId)) throw invalid("Invalid session id");
     const channel = [...this.channels.values()].find(
-      (candidate) => !candidate.exited && candidate.pending.sessionId === sessionId,
+      (candidate) =>
+        !candidate.exited && candidate.pending.sessionId === sessionId,
     );
     if (!channel) {
       if (tabId === undefined) return { tabs: [] };
-      throw new HostOpError(404, "session_not_running", "Session is not running");
+      throw new HostOpError(
+        404,
+        "session_not_running",
+        "Session is not running",
+      );
     }
-    const inFlight = tabId === undefined ? this.browserLists : this.browserCaptures;
+    const inFlight =
+      tabId === undefined ? this.browserLists : this.browserCaptures;
     if (inFlight.has(channel))
-      throw new HostOpError(429, "browser_request_busy", "A browser request is already in progress");
+      throw new HostOpError(
+        429,
+        "browser_request_busy",
+        "A browser request is already in progress",
+      );
     inFlight.add(channel);
     try {
-      const frame = await this.command(channel, tabId === undefined ? "browser_list" : "browser_capture", tabId === undefined ? {} : { id: tabId }, undefined, 7000);
+      const frame = await this.command(
+        channel,
+        tabId === undefined ? "browser_list" : "browser_capture",
+        tabId === undefined ? {} : { id: tabId },
+        undefined,
+        7000,
+      );
       if (channel.exited || channel.pending.sessionId !== sessionId)
-        throw new HostOpError(404, "session_not_running", "Session is no longer running");
+        throw new HostOpError(
+          404,
+          "session_not_running",
+          "Session is no longer running",
+        );
       return frame.data;
     } finally {
       inFlight.delete(channel);
     }
   }
   /** Video commands address only an existing runner with the exact session identity. */
-  async browserVideo(sessionId: string, op: "start" | "next" | "stop", input: { id: string; streamId?: string }): Promise<unknown> {
+  async browserVideo(
+    sessionId: string,
+    op: "start" | "next" | "stop",
+    input: { id: string; streamId?: string },
+  ): Promise<unknown> {
     if (!isValidSessionId(sessionId)) throw invalid("Invalid session id");
-    const channel = [...this.channels.values()].find((candidate) => !candidate.exited && candidate.pending.sessionId === sessionId);
-    if (!channel) throw new HostOpError(404, "session_not_running", "Session is not running");
+    const channel = [...this.channels.values()].find(
+      (candidate) =>
+        !candidate.exited && candidate.pending.sessionId === sessionId,
+    );
+    if (!channel)
+      throw new HostOpError(
+        404,
+        "session_not_running",
+        "Session is not running",
+      );
     const key = `${sessionId}:${input.streamId}`;
     if (op === "next" && this.browserVideoPulls.has(key))
-      throw new HostOpError(429, "browser_request_busy", "A video request is already in progress");
+      throw new HostOpError(
+        429,
+        "browser_request_busy",
+        "A video request is already in progress",
+      );
     if (op === "next") this.browserVideoPulls.add(key);
     try {
-      const frame = await this.command(channel, `browser_video_${op}`, input, undefined, 7000);
+      const frame = await this.command(
+        channel,
+        `browser_video_${op}`,
+        input,
+        undefined,
+        7000,
+      );
       if (channel.exited || channel.pending.sessionId !== sessionId)
-        throw new HostOpError(404, "session_not_running", "Session is no longer running");
+        throw new HostOpError(
+          404,
+          "session_not_running",
+          "Session is no longer running",
+        );
       return frame.data;
     } finally {
       if (op === "next") this.browserVideoPulls.delete(key);
     }
   }
   /** Send input only to the existing runner that owns this session; never start one. */
-  async browserControl(sessionId: string, args: BrowserControlArgs): Promise<unknown> {
+  async browserControl(
+    sessionId: string,
+    args: BrowserControlArgs,
+  ): Promise<unknown> {
     if (!isValidSessionId(sessionId)) throw invalid("Invalid session id");
     const channel = [...this.channels.values()].find(
-      (candidate) => !candidate.exited && candidate.pending.sessionId === sessionId,
+      (candidate) =>
+        !candidate.exited && candidate.pending.sessionId === sessionId,
     );
-    if (!channel) throw new HostOpError(404, "session_not_running", "Session is not running");
-    const frame = await this.command(channel, "browser_control", args, undefined, 7000);
+    if (!channel)
+      throw new HostOpError(
+        404,
+        "session_not_running",
+        "Session is not running",
+      );
+    const frame = await this.command(
+      channel,
+      "browser_control",
+      args,
+      undefined,
+      7000,
+    );
     if (channel.exited || channel.pending.sessionId !== sessionId)
-      throw new HostOpError(404, "session_not_running", "Session is no longer running");
+      throw new HostOpError(
+        404,
+        "session_not_running",
+        "Session is no longer running",
+      );
     return frame.data;
   }
-
 
   private workspaceContains(root: string, cwd: string): boolean {
     const canonical = (value: string) => {
@@ -341,15 +397,22 @@ export class ChannelTable {
 
   private workspaceDeleting(cwd: string): boolean {
     return (
-      [...this.workspaceFences].some((root) => this.workspaceContains(root, cwd)) ||
+      [...this.workspaceFences].some((root) =>
+        this.workspaceContains(root, cwd),
+      ) ||
       (this.deps.workspaceDeleting?.(cwd) ?? false)
     );
   }
 
-  private assertWorkspaceAvailable(cwd: string, recordedCwd?: string | null): void {
+  private assertWorkspaceAvailable(
+    cwd: string,
+    recordedCwd?: string | null,
+  ): void {
     if (
       this.workspaceDeleting(cwd) ||
-      (recordedCwd && recordedCwd !== cwd && this.workspaceDeleting(recordedCwd))
+      (recordedCwd &&
+        recordedCwd !== cwd &&
+        this.workspaceDeleting(recordedCwd))
     )
       throw new HostOpError(
         409,
@@ -481,6 +544,8 @@ export class ChannelTable {
         (args.launch.advisor || channel.launchAdvisor) &&
       channel.lifecycle?.isIdle
     ) {
+      // An open from another link must not stop a child it cannot join.
+      this.checkController(channel, link);
       const replacement = await this.replaceAdvisor(channel, link, args);
       if (!replacement) return this.open(link, args);
       channel = replacement;
@@ -494,8 +559,8 @@ export class ChannelTable {
       );
     }
     const joined = channel.opened;
-    channel.opened = true;
     const continuous = this.join(channel, link);
+    channel.opened = true;
     if (args.preparing) channel.lifecycle?.setPreparing(link.id, true);
     return this.snapshot(channel, link, joined, continuous);
   }
@@ -527,7 +592,9 @@ export class ChannelTable {
       const launch = this.deps.prepareLaunch({
         ...channel.launch,
         advisor: args.launch.advisor,
-        ...(args.launch.spawnModel ? { spawnModel: args.launch.spawnModel } : {}),
+        ...(args.launch.spawnModel
+          ? { spawnModel: args.launch.spawnModel }
+          : {}),
       });
       const spawning = this.create(
         launch,
@@ -729,7 +796,9 @@ export class ChannelTable {
         adopted?.transport.killTree(true);
         throw new HostOpError(503, "host_stopping", "keylime host is stopping");
       }
-      const spawned = adopted ?? (await this.deps.spawn(launch, preparingLinkId === "d:resume"));
+      const spawned =
+        adopted ??
+        (await this.deps.spawn(launch, preparingLinkId === "d:resume"));
       if (this.stopped) {
         spawned.transport.killTree(true);
         throw new HostOpError(503, "host_stopping", "keylime host is stopping");
@@ -754,7 +823,6 @@ export class ChannelTable {
         launch,
         pending: new PendingRequests(LINK_LIMITS.pendingBytes, identity),
         snapshot: new StreamSnapshot(),
-        members: new Map(),
         aliases: new Set(identity ? [identity] : []),
         files: new Set(launch.sessionFile ? [launch.sessionFile] : []),
         commands: new Map(),
@@ -779,16 +847,20 @@ export class ChannelTable {
       });
       const transportId = channel.transport.id;
       if (!channel.adopted && transportId !== undefined) {
-        channel.lifecycle.setTerminalAttached(this.deps.terminalAttached?.(transportId) ?? false);
+        channel.lifecycle.setTerminalAttached(
+          this.deps.terminalAttached?.(transportId) ?? false,
+        );
         if (identity) this.deps.bindTerminal?.(transportId, identity);
       }
       if (preparingLinkId)
         channel.lifecycle.setPreparing(preparingLinkId, true);
       channel.shared = new SharedRequests({
-        members: () => [...channel.members.keys()],
-        isUp: (id) => channel.members.get(id)?.link.isUp() ?? false,
+        member: () => channel.member?.link.id,
+        isUp: (id) =>
+          channel.member?.link.id === id && channel.member.link.isUp(),
         deliver: (id, lines) => {
-          const member = channel.members.get(id);
+          const member =
+            channel.member?.link.id === id ? channel.member : undefined;
           if (member)
             for (const line of lines)
               this.deliver(channel, member, { type: "stdout", ch, line });
@@ -837,8 +909,7 @@ export class ChannelTable {
         channel.commands.clear();
         this.channels.delete(ch);
         // An open result still on its way must carry this exit after it (see release).
-        if ([...channel.members.values()].some((member) => member.paused))
-          this.exitedHandoffs.set(ch, channel);
+        if (channel.member?.paused) this.exitedHandoffs.set(ch, channel);
         // A planned stop names its reason, so web apps do not report it as a crash.
         this.broadcast(channel, {
           type: "exit",
@@ -973,8 +1044,10 @@ export class ChannelTable {
   private stdout(channel: Channel, line: string): void {
     const frame = parseWire(line);
     if (!frame) {
-      for (const member of channel.members.values())
-        member.link.queue({ type: "resync", ch: channel.ch }, channel.ch);
+      channel.member?.link.queue(
+        { type: "resync", ch: channel.ch },
+        channel.ch,
+      );
       return;
     }
     if (frame.t === "hello") channel.noteReady(frame);
@@ -1037,7 +1110,8 @@ export class ChannelTable {
       if (owner) {
         // shortcut: a message command's entry waits for its prompt_result/prompt_error; one that never comes stays until exit.
         if (!MESSAGE_COMMANDS.has(owner.op)) channel.commands.delete(frame.id);
-        const member = owner.link && channel.members.get(owner.link.id);
+        const member =
+          channel.member?.link === owner.link ? channel.member : undefined;
         if (member)
           this.deliver(
             channel,
@@ -1063,28 +1137,14 @@ export class ChannelTable {
       const owner = channel.commands.get(frame.id);
       if (owner) {
         if (frame.t !== "bash_output") channel.commands.delete(frame.id);
-        const member = owner.link && channel.members.get(owner.link.id);
+        const member =
+          channel.member?.link === owner.link ? channel.member : undefined;
         if (member)
           this.deliver(channel, member, {
             type: "stdout",
             ch: channel.ch,
             line: JSON.stringify({ ...frame, id: owner.id }),
           });
-        if (frame.t !== "bash_output") {
-          const outcome: WireFrame = { ...frame };
-          delete outcome.id;
-          const peer = JSON.stringify({
-            t: PEER_PROMPT_OUTCOME_FRAME,
-            outcome,
-          });
-          for (const other of channel.members.values())
-            if (other !== member)
-              this.deliver(channel, other, {
-                type: "stdout",
-                ch: channel.ch,
-                line: peer,
-              });
-        }
         return;
       }
     }
@@ -1092,10 +1152,20 @@ export class ChannelTable {
     this.broadcast(channel, { type: "stdout", ch: channel.ch, line });
   }
 
+  private checkController(channel: Channel, link: DaemonLink): void {
+    if (channel.member && channel.member.link !== link)
+      throw new HostOpError(
+        409,
+        "channel_already_joined",
+        "The old controller must release this channel before it is joined",
+      );
+  }
+
   /** True when `link` was a member with no output dropped since its last snapshot (a server restart on the same link). */
   private join(channel: Channel, link: DaemonLink): boolean {
-    const member = channel.members.get(link.id);
-    if (member) {
+    this.checkController(channel, link);
+    const member = channel.member;
+    if (member?.link === link) {
       // The snapshot supersedes queued output, never this link's command replies (FIFO before the result in the sender).
       const continuous =
         !member.gap &&
@@ -1113,7 +1183,7 @@ export class ChannelTable {
       return continuous;
     }
     link.discard(channel.ch);
-    channel.members.set(link.id, {
+    channel.member = {
       link,
       paused: true,
       opens: 1,
@@ -1121,7 +1191,7 @@ export class ChannelTable {
       bytes: 0,
       resync: false,
       gap: false,
-    });
+    };
     channel.lifecycle?.setInterest(link.id, false);
     return false;
   }
@@ -1129,8 +1199,8 @@ export class ChannelTable {
   /** Called only after the open result has been queued under this channel's key. */
   release(link: DaemonLink, ch: string): void {
     const channel = this.channels.get(ch) ?? this.exitedHandoffs.get(ch),
-      member = channel?.members.get(link.id);
-    if (!channel || !member) return;
+      member = channel?.member;
+    if (!channel || member?.link !== link) return;
     member.opens = Math.max(0, member.opens - 1);
     if (member.opens > 0) return;
     member.paused = false;
@@ -1141,10 +1211,7 @@ export class ChannelTable {
     member.queued = [];
     member.bytes = 0;
     member.resync = false;
-    if (
-      channel.exited &&
-      ![...channel.members.values()].some((other) => other.paused)
-    )
+    if (channel.exited && !channel.member?.paused)
       this.exitedHandoffs.delete(ch);
   }
 
@@ -1165,12 +1232,11 @@ export class ChannelTable {
     else member.link.output(body, channel.pending.sessionId);
   }
   private broadcast(channel: Channel, body: Output): void {
-    for (const member of channel.members.values())
-      this.deliver(channel, member, body);
+    if (channel.member) this.deliver(channel, channel.member, body);
   }
   private member(link: DaemonLink, ch: string): Channel {
     const channel = this.channels.get(ch);
-    if (!channel || !channel.members.has(link.id))
+    if (!channel || channel.member?.link !== link)
       throw new HostOpError(
         403,
         "channel_not_joined",
@@ -1183,7 +1249,7 @@ export class ChannelTable {
     const channel = this.member(link, ch);
     const frame = parseWire(line);
     if (!frame) throw invalid("Invalid channel frame");
-    const member = channel.members.get(link.id)!;
+    const member = channel.member!;
     const op =
       frame.t === "cmd" && typeof frame.op === "string" ? frame.op : null;
     if (frame.t === "cmd" && op === null)
@@ -1259,20 +1325,12 @@ export class ChannelTable {
       channel.commands.set(id, { link, id: frame.id, op });
       out = { ...frame, id };
     }
-    if (op !== null && MESSAGE_COMMANDS.has(op)) {
-      channel.shared?.prompt(link.id);
-      // Ahead of omp's echo: an identical peer message must not confirm another server's own admission.
-      const marker = JSON.stringify({ t: PEER_MESSAGE_FRAME });
-      for (const [other, peer] of channel.members)
-        if (other !== link.id)
-          this.deliver(channel, peer, { type: "stdout", ch, line: marker });
-    }
     channel.lifecycle?.noteStdin(out);
     channel.transport.write(JSON.stringify(out) + "\n", (error) => {
       if (!error || id === null) return;
       channel.commands.delete(id);
       channel.lifecycle?.forgetCommand(String(id), true);
-      if (channel.members.has(link.id)) refuse("write_failed", error.message);
+      if (channel.member?.link === link) refuse("write_failed", error.message);
     });
   }
   setInterest(
@@ -1317,7 +1375,7 @@ export class ChannelTable {
   }
   close(link: DaemonLink, ch: string): void {
     const channel = this.member(link, ch);
-    channel.members.delete(link.id);
+    channel.member = undefined;
     channel.lifecycle?.setPreparing(link.id, false);
     channel.lifecycle?.linkGone(link.id);
     channel.shared?.remove(link.id);
@@ -1343,17 +1401,11 @@ export class ChannelTable {
   linkGone(link: DaemonLink): void {
     this.goneLinks.add(link.id);
     for (const [ch, channel] of this.exitedHandoffs) {
-      channel.members.delete(link.id);
-      if (![...channel.members.values()].some((member) => member.paused))
-        this.exitedHandoffs.delete(ch);
+      if (channel.member?.link === link) channel.member = undefined;
+      if (!channel.member?.paused) this.exitedHandoffs.delete(ch);
     }
     for (const channel of this.channels.values())
-      if (channel.members.has(link.id)) this.close(link, channel.ch);
-  }
-  members(ch: string): DaemonLink[] {
-    return [...(this.channels.get(ch)?.members.values() ?? [])].map(
-      (member) => member.link,
-    );
+      if (channel.member?.link === link) this.close(link, channel.ch);
   }
   listing(link: DaemonLink, replay = true): HelloChannel[] {
     return [...this.channels.values()].map((channel) => ({

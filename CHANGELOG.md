@@ -6,6 +6,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ## [Unreleased]
 
+### Breaking Changes
+- Removed host pools and shared project identities; each daemon now has one controller, and both ends must use link protocol 14
+
 ### Added
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
 - **Settings → Hosts → Deploy release** lists compatible builds already on the web server, shows their build times in your time zone, and marks the newest. The dialog tracks transfer progress for the matched daemon and runner before they install and restart together.
@@ -160,6 +163,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - **Settings → Hosts → Deploy release** lists compatible builds already on the web server, shows their build times in your time zone, and marks the newest. The dialog tracks transfer progress for the matched daemon and runner before they install and restart together
 - The workspace `…` menu can start or stop PR feedback monitoring for a selected chat without running Ship or changing auto-merge. The PR row's bell shows monitoring status; closing the chat picker restores focus to the menu
 - Ship can monitor a PR for new comments and reviews. The server verifies the shipping chat opted in and sends only feedback links; stop monitoring from workspace actions
+- Host-specific settings, model discovery, sessions, notifications, restore claims, and outbox quotas; combined search checks metadata across hosts and transcripts locally
 
 ### Changed
 - `bun run build:binary` builds the browser assets and runners, then compiles and packages all four Keylime targets in parallel. Runner builds use faster native addon compression.
@@ -225,6 +229,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Daemons linked to multiple servers keep each server's OMP configuration separate, and workspace access blocks mirrored settings and cached copies through symlinks
 - Images in saved chats on linked hosts remain available after server configuration refreshes
 - Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged
+- Agent tools remain on their calling host, and pending work from before this release is neither migrated nor replayed
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

@@ -20,6 +20,12 @@ export const NotificationEventSchema = Type.Object(
         description: "Sent only by the test notification button.",
       }),
     ]),
+    hostId: Type.Optional(
+      Type.String({
+        description:
+          "Conversation host; absent for historical notifications without provenance and test pushes.",
+      }),
+    ),
     sessionId: Type.String({
       description: "Conversation identifier; empty for a test push.",
     }),
@@ -47,7 +53,10 @@ export const NotificationEventSchema = Type.Object(
 );
 export const NotificationHistoryEntrySchema = Type.Object(
   {
-    id: Type.String({ description: "Replace tag: sessionId:type." }),
+    id: Type.String({
+      description:
+        "Opaque replace tag scoped to host, session and type for new conversation notifications.",
+    }),
     event: NotificationEventSchema,
     at: Type.Number({ description: "Time recorded, in Unix milliseconds." }),
     read: Type.Boolean({

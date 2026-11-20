@@ -126,7 +126,13 @@ test("retired mirror traffic uses the unknown message and operation paths", asyn
     wrongDirection: false,
   });
 
-  const request = { type: "req", seq: 1, id: "r1", op: "clusterConfig", args: {} };
+  const request = {
+    type: "req",
+    seq: 1,
+    id: "r1",
+    op: "clusterConfig",
+    args: {},
+  };
   assert.deepEqual(decodeDown(JSON.stringify(request)), request);
   assert.equal(isHostOp(request.op), false);
 });
@@ -168,41 +174,6 @@ test("v7 interest and registration keep required fields strictly typed", async (
     { type: "host_tools", seq: 1, ch: "c", tools: [], schemes: ["browser"] },
   ])
     assert.throws(() => decodeDown(JSON.stringify(message)), LinkProtocolError);
-});
-
-test("v7 notifier and session invalidation round trip; hello link is validated", async () => {
-  const { encodeLine, decodeUp, LinkProtocolError, isHostOp } = await load();
-  for (const message of [
-    { type: "notifier", seq: 1, on: true },
-    { type: "sessions_changed", seq: 2 },
-  ]) {
-    assert.deepEqual(decodeUp(encodeLine(message as UpMessage)), message);
-  }
-  const hello = {
-    type: "hello" as const,
-    v: LINK_PROTOCOL_VERSION,
-    ompVersion: null,
-    platform: "linux",
-    home: "/h",
-    autoApproveExtension: false,
-    ack: 0,
-    channels: [],
-    link: { id: "l1", notifier: false },
-  };
-  assert.deepEqual(decodeUp(encodeLine(hello)), hello);
-  for (const link of [
-    null,
-    {},
-    { id: 1, notifier: true },
-    { id: "l1", notifier: "false" },
-  ]) {
-    assert.throws(
-      () => decodeUp(JSON.stringify({ ...hello, link })),
-      LinkProtocolError,
-    );
-  }
-  assert.equal(isHostOp("open"), true);
-  assert.equal(isHostOp("close"), true);
 });
 
 const UP = [
@@ -299,109 +270,6 @@ test("ack is unsequenced and its value must be a safe non-negative integer", asy
       bad,
     );
   }
-});
-
-const CAPACITY = {
-  effectiveCpus: 1.5,
-  load1: 0.75,
-  busyFraction: 0.4,
-  stealFraction: 0.1,
-  availableMemoryBytes: 4 * 1024 ** 3,
-  activeSessions: 2,
-};
-
-test("capacity round-trips as a volatile unsequenced uplink, never a downlink operation", async () => {
-  const { encodeLine, decodeUp, decodeDown } = await load();
-  const message = { type: "capacity" as const, sample: CAPACITY };
-  assert.deepEqual(decodeUp(encodeLine(message)), message);
-  assert.deepEqual(decodeDown(encodeLine(message)), {
-    type: "unknown",
-    messageType: "capacity",
-    seq: null,
-    wrongDirection: true,
-  });
-});
-
-test("capacity rejects missing, non-finite, negative and out-of-range resource fields", async () => {
-  const { decodeUp, LinkProtocolError } = await load();
-  for (const sample of [
-    null,
-    [],
-    {},
-    ...Object.keys(CAPACITY).map((key) => {
-      const incomplete: Partial<typeof CAPACITY> = { ...CAPACITY };
-      delete incomplete[key as keyof typeof CAPACITY];
-      return incomplete;
-    }),
-  ]) {
-    assert.throws(
-      () => decodeUp(JSON.stringify({ type: "capacity", sample })),
-      LinkProtocolError,
-      JSON.stringify(sample),
-    );
-  }
-  for (const [key, values] of [
-    ["effectiveCpus", [0, -1, null, "2"]],
-    ["load1", [-1, null, "1"]],
-    ["busyFraction", [-0.1, 1.01, null]],
-    ["stealFraction", [-0.1, 1.01, null]],
-    ["availableMemoryBytes", [-1, null, "1024"]],
-    ["activeSessions", [-1, 0.5, 2 ** 53, null]],
-  ]) {
-    for (const value of values as (number | string | null)[]) {
-      assert.throws(
-        () =>
-          decodeUp(
-            JSON.stringify({
-              type: "capacity",
-              sample: { ...CAPACITY, [key as string]: value },
-            }),
-          ),
-        LinkProtocolError,
-        `${key}: ${value}`,
-      );
-    }
-  }
-  for (const key of Object.keys(CAPACITY)) {
-    for (const value of ["1e999", "-1e999"]) {
-      const sample = JSON.stringify(CAPACITY).replace(
-        new RegExp(`"${key}":[^,}]+`),
-        `"${key}":${value}`,
-      );
-      assert.throws(
-        () => decodeUp(`{"type":"capacity","sample":${sample}}`),
-        LinkProtocolError,
-        `${key}: ${value}`,
-      );
-    }
-  }
-  assert.throws(
-    () =>
-      decodeUp(
-        JSON.stringify({
-          type: "capacity",
-          sample: { ...CAPACITY, busyFraction: 0.8, stealFraction: 0.3 },
-        }),
-      ),
-    LinkProtocolError,
-    "busy excludes steal, so their total cannot exceed one",
-  );
-});
-
-test("capacity accepts idle zero resources except for strictly positive CPU capacity", async () => {
-  const { decodeUp } = await load();
-  const sample = {
-    effectiveCpus: 0.25,
-    load1: 0,
-    busyFraction: 0,
-    stealFraction: 0,
-    availableMemoryBytes: 0,
-    activeSessions: 0,
-  };
-  assert.deepEqual(decodeUp(JSON.stringify({ type: "capacity", sample })), {
-    type: "capacity",
-    sample,
-  });
 });
 
 test("hello preserves a safe optional creation identity and rejects unsafe identities", async () => {

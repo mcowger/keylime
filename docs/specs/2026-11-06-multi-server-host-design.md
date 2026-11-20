@@ -1,5 +1,7 @@
 # One host daemon, several web servers — design
 
+Historical. [Host independence](2026-11-20-host-independence.md) replaces this topology with one controller per daemon.
+
 Date: 2026-11-06. Branch: `docs/multi-server-host` (on `main` 3b6243c5).
 Builds on: `docs/specs/2026-10-28-remote-hosts-design.md` ("Protocol versions and compatibility"), `docs/specs/2026-10-29-local-daemon-design.md` (adoption), `docs/specs/2026-10-31-websocket-link-design.md` (D3, D6, D7).
 

@@ -2,8 +2,8 @@ import {
   apiErrorResponse,
   hostOfflineResponse,
   resolveSessionHostOr404,
-  resolveHostOrError,
 } from "@/lib/api-utils";
+import { sessionKey } from "@/lib/session-identity";
 import {
   startRpcSession,
   getRpcSession,
@@ -57,7 +57,10 @@ export function commandErrorResponse(error: unknown): Response {
     );
   }
   if (error instanceof WebRpcError && error.code === "session_host_conflict") {
-    return Response.json({ error: error.message, code: error.code }, { status: 409 });
+    return Response.json(
+      { error: error.message, code: error.code },
+      { status: 409 },
+    );
   }
   // host_offline falls through to apiErrorResponse: 503 {hostOffline: true}.
   if (error instanceof WebRpcError && error.code !== "host_offline") {
@@ -103,10 +106,11 @@ export async function runAgentCommand(
   advisor: boolean,
   owner: string,
   trustedUploads?: OutboxUploadReceipt[],
+  { hostId = "local" }: { hostId?: string } = {},
 ): Promise<Response> {
   let release = () => {}; // frees this command's send fence; idempotent
   try {
-    let command = body as { type?: unknown; [key: string]: unknown } | null;
+    const command = body as { type?: unknown; [key: string]: unknown } | null;
     if (typeof command?.type !== "string" || !command.type.trim()) {
       return Response.json(
         { error: "command type is required", code: "command_type_required" },
@@ -114,22 +118,13 @@ export async function runAgentCommand(
       );
     }
     const type = command.type;
-    const selectedHost = type === "get_state" && command.hostId !== undefined
-      ? resolveHostOrError(command.hostId)
-      : undefined;
-    if (selectedHost && "response" in selectedHost) return selectedHost.response;
-    if (selectedHost) {
-      // hostId is a web routing hint, not an omp RPC argument.
-      const { hostId: _hostId, ...rpcCommand } = command;
-      command = rpcCommand;
-    }
     // Held messages: stored and answered here; the outbox's dispatcher sends them to omp (lib/message-outbox.ts).
     if (
       type === "outbox_add" ||
       type === "outbox_remove" ||
       type === "outbox_scope"
     )
-      return await runOutboxCommand(id, command, advisor, owner);
+      return await runOutboxCommand(id, command, advisor, owner, { hostId });
     if (type === "get_client_message_status") {
       const ids = readClientMessageIds(command.clientMessageIds);
       if (!ids)
@@ -142,24 +137,27 @@ export async function runAgentCommand(
         );
       return Response.json({
         success: true,
-        data: (await reconcileOutboxHandoffs(id, ids)) satisfies Static<
+        data: (await reconcileOutboxHandoffs(id, ids, hostId)) satisfies Static<
           typeof ClientMessageStatusSchema
         >,
       });
     }
     // Attached files go to the session's host first; nothing reaches omp when one fails (spec U3).
-    const uploads = takeUploads(command, owner, trustedUploads);
+    const uploads = takeUploads(command, owner, trustedUploads, hostId);
+    const key = sessionKey(id, hostId);
     const held =
       type === "get_jobs" || type === "get_job_output"
         ? []
-        : getRpcSessionKeys(id).flatMap((key) => sendFences().get(key) ?? []);
+        : getRpcSessionKeys(id, hostId).flatMap(
+            (alias) => sendFences().get(sessionKey(alias, hostId)) ?? [],
+          );
     const prior = held.length ? Promise.all(held).then(() => {}) : undefined;
     if (uploads) {
       const gate = new Promise<void>((resolve) => (release = resolve));
       const fence = prior ? prior.then(() => gate) : gate;
-      sendFences().set(id, fence);
+      sendFences().set(key, fence);
       void fence.then(() => {
-        if (sendFences().get(id) === fence) sendFences().delete(id);
+        if (sendFences().get(key) === fence) sendFences().delete(key);
       });
     }
     if (prior) await prior;
@@ -189,12 +187,7 @@ export async function runAgentCommand(
     // no runtime RPC, so a toggle that now differs from the live child's spawn
     // flag must replace an idle child to take effect; busy children keep
     // running and pick the flag up at the next natural respawn.
-    const existing = getRpcSession(id);
-    if (selectedHost && existing?.isAlive() && existing.host.id !== selectedHost.host.id)
-      return Response.json(
-        { error: "Session is active on another host", code: "session_host_conflict" },
-        { status: 409 },
-      );
+    const existing = getRpcSession(id, hostId);
     let resumeId = id;
     let resumeHost: AgentSessionWrapper["host"] | undefined;
     const noSpawn = Object.hasOwn(NO_SPAWN_REPLIES, type);
@@ -230,9 +223,9 @@ export async function runAgentCommand(
       return Response.json({ success: true, data: NO_SPAWN_REPLIES[type] });
     }
 
-    const resolved = selectedHost ?? (resumeHost
+    const resolved = resumeHost
       ? { host: resumeHost }
-      : await resolveSessionHostOr404(resumeId));
+      : await resolveSessionHostOr404(resumeId, hostId);
     if ("response" in resolved) return resolved.response;
     const { host } = resolved;
     const offline = hostOfflineResponse(host);
@@ -274,7 +267,7 @@ export async function runAgentCommand(
       host,
       true,
       undefined,
-      selectedHost !== undefined,
+      true,
     );
     // This command inherits the open's preparation lease, so the shared child cannot idle out before it is sent.
     return await session.withPendingCommand(async () => {

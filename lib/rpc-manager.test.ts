@@ -18,6 +18,22 @@ import type { Host, HostStatus, SpawnRequest } from "./hosts/host.ts";
 import type { LinkDriver } from "./hosts/link-driver.test-helper.ts";
 import type { DownMessage, OpenChannelRequest } from "./hosts/link-protocol.ts";
 import type { NotificationMessage } from "./notification-hub.ts";
+import { sessionKey } from "./session-identity.ts";
+import { saveHostSettings } from "./web-settings.ts";
+
+const disabledHostPolicy = {
+  getSettings: async () => ({
+    autoResumeSessions: false,
+    agentToolsEnabled: false,
+    uploadRetentionDays: 7,
+  }),
+  setSettings: async () => {
+    throw new Error("unexpected settings write");
+  },
+  listModels: async () => {
+    throw new Error("unexpected model listing");
+  },
+} satisfies Pick<Host, "getSettings" | "setSettings" | "listModels">;
 
 type Command = Parameters<RpcProcess["sendCommand"]>[0];
 type TestTransport = RpcTransport & {
@@ -113,8 +129,13 @@ test.after(async () => {
   rmSync(isolatedAgentDir, { recursive: true, force: true });
 });
 
-const { AgentSessionWrapper: SnapshotWrapper, subscribeHostToolCalls } =
-  await import("./rpc-manager.ts");
+// Initialize the registry only after assigning the test's isolated agent directory.
+const {
+  AgentSessionWrapper: SnapshotWrapper,
+  subscribeHostToolCalls,
+  getRpcSession: lookupSession,
+  startRpcSession: spawnSession,
+} = await import("./rpc-manager.ts");
 // Wrappers built directly need an online host; the daemon's machine host is one.
 const { localHost } = await import("./hosts/local-host.ts");
 
@@ -188,8 +209,8 @@ test("host tools for a session no tab watches go to other open tabs, then settle
     "cross-session",
   );
   globalThis.__ompSessions ??= new Map();
-  globalThis.__ompSessions.set("cross-session", wrapper);
-  t.after(() => globalThis.__ompSessions?.delete("cross-session"));
+  globalThis.__ompSessions.set(sessionKey("cross-session"), wrapper);
+  t.after(() => globalThis.__ompSessions?.delete(sessionKey("cross-session")));
   await wrapper.send({ type: "set_host_tools", tools: [{ name: "open_url" }] });
 
   // No tab anywhere: rejected immediately so the agent cannot hang.
@@ -377,6 +398,7 @@ test("cross-session tool cancellation retains the source alias and isolates iden
       {
         type: "host_tool_cancel",
         sessionId: "cancel-source",
+        hostId: "local",
         targetId: "same-id",
       },
     ],
@@ -395,6 +417,7 @@ test("cross-session tool cancellation retains the source alias and isolates iden
   assert.deepEqual(events.at(-1), {
     type: "host_tool_cancel",
     sessionId: "other-source",
+    hostId: "local",
     targetId: "same-id",
   });
 });
@@ -1090,6 +1113,7 @@ test("unexpected child exit is retained until a replacement session clears it", 
     { ...recorded, at: 0 },
     {
       id: "crashed-session",
+      hostId: "local",
       cwd: process.cwd(),
       at: 0,
       code: null,
@@ -1170,6 +1194,7 @@ async function reachableTab() {
           deviceId: "desk-0001",
           visible: false,
           sessionId: null,
+          hostId: "local",
           seq: 0,
           lastSeen: Date.now(),
         },
@@ -1268,6 +1293,7 @@ test("after a moved session switches to another conversation, a tab left on the 
     deviceId: "desk-0001",
     visible: true,
     sessionId: "notify-session",
+    hostId: "local",
     seq: 1,
     lastSeen: Date.now(),
   });
@@ -1337,30 +1363,6 @@ test("an asynchronous prompt failure (prompt_error) notifies the user", async (t
     error: "No API key for provider",
   });
   assert.deepEqual(delivered, [["error", "No API key for provider"]]);
-});
-
-test("a peer server's failed prompt suppresses completion and notifies its failure", async (t) => {
-  const { feed, delivered } = await notifyingSession(t);
-  feed({ type: "agent_start" });
-  feed({ type: "agent_end", isTerminal: true, messages: [] });
-  feed({
-    type: "peer_prompt_outcome",
-    outcome: {
-      t: "prompt_result",
-      agentInvoked: true,
-      status: "error",
-      error: { message: "boom" },
-    },
-  });
-  feed({ type: "session_settled" });
-  feed({
-    type: "peer_prompt_outcome",
-    outcome: { t: "prompt_error", command: "prompt", error: "No API key" },
-  });
-  assert.deepEqual(delivered, [
-    ["error", "boom"],
-    ["error", "No API key"],
-  ]);
 });
 
 test("a crash of an idle session does not notify", async (t) => {
@@ -2305,61 +2307,6 @@ test("auto-approve answers tool approvals and “Allow tool” confirms without 
   );
 });
 
-test("a server-owned confirm takes omp's dialog path and its answer stays on the server", async (t) => {
-  const { wrapper, feed, delivered } = await notifyingSession(t);
-  const sent: RpcFrame[] = [];
-  // Replace the private process's frame sink to observe what omp receives.
-  const wrapperWithProc = wrapper as unknown as { proc: RpcProcess };
-  wrapperWithProc.proc.sendFrame = (frame) => sent.push(frame);
-  const events: AgentEvent[] = [];
-  wrapper.onEvent((event) => events.push(event));
-
-  const answer = wrapper.confirmFromServer(
-    "Start a session on build-box in /srv/app?",
-  );
-  assert.deepEqual(delivered, [
-    ["input", "Start a session on build-box in /srv/app?"],
-  ]);
-  const request = events.find(
-    (event) => event.type === "ui_request" && event.method === "confirm",
-  );
-  assert.ok(request);
-  assert.deepEqual(request.args, [
-    "Start a session on build-box in /srv/app?",
-    "",
-  ]);
-  assert.equal(
-    wrapper.isRunning(),
-    true,
-    "a pending dialog keeps the session waiting on the user",
-  );
-  await wrapper.send({ type: "ui_response", id: request.id, value: true });
-  assert.equal(await answer, true);
-  assert.deepEqual(sent, [], "omp never sees the server's dialog answer");
-  assert.ok(
-    events.some((event) => event.type === "ui_end" && event.id === request.id),
-    "other tabs drop the dialog",
-  );
-
-  const ended = wrapper.confirmFromServer("Second?");
-  feed({ type: "agent_end", isTerminal: true, messages: [] });
-  assert.equal(
-    await ended,
-    false,
-    "a run that ends settles the dialog as declined",
-  );
-  assert.equal(wrapper.isRunning(), false);
-
-  const closed = wrapper.confirmFromServer("Third?");
-  await wrapper.destroyAndWait();
-  assert.equal(
-    await closed,
-    false,
-    "a destroyed session settles the dialog as declined",
-  );
-  assert.equal(await wrapper.confirmFromServer("Fourth?"), false);
-});
-
 // ----------------------------------------------------------------------------
 // Disconnect reaper (DISCONNECT_DESTROY_MS)
 //
@@ -2588,9 +2535,9 @@ for (const fails of [false, true]) {
     const detach = wrapper.onEvent(() => {});
     await wrapper.send({ type: "get_state" });
     globalThis.__ompSessions ??= new Map();
-    globalThis.__ompSessions.set(sessionId, wrapper);
+    globalThis.__ompSessions.set(sessionKey(sessionId, host.id), wrapper);
     t.after(() => {
-      globalThis.__ompSessions?.delete(sessionId);
+      globalThis.__ompSessions?.delete(sessionKey(sessionId, host.id));
       globalThis.__ompUploads?.delete(id);
     });
 
@@ -2599,10 +2546,21 @@ for (const fails of [false, true]) {
       { type: "prompt", message: "read it", uploads: [id] },
       false,
       "open",
+      undefined,
+      { hostId: host.id },
     );
     await until(() => attaching, "upload preparation to start");
     const stop = fails
-      ? runAgentCommand(sessionId, { type: "abort" }, false, "open")
+      ? runAgentCommand(
+          sessionId,
+          { type: "abort" },
+          false,
+          "open",
+          undefined,
+          {
+            hostId: host.id,
+          },
+        )
       : null;
     detach();
     await afterWindow();
@@ -4121,6 +4079,7 @@ test("a tab still on the id omp moved away from during startup counts as viewing
     deviceId: "desk-0001",
     visible: true,
     sessionId: requestedId,
+    hostId: "local",
     seq: 1,
     lastSeen: Date.now(),
   });
@@ -4248,22 +4207,15 @@ test("independent Fork still sends native branch and returns a new session ID an
   );
 });
 test("server agent tools are answered by the server, not the browser (#275)", async (t) => {
-  // Enable the off-by-default gate via the isolated settings file, and
-  // drop the cached settings so this test's gate value is actually read.
-  globalThis.__keylimeSettingsCache = undefined;
+  // The server agent tool lists sessions through the linked daemon, not disk.
+  const { linkLocalDaemon } =
+    await import("./hosts/link-driver.test-helper.ts");
+  const link = await linkLocalDaemon();
+  t.after(() => link.drop());
+  // Enable the gate via the isolated host settings file.
   const settingsPath = join(isolatedAgentDir, "keylime-settings.json");
-  writeFileSync(
-    settingsPath,
-    JSON.stringify({ agentToolsEnabled: true, agentEnv: {} }),
-  );
-  t.after(() => {
-    globalThis.__keylimeSettingsCache = undefined;
-    try {
-      rmSync(settingsPath);
-    } catch {
-      /* already gone */
-    }
-  });
+  saveHostSettings({ agentToolsEnabled: true });
+  t.after(() => rmSync(settingsPath, { force: true }));
 
   const sentCommands: Command[] = [];
   const { wrapper, emit, sentFrames } = snapshotSession(
@@ -4318,10 +4270,6 @@ test("server agent tools are answered by the server, not the browser (#275)", as
 });
 
 test("server agent tools are rejected when the gate is off (#275)", async (t) => {
-  globalThis.__keylimeSettingsCache = undefined;
-  t.after(() => {
-    globalThis.__keylimeSettingsCache = undefined;
-  });
   const { emit, sentFrames } = snapshotSession(
     t,
     undefined,
@@ -4334,6 +4282,7 @@ test("server agent tools are rejected when the gate is off (#275)", async (t) =>
     toolName: "list_sessions",
     arguments: {},
   });
+  await flushWrites();
   assert.deepEqual(
     sentFrames.map((f) => [f.id, f.isError]),
     [["off-1", true]],
@@ -4423,6 +4372,7 @@ test("wrapper spawns through its host", async (t) => {
       invalidated.push(sessionFile);
     },
     autoApproveExtension: () => false,
+    ...disabledHostPolicy,
   };
   const { session } = await startRpcSession(
     "s1",
@@ -4517,6 +4467,7 @@ test("reload keeps the live child when its host cannot check the session file", 
     },
     invalidateSessionLists() {},
     autoApproveExtension: () => false,
+    ...disabledHostPolicy,
   };
   const { session } = await startRpcSession(
     "s2",
@@ -4606,6 +4557,7 @@ test("a session whose host is offline refuses sends with host_offline and report
     sessionFileExists: async () => false,
     invalidateSessionLists() {},
     autoApproveExtension: () => false,
+    ...disabledHostPolicy,
   };
   const { session } = await startRpcSession(
     "s-offline",
@@ -4709,6 +4661,7 @@ test("a running remote session is listed with its host, so the sidebar groups it
     sessionFileExists: async () => false,
     invalidateSessionLists() {},
     autoApproveExtension: () => false,
+    ...disabledHostPolicy,
   };
   const { session } = await startRpcSession(
     "s-remote-run",
@@ -4787,6 +4740,7 @@ test("a session with an open dialog is listed as awaiting input until the dialog
     sessionFileExists: async () => false,
     invalidateSessionLists() {},
     autoApproveExtension: () => false,
+    ...disabledHostPolicy,
   };
   const { session } = await startRpcSession(
     "s-awaiting",
@@ -4903,6 +4857,7 @@ test("a reload whose host drops while the old child exits fails host_offline and
     sessionFileExists: async () => false,
     invalidateSessionLists() {},
     autoApproveExtension: () => false,
+    ...disabledHostPolicy,
   };
   const { session } = await startRpcSession(
     "s-reload-drop",
@@ -4940,7 +4895,7 @@ test("a reload whose host drops while the old child exits fails host_offline and
   transport.exit(0, null);
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(session.isAlive(), false);
-  assert.equal(getRpcSession("s-reload-drop"), undefined);
+  assert.equal(getRpcSession("s-reload-drop", remoteHost.id), undefined);
   assert.equal(spawns, 1);
 });
 
@@ -5214,6 +5169,7 @@ async function wrapperBehindDownLink(
     sessionFileExists: async () => true,
     invalidateSessionLists() {},
     autoApproveExtension: () => false,
+    ...disabledHostPolicy,
   };
   const proc = {
     isAlive: true,
@@ -5273,7 +5229,10 @@ test("the idle timer waits while the host link is down and runs once it returns"
 });
 
 /** An omp child that answers every command; get_state reports `sessionId`, idle. */
-function scriptedTransport(sessionId: string): ScriptedTransport {
+function scriptedTransport(
+  sessionId: string,
+  sessionFile = `/nonexistent/${sessionId}.jsonl`,
+): ScriptedTransport {
   const transport: ScriptedTransport = {
     sent: [],
     emit: undefined!,
@@ -5284,7 +5243,7 @@ function scriptedTransport(sessionId: string): ScriptedTransport {
         command.type === "get_state"
           ? {
               sessionId,
-              sessionFile: `/nonexistent/${sessionId}.jsonl`,
+              sessionFile,
               isStreaming: false,
               isCompacting: false,
             }
@@ -5345,9 +5304,60 @@ function scriptedHost(id: string, transport: RpcTransport): ScriptedHost {
     sessionFileExists: async () => false,
     invalidateSessionLists() {},
     autoApproveExtension: () => false,
+    ...disabledHostPolicy,
   };
   return host as unknown as ScriptedHost;
 }
+
+test("registry and spawn isolate identical session UUIDs and paths by host", async (t) => {
+  const id = randomUUID();
+  const path = `/sessions/${id}.jsonl`;
+  const alias = randomUUID();
+  const primary = scriptedHost("primary-box", scriptedTransport(id, path));
+  const namesake = scriptedHost("namesake-box", scriptedTransport(id, path));
+  const other = scriptedHost("path-box", scriptedTransport(alias, path));
+  const start = async (sessionId: string, host: Host) => {
+    const { session } = await spawnSession(
+      sessionId,
+      path,
+      "/w",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      host,
+    );
+    return session;
+  };
+  const a = await start(id, primary);
+  t.after(() => a.destroyAndWait());
+  const b = await start(id, namesake);
+  t.after(() => b.destroyAndWait());
+  const c = await start(alias, other);
+  t.after(() => c.destroyAndWait());
+
+  assert.equal(new Set([a, b, c]).size, 3);
+  assert.deepEqual(
+    [a.sessionFile, b.sessionFile, c.sessionFile],
+    [path, path, path],
+  );
+  assert.equal(lookupSession(id, primary.id), a);
+  assert.equal(lookupSession(id, namesake.id), b);
+  assert.equal(lookupSession(alias, other.id), c);
+  assert.equal(lookupSession(id), undefined);
+  assert.equal(
+    await start(id, primary),
+    a,
+    "the owning host reuses its writer",
+  );
+  assert.equal(
+    await start(alias, primary),
+    a,
+    "a same-host path alias joins the writer",
+  );
+  assert.equal(lookupSession(alias, primary.id), a);
+  assert.equal(lookupSession(alias, other.id), c);
+});
 
 /** A running session on `host`; `events` collects the types it emits. */
 async function runningRemoteSession(
@@ -5708,7 +5718,7 @@ test("adoptRpcSession re-syncs a live child with no spawn and no ready wait", as
   const id = "11111111-2222-4333-8444-adadadadad01";
   // A crash record from before the restart.
   globalThis.__ompExitedSessions ??= new Map();
-  globalThis.__ompExitedSessions.set(id, {
+  globalThis.__ompExitedSessions.set(sessionKey(id, "adopt-box"), {
     id,
     cwd: "/w",
     at: Date.now(),
@@ -5735,9 +5745,9 @@ test("adoptRpcSession re-syncs a live child with no spawn and no ready wait", as
   ]);
   assert.equal(session.isRunning(), true, "omp reported a run in progress");
   assert.equal(session.sessionFile, `/nonexistent/${id}.jsonl`);
-  assert.equal(getRpcSession(id), session);
+  assert.equal(getRpcSession(id, "adopt-box"), session);
   assert.equal(
-    getExitedRpcSession(id),
+    getExitedRpcSession(id, "adopt-box"),
     undefined,
     "the run goes on: no crash record",
   );
@@ -5917,15 +5927,21 @@ test("a replayed host tool call no tab comes back for is settled after the disco
 
 test("replayed standalone new_session and other mutating agent tools stay unknown; list_sessions runs", async (t) => {
   const { adoptRpcSession } = await import("./rpc-manager.ts");
-  const { until } = await import("./hosts/link-driver.test-helper.ts");
-  globalThis.__keylimeSettingsCache = undefined;
-  const settingsPath = join(isolatedAgentDir, "keylime-settings.json");
-  writeFileSync(
-    settingsPath,
-    JSON.stringify({ agentToolsEnabled: true, agentEnv: {} }),
-  );
+  const { linkHost, until } =
+    await import("./hosts/link-driver.test-helper.ts");
+  const link = await linkHost("Agent tools box");
+  const serving = link.serve({ listSessions: () => [] });
+  t.after(async () => {
+    link.drop();
+    await serving;
+  });
   const id = "11111111-2222-4333-8444-adadadadad06";
   const transport = adoptedTransport(id);
+  const host = adoptionHost(link.id, transport);
+  host.getSettings = async () => ({
+    ...(await disabledHostPolicy.getSettings()),
+    agentToolsEnabled: true,
+  });
   const replay = [
     {
       type: "host_tool_call",
@@ -5947,17 +5963,13 @@ test("replayed standalone new_session and other mutating agent tools stay unknow
     },
   ].map((call) => ompLine(call));
   const session = await adoptRpcSession({
-    host: adoptionHost("agent-tools-box", transport),
+    host,
     transport,
     sessionId: id,
     cwd: "/w",
     replay,
   });
-  t.after(async () => {
-    await session.destroyAndWait();
-    globalThis.__keylimeSettingsCache = undefined;
-    rmSync(settingsPath, { force: true });
-  });
+  t.after(() => session.destroyAndWait());
   await until(
     () => hostToolResults(transport).length === 3,
     "every replayed agent tool answered",
@@ -5981,10 +5993,6 @@ test("replayed standalone new_session and other mutating agent tools stay unknow
 test("an agent tool omp called during the adoption handshake is live, not replayed", async (t) => {
   const { adoptRpcSession } = await import("./rpc-manager.ts");
   // The gate is off: a live call gets the gate's answer, a replayed one "outcome unknown".
-  globalThis.__keylimeSettingsCache = undefined;
-  t.after(() => {
-    globalThis.__keylimeSettingsCache = undefined;
-  });
   const id = "11111111-2222-4333-8444-adadadadad0a";
   const live = {
     type: "host_tool_call",
@@ -6141,7 +6149,7 @@ test("a start during adoption joins it; an adopted child is not replaced over --
     /already started/,
   );
   assert.equal(stray.kills, 1, "the second child is killed");
-  assert.equal(getRpcSession(id), session);
+  assert.equal(getRpcSession(id, host.id), session);
   assert.equal(session.isAlive(), true);
 });
 
@@ -6162,7 +6170,7 @@ test("an adopted child that turns out to run a session another wrapper holds is 
   const stale = adoptedTransport(listedId, { state: { sessionId: holderId } });
   await assert.rejects(
     adoptRpcSession({
-      host: adoptionHost("stale-box", stale),
+      host: adoptionHost("holder-box", stale),
       transport: stale,
       sessionId: listedId,
       cwd: "/w",
@@ -6171,7 +6179,7 @@ test("an adopted child that turns out to run a session another wrapper holds is 
     /already started/,
   );
   assert.ok(stale.kills > 0, "the second writer is killed");
-  assert.equal(getRpcSession(holderId), holder);
+  assert.equal(getRpcSession(holderId, "holder-box"), holder);
   assert.equal(holder.isAlive(), true);
 });
 
@@ -6217,7 +6225,7 @@ test("an adoption whose get_state times out rejects and kills the child", async 
       error.command === "get_state",
   );
   assert.ok(transport.kills > 0, "the child is killed");
-  assert.equal(getRpcSession(id), undefined);
+  assert.equal(getRpcSession(id, "wedged-adopt-box"), undefined);
 });
 
 test("an adoption that failed while its host went offline blocks a start until its child exits", async (t) => {
@@ -6258,7 +6266,7 @@ test("an adoption that failed while its host went offline blocks a start until i
   transport.answer(stateCommand, { success: false, error: "link lost" });
   await assert.rejects(adopting, /link lost/);
   assert.equal(
-    getRpcSession(id)?.isAlive(),
+    getRpcSession(id, host.id)?.isAlive(),
     false,
     "kept registered while its child may still write the file",
   );
@@ -6319,7 +6327,7 @@ test("an adoption whose output outgrows channelBufferBytes before the replay fai
     /exceeded 1000 bytes/,
   );
   assert.ok(transport.kills > 0, "the child is killed");
-  assert.equal(getRpcSession(id), undefined);
+  assert.equal(getRpcSession(id, "chatty-adopt-box"), undefined);
 });
 
 // omp's delta message updates (set_event_filter messageUpdates "delta", lib/message-delta.ts).

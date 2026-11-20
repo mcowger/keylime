@@ -10,7 +10,12 @@ import {
 } from "react";
 import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/field";
-import { Dialog, DialogContent, DialogTitle, ThemedSelect } from "@/components/ui/primitives";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  ThemedSelect,
+} from "@/components/ui/primitives";
 import { toast } from "@/components/ui/toast";
 import { copyText } from "@/lib/clipboard";
 import type {
@@ -23,9 +28,7 @@ import type {
   StageHostArtifactResult,
 } from "@/lib/api-contracts/host-control-models";
 import { newUploadId, uploadFile, type UploadHandle } from "@/lib/event-stream";
-import { clusterOf, isClusterMember } from "@/lib/hosts/cluster";
 import type { HostRow } from "@/lib/hosts/hub";
-import type { HostPool } from "@/lib/hosts/pools";
 import { useI18n } from "@/lib/i18n";
 import { LOCAL_HOST_ID } from "@/lib/project-ordering";
 import { useHostRows } from "@/hooks/useHostRows";
@@ -40,11 +43,7 @@ import { CreationPipelineEditor } from "./CreationPipelineEditor";
 import { isLinkUp } from "@/lib/hosts/host";
 import { isRecord } from "@/lib/type-guards";
 
-type Dialogs =
-  | { kind: "add" }
-  | { kind: "rename"; host: HostRow }
-  | { kind: "renameCluster"; pool: HostPool }
-  | null;
+type Dialogs = { kind: "add" } | { kind: "rename"; host: HostRow } | null;
 
 const inputStyle = {
   width: "100%",
@@ -141,7 +140,7 @@ export function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Name form shared by "Add host" and "Rename" (a host or the cluster); adding ends in the one-time token view. */
+/** Adding a host ends in the one-time token view. */
 function HostDialog({
   dialog,
   onClose,
@@ -153,11 +152,7 @@ function HostDialog({
   const adding = dialog.kind === "add";
   const local = dialog.kind === "rename" && dialog.host.id === "local";
   const [label, setLabel] = useState(
-    dialog.kind === "rename"
-      ? dialog.host.label
-      : dialog.kind === "renameCluster"
-        ? dialog.pool.label
-        : "",
+    dialog.kind === "rename" ? dialog.host.label : "",
   );
   const [busy, setBusy] = useState(false);
   const hintId = useId();
@@ -176,9 +171,6 @@ function HostDialog({
           token: String(data.token),
           command: String(data.command),
         });
-      } else if (dialog.kind === "renameCluster") {
-        await call("PATCH", "/api/hosts", { poolId: dialog.pool.id, label });
-        onClose();
       } else {
         await call("PATCH", "/api/hosts", { id: dialog.host.id, label });
         onClose();
@@ -193,9 +185,7 @@ function HostDialog({
   const title =
     created || adding
       ? t("hostsConfig.addTitle")
-      : dialog.kind === "renameCluster"
-        ? t("hostsConfig.renameClusterTitle")
-        : t("hostsConfig.renameTitle");
+      : t("hostsConfig.renameTitle");
   return (
     // The token is shown once: only Done may close it, never Escape or an outside press.
     <Dialog
@@ -330,7 +320,10 @@ type ArtifactActivation =
   | ({ kind: "failed"; message: string } & ActivationBackups)
   | { kind: "unconfirmed"; operationId: string };
 
-type ActivationBackups = Pick<HostArtifactActivationResult, "backup" | "runnerBackup">;
+type ActivationBackups = Pick<
+  HostArtifactActivationResult,
+  "backup" | "runnerBackup"
+>;
 
 type ReleaseCatalog =
   | { kind: "loading" }
@@ -340,11 +333,18 @@ type ReleaseCatalog =
 const ACTIVATION_POLL_TIMEOUT_MS = 60_000;
 const ACTIVATION_POLL_INTERVAL_MS = 2_000;
 
-type ReleaseTransferBytes = NonNullable<Extract<HostReleaseDeployFrame, { type: "transfer" }>["bytes"]>;
+type ReleaseTransferBytes = NonNullable<
+  Extract<HostReleaseDeployFrame, { type: "transfer" }>["bytes"]
+>;
 
 const releaseBuildTime = new Intl.DateTimeFormat(undefined, {
-  year: "numeric", month: "short", day: "numeric",
-  hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  second: "2-digit",
+  timeZoneName: "short",
 });
 
 async function readReleaseDeployment(
@@ -366,11 +366,20 @@ async function readReleaseDeployment(
         if (!isRecord(frame)) continue;
         switch (frame.type) {
           case "transfer": {
-            const received = isRecord(frame.bytes) ? frame.bytes.received : undefined;
+            const received = isRecord(frame.bytes)
+              ? frame.bytes.received
+              : undefined;
             const total = isRecord(frame.bytes) ? frame.bytes.total : undefined;
-            const bytes = typeof received === "number" && typeof total === "number" &&
-              Number.isSafeInteger(received) && Number.isSafeInteger(total) &&
-              total > 0 && received >= 0 && received <= total ? { received, total } : undefined;
+            const bytes =
+              typeof received === "number" &&
+              typeof total === "number" &&
+              Number.isSafeInteger(received) &&
+              Number.isSafeInteger(total) &&
+              total > 0 &&
+              received >= 0 &&
+              received <= total
+                ? { received, total }
+                : undefined;
             onProgress({ kind: "transferring", bytes });
             break;
           }
@@ -380,7 +389,8 @@ async function readReleaseDeployment(
           case "result":
             return { status: response.status, data: frame.result };
           case "error":
-            if (typeof frame.status === "number") return { status: frame.status, data: frame };
+            if (typeof frame.status === "number")
+              return { status: frame.status, data: frame };
         }
       }
     }
@@ -397,8 +407,10 @@ function activationOutcome(
   const terminal: HostArtifactActivationResult["state"] | null =
     state === "succeeded" || state === "failed" ? state : null;
   const backup = typeof result?.backup === "string" ? result.backup : undefined;
-  const runnerBackup = typeof result?.runnerBackup === "string" ? result.runnerBackup : undefined;
-  if (terminal === "succeeded") return { kind: "succeeded", backup, runnerBackup };
+  const runnerBackup =
+    typeof result?.runnerBackup === "string" ? result.runnerBackup : undefined;
+  if (terminal === "succeeded")
+    return { kind: "succeeded", backup, runnerBackup };
   if (terminal === "failed") {
     return {
       kind: "failed",
@@ -424,7 +436,12 @@ function StageArtifactDialog({
   const { t } = useI18n();
   const name = hostName(t, host);
   const deployingRelease = mode === "release";
-  const title = t(deployingRelease ? "hostsConfig.deployReleaseTitle" : "hostsConfig.stageArtifactTitle", { name });
+  const title = t(
+    deployingRelease
+      ? "hostsConfig.deployReleaseTitle"
+      : "hostsConfig.stageArtifactTitle",
+    { name },
+  );
   const hostUrl = `/api/hosts/${encodeURIComponent(host.id)}`;
   const releasesUrl = `${hostUrl}/releases`;
   const [catalog, setCatalog] = useState<ReleaseCatalog>({ kind: "loading" });
@@ -432,20 +449,30 @@ function StageArtifactDialog({
   const releaseLabelId = useId();
   const canStage = !!host.canStageArtifact && isLinkUp(host.status);
   const canActivate = host.id !== LOCAL_HOST_ID && !!host.canActivateArtifact;
-  const [target, setTarget] = useState<ActivateHostArtifactArgs["target"]>("keylime");
+  const [target, setTarget] =
+    useState<ActivateHostArtifactArgs["target"]>("keylime");
   const [sha256, setSha256] = useState("");
   const expectedHash = sha256.trim().toLowerCase();
   const [confirming, setConfirming] = useState(false);
-  const [activation, setActivation] = useState<ArtifactActivation>({ kind: "idle" });
+  const [activation, setActivation] = useState<ArtifactActivation>({
+    kind: "idle",
+  });
   const activationRequest = useRef<AbortController | null>(null);
-  const mayRetry = !deployingRelease && activation.kind === "failed" && !activation.backup;
+  const mayRetry =
+    !deployingRelease && activation.kind === "failed" && !activation.backup;
   const canConfigure = canActivate && (activation.kind === "idle" || mayRetry);
-  const canInstall =
-    deployingRelease
-      ? activation.kind === "idle" && releaseAvailable && catalog.kind === "loaded" && !!releaseId
-      : canConfigure && isLinkUp(host.status) && /^[0-9a-f]{64}$/.test(expectedHash);
+  const canInstall = deployingRelease
+    ? activation.kind === "idle" &&
+      releaseAvailable &&
+      catalog.kind === "loaded" &&
+      !!releaseId
+    : canConfigure &&
+      isLinkUp(host.status) &&
+      /^[0-9a-f]{64}$/.test(expectedHash);
   const activating =
-    activation.kind === "transferring" || activation.kind === "installing" || activation.kind === "checking";
+    activation.kind === "transferring" ||
+    activation.kind === "installing" ||
+    activation.kind === "checking";
   const targetName = target === "keylime" ? "Keylime" : "keylime-omp";
   const available = useRef(canStage);
   const active = useRef<UploadHandle | null>(null);
@@ -476,7 +503,13 @@ function StageArtifactDialog({
         const data: unknown = await response.json();
         if (signal.aborted) return;
         if (!response.ok) {
-          setCatalog({ kind: "error", message: isRecord(data) && typeof data.error === "string" ? data.error : undefined });
+          setCatalog({
+            kind: "error",
+            message:
+              isRecord(data) && typeof data.error === "string"
+                ? data.error
+                : undefined,
+          });
           return;
         }
         if (!isRecord(data) || !Array.isArray(data.releases)) {
@@ -485,7 +518,11 @@ function StageArtifactDialog({
         }
         const releases: HostReleaseList["releases"] = [];
         for (const item of data.releases as unknown[]) {
-          if (!isRecord(item) || typeof item.id !== "string" || typeof item.builtAt !== "string") {
+          if (
+            !isRecord(item) ||
+            typeof item.id !== "string" ||
+            typeof item.builtAt !== "string"
+          ) {
             setCatalog({ kind: "error" });
             return;
           }
@@ -527,7 +564,12 @@ function StageArtifactDialog({
       requestBody = { releaseId, operationId };
     } else {
       if (stage.kind !== "staged") return;
-      requestBody = { artifactId: stage.id, operationId, target, sha256: expectedHash };
+      requestBody = {
+        artifactId: stage.id,
+        operationId,
+        target,
+        sha256: expectedHash,
+      };
     }
     const controller = new AbortController();
     const { signal } = controller;
@@ -538,28 +580,41 @@ function StageArtifactDialog({
 
     try {
       try {
-        const response = await fetch(deployingRelease ? releasesUrl : artifactsUrl, {
-          method: deployingRelease ? "POST" : "PATCH",
-          signal: AbortSignal.any([signal, AbortSignal.timeout(deployingRelease ? 120_000 : 40_000)]),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-        });
-        const { status, data } = deployingRelease && response.ok
-          ? await readReleaseDeployment(response, (state) => {
-              if (!signal.aborted) setActivation(state);
-            })
-          : { status: response.status, data: await response.json() as unknown };
+        const response = await fetch(
+          deployingRelease ? releasesUrl : artifactsUrl,
+          {
+            method: deployingRelease ? "POST" : "PATCH",
+            signal: AbortSignal.any([
+              signal,
+              AbortSignal.timeout(deployingRelease ? 120_000 : 40_000),
+            ]),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          },
+        );
+        const { status, data } =
+          deployingRelease && response.ok
+            ? await readReleaseDeployment(response, (state) => {
+                if (!signal.aborted) setActivation(state);
+              })
+            : {
+                status: response.status,
+                data: (await response.json()) as unknown,
+              };
         if (signal.aborted) return;
         const result = isRecord(data) ? data : null;
-        const outcome = status < 300 ? activationOutcome(result, failedMessage) : null;
+        const outcome =
+          status < 300 ? activationOutcome(result, failedMessage) : null;
         if (outcome) {
           setActivation(outcome);
           return;
         }
         if (
           ((status >= 400 && status < 500 && status !== 408) ||
-            (status === 501 && result?.code === "host_activation_unsupported")) &&
-          typeof result?.code === "string" && typeof result.error === "string"
+            (status === 501 &&
+              result?.code === "host_activation_unsupported")) &&
+          typeof result?.code === "string" &&
+          typeof result.error === "string"
         ) {
           setActivation({ kind: "failed", message: result.error });
           return;
@@ -570,7 +625,10 @@ function StageArtifactDialog({
 
       if (signal.aborted) return;
       setActivation({ kind: "checking" });
-      const polling = AbortSignal.any([signal, AbortSignal.timeout(ACTIVATION_POLL_TIMEOUT_MS)]);
+      const polling = AbortSignal.any([
+        signal,
+        AbortSignal.timeout(ACTIVATION_POLL_TIMEOUT_MS),
+      ]);
       while (!polling.aborted) {
         try {
           const response = await fetch(statusUrl, {
@@ -579,7 +637,10 @@ function StageArtifactDialog({
           });
           if (response.ok) {
             const data: unknown = await response.json();
-            const outcome = activationOutcome(isRecord(data) ? data : null, failedMessage);
+            const outcome = activationOutcome(
+              isRecord(data) ? data : null,
+              failedMessage,
+            );
             if (!polling.aborted && outcome) {
               setActivation(outcome);
               return;
@@ -608,7 +669,8 @@ function StageArtifactDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (deployingRelease || !file || !canStage || active.current || done) return;
+    if (deployingRelease || !file || !canStage || active.current || done)
+      return;
     let handle: UploadHandle | null = null;
     let unconfirmedDirectory: string | null = null;
     let finalizationTimer: number | undefined;
@@ -712,22 +774,44 @@ function StageArtifactDialog({
                 <div role="status">{t("hostsConfig.deployReleaseEmpty")}</div>
               )}
               {catalog.kind === "loaded" && catalog.releases.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span id={releaseLabelId}>{t("hostsConfig.deployReleaseVersion")}</span>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 4 }}
+                >
+                  <span id={releaseLabelId}>
+                    {t("hostsConfig.deployReleaseVersion")}
+                  </span>
                   <ThemedSelect
                     aria-labelledby={releaseLabelId}
                     value={releaseId}
-                    disabled={confirming || activation.kind !== "idle" || !releaseAvailable}
+                    disabled={
+                      confirming ||
+                      activation.kind !== "idle" ||
+                      !releaseAvailable
+                    }
                     onChange={setReleaseId}
                     options={catalog.releases.map(({ id, builtAt }, index) => {
                       const stamp = Date.parse(builtAt);
                       return {
                         value: id,
                         label: (
-                          <span style={{ display: "block", whiteSpace: "normal", overflowWrap: "anywhere" }}>
-                            {index === 0 ? t("hostsConfig.deployReleaseNewest", { id }) : id}
+                          <span
+                            style={{
+                              display: "block",
+                              whiteSpace: "normal",
+                              overflowWrap: "anywhere",
+                            }}
+                          >
+                            {index === 0
+                              ? t("hostsConfig.deployReleaseNewest", { id })
+                              : id}
                             {Number.isFinite(stamp) && (
-                              <time dateTime={builtAt} style={{ display: "block", color: "var(--text-muted)" }}>
+                              <time
+                                dateTime={builtAt}
+                                style={{
+                                  display: "block",
+                                  color: "var(--text-muted)",
+                                }}
+                              >
                                 {releaseBuildTime.format(stamp)}
                               </time>
                             )}
@@ -739,11 +823,16 @@ function StageArtifactDialog({
                 </div>
               )}
               {!releaseAvailable && activation.kind === "idle" && (
-                <div role="status">{t("hostsConfig.deployReleaseUnavailable")}</div>
+                <div role="status">
+                  {t("hostsConfig.deployReleaseUnavailable")}
+                </div>
               )}
               {confirming && (
                 <p role="status" style={{ margin: 0 }}>
-                  {t("hostsConfig.deployReleaseConfirm", { name, id: releaseId })}
+                  {t("hostsConfig.deployReleaseConfirm", {
+                    name,
+                    id: releaseId,
+                  })}
                 </p>
               )}
             </>
@@ -777,7 +866,8 @@ function StageArtifactDialog({
           <div role="status">
             {stage.kind === "finishing" &&
               t("hostsConfig.stageArtifactFinishing")}
-            {stage.kind === "staged" && activation.kind === "idle" &&
+            {stage.kind === "staged" &&
+              activation.kind === "idle" &&
               t("hostsConfig.stageArtifactStaged")}
             {activation.kind === "transferring" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -790,13 +880,22 @@ function StageArtifactDialog({
                 />
               </div>
             )}
-            {activation.kind === "installing" && t("hostsConfig.activateArtifactInstalling")}
-            {activation.kind === "checking" && t("hostsConfig.activateArtifactChecking")}
+            {activation.kind === "installing" &&
+              t("hostsConfig.activateArtifactInstalling")}
+            {activation.kind === "checking" &&
+              t("hostsConfig.activateArtifactChecking")}
             {activation.kind === "succeeded" &&
               (deployingRelease
-                ? t("hostsConfig.deployReleaseSucceeded", { name, id: releaseId })
-                : t("hostsConfig.activateArtifactSucceeded", { name, target: targetName }))}
-            {!deployingRelease && stage.kind === "idle" &&
+                ? t("hostsConfig.deployReleaseSucceeded", {
+                    name,
+                    id: releaseId,
+                  })
+                : t("hostsConfig.activateArtifactSucceeded", {
+                    name,
+                    target: targetName,
+                  }))}
+            {!deployingRelease &&
+              stage.kind === "idle" &&
               !canStage &&
               t("hostsConfig.stageArtifactUnavailable")}
           </div>
@@ -809,49 +908,65 @@ function StageArtifactDialog({
           {(activation.kind === "succeeded" || activation.kind === "failed") &&
             activation.backup && (
               <CopyField
-                label={t(deployingRelease ? "hostsConfig.deployReleaseDaemonBackup" : "hostsConfig.activateArtifactBackup")}
+                label={t(
+                  deployingRelease
+                    ? "hostsConfig.deployReleaseDaemonBackup"
+                    : "hostsConfig.activateArtifactBackup",
+                )}
                 value={activation.backup}
               />
             )}
-          {(activation.kind === "succeeded" || activation.kind === "failed") && activation.runnerBackup && (
-            <CopyField label={t("hostsConfig.deployReleaseRunnerBackup")} value={activation.runnerBackup} />
-          )}
-          {stage.kind === "staged" && canConfigure && (
-              <>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {t("hostsConfig.activateArtifactTarget")}
-                  <select
-                    value={target}
-                    disabled={confirming}
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      if (value === "keylime" || value === "keylime-omp") setTarget(value);
-                    }}
-                    style={inputStyle}
-                  >
-                    <option value="keylime">Keylime</option>
-                    <option value="keylime-omp">keylime-omp</option>
-                  </select>
-                </label>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {t("hostsConfig.activateArtifactSha256")}
-                  <input
-                    type="text"
-                    value={sha256}
-                    disabled={confirming}
-                    autoComplete="off"
-                    spellCheck={false}
-                    onChange={(event) => setSha256(event.currentTarget.value)}
-                    style={inputStyle}
-                  />
-                </label>
-                {confirming && (
-                  <p role="status" style={{ margin: 0 }}>
-                    {t("hostsConfig.activateArtifactConfirm", { name, target: targetName })}
-                  </p>
-                )}
-              </>
+          {(activation.kind === "succeeded" || activation.kind === "failed") &&
+            activation.runnerBackup && (
+              <CopyField
+                label={t("hostsConfig.deployReleaseRunnerBackup")}
+                value={activation.runnerBackup}
+              />
             )}
+          {stage.kind === "staged" && canConfigure && (
+            <>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                {t("hostsConfig.activateArtifactTarget")}
+                <select
+                  value={target}
+                  disabled={confirming}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    if (value === "keylime" || value === "keylime-omp")
+                      setTarget(value);
+                  }}
+                  style={inputStyle}
+                >
+                  <option value="keylime">Keylime</option>
+                  <option value="keylime-omp">keylime-omp</option>
+                </select>
+              </label>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                {t("hostsConfig.activateArtifactSha256")}
+                <input
+                  type="text"
+                  value={sha256}
+                  disabled={confirming}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(event) => setSha256(event.currentTarget.value)}
+                  style={inputStyle}
+                />
+              </label>
+              {confirming && (
+                <p role="status" style={{ margin: 0 }}>
+                  {t("hostsConfig.activateArtifactConfirm", {
+                    name,
+                    target: targetName,
+                  })}
+                </p>
+              )}
+            </>
+          )}
           {activation.kind === "failed" && (
             <div role="alert" style={{ color: "var(--status-error)" }}>
               {activation.message}
@@ -859,7 +974,9 @@ function StageArtifactDialog({
           )}
           {activation.kind === "unconfirmed" && (
             <>
-              <div role="alert">{t("hostsConfig.activateArtifactUnconfirmed", { name })}</div>
+              <div role="alert">
+                {t("hostsConfig.activateArtifactUnconfirmed", { name })}
+              </div>
               <CopyField
                 label={t("hostsConfig.activateArtifactOperationId")}
                 value={activation.operationId}
@@ -891,30 +1008,43 @@ function StageArtifactDialog({
               onClick={confirming ? () => setConfirming(false) : close}
             >
               {t(
-                (deployingRelease ? activation.kind === "idle" : !done) || confirming
+                (deployingRelease ? activation.kind === "idle" : !done) ||
+                  confirming
                   ? "hostsConfig.cancel"
-                  : stage.kind === "staged" && canActivate && activation.kind === "idle"
+                  : stage.kind === "staged" &&
+                      canActivate &&
+                      activation.kind === "idle"
                     ? "hostsConfig.activateArtifactStageOnly"
                     : "hostsConfig.stageArtifactClose",
               )}
             </button>
             {(deployingRelease
-              ? catalog.kind === "loaded" && !!releaseId && activation.kind === "idle"
+              ? catalog.kind === "loaded" &&
+                !!releaseId &&
+                activation.kind === "idle"
               : stage.kind === "staged" && canConfigure) && (
               <button
                 type="button"
                 className="ui-focus-ring"
                 style={primaryStyle}
                 disabled={!canInstall}
-                onClick={confirming ? () => void install() : () => setConfirming(true)}
+                onClick={
+                  confirming ? () => void install() : () => setConfirming(true)
+                }
               >
                 {deployingRelease
-                  ? t(confirming ? "hostsConfig.deployReleaseInstall" : "hostsConfig.deployReleaseReview")
-                  : t(confirming
-                    ? "hostsConfig.activateArtifactInstall"
-                    : activation.kind === "failed"
-                      ? "hostsConfig.activateArtifactRetry"
-                      : "hostsConfig.activateArtifactReview")}
+                  ? t(
+                      confirming
+                        ? "hostsConfig.deployReleaseInstall"
+                        : "hostsConfig.deployReleaseReview",
+                    )
+                  : t(
+                      confirming
+                        ? "hostsConfig.activateArtifactInstall"
+                        : activation.kind === "failed"
+                          ? "hostsConfig.activateArtifactRetry"
+                          : "hostsConfig.activateArtifactReview",
+                    )}
               </button>
             )}
             {!deployingRelease && !done && (
@@ -936,21 +1066,24 @@ function StageArtifactDialog({
 
 function HostCard({
   host,
-  pools,
   onRename,
   onRevoke,
 }: {
   host: HostRow;
-  pools: HostPool[];
   onRename: () => void;
   onRevoke: () => void;
 }) {
   const { t } = useI18n();
   const name = hostName(t, host);
-  const [artifactMode, setArtifactMode] = useState<"manual" | "release" | null>(null);
+  const [artifactMode, setArtifactMode] = useState<"manual" | "release" | null>(
+    null,
+  );
   const linked = isLocalRow(host) ? null : host;
-  const releaseAvailable = !!linked && !!linked.canActivateArtifact && !!linked.arch && isLinkUp(linked.status);
-  const member = isClusterMember(pools, host.id);
+  const releaseAvailable =
+    !!linked &&
+    !!linked.canActivateArtifact &&
+    !!linked.arch &&
+    isLinkUp(linked.status);
   const details = [
     host.platform,
     host.hostVersion !== null &&
@@ -1031,7 +1164,10 @@ function HostCard({
                 value={localInstallCommand(host.serverPlatform)}
               />
               {t("hostsConfig.localForegroundHint")}
-              <CopyField label={t("hostsConfig.command")} value="keylime host" />
+              <CopyField
+                label={t("hostsConfig.command")}
+                value="keylime host"
+              />
             </div>
           )}
       </div>
@@ -1067,11 +1203,6 @@ function HostCard({
         >
           {t("hostsConfig.stageArtifact")}
         </button>
-        {isLocalRow(host) && member && (
-          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-            {t("hostsConfig.clusterMaster")}
-          </span>
-        )}
         <button
           type="button"
           className="ui-focus-ring"
@@ -1118,12 +1249,11 @@ function HostCard({
 
 export function HostsConfig() {
   const { t } = useI18n();
-  const { hosts, pools, failed: loadFailed } = useHostRows();
+  const { hosts, failed: loadFailed } = useHostRows();
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [revoking, setRevoking] = useState<HostRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [creationHostId, setCreationHostId] = useState(LOCAL_HOST_ID);
-  const cluster = clusterOf(pools);
 
   const revoke = async () => {
     if (!revoking) return;
@@ -1189,42 +1319,6 @@ export function HostsConfig() {
           {t("hostsConfig.add")}
         </button>
       </div>
-      {cluster && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 13,
-              color: "var(--text)",
-              fontWeight: 500,
-              overflowWrap: "anywhere",
-            }}
-          >
-            {t("hostsConfig.clusterName", { name: cluster.label })}
-          </span>
-          <button
-            type="button"
-            className="ui-focus-ring"
-            style={{
-              ...buttonStyle,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              flexShrink: 0,
-            }}
-            onClick={() => setDialog({ kind: "renameCluster", pool: cluster })}
-          >
-            <Pencil size={13} aria-hidden="true" />
-            {t("hostsConfig.renameCluster")}
-          </button>
-        </div>
-      )}
       {loadFailed && (
         <div
           role="alert"
@@ -1248,7 +1342,6 @@ export function HostsConfig() {
             <HostCard
               key={host.id}
               host={host}
-              pools={pools}
               onRename={() => setDialog({ kind: "rename", host })}
               onRevoke={() => setRevoking(host)}
             />

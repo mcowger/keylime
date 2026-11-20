@@ -25,9 +25,7 @@ export function formatUploadSize(bytes: number): string {
   return unit === 0 ? `${bytes} B` : `${value.toFixed(1)} ${units[unit]}`;
 }
 
-/** Sent uploads are deleted after this many days unless the setting says otherwise (the media cache's 30-day sweep, lib/media-cache.ts). */
-export const DEFAULT_UPLOAD_RETENTION_DAYS = 30;
-/** `uploadRetentionDays` (web setting) and the `setUploadRetention` op's `days`: `null` keeps sent uploads for ever. */
+/** The daemon's upload retention policy: null retains sent uploads indefinitely. */
 export function isUploadRetentionDays(value: unknown): value is number | null {
   return (
     value === null ||

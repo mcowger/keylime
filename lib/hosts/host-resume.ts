@@ -16,7 +16,7 @@ import { getAgentDir, getSessionsDir } from "../omp/paths";
 import { readSessionHeaderSync } from "../omp/session-files";
 import { isValidSessionId } from "../session-file-references-core";
 import { isRecord } from "../type-guards";
-import { loadWebServerSettings } from "../web-settings";
+import { loadHostSettings } from "../web-settings";
 import type { SpawnRequest } from "./host";
 
 export const RESUME_PROMPT =
@@ -27,7 +27,7 @@ export type HostResumeEntry = { sessionId: string; launch: SpawnRequest };
 export class HostResumeTracker {
   private readonly path: string;
   private readonly root: string;
-  private readonly enabled: boolean;
+  private readonly enabled: boolean | undefined;
   private entries: HostResumeEntry[] = [];
   private timer?: NodeJS.Timeout;
   private frozen = false;
@@ -42,8 +42,7 @@ export class HostResumeTracker {
     this.path =
       options.path ?? join(getAgentDir(), "keylime", "host-running.json");
     this.root = options.sessionsRoot ?? getSessionsDir();
-    this.enabled =
-      options.enabled ?? loadWebServerSettings().autoResumeSessions;
+    this.enabled = options.enabled;
   }
 
   recordRunning(entries: HostResumeEntry[]): void {
@@ -113,7 +112,7 @@ export class HostResumeTracker {
       for (const { claim } of taken)
         for (const entry of this.validate(claim))
           if (!merged.has(entry.sessionId)) merged.set(entry.sessionId, entry);
-      if (!this.enabled) {
+      if (!(this.enabled ?? loadHostSettings().autoResumeSessions)) {
         for (const { claim } of taken) rmSync(claim, { force: true });
         return [];
       }

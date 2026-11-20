@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -17,6 +18,7 @@ import { Database } from "bun:sqlite";
 import type { RpcFrame, RpcProcess } from "./omp/rpc-process.ts";
 import type { ContextReadOptions } from "./hosts/session-ops.ts";
 import type { AgentSessionWrapper as AgentSessionWrapperType } from "./rpc-manager.ts";
+import { sessionKey } from "./session-identity.ts";
 import {
   LinkDriver,
   linkHost,
@@ -110,7 +112,7 @@ test("state reports a retained exit before the session file exists", async (t) =
   const previousSessions = globalThis.__ompSessions;
   globalThis.__ompExitedSessions = new Map([
     [
-      id,
+      sessionKey(id),
       {
         id,
         cwd: "/tmp/project",
@@ -463,7 +465,15 @@ test("DELETE /api/sessions/[id] re-parents children to the grandparent and stops
     const body = await res.json();
     assert.equal(body.ok, true);
     assert.equal(
-      existsSync(join(dir, "..", "..", "keylime", "outbox.db")),
+      existsSync(
+        join(
+          dir,
+          "..",
+          "..",
+          "keylime",
+          `outbox-host-${createHash("sha256").update("local").digest("hex")}.db`,
+        ),
+      ),
       false,
       "deleting a session without outbox data must not create the outbox store",
     );
@@ -505,9 +515,10 @@ test("session deletion clears only unpinned retry roots and failed deletion reta
       timestamp: "2026-01-05T00:00:00.000Z",
     });
     await listAllSessions();
-    outboxEntries(id);
-    assert.ok(globalThis.__ompOutboxStore);
-    const database = globalThis.__ompOutboxStore.db;
+    outboxEntries(id, "local");
+    const store = globalThis.__keylimeHostOutboxes?.get("local")?.store;
+    assert.ok(store);
+    const database = store.db;
     database.exec(
       "CREATE TABLE IF NOT EXISTS github_receipt_pins (session_id TEXT NOT NULL, entry_id TEXT NOT NULL, PRIMARY KEY (entry_id, session_id))",
     );
@@ -801,7 +812,7 @@ test("archive restore rejects malformed hosts and unlisted key aliases without c
   });
 });
 
-test("local archive restore preserves the archive when another host has its session ID", async () => {
+test("local archive restore permits an active copy on another host", async () => {
   await withAgentDir(async (dir) => {
     const id = "0a000000-0000-4000-8000-000000000043";
     const archived = join(dir, "..", "..", "archive", "sessions", "-project");
@@ -826,12 +837,11 @@ test("local archive restore preserves the archive when another host has its sess
           }),
         }),
       );
-      assert.equal(response.status, 409);
-      assert.equal((await response.json()).code, "session_host_conflict");
-      assert.deepEqual(readFileSync(file), bytes);
+      assert.equal(response.status, 200);
+      assert.equal(existsSync(file), false);
       assert.deepEqual(
         (await listAllSessions()).map((session) => session.id),
-        [],
+        [id],
       );
     } finally {
       closeHostLink(remote.id);
@@ -1036,10 +1046,10 @@ test("POST /api/sessions/archive with a remote hostId restores on that host and 
   });
 });
 
-test("remote archive restore rejects a session ID active on another host before consuming the archive", async () => {
+test("remote archive restore permits an active local copy", async () => {
   await withAgentDir(async (dir) => {
     const id = "0a000000-0000-4000-8000-000000000044";
-    writeSessionFile(dir, "active.jsonl", {
+    const localFile = writeSessionFile(dir, "active.jsonl", {
       id,
       cwd: dir,
       timestamp: "2026-01-01T00:00:00.000Z",
@@ -1063,6 +1073,10 @@ test("remote archive restore rejects a session ID active on another host before 
       remote.serve({
         listSessions: () => [],
         listArchives: () => archives,
+        restoreReserve: () => ({
+          ok: true,
+          value: { instance: "archived-remote" },
+        }),
         restoreArchive() {
           restores++;
           archives.splice(0);
@@ -1076,12 +1090,13 @@ test("remote archive restore rejects a session ID active on another host before 
           body: JSON.stringify({ key: archives[0].key, hostId: remote.id }),
         }),
       );
-      assert.equal(response.status, 409);
-      const body = await response.json();
-      assert.equal(body.code, "session_host_conflict");
-      assert.match(body.error, /another host/i);
-      assert.equal(restores, 0);
-      assert.equal(archives.length, 1);
+      assert.equal(response.status, 200);
+      assert.equal(restores, 1);
+      assert.equal(archives.length, 0);
+      assert.ok(
+        existsSync(localFile),
+        "restoring remotely leaves the local copy alone",
+      );
     } finally {
       closeHostLink(remote.id);
     }
@@ -1207,15 +1222,14 @@ test("capture A and replacement B have distinct restore targets: capture is refu
   });
 });
 
-/** The restore claims on disk as `{ session_id, host_id }` (`host_id` set: held for a remote restore); with `idleMs`, first
- * ages every claim to that long without renewal, as if its request had died. */
+/** Read the durable (host, session) claims; with `idleMs`, first age their last renewal as if the request had died. */
 function restoreClaims(idleMs?: number) {
   assert.ok(process.env.PI_CODING_AGENT_DIR);
   const db = new Database(
     join(
       process.env.PI_CODING_AGENT_DIR,
       "keylime",
-      "archive-restore-locks.sqlite",
+      "archive-restore-host-locks.sqlite",
     ),
   );
   try {
@@ -1224,9 +1238,10 @@ function restoreClaims(idleMs?: number) {
         Date.now() - idleMs,
       );
     return db
-      .query<{ session_id: string; host_id: string | null }, []>(
-        "SELECT session_id, host_id FROM restore_claims",
-      )
+      .query<
+        { session_id: string; host_id: string; instance: string | null },
+        []
+      >("SELECT session_id, host_id, instance FROM restore_claims")
       .all()
       .map((row) => ({ ...row }));
   } finally {
@@ -1234,13 +1249,12 @@ function restoreClaims(idleMs?: number) {
   }
 }
 
-test("restore checks raw same-host and later-host duplicate IDs without consuming either archive", async () => {
+test("restore rejects a target duplicate without querying other hosts", async () => {
   await withAgentDir(async () => {
     const id = "0a000000-0000-4000-8000-000000000045";
     const selected = await linkHost("Selected");
     const later = await linkHost("Later");
     let restores = 0;
-    let foreign = false;
     try {
       selected.serve({
         listArchives: () => [remoteArchive(id)],
@@ -1252,14 +1266,17 @@ test("restore checks raw same-host and later-host duplicate IDs without consumin
           return { ok: true, value: { sessionId: id } };
         },
       });
-      later.serve({ listSessions: () => (foreign ? [listedSession(id)] : []) });
+      let laterChecks = 0;
+      later.serve({
+        listSessions: () => {
+          laterChecks++;
+          return [listedSession(id)];
+        },
+      });
       const same = await restoreRequest(remoteArchive(id).key, selected.id);
       assert.equal(same.status, 409);
       assert.equal((await same.json()).code, "archive_restore_failed");
-      foreign = true;
-      const both = await restoreRequest(remoteArchive(id).key, selected.id);
-      assert.equal(both.status, 409);
-      assert.equal((await both.json()).code, "session_host_conflict");
+      assert.equal(laterChecks, 0);
       assert.equal(restores, 0);
     } finally {
       closeHostLink(selected.id);
@@ -1268,7 +1285,7 @@ test("restore checks raw same-host and later-host duplicate IDs without consumin
   });
 });
 
-test("restore fails closed for an uncached offline host or a rejected linked listing", async () => {
+test("restore ignores offline hosts or rejected listings outside the target", async () => {
   for (const offline of [true, false]) {
     await withAgentDir(async (dir) => {
       const id = "0a000000-0000-4000-8000-000000000046";
@@ -1291,10 +1308,12 @@ test("restore fails closed for an uncached offline host or a rejected linked lis
       const broken = await linkHost("Unavailable");
       const selected = await linkHost("Selected");
       let restores = 0;
+      let foreignChecks = 0;
       try {
         selected.serve({
           listArchives: () => [remoteArchive(id)],
           listSessions: () => [],
+          restoreReserve: () => ({ ok: true, value: { instance: "selected" } }),
           restoreArchive: () => {
             restores++;
             return { ok: true, value: { sessionId: id } };
@@ -1304,6 +1323,7 @@ test("restore fails closed for an uncached offline host or a rejected linked lis
         else
           broken.serve({
             listSessions: () => {
+              foreignChecks++;
               throw new Error("listing failed");
             },
           });
@@ -1312,21 +1332,11 @@ test("restore fails closed for an uncached offline host or a rejected linked lis
           [remoteArchive(id).key, selected.id],
         ]) {
           const response = await restoreRequest(key, hostId);
-          assert.equal(response.status, 503);
-          const body = await response.json();
-          assert.equal(
-            body.code,
-            offline ? "host_offline" : "host_sessions_unavailable",
-          );
-          // Even a local restore names the offline host that blocks it.
-          if (offline)
-            assert.deepEqual(
-              [body.host, body.hostOffline],
-              ["Unavailable", true],
-            );
-          assert.deepEqual(readFileSync(file), bytes);
-          assert.equal(restores, 0);
+          assert.equal(response.status, 200);
         }
+        assert.equal(existsSync(file), false);
+        assert.equal(restores, 1);
+        assert.equal(foreignChecks, 0);
       } finally {
         closeHostLink(broken.id);
         closeHostLink(selected.id);
@@ -1335,42 +1345,79 @@ test("restore fails closed for an uncached offline host or a rejected linked lis
   }
 });
 
-test("concurrent same-ID restores on different hosts cannot both consume archives", async () => {
+test("concurrent same-ID restores use independent host claims", async () => {
   await withAgentDir(async () => {
     const id = "0a000000-0000-4000-8000-000000000047";
     const first = await linkHost("First");
     const second = await linkHost("Second");
-    const { promise: started, resolve: entered } =
-      Promise.withResolvers<void>();
+    const entered = [
+      Promise.withResolvers<void>(),
+      Promise.withResolvers<void>(),
+    ];
     const { promise: gate, resolve: release } = Promise.withResolvers<void>();
     const consumed: string[] = [];
     try {
-      for (const remote of [first, second])
-        remote.serve({
-          listArchives: () => [remoteArchive(id)],
-          listSessions: () => [],
-          restoreReserve: () => ({
-            ok: true,
-            value: { instance: `d-${remote.id}` },
-          }),
-          restoreArchive: async () => {
-            entered();
-            await gate;
-            consumed.push(remote.id);
-            return { ok: true, value: { sessionId: id } };
+      for (const [i, remote] of [first, second].entries())
+        remote.serve(
+          {
+            listArchives: () => [remoteArchive(id)],
+            listSessions: () => [],
+            restoreReserve: () => ({
+              ok: true,
+              value: { instance: `d-${remote.id}` },
+            }),
           },
-        });
-      const winner = restoreRequest(remoteArchive(id).key, first.id);
-      await started;
+          (message) => {
+            if (message.type !== "req" || message.op !== "restoreArchive")
+              return;
+            entered[i].resolve();
+            // A real daemon can answer other operations while this restore is running.
+            void gate.then(async () => {
+              consumed.push(remote.id);
+              await remote.answer(message, {
+                ok: true,
+                value: { sessionId: id },
+              });
+            });
+          },
+        );
+      const firstRestore = restoreRequest(remoteArchive(id).key, first.id);
+      const earlyFirst = await Promise.race([entered[0].promise, firstRestore]);
+      if (earlyFirst)
+        assert.fail(
+          `first restore never reached its daemon: ${earlyFirst.status} ${await earlyFirst.text()}`,
+        );
+      const secondRestore = restoreRequest(remoteArchive(id).key, second.id);
+      const earlySecond = await Promise.race([
+        entered[1].promise,
+        secondRestore,
+      ]);
+      if (earlySecond)
+        assert.fail(
+          `second restore never reached its daemon: ${earlySecond.status} ${await earlySecond.text()}`,
+        );
       try {
-        const loser = await restoreRequest(remoteArchive(id).key, second.id);
-        assert.equal(loser.status, 409);
-        assert.equal((await loser.json()).code, "archive_restore_busy");
+        assert.deepEqual(
+          restoreClaims().sort((a, b) => a.host_id.localeCompare(b.host_id)),
+          [first, second]
+            .map((host) => ({
+              host_id: host.id,
+              session_id: id,
+              instance: `d-${host.id}`,
+            }))
+            .sort((a, b) => a.host_id.localeCompare(b.host_id)),
+        );
+        const busy = await restoreRequest(remoteArchive(id).key, first.id);
+        assert.equal(busy.status, 409);
+        assert.equal((await busy.json()).code, "archive_restore_busy");
       } finally {
         release();
       }
-      assert.equal((await winner).status, 200);
-      assert.deepEqual(consumed, [first.id]);
+      assert.deepEqual(
+        (await Promise.all([firstRestore, secondRestore])).map((r) => r.status),
+        [200, 200],
+      );
+      assert.deepEqual(consumed.sort(), [first.id, second.id].sort());
     } finally {
       release();
       closeHostLink(first.id);
@@ -1437,7 +1484,7 @@ for (const [n, loss] of [
   [0, "a silent host"],
   [1, "a lost link"],
 ]) {
-  test(`a remote restore left unanswered by ${loss} keeps its session claimed, so another host cannot publish a duplicate before the daemon stops`, async () => {
+  test(`a remote restore left unanswered by ${loss} keeps its target claimed until that daemon stops`, async () => {
     await withAgentDir(async () => {
       const id = `0a000000-0000-4000-8000-00000000005${n}`;
       const key = remoteArchive(id).key;
@@ -1483,14 +1530,18 @@ for (const [n, loss] of [
         );
 
         // Its request is gone but the claim still renews: busy.
-        const busy = await restoreRequest(key, second.id);
+        if (loss === "a lost link") {
+          await first.dial();
+          serveFirst();
+        }
+        const busy = await restoreRequest(key, first.id);
         assert.deepEqual(
           [busy.status, (await busy.json()).code],
           [409, "archive_restore_busy"],
         );
         // An hour without renewal: a plain lease would have lapsed, but only the daemon's word frees this claim.
         restoreClaims(3_600_000);
-        const refused = await restoreRequest(key, second.id);
+        const refused = await restoreRequest(key, first.id);
         assert.deepEqual(
           [refused.status, (await refused.json()).code],
           [409, "archive_restore_unconfirmed"],
@@ -1504,14 +1555,10 @@ for (const [n, loss] of [
         // The daemon publishes and reports it stopped: the claim goes, and the session is seen active on `first`.
         daemon.running.clear();
         daemon.published = true;
-        if (loss === "a lost link") {
-          await first.dial();
-          serveFirst();
-        }
-        const conflict = await restoreRequest(key, second.id);
+        const conflict = await restoreRequest(key, first.id);
         assert.deepEqual(
           [conflict.status, (await conflict.json()).code],
-          [409, "session_host_conflict"],
+          [409, "archive_restore_failed"],
         );
         assert.equal(
           secondRestores,
@@ -1527,7 +1574,7 @@ for (const [n, loss] of [
   });
 }
 
-test("a restore request a suspended sender delivers late is refused once another request fenced its claim, so only one host publishes", async () => {
+test("a suspended restore sender is refused after its target fences the old claim", async () => {
   await withAgentDir(async () => {
     const id = "0a000000-0000-4000-8000-000000000053";
     const key = remoteArchive(id).key;
@@ -1537,10 +1584,19 @@ test("a restore request a suspended sender delivers late is refused once another
     // The sender held its claim and reserved here, then was suspended: its restore request reaches the daemon only later.
     const delayed: string[] = [];
     let secondRestores = 0;
+    let retry = false;
     try {
-      void first.serve(admissionOps(id, daemon), (message) => {
-        if (message.type === "req" && message.op === "restoreArchive")
-          delayed.push(restoreClaim(message.args));
+      void first.serve(admissionOps(id, daemon), async (message) => {
+        if (message.type !== "req" || message.op !== "restoreArchive") return;
+        const token = restoreClaim(message.args);
+        if (!retry) {
+          delayed.push(token);
+          return; // Leave only this request unanswered; the daemon can still fence it.
+        }
+        assert.ok(deliverRestore(daemon, token));
+        daemon.running.clear();
+        secondRestores++;
+        await first.answer(message, { ok: true, value: { sessionId: id } });
       });
       second.serve({
         listArchives: () => [remoteArchive(id)],
@@ -1564,9 +1620,10 @@ test("a restore request a suspended sender delivers late is refused once another
         0,
         "the daemon has not seen the restore yet",
       );
-      // The claim is stale and the daemon says nothing runs, but only because its fence now revokes the claim: another host restores.
+      // A same-target retry first revokes the stale admission token.
       restoreClaims(3_600_000);
-      assert.equal((await restoreRequest(key, second.id)).status, 200);
+      retry = true;
+      assert.equal((await restoreRequest(key, first.id)).status, 200);
       assert.equal(secondRestores, 1);
       // The suspended sender wakes and its request arrives: refused, so the session exists once.
       assert.equal(deliverRestore(daemon, delayed[0]), false);
@@ -1615,7 +1672,7 @@ test("a held restore on a daemon that cannot fence stays blocked", async () => {
         linkTimings.opTimeoutMs = timeout;
       }
       restoreClaims(3_600_000);
-      const refused = await restoreRequest(key, second.id);
+      const refused = await restoreRequest(key, first.id);
       const body = await refused.json();
       assert.deepEqual(
         [refused.status, body.code],
@@ -1668,7 +1725,7 @@ test("a restore is never sent to a daemon that cannot reserve it, and leaves no 
   });
 });
 
-test("a held restore whose host was unregistered stays blocked: unregistering does not stop its daemon", async () => {
+test("unregistering a host leaves its held restore claim but does not block other hosts", async () => {
   await withAgentDir(async () => {
     const id = "0a000000-0000-4000-8000-000000000054";
     const key = remoteArchive(id).key;
@@ -1699,14 +1756,9 @@ test("a held restore whose host was unregistered stays blocked: unregistering do
       }
       revokeHost(first.id);
       restoreClaims(3_600_000);
-      const refused = await restoreRequest(key, second.id);
-      const body = await refused.json();
-      assert.deepEqual(
-        [refused.status, body.code],
-        [409, "archive_restore_unconfirmed"],
-      );
-      assert.match(body.error, /no longer registered/);
-      assert.equal(secondRestores, 0);
+      const restored = await restoreRequest(key, second.id);
+      assert.equal(restored.status, 200);
+      assert.equal(secondRestores, 1);
       assert.deepEqual(
         restoreClaims().map((claim) => claim.host_id),
         [first.id],
@@ -1758,7 +1810,7 @@ test("a restore whose daemon was replaced stays blocked: the replacement cannot 
       void replacement.serve(admissionOps(id, d2));
       restoreClaims(3_600_000);
       for (const afterPublish of [false, true]) {
-        const refused = await restoreRequest(key, second.id);
+        const refused = await restoreRequest(key, first.id);
         const body = await refused.json();
         assert.deepEqual(
           [refused.status, body.code],
@@ -1784,10 +1836,10 @@ test("a restore whose daemon was replaced stays blocked: the replacement cannot 
       const survivor = new LinkDriver(first.id, first.token);
       await survivor.dial();
       void survivor.serve(admissionOps(id, d1), () => {});
-      const conflict = await restoreRequest(key, second.id);
+      const conflict = await restoreRequest(key, first.id);
       assert.deepEqual(
         [conflict.status, (await conflict.json()).code],
-        [409, "session_host_conflict"],
+        [409, "archive_restore_failed"],
       );
       assert.equal(secondRestores, 0);
       assert.deepEqual(restoreClaims(), []);
@@ -1808,18 +1860,22 @@ test("a restore refused as not admitted keeps its claim: only the daemon that re
     // nothing about d1, which may be running a restore it was sent before the replacement.
     let fence = { instance: "d2", running: false };
     let secondRestores = 0;
+    let retry = false;
     try {
       void first.serve({
         listArchives: () => [remoteArchive(id)],
         listSessions: () => [],
         restoreReserve: () => ({ ok: true, value: { instance: "d1" } }),
-        restoreArchive: () => ({
-          ok: false,
-          status: 409,
-          code: "archive_restore_not_admitted",
-          error:
-            "This restore was not admitted or was fenced; the archive was not consumed",
-        }),
+        restoreArchive: () =>
+          retry
+            ? { ok: true, value: { sessionId: id } }
+            : {
+                ok: false,
+                status: 409,
+                code: "archive_restore_not_admitted",
+                error:
+                  "This restore was not admitted or was fenced; the archive was not consumed",
+              },
         restoreFence: () => ({ ok: true, value: fence }),
       });
       second.serve({
@@ -1846,7 +1902,7 @@ test("a restore refused as not admitted keeps its claim: only the daemon that re
 
       // The fence is answered by d2: it cannot clear d1's claim, however long it has been idle.
       restoreClaims(3_600_000);
-      const blocked = await restoreRequest(key, second.id);
+      const blocked = await restoreRequest(key, first.id);
       assert.deepEqual(
         [blocked.status, (await blocked.json()).code],
         [409, "archive_restore_unconfirmed"],
@@ -1859,9 +1915,10 @@ test("a restore refused as not admitted keeps its claim: only the daemon that re
 
       // d1 itself answers the fence, with nothing running and its token revoked: now the claim may be taken over.
       fence = { instance: "d1", running: false };
-      const taken = await restoreRequest(key, second.id);
+      retry = true;
+      const taken = await restoreRequest(key, first.id);
       assert.equal(taken.status, 200);
-      assert.equal(secondRestores, 1);
+      assert.equal(secondRestores, 0);
       assert.deepEqual(restoreClaims(), []);
     } finally {
       closeHostLink(first.id);
@@ -1870,8 +1927,8 @@ test("a restore refused as not admitted keeps its claim: only the daemon that re
   });
 });
 
-test("a held claim written without the daemon process that took it is never taken over, and its host is not asked", async () => {
-  await withAgentDir(async (dir) => {
+test("a timed-out restore holds a claim with the reserving daemon instance", async () => {
+  await withAgentDir(async () => {
     const id = "0a000000-0000-4000-8000-000000000058";
     const key = remoteArchive(id).key;
     const first = await linkHost("Earlier build's host");
@@ -1904,33 +1961,15 @@ test("a held claim written without the daemon process that took it is never take
       } finally {
         linkTimings.opTimeoutMs = timeout;
       }
-      // The row as a build that recorded no process leaves it.
-      const db = new Database(
-        join(dir, "..", "..", "keylime", "archive-restore-locks.sqlite"),
-      );
-      try {
-        db.prepare("UPDATE restore_claims SET instance = NULL").run();
-      } finally {
-        db.close(true);
-      }
-      restoreClaims(3_600_000);
-      const refused = await restoreRequest(key, second.id);
-      const body = await refused.json();
-      assert.deepEqual(
-        [refused.status, body.code],
-        [409, "archive_restore_unconfirmed"],
-      );
-      assert.match(body.error, /without the daemon process/);
-      assert.equal(
-        fences,
-        0,
-        "no answer could be matched to the claim, so none is asked for",
-      );
-      assert.equal(secondRestores, 0);
-      assert.deepEqual(
-        restoreClaims().map((claim) => claim.host_id),
-        [first.id],
-      );
+      assert.deepEqual(restoreClaims(), [
+        { host_id: first.id, session_id: id, instance: "d1" },
+      ]);
+      assert.equal((await restoreRequest(key, second.id)).status, 200);
+      assert.equal(secondRestores, 1);
+      assert.equal(fences, 0);
+      assert.deepEqual(restoreClaims(), [
+        { host_id: first.id, session_id: id, instance: "d1" },
+      ]);
     } finally {
       closeHostLink(first.id);
       closeHostLink(second.id);
@@ -2015,9 +2054,12 @@ test("a remote session archives on its own host: POST /api/sessions/[id]/archive
         },
       });
       const res = await sessionArchiveRoute.POST(
-        new Request(`http://localhost/api/sessions/${id}/archive`, {
-          method: "POST",
-        }),
+        new Request(
+          `http://localhost/api/sessions/${id}/archive?hostId=${remote.id}`,
+          {
+            method: "POST",
+          },
+        ),
         { params: Promise.resolve({ id }) },
       );
       assert.equal(res.status, 200);
@@ -2027,6 +2069,83 @@ test("a remote session archives on its own host: POST /api/sessions/[id]/archive
         archivedPath: `/srv/archive/${id}.jsonl.gz`,
       });
       assert.deepEqual(archivedIds, [id]);
+    } finally {
+      closeHostLink(remote.id);
+    }
+  });
+});
+
+test("GET /api/sessions filters an identical session ID by host", async () => {
+  await withAgentDir(async (dir) => {
+    const id = "0a000000-0000-4000-8000-000000000042";
+    writeSessionFile(dir, "local-copy.jsonl", {
+      id,
+      cwd: dir,
+      timestamp: "2026-01-01T00:00:00.000Z",
+    });
+    await registerProject(dir);
+    registerCreatedSession(dir, id);
+    const remote = await linkHost("Remote copy", {
+      hello: { workspaceOps: ["hierarchy"] },
+    });
+    try {
+      let remoteLists = 0;
+      remote.serve({
+        listSessions: () => {
+          remoteLists++;
+          return [listedSession(id)];
+        },
+        hierarchy: () => ({
+          ok: true,
+          value: {
+            projects: [
+              {
+                id: "project:/w",
+                path: "/w",
+                name: "Remote project",
+                kind: "directory",
+                addedAt: "2026-01-01T00:00:00.000Z",
+                workspaces: [
+                  {
+                    id: "workspace:/w",
+                    projectId: "project:/w",
+                    path: "/w",
+                    name: "Remote workspace",
+                    isDefault: true,
+                    sessionIds: [id],
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      });
+      const localResponse = await sessionsListRoute.GET(
+        new Request(`http://localhost/api/sessions?id=${id}`),
+      );
+      assert.equal(localResponse.status, 200);
+      assert.deepEqual(
+        (await localResponse.json()).sessions.map(
+          (entry: { hostId: string }) => entry.hostId,
+        ),
+        ["local"],
+      );
+      assert.equal(remoteLists, 0);
+      for (const [query, hosts] of [
+        ["", ["local", remote.id]],
+        [`id=${id}&hostId=${remote.id}`, [remote.id]],
+        [`id=${id}&hostId=local`, ["local"]],
+      ] as const) {
+        const response = await sessionsListRoute.GET(
+          new Request(`http://localhost/api/sessions?${query}`),
+        );
+        assert.equal(response.status, 200);
+        const { sessions } = await response.json();
+        assert.deepEqual(
+          sessions.map((entry: { hostId: string }) => entry.hostId).sort(),
+          [...hosts].sort(),
+        );
+      }
     } finally {
       closeHostLink(remote.id);
     }
@@ -2076,11 +2195,12 @@ test("a browser-held message for an archived session is accepted and held until 
         },
         false,
         "owner",
+        { hostId: "local" },
       );
     const accepted = await add("archived-held");
     assert.equal(accepted.status, 200, await accepted.clone().text());
     assert.deepEqual(
-      outboxEntries(id).map((entry) => [entry.id, entry.state]),
+      outboxEntries(id, "local").map((entry) => [entry.id, entry.state]),
       [["archived-held", "held"]],
     );
     // A session that is neither listed nor archived is still gone.
@@ -2095,6 +2215,7 @@ test("a browser-held message for an archived session is accepted and held until 
       },
       false,
       "owner",
+      { hostId: "local" },
     );
     assert.equal(gone.status, 404);
   });
@@ -2141,39 +2262,57 @@ test("an unknown session remains retryable until its daemon can establish absenc
   });
 });
 
-test("a live session resolves to its own host before any list has it", async (t) => {
+test("a live session resolves on its explicitly selected host before that host lists it", async () => {
   const id = "0a000000-0000-4000-8000-000000000022";
-  const exported: string[] = [];
-  const host = {
-    id: "local",
-    label: "This machine",
-    status: () => "online",
-    sessionOps: {
-      async exportSession(sessionId: string) {
-        exported.push(sessionId);
+  await withAgentDir(async () => {
+    const remote = await linkHost("Live export host");
+    const exported: unknown[] = [];
+    let lists = 0;
+    void remote.serve({
+      listSessions() {
+        lists++;
+        return [];
+      },
+      exportSession(args) {
+        exported.push(args.id);
         return {
           ok: true,
           value: { html: "<p>live</p>", fileName: "live.html" },
         };
       },
-    },
-  };
-  const previousSessions = globalThis.__ompSessions;
-  globalThis.__ompSessions = new Map([
-    [id, { isAlive: () => true, host } as unknown as AgentSessionWrapperType],
-  ]);
-  t.after(() => {
-    globalThis.__ompSessions = previousSessions;
-  });
-  // No daemon has listed anything: without the live session this answers 503.
-  await withAgentDir(async () => {
-    const response = await exportRoute.GET(
-      new Request(`http://localhost/api/sessions/${id}/export`),
-      { params: Promise.resolve({ id }) },
-    );
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "<p>live</p>");
-    assert.deepEqual(exported, [id]);
+    });
+    const previousSessions = globalThis.__ompSessions;
+    globalThis.__ompSessions = new Map([
+      [
+        sessionKey(id, remote.id),
+        {
+          isAlive: () => true,
+          host: getHost(remote.id),
+        } as unknown as AgentSessionWrapperType,
+      ],
+    ]);
+    try {
+      const url = `http://localhost/api/sessions/${id}/export`;
+      const params = { params: Promise.resolve({ id }) };
+      const implicit = await exportRoute.GET(new Request(url), params);
+      assert.equal(
+        implicit.status,
+        503,
+        "an omitted host selects the offline local daemon",
+      );
+      assert.deepEqual(exported, []);
+      const response = await exportRoute.GET(
+        new Request(`${url}?hostId=${remote.id}`),
+        params,
+      );
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), "<p>live</p>");
+      assert.deepEqual(exported, [id]);
+      assert.equal(lists, 0);
+    } finally {
+      globalThis.__ompSessions = previousSessions;
+      closeHostLink(remote.id);
+    }
   }, null);
 });
 
@@ -2258,35 +2397,82 @@ test("session tail pages stay on one generation and active branch through the ho
     const id = "0a000000-0000-4000-8000-000000000098";
     const header = { id, cwd: dir, timestamp: "2026-01-01T00:00:00.000Z" };
     const entries = Array.from({ length: 65 }, (_, i) => ({
-      type: "message", id: `e${i}`, parentId: i ? `e${i - 1}` : null,
+      type: "message",
+      id: `e${i}`,
+      parentId: i ? `e${i - 1}` : null,
       timestamp: "2026-01-01T00:00:00.000Z",
-      message: { role: "user", content: i === 0 ? "old-secret-" + "x".repeat(10000) : `message ${i}` },
+      message: {
+        role: "user",
+        content: i === 0 ? "old-secret-" + "x".repeat(10000) : `message ${i}`,
+      },
     }));
-    entries.splice(64, 0, { type: "message", id: "abandoned", parentId: "e10", timestamp: "2026-01-01T00:00:00.000Z", message: { role: "user", content: "abandoned branch" } });
+    entries.splice(64, 0, {
+      type: "message",
+      id: "abandoned",
+      parentId: "e10",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      message: { role: "user", content: "abandoned branch" },
+    });
     const file = writeSessionFile(dir, "tail.jsonl", header, entries);
-    const get = (query = "") => sessionRoute.GET(new Request(`http://localhost/api/sessions/${id}${query ? `?${query}` : ""}`), { params: Promise.resolve({ id }) });
+    const get = (query = "") =>
+      sessionRoute.GET(
+        new Request(
+          `http://localhost/api/sessions/${id}${query ? `?${query}` : ""}`,
+        ),
+        { params: Promise.resolve({ id }) },
+      );
     const firstResponse = await get("tail=30");
     assert.equal(firstResponse.status, 200);
     const first = await firstResponse.json();
-    assert.deepEqual(first.context.entryIds, Array.from({ length: 30 }, (_, i) => `e${i + 35}`));
+    assert.deepEqual(
+      first.context.entryIds,
+      Array.from({ length: 30 }, (_, i) => `e${i + 35}`),
+    );
     assert.equal(first.historyHasMore, true);
     assert.equal(first.info.messageCount, 65);
     assert.ok(first.tree.length);
-    assert.ok(!JSON.stringify(first).includes("x".repeat(1000)), "navigation does not contain old message bodies");
-    const query = (before: string, revision: string) => new URLSearchParams({ tail: "30", before, historyRevision: revision }).toString();
-    const second = await (await get(query("e35", first.historyRevision))).json();
-    assert.deepEqual(second.context.entryIds, Array.from({ length: 30 }, (_, i) => `e${i + 5}`));
+    assert.ok(
+      !JSON.stringify(first).includes("x".repeat(1000)),
+      "navigation does not contain old message bodies",
+    );
+    const query = (before: string, revision: string) =>
+      new URLSearchParams({
+        tail: "30",
+        before,
+        historyRevision: revision,
+      }).toString();
+    const second = await (
+      await get(query("e35", first.historyRevision))
+    ).json();
+    assert.deepEqual(
+      second.context.entryIds,
+      Array.from({ length: 30 }, (_, i) => `e${i + 5}`),
+    );
     assert.equal(second.historyRevision, first.historyRevision);
     const third = await (await get(query("e5", first.historyRevision))).json();
     assert.deepEqual(third.context.entryIds, ["e0", "e1", "e2", "e3", "e4"]);
     assert.equal(third.historyHasMore, false);
-    assert.equal((await get(query("abandoned", first.historyRevision))).status, 409);
+    assert.equal(
+      (await get(query("abandoned", first.historyRevision))).status,
+      409,
+    );
     assert.equal((await get("before=e5&tail=30")).status, 400);
     assert.equal((await get("tail=0")).status, 400);
     const full = await (await get()).json();
     assert.equal(full.context.entryIds.length, 65);
     assert.equal("historyHasMore" in full, false);
-    writeFileSync(file, readFileSync(file, "utf8") + JSON.stringify({ type: "message", id: "new", parentId: "e64", timestamp: "2026-01-01T00:00:01.000Z", message: { role: "user", content: "new" } }) + "\n");
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8") +
+        JSON.stringify({
+          type: "message",
+          id: "new",
+          parentId: "e64",
+          timestamp: "2026-01-01T00:00:01.000Z",
+          message: { role: "user", content: "new" },
+        }) +
+        "\n",
+    );
     const stale = await get(query("e35", first.historyRevision));
     assert.equal(stale.status, 409);
     assert.equal((await stale.json()).code, "session_history_changed");
@@ -2298,20 +2484,57 @@ test("tail pages honor compaction order and reject replaced files", async () => 
     const id = "0a000000-0000-4000-8000-000000000099";
     const header = { id, cwd: dir, timestamp: "2026-01-01T00:00:00.000Z" };
     const entries = [
-      { type: "message", id: "old", parentId: null, timestamp: header.timestamp, message: { role: "user", content: "old" } },
-      { type: "message", id: "kept", parentId: "old", timestamp: header.timestamp, message: { role: "user", content: "kept" } },
-      { type: "compaction", id: "cmp", parentId: "kept", timestamp: header.timestamp, firstKeptEntryId: "kept", summary: "summary", tokensBefore: 10 },
-      { type: "message", id: "last", parentId: "cmp", timestamp: header.timestamp, message: { role: "user", content: "last" } },
+      {
+        type: "message",
+        id: "old",
+        parentId: null,
+        timestamp: header.timestamp,
+        message: { role: "user", content: "old" },
+      },
+      {
+        type: "message",
+        id: "kept",
+        parentId: "old",
+        timestamp: header.timestamp,
+        message: { role: "user", content: "kept" },
+      },
+      {
+        type: "compaction",
+        id: "cmp",
+        parentId: "kept",
+        timestamp: header.timestamp,
+        firstKeptEntryId: "kept",
+        summary: "summary",
+        tokensBefore: 10,
+      },
+      {
+        type: "message",
+        id: "last",
+        parentId: "cmp",
+        timestamp: header.timestamp,
+        message: { role: "user", content: "last" },
+      },
     ];
     const file = writeSessionFile(dir, "compacted.jsonl", header, entries);
-    const get = (query: string) => sessionRoute.GET(new Request(`http://localhost/api/sessions/${id}?${query}`), { params: Promise.resolve({ id }) });
+    const get = (query: string) =>
+      sessionRoute.GET(
+        new Request(`http://localhost/api/sessions/${id}?${query}`),
+        { params: Promise.resolve({ id }) },
+      );
     const first = await (await get("tail=1")).json();
     assert.deepEqual(first.context.entryIds, ["last"]);
-    const query = new URLSearchParams({ tail: "2", before: "last", historyRevision: first.historyRevision }).toString();
+    const query = new URLSearchParams({
+      tail: "2",
+      before: "last",
+      historyRevision: first.historyRevision,
+    }).toString();
     const previous = await (await get(query)).json();
     assert.deepEqual(previous.context.entryIds, ["cmp", "kept"]);
     assert.equal(previous.historyHasMore, false);
-    writeFileSync(file, readFileSync(file, "utf8").replace("summary", "changed"));
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8").replace("summary", "changed"),
+    );
     const stale = await get(query);
     assert.equal(stale.status, 409);
     assert.equal((await stale.json()).code, "session_history_changed");
@@ -2358,7 +2581,7 @@ test("sync serves paged file-only history and preserves the legacy context shape
     assert.equal(first.leafId, "two");
     assert.equal(first.live, null);
     assert.equal(
-      globalThis.__ompSessions?.has(id) ?? false,
+      globalThis.__ompSessions?.has(sessionKey(id)) ?? false,
       false,
       "history browsing creates no native wrapper",
     );
@@ -2438,7 +2661,7 @@ test("boundary returns only the latest compaction-aware active context IDs witho
       boundary,
     );
     assert.equal(
-      globalThis.__ompSessions?.has(id) ?? false,
+      globalThis.__ompSessions?.has(sessionKey(id)) ?? false,
       false,
       "boundary browsing creates no native wrapper",
     );
@@ -2574,7 +2797,7 @@ test("sync samples current live output after the history read and excludes pinne
       );
       wrapper.start();
       globalThis.__ompSessions ??= new Map();
-      globalThis.__ompSessions.set(id, wrapper);
+      globalThis.__ompSessions.set(sessionKey(id), wrapper);
       emit({ type: "agent_start" });
       emit({
         type: "message_update",
@@ -2620,7 +2843,7 @@ test("sync samples current live output after the history read and excludes pinne
         );
       } finally {
         await wrapper.destroyAndWait();
-        globalThis.__ompSessions.delete(id);
+        globalThis.__ompSessions.delete(sessionKey(id));
       }
     },
     { readContext: readContextOp },
@@ -2723,7 +2946,7 @@ test("sync recovers the first live reply before persistence without erasing an e
     wrapper.start();
     await wrapper.send({ type: "get_state" });
     globalThis.__ompSessions ??= new Map();
-    globalThis.__ompSessions.set(id, wrapper);
+    globalThis.__ompSessions.set(sessionKey(id), wrapper);
     emit({ type: "agent_start" });
     emit({
       type: "message_update",
@@ -2803,7 +3026,7 @@ test("sync recovers the first live reply before persistence without erasing an e
         false,
         "an existing bad file cannot masquerade as not-yet-persisted",
       );
-      globalThis.__ompSessions.delete(id);
+      globalThis.__ompSessions.delete(sessionKey(id));
       assert.equal(
         (await getContext("file-only-missing", "sync=1")).status,
         404,
@@ -2815,7 +3038,7 @@ test("sync recovers the first live reply before persistence without erasing an e
       );
     } finally {
       await wrapper.destroyAndWait();
-      globalThis.__ompSessions.delete(id);
+      globalThis.__ompSessions.delete(sessionKey(id));
     }
   });
 });
@@ -2907,7 +3130,7 @@ test("sidebar rename cannot fall back to disk while Edit owns the session", asyn
     );
     wrapper.start();
     const previousSessions = globalThis.__ompSessions;
-    globalThis.__ompSessions = new Map([[id, wrapper]]);
+    globalThis.__ompSessions = new Map([[sessionKey(id), wrapper]]);
     let editing;
     const finishEdit = () => {
       if (!editRequest) return;
@@ -3003,7 +3226,7 @@ test("automatic title fallback cannot write after Edit takes over", async () => 
     };
     const previousSessions = globalThis.__ompSessions;
     globalThis.__ompSessions = new Map([
-      [id, rpc as unknown as AgentSessionWrapperType],
+      [sessionKey(id), rpc as unknown as AgentSessionWrapperType],
     ]);
     try {
       const response = await autoNameRoute.POST(
@@ -3068,8 +3291,9 @@ test("GET /api/sessions returns ETag and 304 across unchanged session list and r
     const previousSessions = globalThis.__ompSessions;
     globalThis.__ompSessions = new Map([
       [
-        id1,
+        sessionKey(id1),
         {
+          sessionId: id1,
           isRunning: () => true,
           isAwaitingInput: () => false,
           cwd: dir,
@@ -3090,6 +3314,14 @@ test("GET /api/sessions returns ETag and 304 across unchanged session list and r
         etag1,
         "running state change must invalidate ETag",
       );
+      const running = await res4.json();
+      assert.deepEqual(
+        running.runningSessions.map(
+          ({ id, hostId }: { id: string; hostId: string }) => [hostId, id],
+        ),
+        [["local", id1]],
+      );
+      assert.deepEqual(running.runningSessionIds, [id1]);
 
       // Conditional request with matching etag4 returns 304
       const resCond = await sessionsListRoute.GET(
@@ -3099,11 +3331,12 @@ test("GET /api/sessions returns ETag and 304 across unchanged session list and r
       );
       assert.equal(resCond.status, 304);
 
-      // Running session hostId change (while id and cwd stay the same) invalidates ETag
+      // An unrelated host's same-ID live runtime is not registered by the local row.
       globalThis.__ompSessions = new Map([
         [
-          id1,
+          sessionKey(id1, "remote-worker-1"),
           {
+            sessionId: id1,
             isRunning: () => true,
             isAwaitingInput: () => false,
             cwd: dir,
@@ -3120,16 +3353,13 @@ test("GET /api/sessions returns ETag and 304 across unchanged session list and r
       assert.equal(
         resHostChange.status,
         200,
-        "running session hostId change must invalidate ETag and return 200",
+        "removing the local registered runtime must invalidate the ETag",
       );
       assert.notEqual(resHostChange.headers.get("etag"), etag4);
+      assert.equal(resHostChange.headers.get("etag"), etag1);
       const dataHostChange = await resHostChange.json();
-      assert.equal(
-        dataHostChange.runningSessions.find(
-          (s: { id: string; hostId: string }) => s.id === id1,
-        )?.hostId,
-        "remote-worker-1",
-      );
+      assert.deepEqual(dataHostChange.runningSessions, []);
+      assert.deepEqual(dataHostChange.runningSessionIds, []);
     } finally {
       globalThis.__ompSessions = previousSessions;
     }

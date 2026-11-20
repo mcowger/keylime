@@ -468,6 +468,7 @@ export async function runHostTool(
   handlers: HostToolHandlers,
   sessionId: string | undefined,
   signal?: AbortSignal,
+  hostId = "local",
 ): Promise<{ text: string; isError: boolean }> {
   const str = (value: unknown): string | undefined =>
     typeof value === "string" ? value : undefined;
@@ -527,6 +528,7 @@ export async function runHostTool(
           sessionId,
           requested,
           signal,
+          hostId,
         );
         if (signal?.aborted) return canceled;
         if (!resolved.ok) return { text: resolved.error, isError: true };

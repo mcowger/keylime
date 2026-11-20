@@ -20,6 +20,7 @@ const webpush = (await import("web-push")).default;
 
 const event: NotificationEvent = {
   type: "completed",
+  hostId: "local",
   sessionId: "s1",
   sessionName: "Session",
 };
@@ -36,6 +37,7 @@ const tab = (
   clientId,
   deviceId,
   visible: false,
+  hostId: "local",
   sessionId: null,
   seq: 0,
   lastSeen: 0,
@@ -152,6 +154,23 @@ test("a tab still showing a moved session's old id counts as viewing it", () => 
   );
 });
 
+test("the same session id or alias on another host does not suppress delivery", () => {
+  const presence = [
+    tab("viewer", "desk", { visible: true, sessionId: "s1", hostId: "remote" }),
+  ];
+  for (const notification of [
+    event,
+    { ...event, sessionId: "new-id", aliases: ["s1"] },
+  ]) {
+    assert.deepEqual(
+      hub.routeNotification(notification, presence, all("viewer"), [
+        device("desk"),
+      ]),
+      [{ kind: "toast", clientId: "viewer" }],
+    );
+  }
+});
+
 test("disabled devices and disabled types get nothing", () => {
   const presence = [tab("tab", "desk")];
   assert.deepEqual(
@@ -239,7 +258,7 @@ test("a notification some device wants is recorded even when no tab or push rece
     store
       .listHistory()
       .map((entry) => [entry.id, entry.read, entry.event.sessionName]),
-    [["s1:completed", false, "Session"]],
+    [['["local","s1","completed"]', false, "Session"]],
   );
 });
 
@@ -262,13 +281,14 @@ test("a notification for the session a visible tab shows is recorded as already 
     clientId: "tab-0001",
     deviceId: "desk-0001",
     visible: true,
+    hostId: "local",
     sessionId: "s1",
     seq: 1,
   });
   hub.publishNotification(event);
   assert.deepEqual(
     store.listHistory().map((entry) => [entry.id, entry.read]),
-    [["s1:completed", true]],
+    [['["local","s1","completed"]', true]],
   );
 });
 
@@ -304,6 +324,7 @@ test("a failed history write does not stop delivery", (t) => {
     clientId: "tab-0001",
     deviceId: "desk-0001",
     visible: false,
+    hostId: null,
     sessionId: null,
     seq: 1,
   });
@@ -319,6 +340,7 @@ test("a tab stays reachable when a stale stream of the same tab attaches late an
     clientId: "tab-0001",
     deviceId: "desk-0001",
     visible: false,
+    hostId: null,
     sessionId: null,
     seq: 1,
   });
@@ -351,6 +373,7 @@ test("a presence report that arrives after a newer one from the same tab is igno
     clientId: "tab-0001",
     deviceId: "desk-0001",
     visible: true,
+    hostId: "local",
     sessionId: "s2",
     seq: 2,
   });
@@ -358,6 +381,7 @@ test("a presence report that arrives after a newer one from the same tab is igno
     clientId: "tab-0001",
     deviceId: "desk-0001",
     visible: true,
+    hostId: "local",
     sessionId: "s1",
     seq: 1,
   });
@@ -372,7 +396,7 @@ test("a presence report that arrives after a newer one from the same tab is igno
 test("pushes are written in English with urgency by type", async (t) => {
   isolatedStore(t);
   const sent: {
-    payload: { body: string; url: string; type: string };
+    payload: { body: string; url: string; type: string; hostId: string };
     urgency: string | undefined;
     ttl: number | undefined;
   }[] = [];
@@ -389,6 +413,7 @@ test("pushes are written in English with urgency by type", async (t) => {
   hub.publishNotification(event);
   hub.publishNotification({
     type: "input",
+    hostId: "remote",
     sessionId: "s2",
     sessionName: "Deploy",
     detail: "Ship it?",
@@ -399,15 +424,24 @@ test("pushes are written in English with urgency by type", async (t) => {
     sent.map(({ payload, urgency, ttl }) => [
       payload.body,
       payload.url,
+      payload.hostId,
       payload.type,
       urgency,
       ttl,
     ]),
     [
-      ["Task finished.", "/?session=s1", "completed", "normal", 3600],
+      [
+        "Task finished.",
+        "/?session=s1&hostId=local",
+        "local",
+        "completed",
+        "normal",
+        3600,
+      ],
       [
         "Waiting for your answer: Ship it?",
-        "/?session=s2",
+        "/?session=s2&hostId=remote",
+        "remote",
         "input",
         "high",
         3600,

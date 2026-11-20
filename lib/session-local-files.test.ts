@@ -23,6 +23,7 @@ import type { Host } from "./hosts/host.ts";
 import type { LinkDriver } from "./hosts/link-driver.test-helper.ts";
 import type { OpResult } from "./hosts/session-ops.ts";
 import type { AgentSessionWrapper } from "./rpc-manager.ts";
+import { sessionKey } from "./session-identity.ts";
 import type { SessionInfo } from "./types.ts";
 import type * as SessionLocalFiles from "./session-local-files.ts";
 
@@ -163,20 +164,27 @@ function world(t: TestContext) {
     link.serve({ listSessions: () => sessions.map((s) => s.entry) });
     return link;
   };
-  const resolveRoute = async (id: string, uri?: string) => {
+  const resolveRoute = async (id: string, uri?: string, hostId?: string) => {
     const { GET } =
       await import("../app/api/sessions/[id]/local-file/route.ts");
-    const query = uri === undefined ? "" : `?uri=${encodeURIComponent(uri)}`;
+    const query = new URLSearchParams();
+    if (uri !== undefined) query.set("uri", uri);
+    if (hostId !== undefined) query.set("hostId", hostId);
     return GET(
-      new Request(`http://localhost/api/sessions/${id}/local-file${query}`),
+      new Request(`http://localhost/api/sessions/${id}/local-file?${query}`),
       { params: Promise.resolve({ id }) },
     );
   };
   /** The viewer's request for an absolute path: what its tab does with the resolved path. */
-  const read = (path: string, sessionId?: string, type = "read") =>
+  const read = (
+    path: string,
+    sessionId?: string,
+    type = "read",
+    hostId?: string,
+  ) =>
     filesRoute(
       new Request(
-        `http://localhost/api/files/${encodeFilePathForApi(path)}?type=${type}${sessionId ? `&sessionId=${sessionId}` : ""}`,
+        `http://localhost/api/files/${encodeFilePathForApi(path)}?type=${type}${sessionId ? `&sessionId=${sessionId}` : ""}${hostId ? `&hostId=${encodeURIComponent(hostId)}` : ""}`,
       ),
       {
         params: Promise.resolve({ path: filePathApiSegments(path) }),
@@ -201,7 +209,8 @@ function world(t: TestContext) {
       sessionId,
       cwd: workspace,
     } as unknown as AgentSessionWrapper;
-    for (const key of [id, ...aliases]) {
+    for (const alias of [id, ...aliases]) {
+      const key = sessionKey(alias, host?.id);
       globalThis.__ompSessions.set(key, wrapper);
       t.after(() => {
         globalThis.__ompSessions?.delete(key);
@@ -885,7 +894,7 @@ test("a daemon without resolveLocalFile is refused, never answered from this mac
     "main's namesake of the remote session\n",
   );
   await w.oldLocal(a);
-  await w.remote("Build box", r);
+  const remote = await w.remote("Build box", r);
 
   await refused(
     await w.resolveRoute(A, "local://note.md"),
@@ -893,18 +902,18 @@ test("a daemon without resolveLocalFile is refused, never answered from this mac
     "workspace_unsupported",
   );
   const body = await refused(
-    await w.resolveRoute(R, "local://note.md"),
+    await w.resolveRoute(R, "local://note.md", remote.id),
     501,
     "workspace_unsupported",
   );
   assert.match(body.error, /Build box/);
-  for (const [path, sessionId] of [
-    [join(a.local, "note.md"), A],
-    [join(r.local, "note.md"), R],
+  for (const [path, sessionId, hostId] of [
+    [join(a.local, "note.md"), A, "local"],
+    [join(r.local, "note.md"), R, remote.id],
   ]) {
     for (const type of ["read", "download", "meta"])
       await refused(
-        await w.read(path, sessionId, type),
+        await w.read(path, sessionId, type, hostId),
         501,
         "workspace_unsupported",
       );
@@ -1042,7 +1051,7 @@ test("the host tool resolves a local:// file for the session that asked, whichev
   writeFileSync(join(a.local, "note.md"), "alpha\n");
   writeFileSync(join(b.local, "note.md"), "bravo\n");
   await w.local(a, b);
-  await w.remote("Build box", r);
+  const remote = await w.remote("Build box", r);
   const { runHostTool } = await import("../hooks/useAgentSession-stream.ts");
 
   const requests: string[] = [];
@@ -1072,8 +1081,8 @@ test("the host tool resolves a local:// file for the session that asked, whichev
       opened.push([path, name]);
     },
   };
-  const ask = (sessionId: string | undefined, path: string) =>
-    runHostTool("open_file", { path }, handlers, sessionId);
+  const ask = (sessionId: string | undefined, path: string, hostId = "local") =>
+    runHostTool("open_file", { path }, handlers, sessionId, undefined, hostId);
 
   // The originating session's id travels with the request: B asks while A may be the one on screen.
   assert.deepEqual(await ask(B, "local://note.md"), {
@@ -1102,7 +1111,11 @@ test("the host tool resolves a local:// file for the session that asked, whichev
     [A, "local://absent.md", /not found/i],
     [undefined, "local://note.md", /session/i],
   ] satisfies Array<[string | undefined, string, RegExp]>) {
-    const result = await ask(sessionId, path);
+    const result = await ask(
+      sessionId,
+      path,
+      sessionId === R ? remote.id : "local",
+    );
     assert.equal(result.isError, true, `${sessionId} ${path}`);
     assert.match(result.text, message);
   }

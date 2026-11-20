@@ -236,6 +236,27 @@ test("recording a reused id moves it to the top and makes it unread again", (t) 
   );
 });
 
+test("same-id conversations on different hosts replace only their own history", (t) => {
+  isolated(t);
+  const legacy = store.recordHistory(event("s1"), { at: 1, read: true });
+  const local = store.recordHistory(
+    { ...event("s1"), hostId: "local" },
+    { at: 2, read: true },
+  );
+  const linked = store.recordHistory(
+    { ...event("s1"), hostId: "remote" },
+    { at: 3, read: true },
+  );
+  const updated = store.recordHistory(
+    { ...local.event, sessionName: "Updated" },
+    { at: 4 },
+  );
+
+  assert.equal(updated.id, local.id);
+  assert.equal(updated.read, false);
+  assert.deepEqual(store.listHistory(), [updated, linked, legacy]);
+});
+
 test("history keeps the newest 100 entries", (t) => {
   isolated(t);
   for (let i = 0; i < 105; i++) store.recordHistory(event(`s${i}`), { at: i });

@@ -81,14 +81,10 @@ const reason = (error: unknown) =>
 // Each wait varies ±20% so many hosts do not redial in step.
 const withJitter = (ms: number) => ms * (0.8 + Math.random() * 0.4);
 
-export function nextRedialDelay(
-  delay: number,
-  url: string,
-  primary = true,
-): number {
+export function nextRedialDelay(delay: number, url: string): number {
   return Math.min(
     delay * 2,
-    primary && isLoopbackHost(new URL(url).hostname) ? 3000 : 30000,
+    isLoopbackHost(new URL(url).hostname) ? 3000 : 30000,
   );
 }
 export function dialable(url: string, allowHttp: boolean): boolean {
@@ -104,7 +100,6 @@ export function dialable(url: string, allowHttp: boolean): boolean {
 }
 export type LinkDeps = {
   allowHttp: boolean;
-  primary: boolean;
   hello(link: DaemonLink, replay: boolean): string;
   handleDown(link: DaemonLink, message: DownMessage | UnknownMessage): void;
   onEnd(link: DaemonLink, reason: "revoked" | "replaced" | "version"): void;
@@ -136,23 +131,18 @@ export class DaemonLink {
   stop(): Promise<void> {
     return this.runtime.stop();
   }
-  rekey(token: string): void {
-    this.runtime.rekey(token);
-  }
   isUp(): boolean {
     return this.runtime.isUp();
   }
   busy(): boolean {
     return this.runtime.busy();
   }
-  /** Capacity reports are dropped when the link is down or has no room, never replayed. */
-  report(message: Extract<UpMessage, { type: "capacity" }>): void {
-    this.runtime.report(message);
-  }
   terminalEvent(id: string, payload: string): boolean {
     return this.runtime.sendTerminal({ type: "pty_event", id, payload });
   }
-  abortTerminalLink(): void { this.runtime.abortTerminalLink(); }
+  abortTerminalLink(): void {
+    this.runtime.abortTerminalLink();
+  }
   queue(
     body: Unsequenced<UpMessage>,
     key: string,
@@ -190,7 +180,7 @@ export class DaemonLink {
 function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
   const serverUrl = trimUrl(owner.login.url);
   const linkUrl = serverUrl + "/api/hosts/link";
-  let authorization = "Bearer " + owner.login.token;
+  const authorization = "Bearer " + owner.login.token;
   const log = deps.log;
   const channels = new Map<string, { buffered: number }>();
   // Uplink messages wait in `sender` until they go out, then here until main acks them; a dropped socket resends
@@ -235,7 +225,9 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
   const samples: LinkStatSample[] = [];
   let statsTimer: NodeJS.Timeout | undefined;
   let reliablePending = 0;
-  function report(message: Extract<UpMessage, { type: "capacity" }>): void {
+  function sendTerminal(
+    message: Extract<UpMessage, { type: "pty_event" }>,
+  ): boolean {
     const ws = linked;
     if (
       stopped ||
@@ -244,25 +236,16 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
       ws.bufferedAmount >= SEND_BUFFER_BYTES ||
       inFlightBytes >= LINK_LIMITS.unackedBytes
     )
-      return;
+      return false;
     const data =
       encodeLine({ type: "ack", ack: down.acked }) + encodeLine(message);
     const bytes = Buffer.byteLength(data);
-    if (inFlightBytes + bytes > LINK_LIMITS.unackedBytes) return;
+    if (bytes > LINK_LIMITS.maxLineBytes) return false;
     ws.send(data);
     inFlight.push(bytes);
     inFlightBytes += bytes;
     ackOwed = false;
     appliedSince = 0;
-  }
-  function sendTerminal(message: Extract<UpMessage, { type: "pty_event" }>): boolean {
-    const ws = linked;
-    if (stopped || !ws || ws.readyState !== 1 || ws.bufferedAmount >= SEND_BUFFER_BYTES || inFlightBytes >= LINK_LIMITS.unackedBytes) return false;
-    const data = encodeLine({ type: "ack", ack: down.acked }) + encodeLine(message);
-    const bytes = Buffer.byteLength(data);
-    if (bytes > LINK_LIMITS.maxLineBytes) return false;
-    ws.send(data);
-    inFlight.push(bytes); inFlightBytes += bytes; ackOwed = false; appliedSince = 0;
     return true;
   }
 
@@ -733,15 +716,6 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
           try {
             newest = JSON.parse(closed.reason)?.serverVersion;
           } catch {}
-          if (
-            typeof newest === "number" &&
-            Number.isInteger(newest) &&
-            newest >= MIN_LINK_PROTOCOL_VERSION &&
-            newest < owner.version
-          ) {
-            owner.version = newest;
-            continue;
-          }
           log(
             typeof newest === "number" && newest < LINK_PROTOCOL_VERSION
               ? "this host's keylime is newer than the server's: update keylime on the server"
@@ -795,7 +769,7 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
       await sleep(withJitter(redialDelay), undefined, {
         signal: stopSignal.signal,
       }).catch(() => {});
-      redialDelay = nextRedialDelay(redialDelay, serverUrl, deps.primary);
+      redialDelay = nextRedialDelay(redialDelay, serverUrl);
     }
   }
   function endLink(reason: "revoked" | "replaced" | "version"): void {
@@ -820,17 +794,11 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
     output,
     discard,
     result,
-    report,
     sendTerminal,
     abortTerminalLink: () => linked?.close(1011, "terminal backpressure"),
     busy: () => reliablePending > 0,
     ackedDown: () => down.acked,
     isUp: () => linked !== null && !stopped,
-    rekey: (token: string) => {
-      owner.login.token = token;
-      authorization = "Bearer " + token;
-      socket?.close(1001, "credentials changed");
-    },
     start: () => {
       if (!started && !stopped) {
         started = true;

@@ -77,7 +77,6 @@ interface Props {
   host: { id: string; name: string };
   mode: "folder" | "repo";
   startPath?: string;
-  pool?: { id: string; label: string };
 }
 
 export function DirectoryPicker({
@@ -88,7 +87,6 @@ export function DirectoryPicker({
   host,
   mode,
   startPath,
-  pool,
 }: Props) {
   const { t } = useI18n();
   const showRepoOptions = mode === "repo";
@@ -102,7 +100,7 @@ export function DirectoryPicker({
   const [profile, setProfile] = useState("");
   const [advisor, setAdvisor] = useState(false);
   const [extraArgs, setExtraArgs] = useState("");
-  const [loading, setLoading] = useState(!pool);
+  const [loading, setLoading] = useState(true);
   const [cloneUrl, setCloneUrl] = useState("");
   const [cloneId, setCloneId] = useState<string | null>(null);
   const [cloneLog, setCloneLog] = useState("");
@@ -113,15 +111,10 @@ export function DirectoryPicker({
   const browseAbortRef = useRef<AbortController | null>(null);
   const cloning = cloneId !== null;
   const locked = busy || cloning;
-  const dialogLabel = t(
-    pool
-      ? "directoryPicker.registerPoolProject"
-      : "directoryPicker.selectDirectory",
-  );
+  const dialogLabel = t("directoryPicker.selectDirectory");
 
   const navigateTo = useCallback(
     async (directory?: string) => {
-      if (pool) return;
       browseAbortRef.current?.abort();
       const controller = new AbortController();
       browseAbortRef.current = controller;
@@ -145,7 +138,7 @@ export function DirectoryPicker({
         if (!controller.signal.aborted) setLoading(false);
       }
     },
-    [host.id, pool],
+    [host.id],
   );
 
   useEffect(() => {
@@ -169,13 +162,9 @@ export function DirectoryPicker({
   const handlePathSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const candidate = pathInput.trim();
-    if (pool) {
-      if (candidate && !locked) void submitSelection();
-      return;
-    }
     if (candidate && !locked) void navigateTo(candidate);
   };
-  const hasUncommittedPath = !pool && pathInput.trim() !== currentPath;
+  const hasUncommittedPath = pathInput.trim() !== currentPath;
   const cloneName = cloneUrl.trim() ? cloneDirectoryName(cloneUrl) : null;
   const cloneTarget =
     cloneName && currentPath
@@ -184,7 +173,7 @@ export function DirectoryPicker({
   const profileInvalid =
     profile.trim() !== "" && !isValidOmpProfile(profile.trim());
   const canSelect =
-    Boolean(pool ? pathInput.trim() : currentPath) &&
+    Boolean(currentPath) &&
     !loading &&
     !hasUncommittedPath &&
     !locked &&
@@ -207,8 +196,8 @@ export function DirectoryPicker({
       advisor: advisor || undefined,
       extraArgs: args.length ? args : undefined,
     };
-    if (pool || !cloneUrl.trim()) {
-      onSelect(pool ? pathInput.trim() : currentPath, launchConfig);
+    if (!cloneUrl.trim()) {
+      onSelect(currentPath, launchConfig);
       return;
     }
     const id = newCloneId();
@@ -507,11 +496,7 @@ export function DirectoryPicker({
               border: 0,
             }}
           >
-            {t(
-              pool
-                ? "directoryPicker.poolOrigin"
-                : "directoryPicker.directoryPath",
-            )}
+            {t("directoryPicker.directoryPath")}
           </label>
           <input
             className="directory-picker-path"
@@ -519,16 +504,8 @@ export function DirectoryPicker({
             ref={pathRef}
             type="text"
             value={pathInput}
-            aria-label={t(
-              pool
-                ? "directoryPicker.poolOrigin"
-                : "directoryPicker.pathPlaceholder",
-            )}
-            placeholder={t(
-              pool
-                ? "directoryPicker.poolOrigin"
-                : "directoryPicker.pathPlaceholder",
-            )}
+            aria-label={t("directoryPicker.pathPlaceholder")}
+            placeholder={t("directoryPicker.pathPlaceholder")}
             disabled={locked}
             autoComplete="off"
             spellCheck={false}
@@ -593,19 +570,7 @@ export function DirectoryPicker({
             padding: "8px 10px",
           }}
         >
-          {pool ? (
-            <div
-              role="status"
-              style={{
-                padding: 8,
-                color: "var(--text-dim)",
-                fontSize: 11,
-                lineHeight: 1.6,
-              }}
-            >
-              {t("directoryPicker.poolPreparationHint", { pool: pool.label })}
-            </div>
-          ) : loading ? (
+          {loading ? (
             <div
               style={{ display: "grid", gap: 6, padding: 8 }}
               aria-busy="true"
@@ -720,35 +685,33 @@ export function DirectoryPicker({
               borderTop: "1px solid var(--border)",
             }}
           >
-            {!pool && (
-              <input
-                className="directory-picker-clone-url"
-                type="text"
-                value={cloneUrl}
-                disabled={locked}
-                onChange={(event) => {
-                  setCloneUrl(event.target.value);
-                  setCloneStatus(null);
-                }}
-                placeholder={t("directoryPicker.cloneUrlPlaceholder")}
-                aria-label={t("directoryPicker.cloneUrlLabel")}
-                autoComplete="off"
-                spellCheck={false}
-                style={{
-                  width: "100%",
-                  height: 30,
-                  boxSizing: "border-box",
-                  marginBottom: 7,
-                  padding: "0 8px",
-                  background: "var(--bg-panel)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  color: "var(--text)",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 11,
-                }}
-              />
-            )}
+            <input
+              className="directory-picker-clone-url"
+              type="text"
+              value={cloneUrl}
+              disabled={locked}
+              onChange={(event) => {
+                setCloneUrl(event.target.value);
+                setCloneStatus(null);
+              }}
+              placeholder={t("directoryPicker.cloneUrlPlaceholder")}
+              aria-label={t("directoryPicker.cloneUrlLabel")}
+              autoComplete="off"
+              spellCheck={false}
+              style={{
+                width: "100%",
+                height: 30,
+                boxSizing: "border-box",
+                marginBottom: 7,
+                padding: "0 8px",
+                background: "var(--bg-panel)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                color: "var(--text)",
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+              }}
+            />
             {cloneUrl.trim() && !cloning && !cloneStatus && (
               <div
                 style={{
@@ -941,13 +904,11 @@ export function DirectoryPicker({
             onClick={() => void submitSelection()}
             disabled={!canSelect}
             title={
-              pool
-                ? t("directoryPicker.registerPoolProject")
-                : hasUncommittedPath
-                  ? t("directoryPicker.openPathBeforeSelecting")
-                  : cloneTarget
-                    ? t("directoryPicker.cloneInto", { path: cloneTarget })
-                    : t("directoryPicker.selectCurrentDirectory")
+              hasUncommittedPath
+                ? t("directoryPicker.openPathBeforeSelecting")
+                : cloneTarget
+                  ? t("directoryPicker.cloneInto", { path: cloneTarget })
+                  : t("directoryPicker.selectCurrentDirectory")
             }
             style={{
               padding: "6px 16px",
@@ -963,13 +924,11 @@ export function DirectoryPicker({
           >
             {busy
               ? t("directoryPicker.checking")
-              : pool
-                ? t("directoryPicker.registerPoolProject")
-                : cloning
-                  ? t("directoryPicker.cloning")
-                  : cloneUrl.trim()
-                    ? t("directoryPicker.cloneHere")
-                    : t("directoryPicker.selectThisFolder")}
+              : cloning
+                ? t("directoryPicker.cloning")
+                : cloneUrl.trim()
+                  ? t("directoryPicker.cloneHere")
+                  : t("directoryPicker.selectThisFolder")}
           </button>
         </div>
       </Dialog.Popup>

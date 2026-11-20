@@ -1,6 +1,7 @@
 import { comparableProjectPath } from "./comparable-path";
 import type { ManagedProject, SessionInfo } from "./types";
 import { workspaceKeyOf } from "./workspace-memory";
+import { sessionKey } from "./session-identity";
 
 // ============================================================================
 // Pure ordering/grouping helpers shared between the sidebar and unit tests.
@@ -25,13 +26,11 @@ export function remoteHostId(
   return hostId && hostId !== LOCAL_HOST_ID ? hostId : undefined;
 }
 
-/** Local paths keep their legacy key; remote paths are host-prefixed.
- * Logical pool keys are already domain-separated and never acquire an owner prefix. */
+/** Local paths keep their legacy key; remote paths are host-prefixed. */
 export function hostProjectKey(
   hostId: string | undefined,
   path: string,
 ): string {
-  if (path.startsWith("pool:")) return path;
   return hostId === undefined || hostId === LOCAL_HOST_ID
     ? path
     : `${hostId}:${path}`;
@@ -51,65 +50,32 @@ export function foldedHostProjectKey(
   hostId: string | undefined,
   path: string,
 ): string {
-  return path.startsWith("pool:")
-    ? path
-    : hostProjectKey(hostId, comparableProjectPath(path));
+  return hostProjectKey(hostId, comparableProjectPath(path));
 }
 
-/** Logical project keys remain case-sensitive and independent of physical ownership. */
 export function projectIdentity(project: ManagedProject): string {
   return hostProjectKey(project.hostId, workspaceKeyOf(project));
 }
 
-export type PoolMembers = readonly {
-  id: string;
-  members: readonly { hostId: string }[];
-}[];
-
-/** `pool:<id>` for a pool project and, given `pools`, for a project of a member of the first pool (the cluster); else the host id. */
-export function projectTargetId(
-  project: { poolId?: string; hostId?: string },
-  pools?: PoolMembers,
-): string {
-  if (project.poolId) return `pool:${project.poolId}`;
-  const hostId = project.hostId ?? LOCAL_HOST_ID;
-  const cluster = pools?.[0];
-  return cluster?.members.some((member) => member.hostId === hostId)
-    ? `pool:${cluster.id}`
-    : hostId;
-}
-
 /** Projects per host for the sidebar: this machine first, then the other
  *  hosts by label. Every known host gets a group, empty or not, so it can
- *  still be added to; projects of a host that is not listed are dropped.
- *  With `pools`, the first pool's members have no group: their own projects
- *  join the pool's projects in the pool's group. Each group keeps the given
- *  order, so the cluster sorts and pins as one list. */
-export function groupProjectsByHost<
-  T extends { hostId?: string; poolId?: string },
->(
+ *  still be added to; projects of unlisted hosts are dropped. */
+export function groupProjectsByHost<T extends { hostId?: string }>(
   projects: T[],
   hosts: { id: string; label: string }[],
-  pools?: PoolMembers,
 ): { host: { id: string; label: string }; projects: T[] }[] {
-  const cluster = pools?.[0];
-  const ordered = hosts
-    .filter(
-      (host) => !cluster?.members.some((member) => member.hostId === host.id),
-    )
-    .sort((a, b) => {
-      if ((a.id === LOCAL_HOST_ID) !== (b.id === LOCAL_HOST_ID))
-        return a.id === LOCAL_HOST_ID ? -1 : 1;
-      return a.label.localeCompare(b.label, undefined, {
-        sensitivity: "base",
-        numeric: true,
-      });
+  const ordered = [...hosts].sort((a, b) => {
+    if ((a.id === LOCAL_HOST_ID) !== (b.id === LOCAL_HOST_ID))
+      return a.id === LOCAL_HOST_ID ? -1 : 1;
+    return a.label.localeCompare(b.label, undefined, {
+      sensitivity: "base",
+      numeric: true,
     });
+  });
   return ordered.map((host) => ({
     host,
-    // A pool project (or a sidebar entry for one) already has `pool:<id>` as its target; a member's own project carries its host id and folds into the cluster through the membership check.
     projects: projects.filter(
-      (project) => projectTargetId(project, pools) === host.id,
+      (project) => (project.hostId ?? LOCAL_HOST_ID) === host.id,
     ),
   }));
 }
@@ -212,9 +178,10 @@ export function projectActivityCounts(
       session.projectKey ?? key,
     );
     const current = result.get(folded) ?? { running: 0, unread: 0, exited: 0 };
-    if (running.has(session.id)) current.running += 1;
-    if (unread.has(session.id)) current.unread += 1;
-    if (exited.has(session.id)) current.exited += 1;
+    const identity = sessionKey(session.id, session.hostId);
+    if (running.has(identity)) current.running += 1;
+    if (unread.has(identity)) current.unread += 1;
+    if (exited.has(identity)) current.exited += 1;
     result.set(folded, current);
   }
   return result;

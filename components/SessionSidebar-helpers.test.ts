@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { HostStatus } from "@/lib/hosts/host";
 
-const { livePlace } = await import("./SessionSidebar-helpers");
-const { groupProjectsByHost, groupSessionsByProject, projectActivityCounts } =
-  await import("../lib/project-ordering");
+import { buildSessionTree, livePlace } from "./SessionSidebar-helpers";
+import { groupProjectsByHost } from "../lib/project-ordering";
 
 const hosts = [
   { id: "local", label: "This machine" },
@@ -14,9 +13,9 @@ const selected = { cwd: "/here", hostId: "local" };
 
 test("a running remote session's placeholder project groups under its host, not This machine", () => {
   const place = livePlace(
-    "remote-run",
+    "h1:remote-run",
     null,
-    { "remote-run": { cwd: "/srv/app", hostId: "h1" } },
+    { "h1:remote-run": { cwd: "/srv/app", hostId: "h1" } },
     new Map(),
     new Map(),
     selected,
@@ -37,27 +36,27 @@ test("a running remote session's placeholder project groups under its host, not 
 
 test("a live session's place comes from the freshest source, with that source's host", () => {
   const optimistic = { id: "s", cwd: "/opt", hostId: "h1" };
-  const running = { s: { cwd: "/run" } };
-  const exited = new Map([["s", { cwd: "/exit", hostId: "h1" }]]);
-  const known = new Map([["s", { cwd: "/known", hostId: "h1" }]]);
+  const running = { "h1:s": { cwd: "/run" } };
+  const exited = new Map([["h1:s", { cwd: "/exit", hostId: "h1" }]]);
+  const known = new Map([["h1:s", { cwd: "/known", hostId: "h1" }]]);
   assert.deepEqual(
-    livePlace("s", optimistic, running, exited, known, selected),
+    livePlace("h1:s", optimistic, running, exited, known, selected),
     optimistic,
   );
-  assert.deepEqual(livePlace("s", null, running, exited, known, selected), {
+  assert.deepEqual(livePlace("h1:s", null, running, exited, known, selected), {
     cwd: "/run",
   });
-  assert.deepEqual(livePlace("s", null, {}, exited, known, selected), {
+  assert.deepEqual(livePlace("h1:s", null, {}, exited, known, selected), {
     cwd: "/exit",
     hostId: "h1",
   });
-  assert.deepEqual(livePlace("s", null, {}, new Map(), known, selected), {
+  assert.deepEqual(livePlace("h1:s", null, {}, new Map(), known, selected), {
     cwd: "/known",
     hostId: "h1",
   });
   // Nothing knows it: the selected workspace, host included.
   assert.deepEqual(
-    livePlace("s", null, {}, new Map(), new Map(), selected),
+    livePlace("h1:s", null, {}, new Map(), new Map(), selected),
     selected,
   );
 });
@@ -122,83 +121,33 @@ test("hostsCameOnline: a link-up transition, or a remote host already linked at 
   );
 });
 
-test("sessions on different workers share one logical project while a same-path Mac project stays separate", () => {
-  const projects = [
-    {
-      path: "/srv/app",
-      hostId: "h1",
-      poolId: "workers",
-      projectId: "app",
-      projectKey: "pool:workers:app",
-    },
-    { path: "/srv/app", hostId: "local" },
-    {
-      path: "/srv/app",
-      hostId: "h1",
-      poolId: "workers",
-      projectId: "other",
-      projectKey: "pool:workers:other",
-    },
-  ];
-  const sessions = [
-    {
-      id: "worker-one",
-      cwd: "/srv/app",
-      projectRoot: "/srv/app",
-      hostId: "h1",
-      poolId: "workers",
-      projectId: "app",
-      projectKey: "pool:workers:app",
-    },
-    {
-      id: "worker-two",
-      cwd: "/other/worktree",
-      projectRoot: "/other/app",
-      hostId: "h2",
-      poolId: "workers",
-      projectId: "app",
-      projectKey: "pool:workers:app",
-    },
-    { id: "mac", cwd: "/srv/app", hostId: "local" },
-    {
-      id: "unrelated",
-      cwd: "/srv/app",
-      hostId: "h1",
-      poolId: "workers",
-      projectId: "other",
-      projectKey: "pool:workers:other",
-    },
-  ].map((session) => ({
+test("scores and ancestry do not leak to an identical session id on another host", () => {
+  const base = {
     path: "",
+    cwd: "/repo",
     created: "",
     modified: "",
-    messageCount: 0,
+    messageCount: 1,
     firstMessage: "",
-    ...session,
-  }));
-  assert.deepEqual(
-    [...groupSessionsByProject(projects, sessions)].map(([key, entries]) => [
-      key,
-      entries.map(({ id }) => id),
-    ]),
+  };
+  const roots = buildSessionTree(
     [
-      ["pool:workers:app", ["worker-one", "worker-two"]],
-      ["/srv/app", ["mac"]],
-      ["pool:workers:other", ["unrelated"]],
+      { ...base, id: "shared", hostId: "h1" },
+      { ...base, id: "child", hostId: "h2", parentSessionId: "shared" },
+      { ...base, id: "shared" },
     ],
+    new Map([["local:shared", 100]]),
   );
   assert.deepEqual(
+    roots.map(({ session, children }) => [
+      session.id,
+      session.hostId,
+      children.length,
+    ]),
     [
-      ...projectActivityCounts(
-        sessions,
-        ["worker-one", "worker-two"],
-        ["worker-two", "mac"],
-      ),
-    ],
-    [
-      ["pool:workers:app", { running: 2, unread: 1, exited: 0 }],
-      ["/srv/app", { running: 0, unread: 1, exited: 0 }],
-      ["pool:workers:other", { running: 0, unread: 0, exited: 0 }],
+      ["shared", undefined, 0],
+      ["shared", "h1", 0],
+      ["child", "h2", 0],
     ],
   );
 });

@@ -5,7 +5,6 @@ import {
   lutimesSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -16,7 +15,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import { mockBuiltin } from "../../tests/mock-builtin.ts";
-import { HostOpError } from "./link-protocol";
 
 const { sweepSentUploads, UploadRetention } =
   await import("./upload-retention.ts");
@@ -164,135 +162,45 @@ test("a sweep never follows a symlink: not an uploads entry, not `uploads`, not 
   );
 });
 
-test("a retention of null deletes nothing; a number persists, sweeps, and an invalid one changes nothing", async () => {
-  const { dir, roots } = layout();
-  const file = join(dir, "agent", "keylime", "upload-retention.json");
+test("startup and subsequent sweeps use the current daemon policy", async () => {
+  const { roots } = layout();
   const old = put(
     join(roots.sessions, "proj", "s1", "local", "uploads", "old.bin"),
     400,
   );
-  const retention = new UploadRetention(file, roots);
-
-  // Nothing said yet: nothing deleted.
+  let days: number | null = null;
+  const retention = new UploadRetention(() => days, roots);
   await retention.start();
   retention.stop();
   assert.equal(alive(old), true);
-
-  assert.equal(retention.set(null), null);
-  await retention.sweep();
-  assert.equal(alive(old), true, "null keeps uploads for ever");
-  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { days: null });
-
-  for (const bad of [
-    0,
-    -1,
-    1.5,
-    3651,
-    "7",
-    undefined,
-    NaN,
-    Infinity,
-    {},
-    [30],
-    true,
-  ]) {
-    assert.throws(
-      () => retention.set(bad),
-      (error) =>
-        error instanceof HostOpError &&
-        error.status === 400 &&
-        error.code === "invalid_request",
-      `${String(bad)} is refused`,
-    );
-  }
-  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { days: null });
-
-  retention.set(30);
+  days = 30;
   await retention.sweep();
   assert.equal(alive(old), false);
-  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { days: 30 });
-
-  // The same value again writes nothing.
-  rmSync(file);
-  retention.set(30);
-  assert.equal(alive(file), false);
-});
-
-test("a retention set before a restart sweeps when the daemon starts again; an absent or unreadable file sweeps nothing", async () => {
-  const { dir, roots } = layout();
-  const file = join(dir, "agent", "keylime", "upload-retention.json");
-  const old = join(roots.sessions, "proj", "s1", "local", "uploads", "old.bin");
-  const fresh = put(
-    join(roots.sessions, "proj", "s1", "local", "uploads", "fresh.bin"),
-    1,
-  );
-
-  // Store the value through a daemon whose roots hold nothing, so its background sweep touches no fixture below.
-  const first = new UploadRetention(file, {
-    sessions: join(dir, "none"),
-    archive: join(dir, "none"),
-    ...{ tmp: null },
-  });
-  first.set(7);
-
-  put(old, 40);
-  const restarted = new UploadRetention(file, roots);
-  await restarted.start();
-  restarted.stop();
-  assert.equal(alive(old), false, "the stored value is used at start");
-  assert.equal(alive(fresh), true);
-
-  for (const content of [
-    null,
-    "not json",
-    JSON.stringify({ days: 0 }),
-    JSON.stringify({}),
-    JSON.stringify({ days: "7" }),
-  ]) {
-    if (content === null) rmSync(file);
-    else writeFileSync(file, content);
-    put(old, 400);
-    const unset = new UploadRetention(file, roots);
-    await unset.start();
-    unset.stop();
-    assert.equal(alive(old), true, `${String(content)} sweeps nothing`);
-  }
 });
 
 for (const relaxed of [null, 90]) {
   test(`a running sweep spares remaining files in the same folder after 7 days changes to ${relaxed}`, async (t) => {
-    const { dir, roots } = layout();
+    const { roots } = layout();
     const folder = join(roots.sessions, "proj", "s1", "local", "uploads");
     const files = ["a.bin", "b.bin", "c.bin"].map((name) =>
       put(join(folder, name), 40),
     );
-    const file = join(dir, "upload-retention.json");
-    writeFileSync(file, JSON.stringify({ days: 7 }));
+    let days: number | null = 7;
     const real = { ...(await import("node:fs/promises")) };
     const removed: string[] = [];
-    let retention: InstanceType<typeof UploadRetention>;
     await mockBuiltin(t, "node:fs/promises", {
       async unlink(path: string) {
         await real.unlink(path);
         removed.push(path);
-        if (removed.length === 1) retention.set(relaxed);
+        if (removed.length === 1) days = relaxed;
       },
     });
     const freshModule = `./upload-retention.ts?fresh=mid-folder-${relaxed}`;
     const {
       UploadRetention: FreshUploadRetention,
     }: typeof import("./upload-retention") = await import(freshModule);
-    retention = new FreshUploadRetention(file, roots);
-    // Capture the sweep set(90) starts too, so no background filesystem work escapes the test.
-    const sweep = retention.sweep.bind(retention);
-    const sweeps: Promise<void>[] = [];
-    retention.sweep = (...args) => {
-      const pending = sweep(...args);
-      sweeps.push(pending);
-      return pending;
-    };
+    const retention = new FreshUploadRetention(() => days, roots);
     await retention.sweep();
-    await Promise.all(sweeps);
     assert.equal(
       removed.length,
       1,
@@ -303,7 +211,6 @@ for (const relaxed of [null, 90]) {
       2,
       "the other expired files in that same folder survive",
     );
-    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { days: relaxed });
   });
 }
 
@@ -345,14 +252,12 @@ test("unreadable roots and upload folders are reported; missing folders stay qui
 });
 
 test("stopping retention scheduling does not hide a native sweep still removing old files", async (t) => {
-  const { dir, roots } = layout();
+  const { roots } = layout();
   const old = put(
     join(roots.sessions, "project", "session", "local", "uploads", "old.bin"),
     31,
   );
-  const policy = join(dir, "retention.json");
-  writeFileSync(policy, JSON.stringify({ days: 30 }));
-  const retention = new UploadRetention(policy, roots);
+  const retention = new UploadRetention(() => 30, roots);
   t.after(() => retention.stop());
   const sweeping = retention.start();
   assert.equal(retention.busy(), true);

@@ -8,7 +8,13 @@ import type { SessionInfo } from "@/lib/types";
 import type { EffortRecord } from "@/lib/api-contracts/systems";
 import { EffortSavedChats } from "./EffortDetails";
 import { openEventStream } from "@/lib/event-stream";
-import { Globe, MessageSquarePlus, Terminal as TerminalIcon, X } from "lucide-react";
+import { sessionKey } from "@/lib/session-identity";
+import {
+  Globe,
+  MessageSquarePlus,
+  Terminal as TerminalIcon,
+  X,
+} from "lucide-react";
 import {
   closeTerminal,
   createTerminal,
@@ -81,28 +87,53 @@ export function WorkspaceTerminalTabs({
   const closingChats = useRef(new Set<string>());
   const [closingChatIds, setClosingChatIds] = useState(new Set<string>());
   const browsers = useWorkspaceBrowsers(
-    chatTabs.flatMap((tab) => tab.sessionId ? [tab.sessionId] : []),
+    chatTabs.flatMap((tab) => (tab.sessionId ? [tab.sessionId] : [])),
     enabled && Boolean(cwd),
+    hostId,
   );
-  const browserTabs = chatTabs.filter((tab) => tab.sessionId && browsers[tab.sessionId]?.length);
-  const serviceTabs = effort && effort.root === cwd ? effort.services.filter((service) => !!service.terminalId) : [];
-  const serviceRevision = serviceTabs.map(({ terminalId }) => terminalId).join("\n");
-  const previousServiceTabs = useRef<{ hostId: string; cwd: string | null; ids: string[] }>({ hostId, cwd, ids: [] });
+  const browserTabs = chatTabs.filter(
+    (tab) =>
+      tab.sessionId && browsers[sessionKey(tab.sessionId, hostId)]?.length,
+  );
+  const serviceTabs =
+    effort && effort.root === cwd
+      ? effort.services.filter((service) => !!service.terminalId)
+      : [];
+  const serviceRevision = serviceTabs
+    .map(({ terminalId }) => terminalId)
+    .join("\n");
+  const previousServiceTabs = useRef<{
+    hostId: string;
+    cwd: string | null;
+    ids: string[];
+  }>({ hostId, cwd, ids: [] });
   useEffect(() => {
     const ids = serviceRevision ? serviceRevision.split("\n") : [];
     const previous = previousServiceTabs.current;
-    if (previous.hostId === hostId && previous.cwd === cwd && activeId && previous.ids.includes(activeId) && !ids.includes(activeId)) onSelect(null);
+    if (
+      previous.hostId === hostId &&
+      previous.cwd === cwd &&
+      activeId &&
+      previous.ids.includes(activeId) &&
+      !ids.includes(activeId)
+    )
+      onSelect(null);
     previousServiceTabs.current = { hostId, cwd, ids };
   }, [hostId, cwd, serviceRevision, activeId, onSelect]);
-  const browserId = (sessionId: string) => `browser:${sessionId}`;
+  const browserId = (sessionId: string) =>
+    `browser:${sessionKey(sessionId, hostId)}`;
   useEffect(() => {
     if (!activeId?.startsWith("browser:")) return;
-    const sessionId = activeId.slice("browser:".length);
-    if (!chatTabs.some((tab) => tab.sessionId === sessionId) ||
-        (browsers[sessionId] && browsers[sessionId].length === 0)) {
+    const key = activeId.slice("browser:".length);
+    if (
+      !chatTabs.some(
+        (tab) => tab.sessionId && sessionKey(tab.sessionId, hostId) === key,
+      ) ||
+      (browsers[key] && browsers[key].length === 0)
+    ) {
       onSelect(null);
     }
-  }, [activeId, browsers, chatTabs, onSelect]);
+  }, [activeId, browsers, chatTabs, hostId, onSelect]);
   const closeChat = async (id: string) => {
     if (closingChats.current.has(id)) return;
     closingChats.current.add(id);
@@ -119,18 +150,22 @@ export function WorkspaceTerminalTabs({
     source.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as {
-          runningSessionIds?: string[];
-          runningSessions?: Array<{ id: string; awaitingInput?: boolean }>;
+          runningSessions?: Array<{
+            id: string;
+            hostId: string;
+            awaitingInput?: boolean;
+          }>;
         };
-        if (data.runningSessionIds) setRunning(new Set(data.runningSessionIds));
-        if (data.runningSessions)
-          setAttention(
-            new Set(
-              data.runningSessions
-                .filter((session) => session.awaitingInput)
-                .map((session) => session.id),
-            ),
-          );
+        if (!data.runningSessions) return;
+        const runningKeys = new Set<string>();
+        const attentionKeys = new Set<string>();
+        for (const session of data.runningSessions) {
+          const key = sessionKey(session.id, session.hostId);
+          runningKeys.add(key);
+          if (session.awaitingInput) attentionKeys.add(key);
+        }
+        setRunning(runningKeys);
+        setAttention(attentionKeys);
       } catch {
         /* Ignore malformed event frames. */
       }
@@ -164,11 +199,15 @@ export function WorkspaceTerminalTabs({
     (entry) => entry.hostId === hostId && entry.terminal.cwd === cwd,
   );
   const tabs = visible.map((entry) => {
-    const service = serviceTabs.find(({ terminalId }) => terminalId === entry.terminal.id);
+    const service = serviceTabs.find(
+      ({ terminalId }) => terminalId === entry.terminal.id,
+    );
     return {
       ...entry,
       service,
-      terminal: service ? { ...entry.terminal, title: service.name } : entry.terminal,
+      terminal: service
+        ? { ...entry.terminal, title: service.name }
+        : entry.terminal,
     };
   });
   const create = async () => {
@@ -200,7 +239,10 @@ export function WorkspaceTerminalTabs({
             item.terminal.id !== entry.terminal.id,
         ),
       );
-      if (workspace.current.hostId === entry.hostId && workspace.current.activeId === entry.terminal.id)
+      if (
+        workspace.current.hostId === entry.hostId &&
+        workspace.current.activeId === entry.terminal.id
+      )
         onSelect(null);
       setError(null);
     } catch (err) {
@@ -253,8 +295,14 @@ export function WorkspaceTerminalTabs({
               </button>
               {(!entry.service || entry.service.status === "exited") && (
                 <button
-                  aria-label={entry.service ? `Dismiss ${entry.terminal.title} output` : `Close ${entry.terminal.title}`}
-                  title={entry.service ? "Dismiss service output" : "Close terminal"}
+                  aria-label={
+                    entry.service
+                      ? `Dismiss ${entry.terminal.title} output`
+                      : `Close ${entry.terminal.title}`
+                  }
+                  title={
+                    entry.service ? "Dismiss service output" : "Close terminal"
+                  }
                   onClick={() => void close(entry)}
                 >
                   <X size={14} />
@@ -263,7 +311,10 @@ export function WorkspaceTerminalTabs({
             </div>
           ))}
           {browserTabs.map((tab) => (
-            <div key={browserId(tab.sessionId!)} className="workspace-terminal-tab">
+            <div
+              key={browserId(tab.sessionId!)}
+              className="workspace-terminal-tab"
+            >
               <button
                 role="tab"
                 aria-selected={activeId === browserId(tab.sessionId!)}
@@ -298,9 +349,12 @@ export function WorkspaceTerminalTabs({
           >
             {(activeId === null
               ? chatTabs.find((tab) => tab.id === activeChatId)?.title
-              : browserTabs.find((tab) => browserId(tab.sessionId!) === activeId)
+              : browserTabs.find(
+                    (tab) => browserId(tab.sessionId!) === activeId,
+                  )
                 ? "Browser"
-                : tabs.find((entry) => entry.terminal.id === activeId)?.terminal.title) || "Workspace"}{" "}
+                : tabs.find((entry) => entry.terminal.id === activeId)?.terminal
+                    .title) || "Workspace"}{" "}
             · {chatTabs.length + tabs.length + browserTabs.length} tabs
           </button>,
           headerTarget,
@@ -364,9 +418,11 @@ export function WorkspaceTerminalTabs({
                       {activeId === null && activeChatId === tab.id
                         ? " · Active"
                         : ""}
-                      {tab.sessionId && attention.has(tab.sessionId)
+                      {tab.sessionId &&
+                      attention.has(sessionKey(tab.sessionId, hostId))
                         ? " · Needs attention"
-                        : tab.sessionId && running.has(tab.sessionId)
+                        : tab.sessionId &&
+                            running.has(sessionKey(tab.sessionId, hostId))
                           ? " · Running"
                           : ""}
                     </button>
@@ -416,8 +472,16 @@ export function WorkspaceTerminalTabs({
                     </button>
                     {(!entry.service || entry.service.status === "exited") && (
                       <button
-                        aria-label={entry.service ? `Dismiss ${entry.terminal.title} output` : `Close ${entry.terminal.title}`}
-                        title={entry.service ? "Dismiss service output" : "Close terminal"}
+                        aria-label={
+                          entry.service
+                            ? `Dismiss ${entry.terminal.title} output`
+                            : `Close ${entry.terminal.title}`
+                        }
+                        title={
+                          entry.service
+                            ? "Dismiss service output"
+                            : "Close terminal"
+                        }
                         onClick={() => void close(entry)}
                       >
                         <X size={16} />
@@ -426,15 +490,25 @@ export function WorkspaceTerminalTabs({
                   </div>
                 ))}
                 {browserTabs.map((tab) => (
-                  <div className="workspace-switcher-row" key={browserId(tab.sessionId!)}>
+                  <div
+                    className="workspace-switcher-row"
+                    key={browserId(tab.sessionId!)}
+                  >
                     <button
                       onClick={() => {
                         setPickerOpen(false);
                         onSelect(browserId(tab.sessionId!));
                       }}
-                      aria-current={activeId === browserId(tab.sessionId!) ? "page" : undefined}
+                      aria-current={
+                        activeId === browserId(tab.sessionId!)
+                          ? "page"
+                          : undefined
+                      }
                     >
-                      Browser · {tab.title}{activeId === browserId(tab.sessionId!) ? " · Active" : ""}
+                      Browser · {tab.title}
+                      {activeId === browserId(tab.sessionId!)
+                        ? " · Active"
+                        : ""}
                     </button>
                   </div>
                 ))}
@@ -481,28 +555,29 @@ export function WorkspaceTerminalTabs({
                 </button>
               </form>
             )}
-            {pickerOpen && (effort ? (
-              <EffortSavedChats
-                host={hostId}
-                effort={effort}
-                cwd={cwd}
-                openSessionIds={openSessionIds}
-                onSelect={(session) => {
-                  setPickerOpen(false);
-                  onSelectSaved(session);
-                }}
-              />
-            ) : (
-              <WorkspaceChatPicker
-                hostId={hostId}
-                cwd={cwd}
-                openSessionIds={openSessionIds}
-                onSelect={(session) => {
-                  setPickerOpen(false);
-                  onSelectSaved(session);
-                }}
-              />
-            ))}
+            {pickerOpen &&
+              (effort ? (
+                <EffortSavedChats
+                  host={hostId}
+                  effort={effort}
+                  cwd={cwd}
+                  openSessionIds={openSessionIds}
+                  onSelect={(session) => {
+                    setPickerOpen(false);
+                    onSelectSaved(session);
+                  }}
+                />
+              ) : (
+                <WorkspaceChatPicker
+                  hostId={hostId}
+                  cwd={cwd}
+                  openSessionIds={openSessionIds}
+                  onSelect={(session) => {
+                    setPickerOpen(false);
+                    onSelectSaved(session);
+                  }}
+                />
+              ))}
           </DialogContent>
         </Dialog>
       )}
@@ -511,29 +586,35 @@ export function WorkspaceTerminalTabs({
           {error}
         </div>
       )}
-      <div inert={contentInert ? true : undefined} style={{ display: "contents" }}>
-      {entries.map((entry) => (
-        <WorkspaceTerminal
-          key={`${entry.hostId}:${entry.terminal.id}`}
-          terminal={entry.terminal}
-          hostId={entry.hostId}
-          active={
-            !contentInert &&
-            enabled &&
-            entry.hostId === hostId &&
-            entry.terminal.cwd === cwd &&
-            activeId === entry.terminal.id
-          }
-        />
-      ))}
-      {browserTabs.map((tab) => (
-        <WorkspaceBrowser
-          key={tab.sessionId!}
-          sessionId={tab.sessionId!}
-          pages={browsers[tab.sessionId!]}
-          active={!contentInert && enabled && activeId === browserId(tab.sessionId!)}
-        />
-      ))}
+      <div
+        inert={contentInert ? true : undefined}
+        style={{ display: "contents" }}
+      >
+        {entries.map((entry) => (
+          <WorkspaceTerminal
+            key={`${entry.hostId}:${entry.terminal.id}`}
+            terminal={entry.terminal}
+            hostId={entry.hostId}
+            active={
+              !contentInert &&
+              enabled &&
+              entry.hostId === hostId &&
+              entry.terminal.cwd === cwd &&
+              activeId === entry.terminal.id
+            }
+          />
+        ))}
+        {browserTabs.map((tab) => (
+          <WorkspaceBrowser
+            key={sessionKey(tab.sessionId!, hostId)}
+            sessionId={tab.sessionId!}
+            hostId={hostId}
+            pages={browsers[sessionKey(tab.sessionId!, hostId)]}
+            active={
+              !contentInert && enabled && activeId === browserId(tab.sessionId!)
+            }
+          />
+        ))}
       </div>
     </>
   );

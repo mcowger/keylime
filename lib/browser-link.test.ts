@@ -242,9 +242,12 @@ const settled = (peer: BrowserPeer, predicate: () => unknown, what: string) =>
 
 function withSession(t: TestContext, id: string, session: FakeWrapper) {
   globalThis.__ompSessions ??= new Map();
-  globalThis.__ompSessions.set(id, session as unknown as AgentSessionWrapper);
+  globalThis.__ompSessions.set(
+    `local:${id}`,
+    session as unknown as AgentSessionWrapper,
+  );
   t.after(() => {
-    globalThis.__ompSessions?.delete(id);
+    globalThis.__ompSessions?.delete(`local:${id}`);
   });
 }
 
@@ -773,6 +776,18 @@ test("a command resent after a resync runs once: the (session, rid) dedupe repla
   assert.equal(second.replies()[0].deduped, true);
   assert.equal(first.replies()[0].deduped, false);
   assert.equal(wrapper.sent.length, 1);
+  second.send({ ...cmd, hostId: "unregistered-host" });
+  await until(
+    () => second.read() && second.replies().length === 2,
+    "independent host reply",
+  );
+  assert.equal(second.replies()[1].deduped, false);
+  assert.notEqual(second.replies()[1].status, 200);
+  assert.equal(
+    wrapper.sent.length,
+    1,
+    "a foreign host never uses the local wrapper",
+  );
 });
 
 test("a reply carries status, body, recvAt and its time; a bad session answers 400 and the link stays", async (t) => {

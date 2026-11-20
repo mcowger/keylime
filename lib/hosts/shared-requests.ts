@@ -14,7 +14,7 @@ type Registration = {
   schemes: HostUriScheme[];
 };
 type SharedRequestDeps = {
-  members(): string[];
+  member(): string | undefined;
   isUp(id: string): boolean;
   deliver(id: string, lines: string[]): void;
   /** Sends a daemon-owned `cmd`. `onReply`: omp read it (its successful reply arrived); called before any later output is handled. */
@@ -60,13 +60,12 @@ export class SharedRequests {
   private readonly dialogs = new Map<string, string[]>();
   private readonly callbacks = new Map<string, Callback>();
   private readonly completed = new Set<string>();
-  private readonly registrations = new Map<string, Registration>();
-  private lastPrompt: string | null = null;
+  private registration?: Registration & { id: string };
   /** Name -> the definition (JSON) last advertised to omp, kept after a removal: a call omp made just before it was
    * withdrawn still names that definition. A call goes only to a server registering exactly the one it pinned. */
   private toolDefs = new Map<string, string>();
-  private toolUnion = "[]";
-  private schemeUnion = "[]";
+  private advertisedTools = "[]";
+  private advertisedSchemes = "[]";
 
   constructor(private readonly deps: SharedRequestDeps) {}
 
@@ -118,9 +117,6 @@ export class SharedRequests {
     if (frame.t === "ui_response") {
       if (!this.dialogs.delete(request.key)) return false;
       this.completed.add(request.key);
-      const end = JSON.stringify({ t: "ui_end", id: frame.id });
-      for (const other of this.deps.members())
-        if (other !== id) this.deps.deliver(other, [end]);
       return true;
     }
     const call = this.callbacks.get(request.key);
@@ -130,29 +126,27 @@ export class SharedRequests {
     return true;
   }
 
-  prompt(id: string): void {
-    this.lastPrompt = id;
-  }
-
   setTools(id: string, tools: unknown[], schemes: HostUriScheme[]): void {
     validateHostTools(tools, schemes);
     const writable = new Map<string, boolean>();
     for (const { scheme, writable: canWrite } of schemes)
       writable.set(scheme, (writable.get(scheme) ?? false) || canWrite);
-    this.registrations.set(id, {
+    this.registration = {
+      id,
       tools: tools as Record<string, unknown>[],
       schemes: [...writable].map(([scheme, canWrite]) => ({
         scheme,
         writable: canWrite,
       })),
-    });
-    this.updateUnion();
+    };
+    this.updateRegistration();
     this.dispatch();
   }
 
   remove(id: string): void {
-    this.registrations.delete(id);
-    this.updateUnion();
+    if (this.registration?.id !== id) return;
+    this.registration = undefined;
+    this.updateRegistration();
     this.dispatch();
   }
   linkChanged(): void {
@@ -168,45 +162,39 @@ export class SharedRequests {
     ].flat();
   }
 
-  private updateUnion(): void {
-    const tools = new Map<string, Record<string, unknown>>(),
-      schemes = new Map<string, boolean>();
-    for (const id of this.deps.members()) {
-      const registration = this.registrations.get(id);
-      for (const tool of registration?.tools ?? [])
-        if (!tools.has(tool.name as string))
-          tools.set(tool.name as string, tool);
-      for (const { scheme, writable } of registration?.schemes ?? [])
-        schemes.set(scheme, (schemes.get(scheme) ?? false) || writable);
+  private updateRegistration(): void {
+    const byName = new Map<string, Record<string, unknown>>();
+    for (const tool of this.registration?.tools ?? []) {
+      const name = tool.name as string;
+      if (!byName.has(name)) byName.set(name, tool);
     }
-    // omp's output is ordered: a call read before its reply to this union was made under the previous definitions.
-    const advertised = [...tools].map(
+    // Calls emitted before this command's reply were made under the previous definitions.
+    const advertised = [...byName].map(
       ([name, tool]) => [name, JSON.stringify(tool)] as const,
     );
-    const confirm = () => {
-      for (const [name, def] of advertised) this.toolDefs.set(name, def);
-    };
-    const mergedTools = [...tools.values()].sort((a, b) =>
+    const tools = [...byName.values()].sort((a, b) =>
       String(a.name).localeCompare(String(b.name)),
     );
-    const mergedSchemes = [...schemes]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([scheme, writable]) => ({ scheme, writable }));
-    const toolUnion = JSON.stringify(mergedTools),
-      schemeUnion = JSON.stringify(mergedSchemes);
-    if (toolUnion !== this.toolUnion) {
-      this.toolUnion = toolUnion;
-      this.deps.write("set_host_tools", { tools: mergedTools }, confirm);
+    const schemes = [...(this.registration?.schemes ?? [])].sort((a, b) =>
+      a.scheme.localeCompare(b.scheme),
+    );
+    const toolJson = JSON.stringify(tools),
+      schemeJson = JSON.stringify(schemes);
+    if (toolJson !== this.advertisedTools) {
+      this.advertisedTools = toolJson;
+      this.deps.write("set_host_tools", { tools }, () => {
+        for (const [name, def] of advertised) this.toolDefs.set(name, def);
+      });
     }
-    if (schemeUnion !== this.schemeUnion) {
-      this.schemeUnion = schemeUnion;
-      this.deps.write("set_host_uri_schemes", { schemes: mergedSchemes });
+    if (schemeJson !== this.advertisedSchemes) {
+      this.advertisedSchemes = schemeJson;
+      this.deps.write("set_host_uri_schemes", { schemes });
     }
   }
 
   private eligible(id: string, call: Callback): boolean {
-    if (!this.deps.isUp(id) || !this.deps.members().includes(id)) return false;
-    const registration = this.registrations.get(id);
+    const registration = this.registration;
+    if (registration?.id !== id || !this.deps.isUp(id)) return false;
     if (call.frame.t === "host_tool_call") {
       return (
         registration?.tools.some(
@@ -231,11 +219,8 @@ export class SharedRequests {
     for (const call of this.callbacks.values()) {
       // A lost acknowledgement does not prove the action did not happen.
       if (call.executor !== null) continue;
-      const executor =
-        this.lastPrompt && this.eligible(this.lastPrompt, call)
-          ? this.lastPrompt
-          : this.deps.members().find((id) => this.eligible(id, call));
-      if (!executor) continue;
+      const executor = this.deps.member();
+      if (executor === undefined || !this.eligible(executor, call)) continue;
       call.executor = executor;
       this.deps.deliver(executor, call.lines);
     }

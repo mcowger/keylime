@@ -1,5 +1,6 @@
 "use client";
 
+import { sessionKey } from "@/lib/session-identity";
 import { useState } from "react";
 import {
   ChevronRight,
@@ -142,7 +143,9 @@ export function SystemsSidebar({
           effort.systemId === system.id &&
           (!runningOnly ||
             findEffort(effort) ||
-            effort.sessionIds.some((id) => runningIds.has(id)) ||
+            effort.sessionIds.some((id) =>
+              runningIds.has(sessionKey(id, host.id)),
+            ) ||
             effort.services.some(({ status }) => status === "running") ||
             effort.status === "creating" ||
             effort.status === "cleaning") &&
@@ -150,7 +153,9 @@ export function SystemsSidebar({
             `${effort.name} ${effort.root} ${effort.branch}`
               .toLowerCase()
               .includes(query) ||
-            effort.sessionIds.some((id) => matchedIds?.has(id))),
+            effort.sessionIds.some((id) =>
+              matchedIds?.has(sessionKey(id, host.id)),
+            )),
       ) ?? [];
     if ((runningOnly || !systemMatch) && !efforts.length) return null;
     const forcedOpen = Boolean(query) || runningOnly;

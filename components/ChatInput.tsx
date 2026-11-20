@@ -385,8 +385,6 @@ interface Props {
   draftKey?: string;
   /** Owning host for file uploads and the @ file index (this machine when absent). */
   uploadHostId?: string;
-  /** Lazily bind a pool's real owner before staging any file bytes. Failure never falls back locally. */
-  resolveUploadHost?: () => Promise<string>;
   /** Backend-confirmed ownership relocation, distinct from navigating to a draft. */
   draftIdentityMove?: { from: string; to: string; sourceDraft?: ChatDraft };
   /** Session working directory — enables the @ file autocomplete menu */
@@ -562,7 +560,6 @@ export const ChatInput = memo(
       onPromoteQueuedToSteer,
       draftKey = "new:unassigned",
       uploadHostId = LOCAL_HOST_ID,
-      resolveUploadHost,
       draftIdentityMove,
       cwd,
       activeGoal,
@@ -823,14 +820,12 @@ export const ChatInput = memo(
     /** Uploads in flight, by id: a chip's removal aborts its handle. */
     const uploadHandlesRef = useRef(new Map<string, UploadHandle>());
     const uploadHostIdRef = useRef(uploadHostId);
-    const resolveUploadHostRef = useRef(resolveUploadHost);
     submissionBlockedRef.current = submissionBlocked;
     valueRef.current = value;
     attachedImagesRef.current = attachedImages;
     attachedTextFilesRef.current = attachedTextFiles;
     attachedUploadsRef.current = attachedUploads;
     uploadHostIdRef.current = uploadHostId;
-    resolveUploadHostRef.current = resolveUploadHost;
 
     const captureDraft = useCallback((): ChatDraft => {
       const uploads = attachedUploadsRef.current;
@@ -957,43 +952,24 @@ export const ChatInput = memo(
         if (!upload.file) return;
         const { id, size } = upload;
         let shownPercent = -1;
-        let active: UploadHandle | undefined;
-        let aborted = false;
-        const resolveOwner = resolveUploadHostRef.current;
-        const promise = (async () => {
-          const hostId =
-            upload.hostId ||
-            (resolveOwner ? await resolveOwner() : uploadHostIdRef.current);
-          if (aborted) throw new DOMException("Upload cancelled", "AbortError");
-          if (!hostId)
-            throw new Error(t("agentSession.uploadOwnerUnavailable"));
-          patchUpload(id, { hostId });
-          active = uploadFile(
-            upload.file!,
-            hostId,
-            (received) => {
-              // One render per whole percent: the host acks up to every 16 ms.
-              const percent = Math.floor((received * 100) / Math.max(1, size));
-              if (percent === shownPercent) return;
-              shownPercent = percent;
-              patchUpload(id, { received });
-            },
-            id,
-            (error) =>
-              patchUpload(id, {
-                error: error === null ? null : uploadErrorMessage(error),
-              }),
-          );
-          return await active.promise;
-        })();
-        const handle: UploadHandle = {
-          id,
-          promise,
-          abort() {
-            aborted = true;
-            active?.abort();
+        const hostId = upload.hostId || uploadHostIdRef.current;
+        patchUpload(id, { hostId });
+        const handle = uploadFile(
+          upload.file!,
+          hostId,
+          (received) => {
+            // One render per whole percent: the host acks up to every 16 ms.
+            const percent = Math.floor((received * 100) / Math.max(1, size));
+            if (percent === shownPercent) return;
+            shownPercent = percent;
+            patchUpload(id, { received });
           },
-        };
+          id,
+          (error) =>
+            patchUpload(id, {
+              error: error === null ? null : uploadErrorMessage(error),
+            }),
+        );
         uploadHandlesRef.current.set(id, handle);
         const settle = (patch: Partial<AttachedUpload>) => {
           // Removed or switched meanwhile: its abort ended it.
@@ -1016,7 +992,7 @@ export const ChatInput = memo(
             }),
         );
       },
-      [patchUpload, t],
+      [patchUpload],
     );
 
     /** Attaches files As file and starts their uploads: up to MAX_UPLOAD_BYTES each, MAX_UPLOADS_PER_MESSAGE in all
@@ -1039,7 +1015,7 @@ export const ChatInput = memo(
             id: newUploadId(),
             name: file.name,
             size: file.size,
-            hostId: resolveUploadHostRef.current ? "" : uploadHostIdRef.current,
+            hostId: uploadHostIdRef.current,
             file,
             received: 0,
             status: "uploading",
@@ -2652,7 +2628,11 @@ export const ChatInput = memo(
     ];
     const firstQueued = queuedEntries[0] ?? null;
     const queuedCount = queuedEntries.length;
-    const hasAttachedHeader = !!(advisorReviewPending || startupStage || workspaceBaseSelector);
+    const hasAttachedHeader = !!(
+      advisorReviewPending ||
+      startupStage ||
+      workspaceBaseSelector
+    );
 
     const [queueExpanded, setQueueExpanded] = useState(false);
     const [queueActionPending, setQueueActionPending] = useState(false);
@@ -5097,204 +5077,204 @@ export const ChatInput = memo(
                 </div>
                 {/* Model selector — compact text button with dropdown */}
                 {onModelChange && (
-                    <div
-                      ref={dropdownRef}
-                      className="composer-model-control"
-                      style={{ position: "relative", minWidth: 0 }}
+                  <div
+                    ref={dropdownRef}
+                    className="composer-model-control"
+                    style={{ position: "relative", minWidth: 0 }}
+                  >
+                    <button
+                      ref={modelTriggerRef}
+                      onClick={() => setModelDropdownOpen((v) => !v)}
+                      aria-label={`${t("chatInput.changeModel")}: ${
+                        currentName ??
+                        (modelOptions.length > 0
+                          ? t("chatInput.selectModel")
+                          : showModelsLoading
+                            ? t("chatInput.loadingModels")
+                            : t("chatInput.noModels"))
+                      }`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        height: "var(--control-height-sm)",
+                        maxWidth: "100%",
+                        width: "100%",
+                        padding: "0 4px",
+                        overflow: "hidden",
+                        background: modelDropdownOpen
+                          ? "var(--bg-hover)"
+                          : "none",
+                        border: "none",
+                        borderRadius: 7,
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: "var(--text-sm)",
+                        opacity: 1,
+                        transition:
+                          "background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (isStreaming) return;
+                        e.currentTarget.style.background = "var(--bg-hover)";
+                        e.currentTarget.style.color = "var(--text)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = modelDropdownOpen
+                          ? "var(--bg-hover)"
+                          : "none";
+                        e.currentTarget.style.color = "var(--text-muted)";
+                      }}
+                      title={
+                        modelOptions.length > 0
+                          ? t("chatInput.changeModel")
+                          : showModelsLoading
+                            ? t("chatInput.loadingModels")
+                            : t("chatInput.noAvailableModels")
+                      }
+                      aria-expanded={modelDropdownOpen}
+                      aria-haspopup="dialog"
+                      aria-controls={modelPickerId}
                     >
-                      <button
-                        ref={modelTriggerRef}
-                        onClick={() => setModelDropdownOpen((v) => !v)}
-                        aria-label={`${t("chatInput.changeModel")}: ${
-                          currentName ??
+                      <i
+                        className="composer-effort-gauge"
+                        role="img"
+                        aria-label={`${t("chatInput.reasoningLabel")}: ${thinkingLevelMap?.[thinkingLevel ?? "auto"] ?? thinkingLevel ?? "auto"}`}
+                        title={`${t("chatInput.reasoningLabel")}: ${thinkingLevelMap?.[thinkingLevel ?? "auto"] ?? thinkingLevel ?? "auto"}`}
+                        data-level={thinkingLevel ?? "auto"}
+                        style={{
+                          flexShrink: 0,
+                          display: "inline-block",
+                          width: 13,
+                          height: 13,
+                          border: "1.5px solid currentColor",
+                          borderRadius: "50%",
+                          background: `conic-gradient(currentColor ${EFFORT_GAUGE_DEGREES[thinkingLevel ?? "auto"] ?? 180}deg, transparent 0)`,
+                          borderStyle:
+                            !thinkingLevel || thinkingLevel === "auto"
+                              ? "dashed"
+                              : "solid",
+                        }}
+                      />
+                      <span
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          minWidth: 0,
+                        }}
+                      >
+                        {currentName ??
                           (modelOptions.length > 0
                             ? t("chatInput.selectModel")
                             : showModelsLoading
                               ? t("chatInput.loadingModels")
-                              : t("chatInput.noModels"))
-                        }`}
+                              : t("chatInput.noModels"))}
+                      </span>
+                      <ChevronDown
+                        size={12}
+                        strokeWidth={1.8}
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                          height: "var(--control-height-sm)",
-                          maxWidth: "100%",
-                          width: "100%",
-                          padding: "0 4px",
-                          overflow: "hidden",
-                          background: modelDropdownOpen
-                            ? "var(--bg-hover)"
+                          flexShrink: 0,
+                          opacity: 0.7,
+                          transform: modelDropdownOpen
+                            ? "rotate(180deg)"
                             : "none",
-                          border: "none",
-                          borderRadius: 7,
-                          color: "var(--text-muted)",
-                          cursor: "pointer",
-                          fontSize: "var(--text-sm)",
-                          opacity: 1,
                           transition:
-                            "background var(--dur-fast) var(--ease-out-warm), color var(--dur-fast) var(--ease-out-warm)",
+                            "transform var(--dur-fast) var(--ease-out-warm)",
                         }}
-                        onMouseEnter={(e) => {
-                          if (isStreaming) return;
-                          e.currentTarget.style.background = "var(--bg-hover)";
-                          e.currentTarget.style.color = "var(--text)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = modelDropdownOpen
-                            ? "var(--bg-hover)"
-                            : "none";
-                          e.currentTarget.style.color = "var(--text-muted)";
-                        }}
-                        title={
-                          modelOptions.length > 0
-                            ? t("chatInput.changeModel")
-                            : showModelsLoading
-                              ? t("chatInput.loadingModels")
-                              : t("chatInput.noAvailableModels")
-                        }
-                        aria-expanded={modelDropdownOpen}
-                        aria-haspopup="dialog"
-                        aria-controls={modelPickerId}
-                      >
-                        <i
-                          className="composer-effort-gauge"
-                          role="img"
-                          aria-label={`${t("chatInput.reasoningLabel")}: ${thinkingLevelMap?.[thinkingLevel ?? "auto"] ?? thinkingLevel ?? "auto"}`}
-                          title={`${t("chatInput.reasoningLabel")}: ${thinkingLevelMap?.[thinkingLevel ?? "auto"] ?? thinkingLevel ?? "auto"}`}
-                          data-level={thinkingLevel ?? "auto"}
-                          style={{
-                            flexShrink: 0,
-                            display: "inline-block",
-                            width: 13,
-                            height: 13,
-                            border: "1.5px solid currentColor",
-                            borderRadius: "50%",
-                            background: `conic-gradient(currentColor ${EFFORT_GAUGE_DEGREES[thinkingLevel ?? "auto"] ?? 180}deg, transparent 0)`,
-                            borderStyle:
-                              !thinkingLevel || thinkingLevel === "auto"
-                                ? "dashed"
-                                : "solid",
-                          }}
-                        />
-                        <span
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            minWidth: 0,
-                          }}
-                        >
-                          {currentName ??
-                            (modelOptions.length > 0
-                              ? t("chatInput.selectModel")
-                              : showModelsLoading
-                                ? t("chatInput.loadingModels")
-                                : t("chatInput.noModels"))}
-                        </span>
-                        <ChevronDown
-                          size={12}
-                          strokeWidth={1.8}
-                          style={{
-                            flexShrink: 0,
-                            opacity: 0.7,
-                            transform: modelDropdownOpen
-                              ? "rotate(180deg)"
-                              : "none",
-                            transition:
-                              "transform var(--dur-fast) var(--ease-out-warm)",
-                          }}
-                          aria-hidden="true"
-                        />
-                      </button>
-                      {modelDropdownOpen && (
-                        <div
-                          id={modelPickerId}
-                          role="dialog"
-                          aria-label={t("chatInput.modelsLabel")}
-                          ref={modelDropdownPanelRef}
-                          className="picker-panel"
-                          style={{
-                            position: isMobile ? "fixed" : "absolute",
-                            bottom: isMobile ? 8 : "calc(100% + 6px)",
-                            ...(isMobile
-                              ? {
-                                  left: 8,
-                                  right: 8,
-                                  maxWidth: "calc(100vw - 16px)",
-                                }
-                              : {
-                                  left: 0,
-                                  width: "min(360px, calc(100vw - 32px))",
-                                }),
-                            zIndex: 500,
-                            display: "flex",
-                            flexDirection: "column",
-                            maxHeight: isMobile
-                              ? "calc(100dvh - 32px)"
-                              : "min(360px, calc(100dvh - 32px))",
-                          }}
-                        >
-                          <div className="picker-panel-header">
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                              style={{ color: "var(--text-muted)" }}
-                            >
-                              <rect x="4" y="4" width="16" height="16" rx="2" />
-                              <rect x="9" y="9" width="6" height="6" />
-                            </svg>
-                            <span className="picker-panel-title">
-                              {t("chatInput.modelsLabel")}
-                            </span>
-                            <span className="picker-panel-count">
-                              {modelOptions.length}
-                            </span>
-                          </div>
-                          <ModelPickerPanel
-                            modelOptions={modelOptions}
-                            filteredModelOptions={filteredModelOptions}
-                            currentModel={model}
-                            modelSearchQuery={modelSearchQuery}
-                            onSearchQueryChange={setModelSearchQuery}
-                            searchInputRef={modelSearchInputRef}
-                            showModelsLoading={showModelsLoading}
-                            modelsRefreshing={modelsRefreshing}
-                            modelError={modelError}
-                            onRefreshModels={onRefreshModels}
-                            selectionDisabled={isStreaming}
-                            isMobile={isMobile}
-                            onSelectModel={(provider, modelId) => {
-                              setModelDropdownOpen(false);
-                              if (
-                                provider !== model?.provider ||
-                                modelId !== model?.modelId ||
-                                isAutoModelSelection
-                              ) {
-                                onModelChange(provider, modelId);
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {modelDropdownOpen && (
+                      <div
+                        id={modelPickerId}
+                        role="dialog"
+                        aria-label={t("chatInput.modelsLabel")}
+                        ref={modelDropdownPanelRef}
+                        className="picker-panel"
+                        style={{
+                          position: isMobile ? "fixed" : "absolute",
+                          bottom: isMobile ? 8 : "calc(100% + 6px)",
+                          ...(isMobile
+                            ? {
+                                left: 8,
+                                right: 8,
+                                maxWidth: "calc(100vw - 16px)",
                               }
-                            }}
-                            onClose={() => setModelDropdownOpen(false)}
-                          />
-                          {onThinkingLevelChange && (
-                            <ReasoningEffortSlider
-                              levels={thinkingLevelOptions}
-                              value={thinkingLevel ?? "auto"}
-                              labels={thinkingLevelMap}
-                              disabled={isStreaming}
-                              onChange={onThinkingLevelChange}
-                            />
-                          )}
+                            : {
+                                left: 0,
+                                width: "min(360px, calc(100vw - 32px))",
+                              }),
+                          zIndex: 500,
+                          display: "flex",
+                          flexDirection: "column",
+                          maxHeight: isMobile
+                            ? "calc(100dvh - 32px)"
+                            : "min(360px, calc(100dvh - 32px))",
+                        }}
+                      >
+                        <div className="picker-panel-header">
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            <rect x="4" y="4" width="16" height="16" rx="2" />
+                            <rect x="9" y="9" width="6" height="6" />
+                          </svg>
+                          <span className="picker-panel-title">
+                            {t("chatInput.modelsLabel")}
+                          </span>
+                          <span className="picker-panel-count">
+                            {modelOptions.length}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  )}
+                        <ModelPickerPanel
+                          modelOptions={modelOptions}
+                          filteredModelOptions={filteredModelOptions}
+                          currentModel={model}
+                          modelSearchQuery={modelSearchQuery}
+                          onSearchQueryChange={setModelSearchQuery}
+                          searchInputRef={modelSearchInputRef}
+                          showModelsLoading={showModelsLoading}
+                          modelsRefreshing={modelsRefreshing}
+                          modelError={modelError}
+                          onRefreshModels={onRefreshModels}
+                          selectionDisabled={isStreaming}
+                          isMobile={isMobile}
+                          onSelectModel={(provider, modelId) => {
+                            setModelDropdownOpen(false);
+                            if (
+                              provider !== model?.provider ||
+                              modelId !== model?.modelId ||
+                              isAutoModelSelection
+                            ) {
+                              onModelChange(provider, modelId);
+                            }
+                          }}
+                          onClose={() => setModelDropdownOpen(false)}
+                        />
+                        {onThinkingLevelChange && (
+                          <ReasoningEffortSlider
+                            levels={thinkingLevelOptions}
+                            value={thinkingLevel ?? "auto"}
+                            labels={thinkingLevelMap}
+                            disabled={isStreaming}
+                            onChange={onThinkingLevelChange}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {todoPhases && subagents && onSelectSubagent && (
                   <ComposerActivityIndicators

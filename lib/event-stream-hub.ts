@@ -465,15 +465,20 @@ async function openChannel(
     case "running":
       return openRunningChannel(handle);
     case "open-chat":
-      return openChatChannel(channel.sessionId, handle);
+      return openChatChannel(channel.sessionId, handle, channel.hostId);
     case "open-chats":
       return openChatsChannel(handle);
     case "notifications":
       return openNotificationsChannel(channel.clientId, handle);
     case "session":
-      return openSessionChannel(channel.sessionId, handle);
+      return openSessionChannel(channel.sessionId, handle, channel.hostId);
     case "commit-plan-progress":
-      return openSessionChannel(channel.sessionId, handle, true);
+      return openSessionChannel(
+        channel.sessionId,
+        handle,
+        channel.hostId,
+        true,
+      );
     case "file":
       return openFileChannel(
         channel.path,
@@ -490,29 +495,51 @@ async function openChannel(
 
 // Subscriptions outlive module re-evaluation under bun --hot.
 declare global {
-  var __ompOpenChats:
-    | { counts: Map<string, number>; listeners: Set<SubscriptionHandle> }
+  var __ompScopedOpenChats:
+    | {
+        counts: Map<
+          string,
+          { sessionId: string; hostId: string; count: number }
+        >;
+        listeners: Set<SubscriptionHandle>;
+      }
     | undefined;
 }
 const { counts: openChats, listeners: openChatsListeners } =
-  (globalThis.__ompOpenChats ??= { counts: new Map(), listeners: new Set() });
+  (globalThis.__ompScopedOpenChats ??= {
+    counts: new Map(),
+    listeners: new Set(),
+  });
+
+function openChatsSnapshot() {
+  const openSessions = [...openChats.values()].map(({ sessionId, hostId }) => ({
+    sessionId,
+    hostId,
+  }));
+  const sessionIds = openSessions
+    .filter(({ hostId }) => hostId === "local")
+    .map(({ sessionId }) => sessionId);
+  return { openSessions, sessionIds };
+}
 
 function broadcastOpenChats(): void {
-  const snapshot = { sessionIds: [...openChats.keys()] };
+  const snapshot = openChatsSnapshot();
   for (const listener of openChatsListeners) listener.send(snapshot);
 }
 
 function openChatChannel(
   sessionId: string,
   handle: SubscriptionHandle,
+  hostId = "local",
 ): SubscribeResult {
   handle.open();
   if (!handle.active) return SUBSCRIBED;
-  openChats.set(sessionId, (openChats.get(sessionId) ?? 0) + 1);
+  const key = JSON.stringify([hostId, sessionId]);
+  const entry = openChats.get(key) ?? { hostId, sessionId, count: 0 };
+  entry.count++;
+  openChats.set(key, entry);
   handle.setDetach(() => {
-    const count = openChats.get(sessionId)!;
-    if (count === 1) openChats.delete(sessionId);
-    else openChats.set(sessionId, count - 1);
+    if (--entry.count === 0) openChats.delete(key);
     broadcastOpenChats();
   });
   broadcastOpenChats();
@@ -524,7 +551,7 @@ function openChatsChannel(handle: SubscriptionHandle): SubscribeResult {
   if (!handle.active) return SUBSCRIBED;
   openChatsListeners.add(handle);
   handle.setDetach(() => openChatsListeners.delete(handle));
-  handle.send({ sessionIds: [...openChats.keys()] });
+  handle.send(openChatsSnapshot());
   return SUBSCRIBED;
 }
 
@@ -534,20 +561,22 @@ function openRunningChannel(handle: SubscriptionHandle): SubscribeResult {
   // Subscribe BEFORE taking the initial snapshot so no state change can slip
   // through the gap between snapshot and subscription.
   const unsubscribeRunning = subscribeRunningSessions(
-    ({ ids, runningSessions, exitedSessions, refreshSessionList }) => {
+    ({ runningSessions, exitedSessions, refreshSessionList }) => {
       handle.send({
         type: "running",
-        runningSessionIds: ids,
+        runningSessionIds: runningSessions
+          .filter((s) => s.hostId === "local")
+          .map((s) => s.id),
         runningSessions,
         exitedSessions,
         ...(refreshSessionList ? { refreshSessionList: true } : {}),
       });
     },
   );
-  const unsubscribeFiles = subscribeSessionFileChanges((sessionIds) => {
+  const unsubscribeFiles = subscribeSessionFileChanges((sessions) => {
     handle.send({
       type: "sessions-changed",
-      sessionIds,
+      sessions,
       refreshSessionList: true,
     });
   });
@@ -558,7 +587,9 @@ function openRunningChannel(handle: SubscriptionHandle): SubscribeResult {
   const initialRunning = getRunningRpcSessions();
   handle.send({
     type: "running",
-    runningSessionIds: initialRunning.map((session) => session.id),
+    runningSessionIds: initialRunning
+      .filter((s) => s.hostId === "local")
+      .map((s) => s.id),
     runningSessions: initialRunning,
     exitedSessions: getExitedRpcSessions(),
   });
@@ -614,15 +645,16 @@ function openHostsChannel(handle: SubscriptionHandle): SubscribeResult {
 function openSessionChannel(
   sessionId: string,
   handle: SubscriptionHandle,
+  hostId = "local",
   progressOnly = false,
 ): SubscribeResult {
   // Observer-only: opening a saved session must not create another omp
   // process for a terminal-owned session. Explicit commands use
   // POST /api/agent/[id], which starts the wrapper before this attaches.
-  const existing = getRpcSession(sessionId);
+  const existing = getRpcSession(sessionId, hostId);
   let session = existing?.isAlive() ? existing : undefined;
   // Held messages show before omp runs (a host offline): the channel attaches to the wrapper the dispatcher starts.
-  if (!session && outboxEntries(sessionId).length === 0) {
+  if (!session && outboxEntries(sessionId, hostId).length === 0) {
     return {
       ok: false,
       status: 409,
@@ -636,18 +668,23 @@ function openSessionChannel(
   const attach = (live: AgentSessionWrapper) => {
     // onEvent can synchronously replay pending UI requests. Subscribe before
     // sampling the cursor/announcing readiness so catch-up has no event gap.
-    detachSession = live.onEvent((event) => {
-      if (!progressOnly || event.type === "commit_plan_progress") handle.send(event);
-    }, { internal: progressOnly });
+    detachSession = live.onEvent(
+      (event) => {
+        if (!progressOnly || event.type === "commit_plan_progress")
+          handle.send(event);
+      },
+      { internal: progressOnly },
+    );
     handle.send({
       type: "connected",
       sessionId,
+      hostId,
       web: live.getStreamSnapshot().cursor,
     });
   };
   if (session) attach(session);
   const rebind = () => {
-    const existing = getRpcSession(sessionId);
+    const existing = getRpcSession(sessionId, hostId);
     const live = existing?.isAlive() ? existing : undefined;
     if (live !== session) {
       detachSession();
@@ -657,10 +694,17 @@ function openSessionChannel(
     }
   };
   const detachRunning = subscribeRunningSessions(rebind);
-  const detachOutbox = onOutboxChange(sessionId, () => {
-    rebind();
-    handle.send({ type: "outbox_update", ...outboxSnapshot(sessionId) });
-  });
+  const detachOutbox = onOutboxChange(
+    sessionId,
+    () => {
+      rebind();
+      handle.send({
+        type: "outbox_update",
+        ...outboxSnapshot(sessionId, hostId),
+      });
+    },
+    hostId,
+  );
   rebind();
   handle.setDetach(() => {
     detachOutbox();
@@ -668,7 +712,10 @@ function openSessionChannel(
     detachSession();
   });
   if (handle.active)
-    handle.send({ type: "outbox_update", ...outboxSnapshot(sessionId) });
+    handle.send({
+      type: "outbox_update",
+      ...outboxSnapshot(sessionId, hostId),
+    });
   return SUBSCRIBED;
 }
 

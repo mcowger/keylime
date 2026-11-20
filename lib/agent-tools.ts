@@ -28,13 +28,13 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
   {
     name: "list_sessions",
     description:
-      "List keylime sessions on every host (ID, name, working directory, host, running or idle) so send_to_session can address one without the user copying IDs.",
+      "List sessions on the calling session's host (ID, name, working directory, host, running or idle). Use these IDs with send_to_session.",
     parameters: { type: "object", properties: {} },
   },
   {
     name: "new_session",
     description:
-      "Start an independent keylime session. Registered pooled projects receive an isolated worktree on an eligible worker. Set shareWorkspace to keep unpublished parent workspace dependencies on the calling session's owner. Returns its session ID.",
+      "Start an independent Keylime session on the calling session's host. Set shareWorkspace to use the calling session's exact directory. Returns its session ID.",
     parameters: {
       type: "object",
       properties: {
@@ -65,15 +65,10 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
           type: "string",
           description: "Display name for the new session.",
         },
-        host: {
-          type: "string",
-          description:
-            "Explicit host id or label from list_sessions. Omit to place independent pooled work automatically; standalone projects stay on the calling session's host.",
-        },
         shareWorkspace: {
           type: "boolean",
           description:
-            "Keep the new session on the calling session's host and exact directory when it depends on unpublished parent work. Defaults to false.",
+            "Use the calling session's exact directory when the new session depends on unpublished work. Defaults to false.",
         },
       },
     },
@@ -81,7 +76,7 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
   {
     name: "send_to_session",
     description:
-      "Send a message to another key lime session by ID. If the target is not running it is resumed first, as when a user opens it. The delivered message is prefixed with the sending session's ID so the target transcript shows where it came from.",
+      "Send a message to another Keylime session on the calling session's host. An idle saved session is resumed first. The delivered message includes the sending session's ID.",
     parameters: {
       type: "object",
       properties: {
@@ -137,22 +132,10 @@ export interface AgentToolSessionSummary {
   host: string;
 }
 
-/** A session as the ops layer lists it; executeAgentTool names its host. */
-export type AgentToolSessionRow = Omit<AgentToolSessionSummary, "host"> & {
-  hostId: string;
-};
-
-/** A machine sessions can start on; this machine has id "local". */
-export interface AgentToolHost {
-  id: string;
-  label: string;
-  online: boolean;
-}
-
 export interface AgentToolCreateSessionInput {
   cwd: string;
+  /** The caller's host; all placement and preparation must stay here. */
   hostId: string;
-  explicitHost: boolean;
   shareWorkspace: boolean;
   /** Already sender-attributed by executeAgentTool, or null for an idle session. */
   prompt: string | null;
@@ -162,6 +145,8 @@ export interface AgentToolCreateSessionInput {
 }
 
 export interface AgentToolDeliverInput {
+  /** Scope target lookup, restore and delivery to this host. */
+  sourceHostId: string;
   sessionId: string;
   /** Already sender-attributed by executeAgentTool. */
   message: string;
@@ -182,16 +167,13 @@ export interface AgentToolDeliverResult {
 
 /** Session operations supplied by lib/rpc-manager; fakes replace them in tests. */
 export interface AgentToolSessionOps {
-  listSessions(): Promise<AgentToolSessionRow[]>;
-  listHosts(): AgentToolHost[];
-  /** Authorize the actual physical owner before any preparation or spawn. */
+  /** Only sessions owned by the calling host. */
+  listSessions(sourceHostId: string): Promise<AgentToolSessionSummary[]>;
   createSession(
     input: AgentToolCreateSessionInput,
-    authorize: (host: AgentToolHost) => Promise<boolean>,
   ): Promise<{ sessionId: string }>;
+  /** Foreign targets must be treated as not found. */
   deliver(input: AgentToolDeliverInput): Promise<AgentToolDeliverResult>;
-  /** The host a session lives on; null when no host has it. */
-  sessionHostId(sessionId: string): Promise<string | null>;
 }
 
 export interface AgentToolContext {
@@ -201,11 +183,9 @@ export interface AgentToolContext {
   sourceCwd: string;
   /** The host the calling session runs on; "local" is this machine. */
   sourceHostId: string;
-  /** The off-by-default Settings gate (lib/web-settings agentToolsEnabled). */
+  /** The off-by-default agent-tools policy for the calling host. */
   enabled: boolean;
   guard: AgentToolGuard;
-  /** Ask the calling session's user; resolves false when declined or the dialog is dropped. */
-  confirm(title: string): Promise<boolean>;
 }
 
 /**
@@ -390,31 +370,6 @@ function checkMessageLength(message: string, field: string): void {
   }
 }
 
-/** `host` matched case-insensitively against ids, then labels; a label several hosts share is refused, not guessed. */
-function resolveHost(hosts: AgentToolHost[], host: string): AgentToolHost {
-  const wanted = host.toLowerCase();
-  // "This machine" keeps working after the user renames it.
-  const byId = hosts.find(
-    (h) =>
-      h.id.toLowerCase() === (wanted === "this machine" ? "local" : wanted),
-  );
-  const labelled = byId
-    ? []
-    : hosts.filter((h) => h.label.toLowerCase() === wanted);
-  if (labelled.length > 1) {
-    throw new Error(
-      `"${host}" matches more than one host (ids: ${labelled.map((h) => h.id).join(", ")}). Pass one of those ids as host.`,
-    );
-  }
-  const match = byId ?? labelled[0];
-  if (!match)
-    throw new Error(
-      `Unknown host "${host}". Known hosts: ${hosts.map((h) => h.label).join(", ")}.`,
-    );
-  if (!match.online) throw new Error(`${match.label} is offline.`);
-  return match;
-}
-
 /**
  * Execute one server-side agent tool. Returns a plain JSON-able result the
  * caller renders as the host_tool_result text payload. Throws on every
@@ -435,17 +390,15 @@ export async function executeAgentTool(
   if (!AGENT_TOOL_NAMES.has(toolName))
     throw new Error(`Unknown agent tool: ${toolName}.`);
   const record = asRecord(args);
+  if ("host" in record) {
+    throw new Error(
+      `Agent tools do not accept a "host" argument; they use the calling session's host.`,
+    );
+  }
 
   if (toolName === "list_sessions") {
     ctx.guard.checkRate(ctx.sourceSessionId);
-    const labels = new Map(ops.listHosts().map((h) => [h.id, h.label]));
-    const sessions = await ops.listSessions();
-    return {
-      sessions: sessions.map(({ hostId, ...session }) => ({
-        ...session,
-        host: labels.get(hostId) ?? hostId,
-      })),
-    };
+    return { sessions: await ops.listSessions(ctx.sourceHostId) };
   }
 
   if (toolName === "new_session") {
@@ -475,30 +428,17 @@ export async function executeAgentTool(
     const name = optionalString(record, "name");
     if (name && name.length > 200)
       throw new Error('Agent tool argument "name" exceeds 200 characters.');
-    const requestedHost = optionalString(record, "host");
-    const host = resolveHost(
-      ops.listHosts(),
-      requestedHost ?? ctx.sourceHostId,
-    );
-    if (shareWorkspace && host.id !== ctx.sourceHostId)
-      throw new Error("shareWorkspace requires the calling session's host.");
-    const created = await ops.createSession(
-      {
-        cwd,
-        hostId: host.id,
-        explicitHost: requestedHost !== undefined,
-        shareWorkspace,
-        prompt: prompt
-          ? formatAttributedMessage(ctx.sourceSessionId, prompt)
-          : null,
-        provider,
-        modelId,
-        name,
-      },
-      async (target) =>
-        (target.id === "local" && ctx.sourceHostId === "local") ||
-        ctx.confirm(`Start a session on ${target.label} in ${cwd}?`),
-    );
+    const created = await ops.createSession({
+      cwd,
+      hostId: ctx.sourceHostId,
+      shareWorkspace,
+      prompt: prompt
+        ? formatAttributedMessage(ctx.sourceSessionId, prompt)
+        : null,
+      provider,
+      modelId,
+      name,
+    });
     ctx.guard.setDepth(created.sessionId, depth);
     return { sessionId: created.sessionId };
   }
@@ -516,27 +456,8 @@ export async function executeAgentTool(
   const delivery = parseDelivery(record);
   const { wait, waitTimeoutMs } = parseWait(record);
   const depth = ctx.guard.checkChainDepth(ctx.sourceSessionId);
-  // A remote agent reaching a session on another machine asks first, as new_session does.
-  if (ctx.sourceHostId !== "local") {
-    const targetHostId = await ops.sessionHostId(sessionId);
-    if (!targetHostId) throw new Error(`Session not found: ${sessionId}`);
-    const hosts = ops.listHosts();
-    const target = hosts.find((h) => h.id === targetHostId);
-    if (targetHostId !== ctx.sourceHostId) {
-      const sourceLabel =
-        hosts.find((h) => h.id === ctx.sourceHostId)?.label ?? ctx.sourceHostId;
-      if (
-        !(await ctx.confirm(
-          `Send a message from a session on ${sourceLabel} to session ${sessionId} on ${target?.label ?? targetHostId}?`,
-        ))
-      ) {
-        throw new Error(
-          `The user declined to send a message to session ${sessionId}.`,
-        );
-      }
-    }
-  }
   const result = await ops.deliver({
+    sourceHostId: ctx.sourceHostId,
     sessionId,
     message: formatAttributedMessage(ctx.sourceSessionId, message),
     delivery,

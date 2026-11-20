@@ -1,6 +1,10 @@
 import { createHash } from "crypto";
-import { listSessionsAllHosts } from "@/lib/hosts/session-index";
+import {
+  listRegisteredHostSessions,
+  listSessionsAllHosts,
+} from "@/lib/hosts/session-index";
 import { getRunningRpcSessions } from "@/lib/rpc-manager";
+import { sessionKey } from "@/lib/session-identity";
 
 // The session list mixes on-disk sessions with the live runningSessionIds set,
 // which changes on every agent turn, so it must never be cached by proxies or
@@ -15,24 +19,34 @@ const SESSION_LIST_HEADERS = {
 /**
  * @apiContract listSessions
  * @apiUsage Poll the cross-host session inventory together with currently running registered wrappers.
- * @apiInputs Optional id filters only sessions, not runningSessionIds or runningSessions; an unfiltered request may supply If-None-Match.
+ * @apiInputs Optional hostId selects one host; id filters sessions and defaults its host to local. An unfiltered request may supply If-None-Match.
  * @apiInvariants Host inventories can be cached internally; running wrappers are sampled at request time. Unfiltered responses have an ETag and may return 304; filtered responses do not.
  * @apiEffects Read-only inventory and live-wrapper lookup; responses prohibit browser and proxy storage.
  * @apiRecovery Re-poll for changes and retain the previous unfiltered body on 304; a partial host inventory is not proof a session is absent everywhere.
  */
 export async function GET(req: Request) {
   try {
-    const filterId = new URL(req.url).searchParams.get("id");
+    const query = new URL(req.url).searchParams;
+    const filterId = query.get("id");
+    const hostId = query.get("hostId") ?? (filterId !== null ? "local" : null);
 
-    const sessions = await listSessionsAllHosts();
-    const registered = new Set(sessions.map((session) => session.id));
-    const runningSessions = getRunningRpcSessions().filter((session) =>
-      registered.has(session.id),
+    const sessions =
+      hostId === null
+        ? await listSessionsAllHosts()
+        : await listRegisteredHostSessions(hostId);
+    const registered = new Set(sessions.map((s) => sessionKey(s.id, s.hostId)));
+    const runningSessions = getRunningRpcSessions().filter((s) =>
+      registered.has(sessionKey(s.id, s.hostId)),
     );
-    const runningSessionIds = runningSessions.map((s) => s.id);
+    const runningSessionIds = runningSessions
+      .filter((s) => s.hostId === (hostId ?? "local"))
+      .map((s) => s.id);
 
-    if (filterId) {
-      const matched = sessions.filter((s) => s.id === filterId);
+    if (hostId !== null) {
+      const matched =
+        filterId !== null
+          ? sessions.filter((s) => s.id === filterId)
+          : sessions;
       const body = { sessions: matched, runningSessionIds, runningSessions };
       const bodyJson = JSON.stringify(body);
       return new Response(bodyJson, {

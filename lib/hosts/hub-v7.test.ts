@@ -52,7 +52,6 @@ process.env.PI_CODING_AGENT_DIR = dir;
 // Load the host modules only after isolating their agent directory.
 const hub = await import("./hub.ts");
 const { RpcProcess } = await import("../omp/rpc-process.ts");
-const { savePools } = await import("./pools.ts");
 const { HostOpError, LINK_PROTOCOL_VERSION } =
   await import("./link-protocol.ts");
 const {
@@ -123,7 +122,7 @@ async function sharedLink(
   let alive = true;
   let coldStarts = 0;
   const link = await linkHost(`Shared ${id}`, {
-    hello: { v: LINK_PROTOCOL_VERSION, link: { id: "l1", notifier: true } },
+    hello: { v: LINK_PROTOCOL_VERSION },
     channels: listed ? [{ ch, sessionId: id, cwd: "/w", pending }] : [],
   });
   const messages: DownMessage[] = [];
@@ -215,7 +214,7 @@ async function sharedLink(
     },
   );
   t.after(async () => {
-    await getRpcSession(id)?.destroyAndWait();
+    await getRpcSession(id, link.id)?.destroyAndWait();
     hub.closeHostLink(link.id);
     await serving;
   });
@@ -279,7 +278,7 @@ test("shell exclusion is forwarded on every bash command, including after reload
 test("v7 open installs the returned channel and snapshot before same-frame live output", async (t) => {
   const id = sessionId();
   const link = await linkHost("Atomic open", {
-    hello: { v: LINK_PROTOCOL_VERSION, link: { id: "l1", notifier: true } },
+    hello: { v: LINK_PROTOCOL_VERSION },
   });
   t.after(() => hub.closeHostLink(link.id));
   const opening = hub.getHost(link.id)!.spawnRpc(launch(id), id);
@@ -391,7 +390,7 @@ test("v7 open installs the returned channel and snapshot before same-frame live 
 
 async function registeredLink(t: TestContext, label: string) {
   const link = await linkHost(label, {
-    hello: { v: LINK_PROTOCOL_VERSION, link: { id: "l1", notifier: true } },
+    hello: { v: LINK_PROTOCOL_VERSION },
   });
   t.after(() => hub.closeHostLink(link.id));
   return link;
@@ -465,45 +464,14 @@ test("a linked host with no registry record refuses a start with 409 and sends n
   await assertNothingSent(link);
 });
 
-const poolsFile = join(dir, "keylime", "pools.json");
-const hostsFile = join(dir, "keylime", "hosts.json");
-function seedCluster(t: TestContext, ...hostIds: string[]) {
-  savePools([
-    {
-      id: "cluster",
-      label: "Cluster",
-      enabled: true,
-      projects: [],
-      members: hostIds.map((hostId) => ({
-        hostId,
-        projectsRoot: "/srv/p",
-        provisioned: true,
-        draining: false,
-      })),
-    },
-  ]);
-  t.after(() => rmSync(poolsFile, { force: true }));
-}
-
-test("a pure join for a member reads neither the registry nor the pools and is not refused", async (t) => {
-  const link = await registeredLink(t, "Member join");
-  seedCluster(t, link.id);
-  const [hosts, pools] = [readFileSync(hostsFile), readFileSync(poolsFile)];
-  const host = hub.getHost(link.id); // looked up while hosts.json is still readable
-  t.after(() => {
-    writeFileSync(hostsFile, hosts);
-    writeFileSync(poolsFile, pools);
-  });
-  writeFileSync(hostsFile, "not json");
-  writeFileSync(poolsFile, "not json");
+test("a pure join does not read the host registry", async (t) => {
+  const link = await registeredLink(t, "Existing session join");
+  const file = join(dir, "keylime", "hosts.json");
+  const host = hub.getHost(link.id);
+  const saved = readFileSync(file);
+  t.after(() => writeFileSync(file, saved));
+  writeFileSync(file, "not json");
   await openedLaunch(link, { expectedChannel: "c1" }, host);
-});
-
-test("a linked start does not depend on pools.json", async (t) => {
-  const link = await registeredLink(t, "Pools gone");
-  t.after(() => rmSync(poolsFile, { force: true }));
-  writeFileSync(poolsFile, "not json");
-  await openedLaunch(link);
 });
 
 test("v7 joined wrappers skip child-global startup, report interest and preserve concurrent preparation", async (t) => {
@@ -574,8 +542,11 @@ test("v7 hello eagerly joins background runs and resync restores the daemon snap
     streaming: snapshot("whole"),
     state: { isStreaming: true },
   });
-  await until(() => getRpcSession(id)?.isAlive(), "background adoption");
-  const wrapper = getRpcSession(id);
+  await until(
+    () => getRpcSession(id, link.id)?.isAlive(),
+    "background adoption",
+  );
+  const wrapper = getRpcSession(id, link.id);
   assert.ok(wrapper);
   assert.equal(wrapper.hasSubscribers(), false);
   assert.equal(wrapper.isRunning(), true);
@@ -630,18 +601,26 @@ test("v7 failed adoption and unidentifiable hello children close only membership
       message ===
       `[keylime] left the shared omp child of session ${id} on Shared ${id} running: this server could not adopt it (get_state failed)`,
   );
-  const { messages, closes, ch } = await sharedLink(t, id, {
+  const {
+    link: failedLink,
+    messages,
+    closes,
+    ch,
+  } = await sharedLink(t, id, {
     listed: true,
     fail: "get_state",
   });
   await until(() => closes.includes(ch), "failed adoption closes membership");
-  await until(() => !getRpcSession(id), "failed wrapper removed");
+  await until(
+    () => !getRpcSession(id, failedLink.id),
+    "failed wrapper removed",
+  );
   assert.equal(
     messages.some((m) => m.type === "kill"),
     false,
   );
   const link = await linkHost("Unknown shared child", {
-    hello: { v: LINK_PROTOCOL_VERSION, link: { id: "l1", notifier: true } },
+    hello: { v: LINK_PROTOCOL_VERSION },
     channels: [{ ch: "unknown", sessionId: null, cwd: "/w", pending: null }],
   });
   t.after(() => hub.closeHostLink(link.id));
@@ -650,82 +629,9 @@ test("v7 failed adoption and unidentifiable hello children close only membership
   assert.deepEqual(close.args, { ch: "unknown" });
 });
 
-test("v7 notifier handoff gates automatic publication only", async (t) => {
-  const id = sessionId();
-  const { link } = await sharedLink(t, id);
-  assert.equal(hub.isNotifier(link.id), true);
-  await link.post({ type: "notifier", on: false });
-  assert.equal(hub.isNotifier(link.id), false);
-  const { publishNotification, attachNotificationClient, reportPresence } =
-    await import("../notification-hub.ts");
-  const { saveDevice } = await import("../notification-store.ts");
-  const delivered: NotificationMessage[] = [];
-  saveDevice("v7-device", {
-    enabled: true,
-    types: { completed: true, input: true, error: true, modelSwitch: true },
-    whenActive: "toast",
-  });
-  reportPresence({
-    clientId: "v7-tab",
-    deviceId: "v7-device",
-    visible: false,
-    sessionId: null,
-    seq: 1,
-  });
-  t.after(attachNotificationClient("v7-tab", (event) => delivered.push(event)));
-  const { session } = await startRpcSession(
-    id,
-    launch(id).sessionFile,
-    "/w",
-    undefined,
-    false,
-    "/w",
-    undefined,
-    hub.getHost(link.id)!,
-  );
-  await link.post({
-    type: "stdout",
-    ch: session["proc"].transport.id,
-    line: ev({ type: "agent_start" }),
-  });
-  await link.post({
-    type: "stdout",
-    ch: session["proc"].transport.id,
-    line: ev({ type: "session_settled" }),
-  });
-  assert.equal(
-    delivered.length,
-    0,
-    "non-notifier cannot publish an automatic completion",
-  );
-  // Explicit test notifications have no host identity and must not be globally suppressed.
-  publishNotification({
-    type: "completed",
-    sessionId: id,
-    sessionName: "Test",
-  });
-  assert.ok(delivered.length > 0);
-  delivered.length = 0;
-  await link.post({ type: "notifier", on: true });
-  await link.post({
-    type: "stdout",
-    ch: session["proc"].transport.id,
-    line: ev({ type: "agent_start" }),
-  });
-  await link.post({
-    type: "stdout",
-    ch: session["proc"].transport.id,
-    line: ev({ type: "session_settled" }),
-  });
-  assert.deepEqual(
-    delivered.map((message) => message.event.type),
-    ["completed"],
-  );
-});
-
 test("v7 sessions_changed invalidates host list cache and broadcasts refresh", async (t) => {
   const link = await linkHost("Changed lists", {
-    hello: { v: LINK_PROTOCOL_VERSION, link: { id: "l1", notifier: true } },
+    hello: { v: LINK_PROTOCOL_VERSION },
   });
   t.after(() => hub.closeHostLink(link.id));
   let lists = 0;
@@ -845,37 +751,6 @@ test("v7 wrappers leave both stop timers to the daemon and keep ordinary tool re
   await wrapper.destroyAndWait();
 });
 
-test("resume manifests retain legacy hosts but exclude v7 hosts", async (t) => {
-  const id = sessionId();
-  const { link } = await sharedLink(t, id);
-  const { saveWebServerSettings } = await import("../web-settings.ts");
-  const { recordRunningSessions, resumeOnHostLink } =
-    await import("../session-resume.ts");
-  const tracker = globalThis.__ompResumeTracker;
-  globalThis.__ompResumeTracker = undefined;
-  t.after(() => {
-    globalThis.__ompResumeTracker = tracker;
-  });
-  saveWebServerSettings({ autoResumeSessions: true });
-  const legacy = { id: sessionId(), hostId: "legacy-offline", advisor: false };
-  const shared = { id, hostId: link.id, advisor: false };
-  recordRunningSessions([shared, legacy], () => true);
-  const manifest = join(
-    dir,
-    `keylime-interrupted-sessions-${process.pid}.json`,
-  );
-  assert.equal(existsSync(manifest), true);
-  assert.deepEqual(JSON.parse(readFileSync(manifest, "utf8")).sessions, [
-    legacy,
-  ]);
-  const resumed: (typeof shared)[] = [];
-  resumeOnHostLink([shared], async (entry) => {
-    resumed.push(entry);
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(resumed, []);
-});
-
 test("shared callback snapshots cannot execute a browser action twice", async (t) => {
   const id = sessionId();
   const pending: string[] = [];
@@ -918,11 +793,14 @@ test("adopted shared web callbacks report unknown outcome instead of blindly rep
     toolName: "open_url",
     arguments: { url: "https://example.test" },
   });
-  const { messages } = await sharedLink(t, id, {
+  const { link, messages } = await sharedLink(t, id, {
     listed: true,
     pending: [call],
   });
-  await until(() => getRpcSession(id)?.isAlive(), "adopted callback owner");
+  await until(
+    () => getRpcSession(id, link.id)?.isAlive(),
+    "adopted callback owner",
+  );
   await until(
     () =>
       messages.some(
@@ -940,7 +818,7 @@ test("adopted shared web callbacks report unknown outcome instead of blindly rep
   assert.equal(reply.isError, true);
   assert.match(reply.result.content[0].text, /outcome is unknown/);
   const events: SessionEvent[] = [];
-  const wrapper = getRpcSession(id);
+  const wrapper = getRpcSession(id, link.id);
   assert.ok(wrapper);
   const detach = wrapper.onEvent((event) => events.push(event));
   detach();
@@ -955,17 +833,17 @@ test("v7 channels_changed observes a newly created run without any tab", async (
   const { link, ch, opens } = await sharedLink(t, id, {
     state: { isStreaming: true },
   });
-  assert.equal(getRpcSession(id), undefined);
+  assert.equal(getRpcSession(id, link.id), undefined);
   await link.post({
     type: "channels_changed",
     channels: [{ ch, sessionId: id, cwd: "/w", pending: [] }],
   });
   await until(
-    () => getRpcSession(id)?.isAlive(),
+    () => getRpcSession(id, link.id)?.isAlive(),
     "new background channel adoption",
   );
-  assert.equal(getRpcSession(id)?.hasSubscribers(), false);
-  assert.equal(getRpcSession(id)?.isRunning(), true);
+  assert.equal(getRpcSession(id, link.id)?.hasSubscribers(), false);
+  assert.equal(getRpcSession(id, link.id)?.isRunning(), true);
   assert.equal(opens.length, 1);
 });
 
@@ -1025,7 +903,7 @@ test("joined and eagerly adopted shared wrappers retain the actual native adviso
     const { link } = await sharedLink(t, id, { listed, advisorSpawned: true });
     if (listed)
       await until(
-        () => getRpcSession(id)?.isAlive(),
+        () => getRpcSession(id, link.id)?.isAlive(),
         "advisor-aware eager adoption",
       );
     const { session } = await startRpcSession(
@@ -1054,8 +932,11 @@ test("workspace-forced advisor is preserved on a shared toggle-off request", asy
     advisorSpawned: true,
     launchAdvisor: true,
   });
-  await until(() => getRpcSession(id)?.isAlive(), "workspace advisor adoption");
-  const prior = getRpcSession(id);
+  await until(
+    () => getRpcSession(id, link.id)?.isAlive(),
+    "workspace advisor adoption",
+  );
+  const prior = getRpcSession(id, link.id);
   const { session } = await startRpcSession(
     id,
     launch(id).sessionFile,
@@ -1079,12 +960,15 @@ test("workspace-forced advisor is preserved on a shared toggle-off request", asy
 for (const desired of [true, false]) {
   test(`an idle shared advisor toggle to ${desired} replaces before the prompt`, async (t) => {
     const id = sessionId();
-    const { opens, messages } = await sharedLink(t, id, {
+    const { link, opens, messages } = await sharedLink(t, id, {
       listed: true,
       advisorSpawned: !desired,
     });
-    await until(() => getRpcSession(id)?.isAlive(), "initial shared adoption");
-    const before = getRpcSession(id);
+    await until(
+      () => getRpcSession(id, link.id)?.isAlive(),
+      "initial shared adoption",
+    );
+    const before = getRpcSession(id, link.id);
     assert.ok(before);
     const { runAgentCommand } = await import("../agent-command.ts");
     const reply = await runAgentCommand(
@@ -1092,9 +976,11 @@ for (const desired of [true, false]) {
       { type: "prompt", message: "change advisor" },
       desired,
       "advisor-owner",
+      undefined,
+      { hostId: link.id },
     );
     assert.equal(reply.status, 200, await reply.text());
-    const after = getRpcSession(id);
+    const after = getRpcSession(id, link.id);
     assert.ok(after);
     assert.notEqual(after, before);
     assert.equal(before.isAlive(), false);
@@ -1150,8 +1036,11 @@ test("a host-side busy race retains the current shared wrapper and never sends a
     hostBusy: true,
     streaming: (count) => (count === 1 ? null : snapshot("peer raced")),
   });
-  await until(() => getRpcSession(id)?.isAlive(), "host-busy shared adoption");
-  const before = getRpcSession(id);
+  await until(
+    () => getRpcSession(id, link.id)?.isAlive(),
+    "host-busy shared adoption",
+  );
+  const before = getRpcSession(id, link.id);
   const { session } = await startRpcSession(
     id,
     launch(id).sessionFile,
@@ -1184,8 +1073,11 @@ test("a host-side busy race retains the current shared wrapper and never sends a
 test("terminal-but-unsettled shared work defers an advisor toggle until settlement", async (t) => {
   const id = sessionId();
   const fixture = await sharedLink(t, id, { listed: true });
-  await until(() => getRpcSession(id)?.isAlive(), "unsettled shared adoption");
-  const before = getRpcSession(id);
+  await until(
+    () => getRpcSession(id, fixture.link.id)?.isAlive(),
+    "unsettled shared adoption",
+  );
+  const before = getRpcSession(id, fixture.link.id);
   assert.ok(before);
   await fixture.link.post(
     { type: "stdout", ch: fixture.ch, line: ev({ type: "agent_start" }) },
@@ -1235,11 +1127,7 @@ test("a stale channel announcement cannot exit a channel opened after that snaps
   transport.onExit(() => {
     exited = true;
   });
-  await link.post(
-    { type: "channels_changed", channels: [] },
-    { type: "notifier", on: false },
-  );
-  await until(() => !hub.isNotifier(link.id), "same-frame ordering marker");
+  await link.post({ type: "channels_changed", channels: [] });
   assert.equal(exited, false);
   assert.equal(transport.lost, false);
   transport.close!();
@@ -1339,10 +1227,16 @@ test("the open-to-command preparation handoff has no false gap and is never reus
 test("a stale passive announcement after native exit cannot cold-start the saved session", async (t) => {
   const id = sessionId();
   const fixture = await sharedLink(t, id, { listed: true });
-  await until(() => getRpcSession(id)?.isAlive(), "initial passive adoption");
+  await until(
+    () => getRpcSession(id, fixture.link.id)?.isAlive(),
+    "initial passive adoption",
+  );
   const ch = fixture.ch;
   await fixture.exit();
-  await until(() => !getRpcSession(id), "exited wrapper removed");
+  await until(
+    () => !getRpcSession(id, fixture.link.id),
+    "exited wrapper removed",
+  );
   await fixture.link.post({
     type: "channels_changed",
     channels: [{ ch, sessionId: id, cwd: "/w", pending: [] }],
@@ -1354,7 +1248,7 @@ test("a stale passive announcement after native exit cannot cold-start the saved
   );
   assert.equal(fixture.opens.at(-1)?.expectedChannel, ch);
   assert.equal(fixture.coldStarts, 0);
-  assert.equal(getRpcSession(id), undefined);
+  assert.equal(getRpcSession(id, fixture.link.id), undefined);
 });
 
 test("failed shared startup closes an unclaimed preparation handoff", async (t) => {
@@ -1378,10 +1272,10 @@ test("failed shared startup closes an unclaimed preparation handoff", async (t) 
     () => fixture.closes.includes(fixture.ch),
     "failed startup closes its leased membership",
   );
-  assert.equal(getRpcSession(id), undefined);
+  assert.equal(getRpcSession(id, fixture.link.id), undefined);
 });
 
-test("a peer's deliberate identity switch refreshes the joined server's registry", async (t) => {
+test("a native identity switch refreshes the controller's registry", async (t) => {
   const id = sessionId(),
     next = sessionId(),
     state: Record<string, unknown> = {};
@@ -1403,62 +1297,12 @@ test("a peer's deliberate identity switch refreshes the joined server's registry
     type: "channels_changed",
     channels: [{ ch, sessionId: next, cwd: "/w", pending: [] }],
   });
-  await until(() => getRpcSession(next) === session, "peer switched identity");
-  assert.equal(getRpcSession(id), undefined);
+  await until(
+    () => getRpcSession(next, link.id) === session,
+    "runner switched identity",
+  );
+  assert.equal(getRpcSession(id, link.id), undefined);
   assert.equal(session.isAlive(), true);
-});
-
-test("a peer server's identical echo never confirms this server's own message admission", async (t) => {
-  const id = sessionId();
-  const fixture = await sharedLink(t, id);
-  const { session } = await startRpcSession(
-    id,
-    launch(id).sessionFile,
-    "/w",
-    undefined,
-    false,
-    "/w",
-    undefined,
-    hub.getHost(fixture.link.id)!,
-  );
-  const echo = (n: number) =>
-    ["message_start", "message_end"].map((type) => ({
-      type: "stdout",
-      ch: fixture.ch,
-      line: ev({
-        type,
-        messageId: `u${n}`,
-        message: { role: "user", content: "same" },
-      }),
-    }));
-  const watch = () =>
-    session.watchMessageReplacement(
-      { type: "prompt", message: "same" },
-      { steering: [], followUp: [] },
-      session.getMessageCommandGeneration() - 1,
-      false,
-    );
-  const own = watch(),
-    owned = own.handOff();
-  await fixture.link.post(...echo(1));
-  assert.deepEqual(await owned, {}, "an uncontended echo proves the admission");
-  own.stop();
-  const contended = watch(),
-    outcome = contended.handOff();
-  await fixture.link.post(
-    {
-      type: "stdout",
-      ch: fixture.ch,
-      line: JSON.stringify({ t: "peer_message_command" }),
-    },
-    ...echo(2),
-  );
-  assert.equal(
-    (await outcome).mayHaveBeenSent,
-    true,
-    "a peer's admission makes the echo ambiguous",
-  );
-  contended.stop();
 });
 
 test("a failed advisor replacement after the old child exited reports the exit and drops the dead wrapper", async (t) => {
@@ -1491,7 +1335,10 @@ test("a failed advisor replacement after the old child exited reports the exit a
   );
   off();
   assert.ok(events.includes("process_exit"));
-  await until(() => getRpcSession(id) === undefined, "dead wrapper removed");
+  await until(
+    () => getRpcSession(id, fixture.link.id) === undefined,
+    "dead wrapper removed",
+  );
 });
 
 test("an edit another web app holds the lease for fails session_busy before any preflight read", async (t) => {
@@ -1585,9 +1432,12 @@ test("a host's planned stop closes the wrapper quietly; a crash is still reporte
       signal: null,
       ...(reason ? { reason } : {}),
     });
-    await until(() => getRpcSession(id) === undefined, "wrapper closed");
+    await until(
+      () => getRpcSession(id, fixture.link.id) === undefined,
+      "wrapper closed",
+    );
     off();
-    assert.equal(Boolean(getExitedRpcSession(id)), reported);
+    assert.equal(Boolean(getExitedRpcSession(id, fixture.link.id)), reported);
     assert.equal(notices.length > 0, reported);
   }
 });

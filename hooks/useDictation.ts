@@ -8,7 +8,7 @@ export interface UseDictationOptions {
   onTranscript: (text: string, after?: SttAfter) => void;
   onError?: (error: string) => void;
   /**
-   * Composer scope (session id or `new:<cwd>` draft key). Jobs started under
+   * Composer scope (the host-qualified session or fresh-chat draft key). Jobs started under
    * it are picked up by every browser showing the same scope, so a recording
    * survives the recording browser disconnecting.
    */

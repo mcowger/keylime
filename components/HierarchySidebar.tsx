@@ -1,5 +1,6 @@
 "use client";
 
+import { sessionKey } from "@/lib/session-identity";
 import {
   useCallback,
   useEffect,
@@ -126,6 +127,7 @@ type Props = {
   onSnapshots: (snapshots: Record<string, HierarchySnapshot>) => void;
   searchQuery: string;
   matchedSessionIds: Set<string> | null;
+  matchScore?: (key: string) => number;
   runningOnly: boolean;
   runningSessionIds: Set<string>;
   awaitingInputIds: Set<string>;
@@ -134,7 +136,7 @@ type Props = {
   collapsedHosts: Set<string>;
   onToggleHost: (host: string) => void;
   onSelectSession: (session: SessionInfo) => void;
-  onOpenLinkedSession?: (sessionId: string) => void;
+  onOpenLinkedSession?: (sessionId: string, hostId?: string) => void;
   onOpenPlanning?: (destination: PlanningDestination) => void;
   onAddProject: (host: string) => void;
   onNewWorkspace: (project: ManagedProject) => void;
@@ -222,6 +224,7 @@ export function HierarchySidebar({
   onChanged,
   searchQuery,
   matchedSessionIds,
+  matchScore,
   runningOnly,
   runningSessionIds,
   awaitingInputIds,
@@ -967,7 +970,10 @@ export function HierarchySidebar({
                   : undefined;
                 onOpenEffort(host.id, effort, navigate, latest);
               }}
-              onOpenLinkedSession={onOpenLinkedSession}
+              onOpenLinkedSession={
+                onOpenLinkedSession &&
+                ((id) => onOpenLinkedSession(id, host.id))
+              }
               onOpenPlanning={onOpenPlanning}
               onChanged={onChanged}
             />
@@ -1013,7 +1019,7 @@ export function HierarchySidebar({
                         (selectedHostId === host.id &&
                           selectedCwd === workspace.path) ||
                         workspace.sessionIds.some((id) =>
-                          runningSessionIds.has(id),
+                          runningSessionIds.has(sessionKey(id, host.id)),
                         )) &&
                       (!query ||
                         projectMatch ||
@@ -1021,7 +1027,7 @@ export function HierarchySidebar({
                           .toLowerCase()
                           .includes(query) ||
                         workspace.sessionIds.some((id) =>
-                          matchedSessionIds?.has(id),
+                          matchedSessionIds?.has(sessionKey(id, host.id)),
                         )),
                   );
                   if (
@@ -1173,7 +1179,9 @@ export function HierarchySidebar({
                                   onOpenTarget: ({ path }) => {
                                     if (path) onSelectWorkspace(path, host.id);
                                   },
-                                  onOpenChat: onOpenLinkedSession,
+                                  onOpenChat:
+                                    onOpenLinkedSession &&
+                                    ((id) => onOpenLinkedSession(id, host.id)),
                                 });
                               }}
                             >
@@ -1248,7 +1256,8 @@ export function HierarchySidebar({
                       {projectExpanded &&
                         workspaces.map((workspace) => {
                           const runningCount = workspace.sessionIds.filter(
-                            (id) => runningSessionIds.has(id),
+                            (id) =>
+                              runningSessionIds.has(sessionKey(id, host.id)),
                           ).length;
                           const workspaceSessions = sessions.filter(
                             (session) =>
@@ -1262,9 +1271,9 @@ export function HierarchySidebar({
                           )[0];
                           const needsAttention = workspaceSessions.some(
                             ({ id }) =>
-                              awaitingInputIds.has(id) ||
-                              unreadSessionIds.has(id) ||
-                              hasUndismissedExit(id),
+                              awaitingInputIds.has(sessionKey(id, host.id)) ||
+                              unreadSessionIds.has(sessionKey(id, host.id)) ||
+                              hasUndismissedExit(sessionKey(id, host.id)),
                           );
                           const workspaceKey = hostProjectKey(
                             host.id,
@@ -1513,7 +1522,10 @@ export function HierarchySidebar({
                                             workspace.unavailable ||
                                             !latestSession ||
                                             runningSessionIds.has(
-                                              latestSession.id,
+                                              sessionKey(
+                                                latestSession.id,
+                                                host.id,
+                                              ),
                                             )
                                           }
                                           onClick={() => {
@@ -1696,22 +1708,34 @@ export function HierarchySidebar({
                               </div>
                               {query &&
                                 workspace.sessionIds
-                                  .filter((id) => matchedSessionIds?.has(id))
+                                  .filter((id) =>
+                                    matchedSessionIds?.has(
+                                      sessionKey(id, host.id),
+                                    ),
+                                  )
+                                  .sort(
+                                    (a, b) =>
+                                      (matchScore?.(sessionKey(b, host.id)) ??
+                                        0) -
+                                      (matchScore?.(sessionKey(a, host.id)) ??
+                                        0),
+                                  )
                                   .map((id) => {
                                     const session = sessions.find(
                                       (item) =>
                                         item.id === id &&
                                         (item.hostId ?? "local") === host.id,
                                     );
+                                    const key = sessionKey(id, host.id);
                                     return (
                                       <div
-                                        key={id}
+                                        key={key}
                                         style={{
                                           marginLeft: 18,
                                           display: "flex",
                                           alignItems: "center",
                                           background:
-                                            selectedSessionId === id
+                                            selectedSessionId === key
                                               ? "var(--bg-selected)"
                                               : undefined,
                                         }}
@@ -1723,7 +1747,7 @@ export function HierarchySidebar({
                                             !session || workspace.unavailable
                                           }
                                           aria-current={
-                                            selectedSessionId === id
+                                            selectedSessionId === key
                                               ? "true"
                                               : undefined
                                           }

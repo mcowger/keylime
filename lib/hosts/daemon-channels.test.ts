@@ -3,7 +3,6 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { ChannelTable } from "./daemon-channels.ts";
 import { RESUME_PROMPT } from "./host-resume.ts";
-import { LINK_PROTOCOL_VERSION } from "./link-protocol.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -93,7 +92,6 @@ function harness(launchAdvisor = false, hello: object = {}) {
   };
   const links = ["l1", "l2"].map((id) => ({
     id,
-    version: LINK_PROTOCOL_VERSION,
     isUp: () => true,
     queue(body: Unsequenced<UpMessage>, key: string) {
       output.push({ id, body, key });
@@ -187,54 +185,7 @@ function harness(launchAdvisor = false, hello: object = {}) {
   };
 }
 
-test("concurrent opens spawn once; command order and replies stay source-owned", async () => {
-  const h = harness();
-  const [a, b] = await Promise.all([
-    h.table.open(h.a, { sessionId: SAVED, launch }),
-    h.table.open(h.b, { sessionId: SAVED, launch }),
-  ]);
-  assert.equal(h.children.length, 1);
-  assert.equal(a.ch, b.ch);
-  h.table.release(h.a, a.ch);
-  h.table.release(h.b, b.ch);
-  // Both links number their commands 1: the daemon gives each its own id toward the child and restores the link's on the reply.
-  h.table.stdin(h.a, a.ch, cmd(1, "get_messages", { who: "a" }));
-  h.table.stdin(h.b, a.ch, cmd(1, "get_messages", { who: "b" }));
-  const sent = own(h.children[0]);
-  assert.deepEqual(
-    sent.map((frame) => frame.args.who),
-    ["a", "b"],
-  );
-  assert.notEqual(sent[0].id, sent[1].id);
-  for (const frame of sent)
-    h.children[0].emit({
-      t: "res",
-      id: frame.id,
-      ok: true,
-      data: { who: frame.args.who },
-    });
-  assert.deepEqual(
-    stdoutFrames(h).map((frame) => [frame.id, frame.data.who]),
-    [
-      [1, "a"],
-      [1, "b"],
-    ],
-  );
-  assert.deepEqual(
-    h.output.map((item) => item.id),
-    ["l1", "l2"],
-  );
-  assert.throws(() =>
-    h.table.stdin(
-      { ...h.a, id: "guessed" } as DaemonLink,
-      a.ch,
-      cmd(1, "get_messages"),
-    ),
-  );
-  await h.table.stop();
-});
-
-test("shared opens report the actual advisor flag even when a joining link requests another mode", async () => {
+test("a controller reopen reports the actual advisor flag even when it requests another mode", async () => {
   for (const [requested, forced] of [
     [false, false],
     [true, false],
@@ -245,7 +196,7 @@ test("shared opens report the actual advisor flag even when a joining link reque
       sessionId: SAVED,
       launch: { ...launch, advisor: requested },
     });
-    const joined = await h.table.open(h.b, {
+    const joined = await h.table.open(h.a, {
       sessionId: SAVED,
       launch: { ...launch, advisor: !requested },
     });
@@ -257,13 +208,31 @@ test("shared opens report the actual advisor flag even when a joining link reque
   }
 });
 
-test("an idle advisor replacement fences opens and correlates late stdin refusal before killing once", async () => {
+test("a reconnected controller's idle advisor replacement fences opens and refuses late stdin by id", async () => {
   const h = harness(),
     first = await h.table.open(h.a, { sessionId: SAVED, launch });
   h.table.release(h.a, first.ch);
   const old = h.children[0];
+  h.table.linkDown(h.a);
+  h.table.linkUp(h.a);
+  const rejoined = await h.table.open(h.a, {
+    sessionId: SAVED,
+    launch,
+    expectedChannel: first.ch,
+  });
+  assert.equal(rejoined.ch, first.ch);
+  h.table.release(h.a, first.ch);
+  await assert.rejects(
+    h.table.open(h.b, {
+      sessionId: SAVED,
+      launch: { ...launch, advisor: true },
+      replaceAdvisor: true,
+    }),
+    { status: 409, code: "channel_already_joined" },
+  );
+  assert.deepEqual(old.kills, []);
   old.holdExit = true;
-  const replacement = h.table.open(h.b, {
+  const replacement = h.table.open(h.a, {
     sessionId: SAVED,
     launch: { ...launch, advisor: true },
     replaceAdvisor: true,
@@ -294,11 +263,14 @@ test("an idle advisor replacement fences opens and correlates late stdin refusal
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(joined, false);
   old.exit();
-  const [next, peer] = await Promise.all([replacement, joining]);
+  const [next, reopened] = await Promise.all([replacement, joining]);
   assert.notEqual(next.ch, first.ch);
-  assert.equal(peer.ch, next.ch);
+  assert.equal(reopened.ch, next.ch);
   assert.equal(next.advisorSpawned, true);
   assert.equal(h.children.length, 2);
+  assert.deepEqual(old.kills, [false]);
+  h.table.release(h.a, next.ch);
+  h.table.release(h.a, next.ch);
   const held = await h.table.open(h.a, {
     sessionId: SAVED,
     launch,
@@ -309,11 +281,12 @@ test("an idle advisor replacement fences opens and correlates late stdin refusal
     next.ch,
     "the source's preparation handoff protects its new child",
   );
-  h.table.setInterest(h.b, next.ch, true, false);
+  h.table.release(h.a, next.ch);
+  h.table.setInterest(h.a, next.ch, true, false);
   await h.table.stop();
 });
 
-test("advisor changes never replace a peer command, unsettled background work, dialog or preparation", async () => {
+test("advisor changes never replace an active command, unsettled background work, dialog or preparation", async () => {
   for (const phase of [
     "command",
     "acknowledged",
@@ -330,7 +303,7 @@ test("advisor changes never replace a peer command, unsettled background work, d
       h.table.stdin(
         h.a,
         first.ch,
-        cmd("peer-prompt", "prompt", { message: "work" }),
+        cmd("active-prompt", "prompt", { message: "work" }),
       );
     if (phase === "acknowledged")
       child.emit({
@@ -346,7 +319,7 @@ test("advisor changes never replace a peer command, unsettled background work, d
     if (phase === "dialog")
       child.emit({ t: "ui_request", id: 1, method: "ask", args: {} });
     if (phase === "preparing") h.table.setInterest(h.a, first.ch, false, true);
-    const joined = await h.table.open(h.b, {
+    const joined = await h.table.open(h.a, {
       sessionId: SAVED,
       launch: { ...launch, advisor: true },
       replaceAdvisor: true,
@@ -358,110 +331,10 @@ test("advisor changes never replace a peer command, unsettled background work, d
   }
 });
 
-test("join captures full stream and dialogs before later deltas; first answer closes the other UI", async () => {
-  const h = harness(),
-    a = await h.table.open(h.a, { sessionId: SAVED, launch });
-  h.table.release(h.a, a.ch);
-  const child = h.children[0];
-  ev(child, {
-    type: "message_start",
-    messageId: "m",
-    message: { role: "assistant", content: [{ type: "text", text: "one" }] },
-  });
-  child.emit({ t: "ui_request", id: 1, method: "ask", args: {} });
-  const b = await h.table.open(h.b, { sessionId: SAVED, launch });
-  assert.equal(JSON.parse(b.streaming!).event.message.content[0].text, "one");
-  assert.equal(JSON.parse(b.pending![0]).id, 1);
-  ev(child, {
-    type: "message_update",
-    messageId: "m",
-    message: { role: "assistant" },
-    assistantMessageEvent: {
-      type: "text_delta",
-      contentIndex: 0,
-      delta: "two",
-    },
-  });
-  assert.equal(h.output.filter((x) => x.id === "l2").length, 0);
-  h.table.release(h.b, b.ch);
-  assert.equal(h.output.filter((x) => x.id === "l2").length, 1);
-  h.table.stdin(
-    h.b,
-    b.ch,
-    JSON.stringify({ t: "ui_response", id: 1, value: "x" }),
-  );
-  h.table.stdin(
-    h.a,
-    a.ch,
-    JSON.stringify({ t: "ui_response", id: 1, value: "y" }),
-  );
-  assert.equal(
-    child.writes.filter((frame) => frame.t === "ui_response").length,
-    1,
-  );
-  assert.ok(
-    h.output.some(
-      (x) =>
-        x.id === "l1" &&
-        x.body.type === "stdout" &&
-        JSON.parse(x.body.line).t === "ui_end" &&
-        JSON.parse(x.body.line).id === 1,
-    ),
-  );
-  await h.table.stop();
-});
-
-test("a private res is never broadcast; a session frame after a persistence notice moves identity and keeps aliases", async () => {
-  const h = harness(),
-    a = await h.table.open(h.a, { sessionId: SAVED, launch });
-  h.table.release(h.a, a.ch);
-  const b = await h.table.open(h.b, { sessionId: SAVED, launch });
-  h.table.release(h.b, b.ch);
-  ev(h.children[0], {
-    type: "notice",
-    source: "session-persistence",
-    level: "info",
-  });
-  h.output.length = 0;
-  h.table.stdin(h.a, a.ch, cmd("a", "get_state_probe"));
-  h.children[0].emit({
-    t: "res",
-    id: own(h.children[0])[0].id,
-    ok: true,
-    data: { pad: "x".repeat(1100000) },
-  });
-  assert.equal(h.output.filter((x) => x.id === "l2").length, 0);
-  assert.deepEqual(
-    h.output.filter((x) => x.id === "l1").map((x) => JSON.parse(line(x)).id),
-    ["a"],
-  );
-  h.children[0].emit({
-    t: "session",
-    sessionId: MOVED,
-    sessionFile: "/tmp/moved.jsonl",
-  });
-  assert.equal(
-    (await h.table.open(h.b, { sessionId: SAVED, launch })).ch,
-    a.ch,
-  );
-  assert.equal(
-    (
-      await h.table.open(h.b, {
-        sessionId: MOVED,
-        launch: { ...launch, sessionFile: "/tmp/moved.jsonl" },
-      })
-    ).ch,
-    a.ch,
-  );
-  assert.equal(h.table.listing(h.a)[0].sessionId, MOVED);
-  assert.equal(h.children.length, 1);
-  await h.table.stop();
-});
-
-test("startup sets global settings once for two members; links may not send daemon-owned ops", async () => {
+test("startup sets host settings once across repeated opens; the controller may not send daemon-owned ops", async () => {
   const h = harness();
   const a = await h.table.open(h.a, { sessionId: SAVED, launch });
-  await h.table.open(h.b, { sessionId: SAVED, launch });
+  await h.table.open(h.a, { sessionId: SAVED, launch });
   assert.deepEqual(
     h.children[0].writes.map((frame) => [frame.t, frame.op]),
     [
@@ -571,23 +444,18 @@ test("a message_update the snapshot cannot apply moves the child to full updates
   await h.table.stop();
 });
 
-test("closing one membership neither kills the child nor broadcasts its late reply", async () => {
-  const h = harness(),
-    a = await h.table.open(h.a, { sessionId: SAVED, launch });
-  await h.table.open(h.b, { sessionId: SAVED, launch });
+test("controller handoff never sends the old controller's late command reply to its replacement", async () => {
+  const h = harness();
+  const a = await h.table.open(h.a, { sessionId: SAVED, launch });
   h.table.release(h.a, a.ch);
-  h.table.release(h.b, a.ch);
   h.table.stdin(h.a, a.ch, cmd("old", "get_messages"));
-  h.table.stdin(h.b, a.ch, cmd("old", "get_messages")); // The other link's own numbering never collides.
-  const [first] = own(h.children[0]);
-  h.table.close(h.a, a.ch);
-  h.children[0].emit({ t: "res", id: first.id, ok: true, data: {} });
-  assert.deepEqual(h.output, []);
-  assert.equal(h.table.size, 1);
-  assert.equal(
-    (await h.table.open(h.a, { sessionId: SAVED, launch })).joined,
-    true,
-  );
+  const id = h.children[0].writes.at(-1)!.id;
+  h.table.linkGone(h.a);
+  await h.table.open(h.b, { sessionId: SAVED, launch });
+  h.table.release(h.b, a.ch);
+  h.children[0].emit({ t: "res", id, ok: true });
+  assert.ok(!stdoutFrames(h).some((frame) => frame.id === "old"));
+  assert.equal(h.children.length, 1);
   await h.table.stop();
 });
 
@@ -617,12 +485,12 @@ test("delete fence waits for exit and prevents a concurrent reopen until the mut
   await h.table.stop();
 });
 
-test("recovery and two server opens share one spawn and one daemon-owned resume prompt", async () => {
+test("recovery and repeated opens share one spawn and one daemon-owned resume prompt", async () => {
   const h = harness();
   await Promise.all([
     h.table.recover([{ sessionId: SAVED, launch }]),
     h.table.open(h.a, { sessionId: SAVED, launch }),
-    h.table.open(h.b, { sessionId: SAVED, launch }),
+    h.table.open(h.a, { sessionId: SAVED, launch }),
   ]);
   assert.equal(h.children.length, 1);
   const prompts = h.children[0].writes.filter((frame) => frame.op === "prompt");
@@ -632,69 +500,12 @@ test("recovery and two server opens share one spawn and one daemon-owned resume 
   await h.table.stop();
 });
 
-test("only the chosen callback executor receives the request but both members receive the committed result", async () => {
-  const h = harness(),
-    a = await h.table.open(h.a, { sessionId: SAVED, launch });
-  await h.table.open(h.b, { sessionId: SAVED, launch });
-  h.table.release(h.a, a.ch);
-  h.table.release(h.b, a.ch);
-  for (const link of [h.a, h.b])
-    h.table.setTools(link, a.ch, [{ name: "open_url" }], []);
-  await new Promise((resolve) => setImmediate(resolve)); // omp answers set_host_tools before it can call the tool
-  h.table.stdin(h.b, a.ch, cmd("p", "prompt", { message: "open" }));
-  h.children[0].emit({
-    t: "host_tool_call",
-    id: 7,
-    toolName: "open_url",
-    arguments: {},
-  });
-  // The non-prompting member sees only the daemon's peer-admission marker, never the callback.
-  assert.deepEqual(
-    h.output.map((item) => [item.id, JSON.parse(line(item)).t]),
-    [
-      ["l1", "peer_message_command"],
-      ["l2", "host_tool_call"],
-    ],
-  );
-  h.table.stdin(
-    h.a,
-    a.ch,
-    JSON.stringify({ t: "host_tool_result", id: 7, result: "no" }),
-  );
-  h.table.stdin(
-    h.b,
-    a.ch,
-    JSON.stringify({ t: "host_tool_result", id: 7, result: "yes" }),
-  );
-  assert.deepEqual(
-    h.children[0].writes
-      .filter((frame) => frame.t === "host_tool_result")
-      .map(({ id, result }) => ({ id, result })),
-    [{ id: 7, result: "yes" }],
-  );
-  ev(h.children[0], {
-    type: "tool_execution_end",
-    toolCallId: 7,
-    toolName: "open_url",
-    result: "yes",
-  });
-  assert.deepEqual(
-    h.output
-      .filter(
-        (item) => JSON.parse(line(item)).event?.type === "tool_execution_end",
-      )
-      .map((item) => item.id),
-    ["l1", "l2"],
-  );
-  await h.table.stop();
-});
-
 test("a prompt_result returns under the sending link's own id, to that link only", async () => {
   const h = harness(),
     a = await h.table.open(h.a, { sessionId: SAVED, launch });
-  await h.table.open(h.b, { sessionId: SAVED, launch });
+  await h.table.open(h.a, { sessionId: SAVED, launch });
   h.table.release(h.a, a.ch);
-  h.table.release(h.b, a.ch);
+  h.table.release(h.a, a.ch);
   h.table.stdin(h.a, a.ch, cmd(1000, "prompt", { message: "hi" }));
   const [sent] = own(h.children[0]);
   assert.notEqual(sent.id, 1000);
@@ -724,56 +535,32 @@ test("a prompt_result returns under the sending link's own id, to that link only
   await h.table.stop();
 });
 
-test("a prompt's outcome reaches the other members uncorrelated, so the elected notifier sees a peer's failure", async () => {
-  const h = harness(),
-    a = await h.table.open(h.a, { sessionId: SAVED, launch });
-  await h.table.open(h.b, { sessionId: SAVED, launch });
-  h.table.release(h.a, a.ch);
-  h.table.release(h.b, a.ch);
-  h.table.stdin(h.a, a.ch, cmd(1000, "prompt", { message: "hi" }));
-  h.table.stdin(h.a, a.ch, cmd(1001, "prompt", { message: "again" }));
-  const [first, second] = own(h.children[0]);
-  h.children[0].emit({
-    t: "prompt_result",
-    id: first.id,
-    agentInvoked: true,
-    status: "error",
-    error: { message: "boom" },
+test("the controller can answer a recovered dialog only once", async () => {
+  const h = harness();
+  const { ch } = await h.table.open(h.a, { sessionId: SAVED, launch });
+  h.table.release(h.a, ch);
+  const request = { t: "ui_request", id: 7, method: "askDialog", args: [] };
+  h.children[0].emit(request);
+  h.table.linkDown(h.a);
+  h.table.linkUp(h.a);
+  const reopened = await h.table.open(h.a, {
+    sessionId: SAVED,
+    launch,
+    expectedChannel: ch,
   });
-  h.children[0].emit({
-    t: "prompt_error",
-    id: second.id,
-    command: "prompt",
-    error: "No API key",
-  });
-  const outcomes = (frames: { t: string; id?: string | number }[]) =>
-    frames.filter((frame) =>
-      ["prompt_result", "prompt_error", "peer_prompt_outcome"].includes(
-        frame.t,
-      ),
-    );
+  assert.equal(reopened.ch, ch);
+  assert.ok(reopened.pending?.some((line) => JSON.parse(line).id === 7));
+  h.table.release(h.a, ch);
+  const reply = (result: string) =>
+    JSON.stringify({ t: "ui_response", id: 7, result });
+  h.table.stdin(h.a, ch, reply("first"));
+  h.table.stdin(h.a, ch, reply("second"));
   assert.deepEqual(
-    outcomes(stdoutFrames(h, "l1")).map((frame) => [frame.t, frame.id]),
-    [
-      ["prompt_result", 1000],
-      ["prompt_error", 1001],
-    ],
+    h.children[0].writes
+      .filter(({ t }) => t === "ui_response")
+      .map(({ result }) => result),
+    ["first"],
   );
-  assert.deepEqual(outcomes(stdoutFrames(h, "l2")), [
-    {
-      t: "peer_prompt_outcome",
-      outcome: {
-        t: "prompt_result",
-        agentInvoked: true,
-        status: "error",
-        error: { message: "boom" },
-      },
-    },
-    {
-      t: "peer_prompt_outcome",
-      outcome: { t: "prompt_error", command: "prompt", error: "No API key" },
-    },
-  ]);
   await h.table.stop();
 });
 
@@ -801,7 +588,6 @@ test("an adopted channel has no idle stop and is never recorded as running", asy
     );
     assert.equal(h.table.size, 1);
     ev(h.children[0], { type: "agent_start" });
-    assert.equal(h.table.activeTurns, 1);
     assert.deepEqual(h.table.running(), []);
     await control.table.stop();
     await h.table.stop();
@@ -811,7 +597,7 @@ test("an adopted channel has no idle stop and is never recorded as running", asy
   }
 });
 
-test("shared removal never kills; permanent removal during spawn cannot attach a dead shared member", async () => {
+test("permanent controller removal leaves the child alive and prevents a stale open from attaching", async () => {
   const removed = harness();
   await removed.table.open(removed.a, { sessionId: SAVED, launch });
   removed.table.linkGone(removed.a);
@@ -831,8 +617,8 @@ test("shared removal never kills; permanent removal during spawn cannot attach a
   );
   const opened = await b;
   assert.deepEqual(
-    shared.table.members(opened.ch).map((link) => link.id),
-    ["l2"],
+    shared.table.listing(shared.b).map((channel) => channel.ch),
+    [opened.ch],
   );
   assert.equal(shared.children.length, 1);
   await shared.table.stop();
@@ -883,7 +669,7 @@ for (const operation of ["open", "delete"]) {
       });
       h.children[0].emit({ t: "session", sessionId: MOVED, sessionFile: fork });
       if (operation === "open") {
-        const reopened = await h.table.open(h.b, {
+        const reopened = await h.table.open(h.a, {
           sessionId: SAVED,
           launch: { ...launch, sessionFile: parent },
         });
@@ -929,7 +715,7 @@ test("a native copy-on-write move retains aliases even while the original file s
     h.children[0].emit({ t: "session", sessionId: MOVED, sessionFile: moved });
     assert.equal(
       (
-        await h.table.open(h.b, {
+        await h.table.open(h.a, {
           sessionId: SAVED,
           launch: { ...launch, sessionFile: parent },
         })
@@ -938,7 +724,7 @@ test("a native copy-on-write move retains aliases even while the original file s
     );
     assert.equal(
       (
-        await h.table.open(h.b, {
+        await h.table.open(h.a, {
           sessionId: MOVED,
           launch: { ...launch, sessionFile: moved },
         })
@@ -959,7 +745,7 @@ test("a new source's preparation lease survives startup until its first command 
     launch,
     preparing: true,
   });
-  const protectedJoin = await h.table.open(h.b, {
+  const protectedJoin = await h.table.open(h.a, {
     sessionId: SAVED,
     launch: { ...launch, advisor: true },
     replaceAdvisor: true,
@@ -967,7 +753,7 @@ test("a new source's preparation lease survives startup until its first command 
   assert.equal(protectedJoin.ch, first.ch);
   assert.deepEqual(h.children[0].kills, []);
   h.table.setInterest(h.a, first.ch, true, false);
-  const changed = await h.table.open(h.b, {
+  const changed = await h.table.open(h.a, {
     sessionId: SAVED,
     launch: { ...launch, advisor: true },
     replaceAdvisor: true,
@@ -1034,39 +820,6 @@ test("destructive operations on an old copy-on-write file never retarget its liv
   }
 });
 
-test("explicit close releases only its own preparation handoff, including startup failure cleanup", async () => {
-  const h = harness();
-  const first = await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch,
-    preparing: true,
-  });
-  await h.table.open(h.b, { sessionId: SAVED, launch, preparing: true });
-  h.table.close(h.a, first.ch);
-  const held = await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch: { ...launch, advisor: true },
-    replaceAdvisor: true,
-  });
-  assert.equal(
-    held.ch,
-    first.ch,
-    "the other member's preparation remains protected",
-  );
-  h.table.close(h.b, first.ch);
-  const replaced = await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch: { ...launch, advisor: true },
-    replaceAdvisor: true,
-  });
-  assert.notEqual(
-    replaced.ch,
-    first.ch,
-    "closed members leave no residual preparation lease",
-  );
-  await h.table.stop();
-});
-
 test("a recovering run is protected from a competing advisor open before its resume prompt starts", async () => {
   const h = harness();
   const [, joined] = await Promise.all([
@@ -1110,47 +863,6 @@ test("a session frame updates the listing even in the middle of a run", async ()
   } finally {
     await h.table.stop();
   }
-});
-
-test("a history-edit lease refuses a competing editor and other links' mutations until released, dropped or closed", async () => {
-  const h = harness(),
-    a = await h.table.open(h.a, { sessionId: SAVED, launch });
-  await h.table.open(h.b, { sessionId: SAVED, launch });
-  h.table.release(h.a, a.ch);
-  h.table.release(h.b, a.ch);
-  const prompts = () =>
-    h.children[0].writes
-      .filter((frame) => frame.op === "prompt")
-      .map((frame) => frame.args.message);
-  h.table.editLease(h.a, a.ch, true);
-  assert.throws(
-    () => h.table.editLease(h.b, a.ch, true),
-    { status: 409, code: "session_busy" },
-    "a competing editor fails before its preflight",
-  );
-  h.table.editLease(h.b, a.ch, false); // Releasing a lease it does not hold changes nothing.
-  h.table.stdin(h.b, a.ch, cmd("peer", "prompt", { message: "peer" }));
-  h.table.stdin(h.b, a.ch, cmd("read", "get_messages"));
-  h.table.stdin(h.a, a.ch, cmd("edit", "prompt", { message: "edit" }));
-  assert.deepEqual(prompts(), ["edit"]);
-  assert.ok(
-    h.children[0].writes.some((frame) => frame.op === "get_messages"),
-    "reads are never fenced",
-  );
-  const refused = stdoutFrames(h, "l2").find((frame) => frame.id === "peer");
-  assert.equal(refused?.code, "session_busy");
-  h.table.editLease(h.a, a.ch, false);
-  h.table.editLease(h.b, a.ch, true);
-  h.table.editLease(h.b, a.ch, false); // Free again: B may take it.
-  h.table.stdin(h.b, a.ch, cmd("after", "prompt", { message: "after" }));
-  h.table.editLease(h.a, a.ch, true);
-  h.table.linkDown(h.a); // A restarted server forgets its edit.
-  h.table.stdin(h.b, a.ch, cmd("dropped", "prompt", { message: "dropped" }));
-  h.table.editLease(h.a, a.ch, true);
-  h.table.close(h.a, a.ch);
-  h.table.stdin(h.b, a.ch, cmd("closed", "prompt", { message: "closed" }));
-  assert.deepEqual(prompts(), ["edit", "after", "dropped", "closed"]);
-  await h.table.stop();
 });
 
 test("an exit between join and the open result's release still reaches the joining link", async () => {
@@ -1241,7 +953,7 @@ test("a resumed session stays recorded as running between omp's reply and agent_
   await h.table.stop();
 });
 
-test("a pooled creation joins across shared links once and cannot change intent or restart after exit", async (t) => {
+test("a creation identity joins once and cannot change intent or restart after exit", async (t) => {
   const h = harness();
   t.after(() => h.table.stop());
   const created = {
@@ -1251,25 +963,13 @@ test("a pooled creation joins across shared links once and cannot change intent 
   };
   const [first, joined] = await Promise.all([
     h.table.open(h.a, { sessionId: null, launch: created, preparing: true }),
-    h.table.open(h.b, { sessionId: null, launch: created, preparing: true }),
+    h.table.open(h.a, { sessionId: null, launch: created, preparing: true }),
   ]);
   assert.equal(h.children.length, 1);
   assert.equal(first.ch, joined.ch);
   assert.equal(h.table.listing(h.b)[0].creationId, created.creationId);
   h.table.release(h.a, first.ch);
-  h.table.release(h.b, first.ch);
-  ev(h.children[0], { type: "agent_start" });
-  assert.equal(
-    h.table.activeTurns,
-    1,
-    "the shared child is counted once, not once per web app",
-  );
-  ev(h.children[0], { type: "agent_end", isTerminal: true });
-  assert.equal(
-    h.table.activeTurns,
-    0,
-    "an unsettled but idle child is not an executing turn",
-  );
+  h.table.release(h.a, first.ch);
   await assert.rejects(
     h.table.open(h.a, {
       sessionId: null,
@@ -1432,7 +1132,7 @@ test("blocking workspace setup fences new starts but permits joining existing ch
       launch: { ...workspace, sessionFile: "/tmp/s.jsonl" },
     });
     setStage("postBlocking");
-    await h.table.open(h.b, {
+    await h.table.open(h.a, {
       sessionId: SAVED,
       launch: workspace,
       expectedChannel: existing.ch,
@@ -1462,8 +1162,16 @@ test("blocking workspace setup fences new starts but permits joining existing ch
 test("browser requests use only the exact live session and never spawn one", async () => {
   const h = harness();
   assert.deepEqual(await h.table.browserCommand(SAVED), { tabs: [] });
-  await assert.rejects(h.table.browserCommand(SAVED, "tab-1"), { code: "session_not_running" });
-  await assert.rejects(h.table.browserControl(SAVED, { id: "tab-1", actions: [{ type: "reload" }] }), { code: "session_not_running" });
+  await assert.rejects(h.table.browserCommand(SAVED, "tab-1"), {
+    code: "session_not_running",
+  });
+  await assert.rejects(
+    h.table.browserControl(SAVED, {
+      id: "tab-1",
+      actions: [{ type: "reload" }],
+    }),
+    { code: "session_not_running" },
+  );
   assert.equal(h.children.length, 0);
 
   const opened = await h.table.open(h.a, { sessionId: SAVED, launch });
@@ -1473,15 +1181,31 @@ test("browser requests use only the exact live session and never spawn one", asy
   const listCommand = own(child).at(-1)!;
   assert.equal(listCommand.op, "browser_list");
   assert.deepEqual(listCommand.args, {});
-  child.emit({ t: "res", id: listCommand.id, ok: true, data: { tabs: [{ id: "tab-1", title: "Page", url: "https://example.org" }] } });
-  assert.deepEqual(await listing, { tabs: [{ id: "tab-1", title: "Page", url: "https://example.org" }] });
+  child.emit({
+    t: "res",
+    id: listCommand.id,
+    ok: true,
+    data: {
+      tabs: [{ id: "tab-1", title: "Page", url: "https://example.org" }],
+    },
+  });
+  assert.deepEqual(await listing, {
+    tabs: [{ id: "tab-1", title: "Page", url: "https://example.org" }],
+  });
 
   const capture = h.table.browserCommand(SAVED, "tab-1");
   const captureCommand = own(child).at(-1)!;
   assert.equal(captureCommand.op, "browser_capture");
   assert.deepEqual(captureCommand.args, { id: "tab-1" });
-  await assert.rejects(h.table.browserCommand(SAVED, "tab-1"), { code: "browser_request_busy" });
-  child.emit({ t: "res", id: captureCommand.id, ok: true, data: { mimeType: "image/jpeg", data: "/9j/2Q==" } });
+  await assert.rejects(h.table.browserCommand(SAVED, "tab-1"), {
+    code: "browser_request_busy",
+  });
+  child.emit({
+    t: "res",
+    id: captureCommand.id,
+    ok: true,
+    data: { mimeType: "image/jpeg", data: "/9j/2Q==" },
+  });
   assert.deepEqual(await capture, { mimeType: "image/jpeg", data: "/9j/2Q==" });
   const controlArgs = { id: "tab-1", actions: [{ type: "reload" as const }] };
   const control = h.table.browserControl(SAVED, controlArgs);
@@ -1490,7 +1214,9 @@ test("browser requests use only the exact live session and never spawn one", asy
   assert.deepEqual(controlCommand.args, controlArgs);
   child.emit({ t: "res", id: controlCommand.id, ok: true, data: {} });
   assert.deepEqual(await control, {});
-  await assert.rejects(h.table.browserControl(MOVED, controlArgs), { code: "session_not_running" });
+  await assert.rejects(h.table.browserControl(MOVED, controlArgs), {
+    code: "session_not_running",
+  });
   assert.deepEqual(await h.table.browserCommand(MOVED), { tabs: [] });
   await h.table.stop();
 });

@@ -46,7 +46,6 @@ const settingsProps = {
   onOpenUrlAutomaticallyChange: noop,
   cwd: null,
   remoteHost: false,
-  cluster: false,
   sessionId: null,
   onModelsSaved: noop,
   onPluginsReloaded: noop,
@@ -57,13 +56,14 @@ const settingsProps = {
 function fakeSettings(
   t: TestContext,
   stored: { uploadRetentionDays: number | null },
+  endpoint = "/api/web-settings?hostId=local",
 ) {
   const puts: Array<BodyInit | null | undefined> = [];
   let putStatus = 200;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = Object.assign(
     async (url: RequestInfo | URL, init?: RequestInit) => {
-      if (String(url) !== "/api/web-settings") return Response.json({});
+      if (String(url) !== endpoint) return Response.json({});
       if (init?.method === "PUT") {
         puts.push(init.body);
         return Response.json({}, { status: putStatus });
@@ -129,4 +129,28 @@ test("a retention set through the API stays visible as its own choice", async (t
     within(list).getAllByRole("option").at(-1)?.textContent,
     "14 days",
   );
+});
+
+test("upload retention reads and writes the selected host", async (t) => {
+  const hostId = "laptop";
+  const { puts } = fakeSettings(
+    t,
+    { uploadRetentionDays: 7 },
+    `/api/web-settings?hostId=${hostId}`,
+  );
+  const { container } = render(
+    createElement(SettingsConfig, {
+      ...settingsProps,
+      remoteHost: true,
+      hostId,
+    }),
+  );
+  await settle();
+  const select = within(container).getByRole("combobox", {
+    name: "Delete sent uploads after",
+  });
+  assert.equal(select.textContent, "7 days");
+  await choose(select, "Never");
+  await settle();
+  assert.deepEqual(puts, ['{"uploadRetentionDays":null}']);
 });

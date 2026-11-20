@@ -79,7 +79,6 @@ function link(
 ) {
   return new DaemonLink({ url: server.url, token: "test" }, id, {
     allowHttp: false,
-    primary: id === "l1",
     hello: (link) =>
       encodeLine({
         type: "hello",
@@ -90,7 +89,6 @@ function link(
         autoApproveExtension: false,
         ack: link.ackedDown,
         channels: [],
-        link: { id: link.id, notifier: false },
       }),
     handleDown() {},
     onEnd: (link, reason) => ends.push([link.id, reason]),
@@ -98,79 +96,35 @@ function link(
   });
 }
 
-test("a server below the minimum protocol ends only its own link and leaves the other live", async (t) => {
-  const a = hub(t),
-    b = hub(t, LINK_PROTOCOL_VERSION - 1),
-    ends: [string, "revoked" | "replaced" | "version"][] = [],
-    la = link(a, "l1", ends),
-    lb = link(b, "l2", ends);
-  t.after(async () => {
-    await Promise.all([la.stop(), lb.stop()]);
-  });
-  la.start();
-  lb.start();
-  await until(() => la.isUp() && ends.length === 1);
-  assert.equal(a.hellos[0].link.id, "l1");
-  assert.equal(b.hellos[0].link.id, "l2");
-  assert.equal(b.hellos.at(-1)!.v, LINK_PROTOCOL_VERSION);
-  assert.deepEqual(ends, [["l2", "version"]]);
-  assert.equal(lb.isUp(), false);
-  assert.equal(la.isUp(), true);
-  la.queue({ type: "sessions_changed" }, "sessions");
-  await until(() => a.messages.some((m) => m.type === "sessions_changed"));
+test("a v13 controller cannot establish a v14 link", async (t) => {
+  const server = hub(t, 13);
+  const ends: [string, "revoked" | "replaced" | "version"][] = [];
+  const connection = link(server, "controller", ends);
+  t.after(() => connection.stop());
+  connection.start();
+  await until(() => ends.length === 1);
+  assert.equal(server.hellos[0].v, 14);
+  assert.deepEqual(ends, [["controller", "version"]]);
+  assert.equal(connection.isUp(), false);
 });
 
-test("overflow preserves numbered sequence records and resyncs only its own link", async (t) => {
-  const a = hub(t),
-    b = hub(t),
-    ends: [string, "revoked" | "replaced" | "version"][] = [],
-    la = link(a, "l1", ends),
-    lb = link(b, "l2", ends);
-  t.after(async () => {
-    await Promise.all([la.stop(), lb.stop()]);
-  });
-  la.start();
-  lb.start();
-  await until(() => la.isUp() && lb.isUp());
+test("overflow preserves numbered sequence records and requests resync", async (t) => {
+  const server = hub(t),
+    connection = link(server, "controller", []);
+  t.after(() => connection.stop());
+  connection.start();
+  await until(() => connection.isUp());
   const old = LINK_LIMITS.channelBufferBytes;
   LINK_LIMITS.channelBufferBytes = 1000;
   t.after(() => {
     LINK_LIMITS.channelBufferBytes = old;
   });
-  la.output({ type: "stdout", ch: "c", line: "x".repeat(2000) }, "s");
-  lb.output({ type: "stdout", ch: "c", line: "ok" }, "s");
-  await until(
-    () =>
-      a.messages.some((m) => m.type === "resync") &&
-      b.messages.some((m) => m.type === "stdout"),
-  );
-  assert.equal(
-    b.messages.some((m) => m.type === "resync"),
-    false,
-  );
+  connection.output({ type: "stdout", ch: "c", line: "x".repeat(2000) }, "s");
+  await until(() => server.messages.some((m) => m.type === "resync"));
   assert.deepEqual(
-    a.messages.map((m) => m.seq),
-    a.messages.map((_, i) => i + 1),
+    server.messages.map((m) => m.seq),
+    server.messages.map((_, i) => i + 1),
   );
-});
-
-test("token rotation keeps the logical link and leaves the other socket alone", async (t) => {
-  const a = hub(t),
-    b = hub(t),
-    ends: [string, "revoked" | "replaced" | "version"][] = [],
-    la = link(a, "l1", ends),
-    lb = link(b, "l2", ends);
-  t.after(async () => {
-    await Promise.all([la.stop(), lb.stop()]);
-  });
-  la.start();
-  lb.start();
-  await until(() => la.isUp() && lb.isUp());
-  la.rekey("new-token");
-  await until(() => a.hellos.length === 2);
-  assert.equal(a.hellos[1].link.id, "l1");
-  assert.equal(b.hellos.length, 1);
-  assert.deepEqual(ends, []);
 });
 
 test("a fresh snapshot discards old output without discarding its queued open result", async (t) => {
@@ -193,23 +147,17 @@ test("a fresh snapshot discards old output without discarding its queued open re
   );
 });
 
-test("reliable results hold their own link busy until acknowledged without blocking another link", async (t) => {
-  const a = hub(t),
-    b = hub(t),
-    la = link(a, "l1", []),
-    lb = link(b, "l2", []);
-  t.after(async () => {
-    await Promise.all([la.stop(), lb.stop()]);
-  });
-  la.start();
-  lb.start();
-  await until(() => la.isUp() && lb.isUp());
-  la.result("held-result", { native: true });
-  assert.equal(la.busy(), true);
-  assert.equal(lb.busy(), false);
+test("reliable results hold the link busy until acknowledged", async (t) => {
+  const server = hub(t),
+    connection = link(server, "controller", []);
+  t.after(() => connection.stop());
+  connection.start();
+  await until(() => connection.isUp());
+  connection.result("held-result", { native: true });
+  assert.equal(connection.busy(), true);
   await until(
     () =>
-      a.messages.some((message) => message.id === "held-result") && !la.busy(),
+      server.messages.some((message) => message.id === "held-result") &&
+      !connection.busy(),
   );
-  assert.equal(lb.isUp(), true);
 });

@@ -476,7 +476,7 @@
       },
       "BrowserCommand": {
         "contentType": "application/json",
-        "description": "Agent command for an existing session. rid is scoped to session for deduplication, not globally; a reply reports dispatch outcome and is not necessarily completion of the resulting turn. advisor selects the advisor.",
+        "description": "Agent command for an existing session. rid is scoped to (hostId, session) for deduplication. session is the raw session ID; omitted hostId selects local. A reply reports dispatch outcome, not necessarily completion of the resulting turn.",
         "name": "BrowserCommand",
         "payload": {
           "$ref": "#/components/schemas/BrowserCommand"
@@ -2237,7 +2237,7 @@
         "type": "object"
       },
       "BrowserCommand": {
-        "description": "Agent command for an existing session. rid is scoped to session for deduplication, not globally; a reply reports dispatch outcome and is not necessarily completion of the resulting turn. advisor selects the advisor.",
+        "description": "Agent command for an existing session. rid is scoped to (hostId, session) for deduplication. session is the raw session ID; omitted hostId selects local. A reply reports dispatch outcome, not necessarily completion of the resulting turn.",
         "properties": {
           "advisor": {
             "type": "boolean"
@@ -4833,6 +4833,9 @@
             ],
             "description": "Every accepted existing-session agent command. ensure_session belongs only to POST /api/agent/new.",
             "title": "AgentCommand"
+          },
+          "hostId": {
+            "type": "string"
           },
           "rid": {
             "type": "string"
@@ -43753,7 +43756,7 @@
                 "title": "AgentEvent"
               },
               {
-                "description": "Unlike GET /hosts, a live snapshot omits pools while pools.json is unreadable so clients retain their last successful pool state.",
+                "description": "Independent hosts, local first. Matches GET /api/hosts.",
                 "properties": {
                   "hosts": {
                     "items": {
@@ -43989,140 +43992,6 @@
                       ]
                     },
                     "type": "array"
-                  },
-                  "pools": {
-                    "items": {
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "id": {
-                          "type": "string"
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "members": {
-                          "items": {
-                            "properties": {
-                              "draining": {
-                                "type": "boolean"
-                              },
-                              "hostId": {
-                                "type": "string"
-                              },
-                              "projectsRoot": {
-                                "type": "string"
-                              },
-                              "provisioned": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "hostId",
-                              "projectsRoot",
-                              "provisioned",
-                              "draining"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "projects": {
-                          "items": {
-                            "allOf": [
-                              {
-                                "description": "Persisted project registry entry, including hidden entries.",
-                                "properties": {
-                                  "addedAt": {
-                                    "description": "ISO timestamp of the latest explicit add.",
-                                    "type": "string"
-                                  },
-                                  "alias": {
-                                    "type": "string"
-                                  },
-                                  "hidden": {
-                                    "description": "Hidden entries suppress sidebar rediscovery until added again.",
-                                    "type": "boolean"
-                                  },
-                                  "launchConfig": {
-                                    "description": "Workspace-level omp launch configuration; only affects omp children spawned for that workspace.",
-                                    "properties": {
-                                      "advisor": {
-                                        "description": "Whether to launch with advisor mode.",
-                                        "type": "boolean"
-                                      },
-                                      "extraArgs": {
-                                        "description": "Extra OMP CLI args, stored as an array.",
-                                        "items": {
-                                          "type": "string"
-                                        },
-                                        "type": "array"
-                                      },
-                                      "profile": {
-                                        "description": "The OMP profile to use.",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "type": "object"
-                                  },
-                                  "pinOrder": {
-                                    "type": "number"
-                                  },
-                                  "sortOrder": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": ["addedAt", "hidden"],
-                                "type": "object"
-                              },
-                              {
-                                "properties": {
-                                  "clonePaths": {
-                                    "patternProperties": {
-                                      "^(.*)$": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "type": "object"
-                                  },
-                                  "defaultRef": {
-                                    "type": "string"
-                                  },
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "name": {
-                                    "type": "string"
-                                  },
-                                  "origin": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "id",
-                                  "name",
-                                  "origin",
-                                  "clonePaths"
-                                ],
-                                "type": "object"
-                              }
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "label",
-                        "enabled",
-                        "members",
-                        "projects"
-                      ],
-                      "type": "object"
-                    },
-                    "type": "array"
                   }
                 },
                 "required": ["hosts"],
@@ -44240,12 +44109,15 @@
                   "filePath": {
                     "type": "string"
                   },
+                  "hostId": {
+                    "type": "string"
+                  },
                   "type": {
                     "const": "connected",
                     "type": "string"
                   }
                 },
-                "required": ["type", "filePath"],
+                "required": ["type", "filePath", "hostId"],
                 "type": "object"
               },
               {
@@ -44316,7 +44188,7 @@
                   },
                   "runningSessions": {
                     "items": {
-                      "description": "A live RPC session advertised to running-session subscribers; hostId is omitted when unavailable and awaitingInput is present only when true.",
+                      "description": "A live RPC session on the named host. awaitingInput is present only when true.",
                       "properties": {
                         "awaitingInput": {
                           "const": true,
@@ -44328,7 +44200,7 @@
                           "type": "string"
                         },
                         "hostId": {
-                          "description": "Owning host when known.",
+                          "description": "Owning host, including local.",
                           "type": "string"
                         },
                         "id": {
@@ -44336,7 +44208,7 @@
                           "type": "string"
                         }
                       },
-                      "required": ["id", "cwd"],
+                      "required": ["id", "cwd", "hostId"],
                       "title": "RunningRpcSession",
                       "type": "object"
                     },
@@ -44361,9 +44233,18 @@
                     "const": true,
                     "type": "boolean"
                   },
-                  "sessionIds": {
+                  "sessions": {
                     "items": {
-                      "type": "string"
+                      "properties": {
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["sessionId", "hostId"],
+                      "type": "object"
                     },
                     "type": "array"
                   },
@@ -44372,11 +44253,26 @@
                     "type": "string"
                   }
                 },
-                "required": ["type", "sessionIds", "refreshSessionList"],
+                "required": ["type", "sessions", "refreshSessionList"],
                 "type": "object"
               },
               {
                 "properties": {
+                  "openSessions": {
+                    "items": {
+                      "properties": {
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["sessionId", "hostId"],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "sessionIds": {
                     "items": {
                       "type": "string"
@@ -44384,7 +44280,7 @@
                     "type": "array"
                   }
                 },
-                "required": ["sessionIds"],
+                "required": ["sessionIds", "openSessions"],
                 "type": "object"
               },
               {
@@ -44418,6 +44314,10 @@
                           },
                           "from": {
                             "description": "Previous model for a model-switch event.",
+                            "type": "string"
+                          },
+                          "hostId": {
+                            "description": "Conversation host; absent for historical notifications without provenance and test pushes.",
                             "type": "string"
                           },
                           "sessionId": {
@@ -44548,6 +44448,9 @@
                   },
                   {
                     "properties": {
+                      "hostId": {
+                        "type": "string"
+                      },
                       "sessionId": {
                         "type": "string"
                       },
@@ -44559,7 +44462,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["type", "sessionId", "targetId"],
+                    "required": ["type", "sessionId", "hostId", "targetId"],
                     "type": "object"
                   }
                 ],
@@ -75105,6 +75008,9 @@
               },
               {
                 "properties": {
+                  "hostId": {
+                    "type": "string"
+                  },
                   "kind": {
                     "const": "open-chat",
                     "type": "string"
@@ -75157,6 +75063,9 @@
               },
               {
                 "properties": {
+                  "hostId": {
+                    "type": "string"
+                  },
                   "kind": {
                     "const": "session",
                     "type": "string"
@@ -75170,6 +75079,9 @@
               },
               {
                 "properties": {
+                  "hostId": {
+                    "type": "string"
+                  },
                   "kind": {
                     "const": "commit-plan-progress",
                     "type": "string"
@@ -75228,7 +75140,7 @@
                 "type": "object"
               }
             ],
-            "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. The parser additionally validates identifiers and paths. A file's null sessionId selects no session; an omitted hostId uses the default resolution.",
+            "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. Session, open-chat, and commit-plan progress channels take a raw session ID and default an omitted hostId to local. The parser validates identifiers and paths. A file's null sessionId selects no session.",
             "title": "EventStreamChannel"
           },
           "id": {

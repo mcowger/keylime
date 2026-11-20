@@ -91,17 +91,21 @@ import {
   buildFileLineMentionText,
 } from "@/lib/file-fuzzy";
 import { getInitialNavigation } from "@/lib/initial-navigation";
+import { sessionKey, sessionUrl } from "@/lib/session-identity";
 import { comparableProjectPath } from "@/lib/comparable-path";
 import {
   hostProjectKey,
   LOCAL_HOST_ID,
-  newChatDraftKey,
   remoteHostId,
 } from "@/lib/project-ordering";
 import { useHostRows } from "@/hooks/useHostRows";
 import { LocalDaemonBanner } from "./LocalDaemonBanner";
 import { hostName } from "./host-status";
-import { clearDraft, getDraftRevision, getDraftSummary } from "@/lib/draft-store";
+import {
+  clearDraft,
+  getDraftRevision,
+  getDraftSummary,
+} from "@/lib/draft-store";
 import { useNotifications } from "@/hooks/useNotifications";
 import {
   PanelLoadingFallback,
@@ -126,7 +130,12 @@ import type { HierarchySnapshot } from "@/lib/project-hierarchy-types";
 import { runHostTool } from "@/hooks/useAgentSession-stream";
 import type { ChatStartupStage } from "@/hooks/useAgentSession";
 import { getOutboxScope, sendAgentCommand } from "@/lib/agent-client";
-import { addToOutbox, newOutboxId, openEventStream, type EventStream } from "@/lib/event-stream";
+import {
+  addToOutbox,
+  newOutboxId,
+  openEventStream,
+  type EventStream,
+} from "@/lib/event-stream";
 import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo, GenerationSpeedInfo } from "@/lib/pi-types";
 import type { SettingsTab } from "./SettingsTabs";
@@ -164,7 +173,7 @@ type ChatTab = {
   cwd: string;
   hostId?: string;
   session: SessionInfo | null;
-  creation: { id?: string; initialization?: string };
+  creation: { id?: string };
   workspaceProject?: string;
   workspaceSource?: string;
   workspaceJob?: WorkspaceCreationJob;
@@ -210,8 +219,6 @@ function loadChatTabs(): ChatTab[] {
           !Array.isArray(tab.creation) &&
           (tab.creation.id === undefined ||
             typeof tab.creation.id === "string") &&
-          (tab.creation.initialization === undefined ||
-            typeof tab.creation.initialization === "string") &&
           (tab.session === null ||
             (tab.session &&
               typeof tab.session.id === "string" &&
@@ -244,9 +251,15 @@ export function AppShell({ appName }: { appName: string }) {
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
   const [shipFlows, setShipFlows] = useState<ShipTarget[]>([]);
   const openShip = useCallback((target: ShipTarget) => {
-    setShipFlows((flows) => flows.some((flow) =>
-      hostProjectKey(flow.host, flow.path) === hostProjectKey(target.host, target.path)
-    ) ? flows : [...flows, target]);
+    setShipFlows((flows) =>
+      flows.some(
+        (flow) =>
+          hostProjectKey(flow.host, flow.path) ===
+          hostProjectKey(target.host, target.path),
+      )
+        ? flows
+        : [...flows, target],
+    );
   }, []);
   // The transient identity belongs to one intentional new chat, not one request attempt.
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
@@ -257,7 +270,6 @@ export function AppShell({ appName }: { appName: string }) {
   );
   const [newSessionCreation, setNewSessionCreation] = useState<{
     id?: string;
-    initialization?: string;
   }>({});
   const [chatTabs, setChatTabs] = useState<ChatTab[]>(loadChatTabs);
   const chatTabsRef = useRef(chatTabs);
@@ -266,12 +278,18 @@ export function AppShell({ appName }: { appName: string }) {
   const [hiddenSharedIds, setHiddenSharedIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const dismissExitedChatRef = useRef<((id: string) => void) | null>(null);
+  const dismissExitedChatRef = useRef<
+    ((id: string, hostId?: string) => void) | null
+  >(null);
   const sharedDiscoveryComplete = useRef(false);
   const membershipStreams = useRef(new Map<string, EventStream>());
   useEffect(() => {
-    const ids = new Set(
-      chatTabs.flatMap((tab) => (tab.session ? [tab.session.id] : [])),
+    const ids = new Map(
+      chatTabs.flatMap(({ session }) =>
+        session
+          ? [[sessionKey(session.id, session.hostId), session] as const]
+          : [],
+      ),
     );
     for (const [id, stream] of membershipStreams.current) {
       if (!ids.has(id)) {
@@ -279,11 +297,15 @@ export function AppShell({ appName }: { appName: string }) {
         membershipStreams.current.delete(id);
       }
     }
-    for (const id of ids) {
+    for (const [id, session] of ids) {
       if (!membershipStreams.current.has(id))
         membershipStreams.current.set(
           id,
-          openEventStream({ kind: "open-chat", sessionId: id }),
+          openEventStream({
+            kind: "open-chat",
+            sessionId: session.id,
+            hostId: session.hostId ?? LOCAL_HOST_ID,
+          }),
         );
     }
   }, [chatTabs]);
@@ -300,13 +322,17 @@ export function AppShell({ appName }: { appName: string }) {
     let closed = false;
     source.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as { sessionIds?: unknown };
-        if (
-          !Array.isArray(data.sessionIds) ||
-          !data.sessionIds.every((id) => typeof id === "string")
-        )
-          return;
-        const ids: string[] = data.sessionIds;
+        const data = JSON.parse(event.data) as {
+          openSessions?: Array<{ sessionId: string; hostId: string }>;
+        };
+        if (!Array.isArray(data.openSessions)) return;
+        const ids = data.openSessions
+          .filter(
+            (entry) =>
+              typeof entry?.sessionId === "string" &&
+              typeof entry.hostId === "string",
+          )
+          .map(({ sessionId, hostId }) => sessionKey(sessionId, hostId));
         setOpenSessionIds(ids);
         setHiddenSharedIds(
           (hidden) => new Set([...hidden].filter((id) => ids.includes(id))),
@@ -320,18 +346,27 @@ export function AppShell({ appName }: { appName: string }) {
         }
         void fetch("/api/sessions")
           .then(async (response) => {
-            if (!response.ok) { if (!closed && current === version) sharedDiscoveryComplete.current = true; return; }
+            if (!response.ok) {
+              if (!closed && current === version)
+                sharedDiscoveryComplete.current = true;
+              return;
+            }
             const result = (await response.json()) as {
               sessions: SessionInfo[];
             };
             if (!closed && current === version) {
               sharedDiscoveryComplete.current = true;
               setSharedSessions(
-                result.sessions.filter((session) => ids.includes(session.id)),
+                result.sessions.filter((session) =>
+                  ids.includes(sessionKey(session.id, session.hostId)),
+                ),
               );
             }
           })
-          .catch(() => { if (!closed && current === version) sharedDiscoveryComplete.current = true; });
+          .catch(() => {
+            if (!closed && current === version)
+              sharedDiscoveryComplete.current = true;
+          });
       } catch {
         // Ignore malformed event frames.
       }
@@ -343,17 +378,22 @@ export function AppShell({ appName }: { appName: string }) {
   }, []);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
-  const [chatStartup, setChatStartup] = useState<Partial<Record<string, ChatStartupStage>>>({});
-  const updateStartupStage = useCallback((stage: ChatStartupStage | undefined) => {
-    if (!activeChatId) return;
-    setChatStartup((previous) => {
-      if (previous[activeChatId] === stage) return previous;
-      const next = { ...previous };
-      if (stage) next[activeChatId] = stage;
-      else delete next[activeChatId];
-      return next;
-    });
-  }, [activeChatId]);
+  const [chatStartup, setChatStartup] = useState<
+    Partial<Record<string, ChatStartupStage>>
+  >({});
+  const updateStartupStage = useCallback(
+    (stage: ChatStartupStage | undefined) => {
+      if (!activeChatId) return;
+      setChatStartup((previous) => {
+        if (previous[activeChatId] === stage) return previous;
+        const next = { ...previous };
+        if (stage) next[activeChatId] = stage;
+        else delete next[activeChatId];
+        return next;
+      });
+    },
+    [activeChatId],
+  );
   const buildingWorkspaceProjects = useMemo(() => {
     const projects = new Set<string>();
     for (const tab of chatTabs) {
@@ -364,8 +404,17 @@ export function AppShell({ appName }: { appName: string }) {
     return projects;
   }, [chatTabs, chatStartup]);
   const visitedWorkspaces = useRef(new Set<string>());
-  const pendingSharedWorkspace = useRef<{ cwd: string; hostId: string; tabId: string } | null>(null);
-  const pendingWorkspaceDraft = useRef<{ cwd: string; hostId: string; tabId: string; revision: number } | null>(null);
+  const pendingSharedWorkspace = useRef<{
+    cwd: string;
+    hostId: string;
+    tabId: string;
+  } | null>(null);
+  const pendingWorkspaceDraft = useRef<{
+    cwd: string;
+    hostId: string;
+    tabId: string;
+    revision: number;
+  } | null>(null);
   const updateChatTabs = useCallback(
     (update: (tabs: ChatTab[]) => ChatTab[]) => {
       const next = update(chatTabsRef.current);
@@ -382,7 +431,9 @@ export function AppShell({ appName }: { appName: string }) {
     },
     [],
   );
+  const sessionLookupVersion = useRef(0);
   const activateChat = useCallback((tab: ChatTab | null) => {
+    sessionLookupVersion.current += 1;
     if (tab && activeChatIdRef.current === tab.id) {
       setActiveTerminalId(null);
       return;
@@ -407,27 +458,6 @@ export function AppShell({ appName }: { appName: string }) {
     setSessionKey((key) => key + 1);
   }, []);
   const newSessionCreationId = newSessionCreation.id;
-  const handleNewSessionInitialization = useCallback(
-    (initialization: string) => {
-      const tabId = activeChatIdRef.current;
-      updateChatTabs((tabs) =>
-        tabs.map((tab) =>
-          tab.id === tabId &&
-          tab.creation.id === newSessionCreationId &&
-          tab.creation.initialization === undefined
-            ? { ...tab, creation: { ...tab.creation, initialization } }
-            : tab,
-        ),
-      );
-      setNewSessionCreation((current) =>
-        current.id === newSessionCreationId &&
-        current.initialization === undefined
-          ? { ...current, initialization }
-          : current,
-      );
-    },
-    [newSessionCreationId, updateChatTabs],
-  );
   const [workspaceOptions, setWorkspaceOptions] = useState<{
     projects: ManagedProject[];
     selectedProject: string | null;
@@ -444,25 +474,51 @@ export function AppShell({ appName }: { appName: string }) {
     },
     [],
   );
-  const { hosts, pools } = useHostRows();
+  const { hosts } = useHostRows();
   const systemsHosts = useSystemsHosts(hosts);
   const [effortDetails, setEffortDetails] = useState<EffortTarget | null>(null);
-  const effortsByHost = useMemo(() => Object.entries(systemsHosts.byHost).flatMap(([host, state]) =>
-    (state.data?.efforts ?? []).map((effort) => ({ host, effort })),
-  ), [systemsHosts.byHost]);
-  const effortForPath = useCallback((hostId: string, cwd: string) => {
-    const path = comparableProjectPath(cwd);
-    return effortsByHost.filter(({ host, effort }) => {
-      const root = comparableProjectPath(effort.root);
-      return host === hostId && (path === root || path.startsWith(`${root}/`));
-    }).sort((a, b) => Number(a.effort.status === "cleaned") - Number(b.effort.status === "cleaned") || b.effort.root.length - a.effort.root.length)[0]?.effort;
-  }, [effortsByHost]);
-  const navigationProjects = useMemo(() => [
-    ...workspaceOptions.projects,
-    ...effortsByHost.flatMap(({ host, effort }) => effort.status === "ready"
-      ? [effort.root, ...effort.members.filter((member) => member.status === "complete").map((member) => member.path)].map((path) => ({ path, hostId: host }))
-      : []),
-  ], [workspaceOptions.projects, effortsByHost]);
+  const effortsByHost = useMemo(
+    () =>
+      Object.entries(systemsHosts.byHost).flatMap(([host, state]) =>
+        (state.data?.efforts ?? []).map((effort) => ({ host, effort })),
+      ),
+    [systemsHosts.byHost],
+  );
+  const effortForPath = useCallback(
+    (hostId: string, cwd: string) => {
+      const path = comparableProjectPath(cwd);
+      return effortsByHost
+        .filter(({ host, effort }) => {
+          const root = comparableProjectPath(effort.root);
+          return (
+            host === hostId && (path === root || path.startsWith(`${root}/`))
+          );
+        })
+        .sort(
+          (a, b) =>
+            Number(a.effort.status === "cleaned") -
+              Number(b.effort.status === "cleaned") ||
+            b.effort.root.length - a.effort.root.length,
+        )[0]?.effort;
+    },
+    [effortsByHost],
+  );
+  const navigationProjects = useMemo(
+    () => [
+      ...workspaceOptions.projects,
+      ...effortsByHost.flatMap(({ host, effort }) =>
+        effort.status === "ready"
+          ? [
+              effort.root,
+              ...effort.members
+                .filter((member) => member.status === "complete")
+                .map((member) => member.path),
+            ].map((path) => ({ path, hostId: host }))
+          : [],
+      ),
+    ],
+    [workspaceOptions.projects, effortsByHost],
+  );
   const handleWorkspaceOptionsChange = useCallback(
     (
       projects: ManagedProject[],
@@ -479,7 +535,7 @@ export function AppShell({ appName }: { appName: string }) {
   >(() => (initialNavigation.requestedCwd ? "validating" : "idle"));
   const [initialCwdError, setInitialCwdError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [sessionKey, setSessionKey] = useState(0);
+  const [chatMountKey, setSessionKey] = useState(0);
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
   const [explorerRefreshing, setExplorerRefreshing] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
@@ -750,7 +806,6 @@ export function AppShell({ appName }: { appName: string }) {
     branchLeafChangeFnRef.current?.(leafId);
   }, []);
 
-
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
   const [sessionStats, setSessionStats] = useState<SessionStatsInfo | null>(
     null,
@@ -759,14 +814,20 @@ export function AppShell({ appName }: { appName: string }) {
     kind: "idle",
   });
   const autoNameTimerRef = useRef<TimerHandle | undefined>(undefined);
-  const activeSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
+  const activeSessionIdRef = useRef<string | null>(
+    selectedSession
+      ? sessionKey(selectedSession.id, selectedSession.hostId)
+      : null,
+  );
   const activeSettingsTabRef = useRef(settingsTab);
   const archiveRetryTimerRef = useRef<TimerHandle | undefined>(undefined);
   useEffect(() => () => clearTimeout(archiveRetryTimerRef.current), []);
   useLayoutEffect(() => {
-    activeSessionIdRef.current = selectedSession?.id ?? null;
+    activeSessionIdRef.current = selectedSession
+      ? sessionKey(selectedSession.id, selectedSession.hostId)
+      : null;
     activeSettingsTabRef.current = settingsTab;
-  }, [selectedSession?.id, settingsTab]);
+  }, [selectedSession?.id, selectedSession?.hostId, settingsTab]);
   const handleSessionStatsChange = useCallback(
     (stats: SessionStatsInfo | null) => {
       setSessionStats(stats);
@@ -1072,7 +1133,6 @@ export function AppShell({ appName }: { appName: string }) {
     [],
   );
 
-
   // Right panel tabs: Explorer | Git changes | open files (Tauri parity).
   const [fileTabs, setFileTabs] = useState<Tab[]>([]);
   const [activeFileTabId, setActiveFileTabId] = useState<string | null>(null);
@@ -1137,7 +1197,11 @@ export function AppShell({ appName }: { appName: string }) {
   // the dialog records it, and closing could not return focus there.
   const [rightPanelMounted, setRightPanelMounted] = useState(false);
   const rightPanelIsModal =
-    isCompactOverlay && rightPanelMounted && rightPanelOpen && !settingsTab && !planning;
+    isCompactOverlay &&
+    rightPanelMounted &&
+    rightPanelOpen &&
+    !settingsTab &&
+    !planning;
   const rightPanelRef = useModalDialog<HTMLDivElement>({
     onClose: closeRightPanel,
     active: rightPanelIsModal,
@@ -1341,18 +1405,55 @@ export function AppShell({ appName }: { appName: string }) {
       if (discovery === "resolved") {
         const pending = pendingWorkspaceDraft.current;
         pendingWorkspaceDraft.current = null;
-        if (!pending || pending.cwd !== cwd || pending.hostId !== hostId || activeChatIdRef.current !== pending.tabId || !latestSession || activeTerminalId || chatTabsRef.current.find((item) => item.id === pending.tabId)?.session) return;
-        const key = newChatDraftKey(pending.cwd, remoteHostId(hostId));
+        if (
+          !pending ||
+          pending.cwd !== cwd ||
+          pending.hostId !== hostId ||
+          activeChatIdRef.current !== pending.tabId ||
+          !latestSession ||
+          activeTerminalId ||
+          chatTabsRef.current.find((item) => item.id === pending.tabId)?.session
+        )
+          return;
+        const key = sessionKey(`new:tab:${pending.tabId}`, hostId);
         const draft = getDraftSummary(key);
-        if (getDraftRevision(key) !== pending.revision || draft.text || draft.hasAttachments) return;
-        const tab: ChatTab = { id: browserUUID(), cwd: latestSession.cwd, hostId: remoteHostId(latestSession.hostId), session: latestSession, creation: {} };
-        updateChatTabs((tabs) => [...tabs.filter((item) => item.id !== pending.tabId), tab]);
+        if (
+          getDraftRevision(key) !== pending.revision ||
+          draft.text ||
+          draft.hasAttachments
+        )
+          return;
+        const tab: ChatTab = {
+          id: browserUUID(),
+          cwd: latestSession.cwd,
+          hostId: remoteHostId(latestSession.hostId),
+          session: latestSession,
+          creation: {},
+        };
+        updateChatTabs((tabs) => [
+          ...tabs.filter((item) => item.id !== pending.tabId),
+          tab,
+        ]);
         activateChat(tab);
-        router.replace(`?session=${encodeURIComponent(latestSession.id)}`);
+        router.replace(
+          sessionUrl(
+            `?session=${encodeURIComponent(latestSession.id)}`,
+            latestSession.hostId,
+          ),
+        );
         return;
       }
-      if (!synchronized && !(discovery === "pending" && pendingWorkspaceDraft.current?.cwd === cwd && pendingWorkspaceDraft.current.hostId === hostId)) pendingWorkspaceDraft.current = null;
-      const effort = synchronized && cwd ? effortForPath(hostId, cwd) : undefined;
+      if (
+        !synchronized &&
+        !(
+          discovery === "pending" &&
+          pendingWorkspaceDraft.current?.cwd === cwd &&
+          pendingWorkspaceDraft.current.hostId === hostId
+        )
+      )
+        pendingWorkspaceDraft.current = null;
+      const effort =
+        synchronized && cwd ? effortForPath(hostId, cwd) : undefined;
       if (effort?.status !== "ready") setActiveTerminalId(null);
       setActiveCwd(cwd);
       setActiveHostId(remoteHostId(hostId));
@@ -1361,10 +1462,14 @@ export function AppShell({ appName }: { appName: string }) {
       // restore a chat over the selected terminal in this Effort root.
       if (
         effort?.status === "ready" &&
-        cwd && activeTerminalId &&
+        cwd &&
+        activeTerminalId &&
         comparableProjectPath(cwd) === comparableProjectPath(effort.root) &&
-        effort.services.some((service) => service.terminalId === activeTerminalId)
-      ) return;
+        effort.services.some(
+          (service) => service.terminalId === activeTerminalId,
+        )
+      )
+        return;
       if (
         synchronized &&
         chatTabsRef.current.find((tab) => tab.id === activeChatIdRef.current)
@@ -1396,24 +1501,58 @@ export function AppShell({ appName }: { appName: string }) {
       const candidates = chatTabsRef.current.filter((tab) =>
         tabInWorkspace(tab, cwd, hostId, navigationProjects),
       );
-      const shared = sharedSessions.find((session) =>
-        openSessionIds.includes(session.id) && !hiddenSharedIds.has(session.id) &&
-        tabInWorkspace({ id: session.id, cwd: session.cwd, hostId: remoteHostId(session.hostId), session, creation: {} }, cwd, hostId, navigationProjects),
+      const shared = sharedSessions.find(
+        (session) =>
+          openSessionIds.includes(sessionKey(session.id, session.hostId)) &&
+          !hiddenSharedIds.has(sessionKey(session.id, session.hostId)) &&
+          tabInWorkspace(
+            {
+              id: session.id,
+              cwd: session.cwd,
+              hostId: remoteHostId(session.hostId),
+              session,
+              creation: {},
+            },
+            cwd,
+            hostId,
+            navigationProjects,
+          ),
       );
       const existing = shared
-        ? candidates.find((tab) => tab.session?.id === shared.id) ?? {
-            id: browserUUID(), cwd: shared.cwd, hostId: remoteHostId(shared.hostId), session: shared, creation: {},
-          }
+        ? (candidates.find(
+            ({ session }) =>
+              session &&
+              sessionKey(session.id, session.hostId) ===
+                sessionKey(shared.id, shared.hostId),
+          ) ?? {
+            id: browserUUID(),
+            cwd: shared.cwd,
+            hostId: remoteHostId(shared.hostId),
+            session: shared,
+            creation: {},
+          })
         : preferredId === ""
           ? undefined
-          : (candidates.find((tab) => tab.id === preferredId) ?? candidates[0] ?? (latestSession && !hiddenSharedIds.has(latestSession.id) ? {
-              id: browserUUID(), cwd: latestSession.cwd, hostId: remoteHostId(latestSession.hostId), session: latestSession, creation: {},
-            } : undefined));
+          : (candidates.find((tab) => tab.id === preferredId) ??
+            candidates[0] ??
+            (latestSession &&
+            !hiddenSharedIds.has(
+              sessionKey(latestSession.id, latestSession.hostId),
+            )
+              ? {
+                  id: browserUUID(),
+                  cwd: latestSession.cwd,
+                  hostId: remoteHostId(latestSession.hostId),
+                  session: latestSession,
+                  creation: {},
+                }
+              : undefined));
       if (existing) {
         if (!shared && !sharedDiscoveryComplete.current) {
           pendingSharedWorkspace.current = { cwd, hostId, tabId: existing.id };
         }
-        if (!candidates.includes(existing)) updateChatTabs((tabs) => [...tabs, existing]);
+        if (!candidates.includes(existing))
+          updateChatTabs((tabs) => [...tabs, existing]);
         activateChat(existing);
       } else if (allowDraft && !alreadyVisited && preferredId !== "") {
         const tab: ChatTab = {
@@ -1424,13 +1563,19 @@ export function AppShell({ appName }: { appName: string }) {
           creation: { id: browserUUID() },
         };
         if (discovery === "pending") {
-          const key = newChatDraftKey(cwd, remoteHostId(hostId));
+          const key = sessionKey(`new:tab:${tab.id}`, hostId);
           const draft = getDraftSummary(key);
           if (!draft.text && !draft.hasAttachments)
-            pendingWorkspaceDraft.current = { cwd, hostId, tabId: tab.id, revision: getDraftRevision(key) };
+            pendingWorkspaceDraft.current = {
+              cwd,
+              hostId,
+              tabId: tab.id,
+              revision: getDraftRevision(key),
+            };
         }
         updateChatTabs((tabs) => [...tabs, tab]);
-        if (!sharedDiscoveryComplete.current) pendingSharedWorkspace.current = { cwd, hostId, tabId: tab.id };
+        if (!sharedDiscoveryComplete.current)
+          pendingSharedWorkspace.current = { cwd, hostId, tabId: tab.id };
         activateChat(tab);
       } else {
         activateChat(null);
@@ -1440,7 +1585,10 @@ export function AppShell({ appName }: { appName: string }) {
       setActiveTopPanel(null);
       router.replace(
         existing?.session
-          ? `?session=${encodeURIComponent(existing.session.id)}`
+          ? sessionUrl(
+              `?session=${encodeURIComponent(existing.session.id)}`,
+              existing.session.hostId,
+            )
           : "/",
       );
     },
@@ -1462,23 +1610,57 @@ export function AppShell({ appName }: { appName: string }) {
   useEffect(() => {
     const pending = pendingSharedWorkspace.current;
     if (!pending || activeChatIdRef.current !== pending.tabId) return;
-    const session = sharedSessions.find((item) =>
-      openSessionIds.includes(item.id) && !hiddenSharedIds.has(item.id) &&
-      tabInWorkspace({ id: item.id, cwd: item.cwd, hostId: remoteHostId(item.hostId), session: item, creation: {} }, pending.cwd, pending.hostId, navigationProjects),
+    const session = sharedSessions.find(
+      (item) =>
+        openSessionIds.includes(sessionKey(item.id, item.hostId)) &&
+        !hiddenSharedIds.has(sessionKey(item.id, item.hostId)) &&
+        tabInWorkspace(
+          {
+            id: item.id,
+            cwd: item.cwd,
+            hostId: remoteHostId(item.hostId),
+            session: item,
+            creation: {},
+          },
+          pending.cwd,
+          pending.hostId,
+          navigationProjects,
+        ),
     );
     if (!session) {
-      if (sharedDiscoveryComplete.current) pendingSharedWorkspace.current = null;
+      if (sharedDiscoveryComplete.current)
+        pendingSharedWorkspace.current = null;
       return;
     }
     pendingSharedWorkspace.current = null;
-    const existing = chatTabsRef.current.find((item) => item.session?.id === session.id && remoteHostId(item.hostId) === remoteHostId(session.hostId));
-    const tab: ChatTab = existing ?? { id: browserUUID(), cwd: session.cwd, hostId: remoteHostId(session.hostId), session, creation: {} };
+    const existing = chatTabsRef.current.find(
+      ({ session: open }) =>
+        open &&
+        sessionKey(open.id, open.hostId) ===
+          sessionKey(session.id, session.hostId),
+    );
+    const tab: ChatTab = existing ?? {
+      id: browserUUID(),
+      cwd: session.cwd,
+      hostId: remoteHostId(session.hostId),
+      session,
+      creation: {},
+    };
     if (!existing) updateChatTabs((tabs) => [...tabs, tab]);
     activateChat(tab);
-    router.replace(`?session=${encodeURIComponent(session.id)}`);
-  }, [sharedSessions, openSessionIds, hiddenSharedIds, navigationProjects, updateChatTabs, activateChat, router]);
+    router.replace(
+      sessionUrl(`?session=${encodeURIComponent(session.id)}`, session.hostId),
+    );
+  }, [
+    sharedSessions,
+    openSessionIds,
+    hiddenSharedIds,
+    navigationProjects,
+    updateChatTabs,
+    activateChat,
+    router,
+  ]);
 
-  const sessionLookupVersion = useRef(0);
   const handleSelectSession = useCallback(
     (session: SessionInfo, isRestore = false) => {
       if (!isRestore) setPlanning(null);
@@ -1496,8 +1678,9 @@ export function AppShell({ appName }: { appName: string }) {
       }
       const existing = chatTabsRef.current.find(
         (tab) =>
-          tab.session?.id === session.id &&
-          remoteHostId(tab.hostId) === remoteHostId(session.hostId),
+          tab.session &&
+          sessionKey(tab.session.id, tab.session.hostId) ===
+            sessionKey(session.id, session.hostId),
       );
       const tab: ChatTab = existing
         ? {
@@ -1521,17 +1704,22 @@ export function AppShell({ appName }: { appName: string }) {
       if (
         !isRestore &&
         activeChatIdRef.current === tab.id &&
-        session.id === selectedSession?.id
+        activeSessionIdRef.current === sessionKey(session.id, session.hostId)
       )
         return;
       activateChat(tab);
       setInitialSessionRestored(true);
       // Skip router.replace when restoring from the URL: the param is already correct.
       if (!isRestore) {
-        router.replace(`?session=${encodeURIComponent(session.id)}`);
+        router.replace(
+          sessionUrl(
+            `?session=${encodeURIComponent(session.id)}`,
+            session.hostId,
+          ),
+        );
       }
     },
-    [router, isMobile, selectedSession?.id, activateChat, updateChatTabs],
+    [router, isMobile, activateChat, updateChatTabs],
   );
 
   const handleNewSession = useCallback(
@@ -1540,7 +1728,6 @@ export function AppShell({ appName }: { appName: string }) {
       cwd: string | null,
       hostId?: string,
       _project?: ManagedProject,
-      initialization?: string,
       keepSidebarOpen = false,
       workspaceFixed = false,
     ) => {
@@ -1553,7 +1740,10 @@ export function AppShell({ appName }: { appName: string }) {
       if (effort && effort.status !== "ready") return;
       const existing = creationId
         ? chatTabsRef.current.find(
-            (item) => item.creation.id === creationId && !item.session,
+            (item) =>
+              item.creation.id === creationId &&
+              !item.session &&
+              remoteHostId(item.hostId) === remoteHostId(hostId),
           )
         : undefined;
       const tab: ChatTab = existing ?? {
@@ -1561,7 +1751,7 @@ export function AppShell({ appName }: { appName: string }) {
         cwd: effort?.root ?? cwd,
         hostId: remoteHostId(hostId),
         session: null,
-        creation: { id: creationId || browserUUID(), initialization },
+        creation: { id: creationId || browserUUID() },
         workspaceFixed: workspaceFixed || !!effort,
       };
       if (!existing) updateChatTabs((tabs) => [...tabs, tab]);
@@ -1738,19 +1928,22 @@ export function AppShell({ appName }: { appName: string }) {
   } | null>(null);
   const [importingSession, setImportingSession] = useState(false);
   const openLinkedSession = useCallback(
-    async (id: string, restore = false) => {
+    async (id: string, hostId = LOCAL_HOST_ID, restore = false) => {
       const version = ++sessionLookupVersion.current;
       setPendingSessionImport(null);
       try {
         const response = await fetch(
-          `/api/sessions/${encodeURIComponent(id)}?deferThinking&deferMedia&tail=1`,
+          sessionUrl(
+            `/api/sessions/${encodeURIComponent(id)}?deferThinking&deferMedia&tail=1`,
+            hostId,
+          ),
         );
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const detail = (await response.json()) as {
           info: SessionInfo;
           hostId: string;
         };
-        if (!detail.info?.cwd || !detail.hostId)
+        if (!detail.info?.cwd || detail.hostId !== hostId)
           throw new Error("Session location is unavailable");
         const hierarchyResponse = await fetch(
           `/api/hierarchy?host=${encodeURIComponent(detail.hostId)}`,
@@ -1774,8 +1967,16 @@ export function AppShell({ appName }: { appName: string }) {
         if (!workspace?.sessionIds.includes(id)) {
           const systems = await systemsRequest(detail.hostId).catch(() => null);
           if (version !== sessionLookupVersion.current) return;
-          if (systems?.efforts.some((effort) => effort.status === "ready" && effort.sessionIds.includes(id))) {
-            handleSelectSession({ ...detail.info, hostId: detail.hostId }, restore);
+          if (
+            systems?.efforts.some(
+              (effort) =>
+                effort.status === "ready" && effort.sessionIds.includes(id),
+            )
+          ) {
+            handleSelectSession(
+              { ...detail.info, hostId: detail.hostId },
+              restore,
+            );
             return;
           }
         }
@@ -1805,12 +2006,35 @@ export function AppShell({ appName }: { appName: string }) {
   useEffect(() => {
     if (
       initialSessionId &&
-      restoredLinkedSession.current !== initialSessionId
+      restoredLinkedSession.current !==
+        sessionKey(initialSessionId, initialNavigation.hostId)
     ) {
-      restoredLinkedSession.current = initialSessionId;
-      void openLinkedSession(initialSessionId, true);
+      restoredLinkedSession.current = sessionKey(
+        initialSessionId,
+        initialNavigation.hostId,
+      );
+      void openLinkedSession(initialSessionId, initialNavigation.hostId, true);
     }
-  }, [initialSessionId, openLinkedSession]);
+  }, [initialSessionId, initialNavigation.hostId, openLinkedSession]);
+  useEffect(() => {
+    const restore = () => {
+      const { sessionId, hostId } = getInitialNavigation(
+        new URLSearchParams(window.location.search),
+      );
+      if (
+        sessionId &&
+        sessionKey(sessionId, hostId) !== activeSessionIdRef.current
+      ) {
+        void openLinkedSession(sessionId, hostId, true);
+      } else {
+        sessionLookupVersion.current += 1;
+        setPendingSessionImport(null);
+        setInitialSessionRestored(true);
+      }
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [openLinkedSession]);
 
   const importLinkedSession = useCallback(async () => {
     if (!pendingSessionImport || importingSession) return;
@@ -1837,7 +2061,7 @@ export function AppShell({ appName }: { appName: string }) {
       const session = pendingSessionImport.session;
       setPendingSessionImport(null);
       setRefreshKey((key) => key + 1);
-      publishSessionsChanged([session.id]);
+      publishSessionsChanged([sessionKey(session.id, session.hostId)]);
       handleSelectSession(session);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -1859,26 +2083,22 @@ export function AppShell({ appName }: { appName: string }) {
   // view the user just switched to.
   const navViewVersionRef = useRef(0);
   const navSessionId = selectedSession?.id ?? null;
+  const navSessionHost = selectedSession?.hostId;
   const navSessionCwd = selectedSession?.cwd ?? null;
   useEffect(() => {
     navViewVersionRef.current += 1;
     recordNavigationView({
       sessionId: navSessionId,
       cwd: navSessionId ? navSessionCwd : newSessionCwd,
-      ...(!navSessionId && newSessionHostId
-        ? { hostId: newSessionHostId }
-        : {}),
+      hostId: navSessionId ? navSessionHost : newSessionHostId,
       ...(!navSessionId ? { creationId: newSessionCreationId } : {}),
-      ...(!navSessionId && newSessionCreation.initialization
-        ? { initialization: newSessionCreation.initialization }
-        : {}),
     });
   }, [
     navSessionId,
+    navSessionHost,
     navSessionCwd,
     newSessionCwd,
     newSessionHostId,
-    newSessionCreation,
     newSessionCreationId,
     recordNavigationView,
   ]);
@@ -1887,14 +2107,21 @@ export function AppShell({ appName }: { appName: string }) {
   // means the id is gone (entry should be dropped); "unavailable" means the
   // list itself could not be fetched (keep the entry, abort this navigation).
   const fetchSessionForNavigation = useCallback(
-    async (sessionId: string): Promise<SessionInfo | null | "unavailable"> => {
+    async (
+      sessionId: string,
+      hostId = LOCAL_HOST_ID,
+    ): Promise<SessionInfo | null | "unavailable"> => {
       try {
         const res = await fetch(
-          `/api/sessions?id=${encodeURIComponent(sessionId)}`,
+          `/api/sessions?${new URLSearchParams({ id: sessionId, hostId })}`,
         );
         if (!res.ok) return "unavailable";
         const data = (await res.json()) as { sessions?: SessionInfo[] };
-        return data.sessions?.find((s) => s.id === sessionId) ?? null;
+        return (
+          data.sessions?.find(
+            (s) => sessionKey(s.id, s.hostId) === sessionKey(sessionId, hostId),
+          ) ?? null
+        );
       } catch {
         return "unavailable";
       }
@@ -1925,12 +2152,14 @@ export function AppShell({ appName }: { appName: string }) {
             entry.cwd,
             entry.hostId,
             undefined,
-            entry.initialization,
           );
           return;
         }
         const versionAtPress = navViewVersionRef.current;
-        const session = await fetchSessionForNavigation(entry.sessionId);
+        const session = await fetchSessionForNavigation(
+          entry.sessionId,
+          entry.hostId,
+        );
         if (navViewVersionRef.current !== versionAtPress) return; // user moved on: do nothing
         if (session === "unavailable") return; // list fetch failed: keep the entry, try again next press
         if (session) {
@@ -2006,17 +2235,23 @@ export function AppShell({ appName }: { appName: string }) {
   // handleCwdChange relies on. Hydrate it from the session list so switching
   // worktrees right after creating a session doesn't close the chat.
   const hydrateSelectedSession = useCallback(
-    (sessionId: string) => {
-      void fetch("/api/sessions")
+    (sessionId: string, hostId = LOCAL_HOST_ID) => {
+      void fetch(
+        `/api/sessions?${new URLSearchParams({ id: sessionId, hostId })}`,
+      )
         .then((r) =>
           r.ok ? (r.json() as Promise<{ sessions: SessionInfo[] }>) : null,
         )
         .then((d) => {
-          const full = d?.sessions.find((s) => s.id === sessionId);
+          const full = d?.sessions.find(
+            (s) => sessionKey(s.id, s.hostId) === sessionKey(sessionId, hostId),
+          );
           if (!full) return;
           updateChatTabs((tabs) =>
             tabs.map((tab) =>
-              tab.session?.id === sessionId
+              tab.session &&
+              sessionKey(tab.session.id, tab.session.hostId) ===
+                sessionKey(sessionId, hostId)
                 ? {
                     ...tab,
                     session: { ...full, name: tab.session.name || full.name },
@@ -2028,7 +2263,8 @@ export function AppShell({ appName }: { appName: string }) {
           );
           setSelectedSession((prev) =>
             prev &&
-            prev.id === sessionId &&
+            sessionKey(prev.id, prev.hostId) ===
+              sessionKey(sessionId, hostId) &&
             (!prev.projectRoot || prev.path === "")
               ? { ...full, name: prev.name || full.name }
               : prev,
@@ -2059,11 +2295,16 @@ export function AppShell({ appName }: { appName: string }) {
           const data = (await response.json()) as { sessions: SessionInfo[] };
           if (closed) return;
           const names = new Map(
-            data.sessions.map((session) => [session.id, session.name]),
+            data.sessions.map((session) => [
+              sessionKey(session.id, session.hostId),
+              session.name,
+            ]),
           );
           updateChatTabs((tabs) =>
             tabs.map((tab) => {
-              const name = tab.session && names.get(tab.session.id);
+              const name =
+                tab.session &&
+                names.get(sessionKey(tab.session.id, tab.session.hostId));
               return name && name !== tab.session?.name
                 ? { ...tab, session: { ...tab.session!, name } }
                 : tab;
@@ -2071,12 +2312,15 @@ export function AppShell({ appName }: { appName: string }) {
           );
           setSharedSessions((sessions) =>
             sessions.map((session) => {
-              const name = names.get(session.id);
-              return name && name !== session.name ? { ...session, name } : session;
+              const name = names.get(sessionKey(session.id, session.hostId));
+              return name && name !== session.name
+                ? { ...session, name }
+                : session;
             }),
           );
           setSelectedSession((current) => {
-            const name = current && names.get(current.id);
+            const name =
+              current && names.get(sessionKey(current.id, current.hostId));
             return current && name && name !== current.name
               ? { ...current, name }
               : current;
@@ -2125,8 +2369,13 @@ export function AppShell({ appName }: { appName: string }) {
         setActiveHostId(remoteHostId(session.hostId));
         setNewSessionCwd(null);
         setSelectedSession(session);
-        hydrateSelectedSession(session.id);
-        router.replace(`?session=${encodeURIComponent(session.id)}`);
+        hydrateSelectedSession(session.id, session.hostId);
+        router.replace(
+          sessionUrl(
+            `?session=${encodeURIComponent(session.id)}`,
+            session.hostId,
+          ),
+        );
       }
       setRefreshKey((k) => k + 1);
     },
@@ -2134,26 +2383,37 @@ export function AppShell({ appName }: { appName: string }) {
   );
 
   const handleSessionMoved = useCallback(
-    (oldId: string, newId: string) => {
+    (
+      oldId: string,
+      newId: string,
+      hostId = selectedSession?.hostId ?? LOCAL_HOST_ID,
+    ) => {
       updateChatTabs((tabs) =>
         tabs.map((tab) =>
-          tab.session?.id === oldId
+          tab.session &&
+          sessionKey(tab.session.id, tab.session.hostId) ===
+            sessionKey(oldId, hostId)
             ? { ...tab, session: { ...tab.session, id: newId, path: "" } }
             : tab,
         ),
       );
-      if (activeSessionIdRef.current !== oldId) return;
-      activeSessionIdRef.current = newId;
+      if (activeSessionIdRef.current !== sessionKey(oldId, hostId)) return;
+      activeSessionIdRef.current = sessionKey(newId, hostId);
       setSelectedSession((current) =>
-        current?.id === oldId ? { ...current, id: newId, path: "" } : current,
+        current &&
+        sessionKey(current.id, current.hostId) === sessionKey(oldId, hostId)
+          ? { ...current, id: newId, path: "" }
+          : current,
       );
       setRefreshKey((key) => key + 1);
-      hydrateSelectedSession(newId);
+      hydrateSelectedSession(newId, hostId);
       // This is the same conversation. Preserve ChatWindow's run/edit fences
       // and its mounted composer, including unfinished attachments and audio.
-      router.replace(`?session=${encodeURIComponent(newId)}`);
+      router.replace(
+        sessionUrl(`?session=${encodeURIComponent(newId)}`, hostId),
+      );
     },
-    [router, hydrateSelectedSession, updateChatTabs],
+    [router, hydrateSelectedSession, updateChatTabs, selectedSession?.hostId],
   );
 
   const handleAgentEnd = useCallback(() => {
@@ -2162,23 +2422,28 @@ export function AppShell({ appName }: { appName: string }) {
   }, []);
 
   const openSessionById = useCallback(
-    (sessionId: string) => {
+    (sessionId: string, hostId = LOCAL_HOST_ID) => {
       window.focus();
       // On narrow screens the file panel covers the chat it is about to show.
       if (isCompactOverlay) setRightPanelOpen(false);
-      void openLinkedSession(sessionId);
+      void openLinkedSession(sessionId, hostId);
     },
     [openLinkedSession, isCompactOverlay],
   );
 
   // Full-page Settings hides the chat, so its session counts as not viewed.
   useNotifications({
-    sessionId: settingsTab ? null : (selectedSession?.id ?? null),
+    visibleSessionId: settingsTab ? null : (selectedSession?.id ?? null),
+    visibleHostId:
+      settingsTab || !selectedSession
+        ? null
+        : (selectedSession.hostId ?? LOCAL_HOST_ID),
     onOpenSession: openSessionById,
   });
 
   const handleAutoName = useCallback(async () => {
     const sessionId = selectedSession?.id;
+    const hostId = selectedSession?.hostId;
     if (!sessionId || autoNameStatus.kind === "naming") return;
     clearTimeout(autoNameTimerRef.current);
     setActiveTopPanel(null);
@@ -2186,7 +2451,10 @@ export function AppShell({ appName }: { appName: string }) {
 
     try {
       const response = await fetch(
-        `/api/sessions/${encodeURIComponent(sessionId)}/auto-name`,
+        sessionUrl(
+          `/api/sessions/${encodeURIComponent(sessionId)}/auto-name`,
+          hostId,
+        ),
         {
           method: "POST",
         },
@@ -2205,17 +2473,22 @@ export function AppShell({ appName }: { appName: string }) {
       }
 
       const title = body.title.trim();
-      if (activeSessionIdRef.current !== sessionId) return;
+      if (activeSessionIdRef.current !== sessionKey(sessionId, hostId)) return;
       setRefreshKey((key) => key + 1);
       updateChatTabs((tabs) =>
         tabs.map((tab) =>
-          tab.session?.id === sessionId
+          tab.session &&
+          sessionKey(tab.session.id, tab.session.hostId) ===
+            sessionKey(sessionId, hostId)
             ? { ...tab, session: { ...tab.session, name: title } }
             : tab,
         ),
       );
       setSelectedSession((current) =>
-        current?.id === sessionId ? { ...current, name: title } : current,
+        current &&
+        sessionKey(current.id, current.hostId) === sessionKey(sessionId, hostId)
+          ? { ...current, name: title }
+          : current,
       );
       setSessionStats((current) =>
         current?.sessionId === sessionId
@@ -2228,7 +2501,7 @@ export function AppShell({ appName }: { appName: string }) {
         1800,
       );
     } catch (error) {
-      if (activeSessionIdRef.current !== sessionId) return;
+      if (activeSessionIdRef.current !== sessionKey(sessionId, hostId)) return;
       const message = error instanceof Error ? error.message : String(error);
       setAutoNameStatus({ kind: "error", message });
       autoNameTimerRef.current = setTimeout(
@@ -2236,14 +2509,20 @@ export function AppShell({ appName }: { appName: string }) {
         5000,
       );
     }
-  }, [autoNameStatus.kind, selectedSession?.id, updateChatTabs]);
+  }, [
+    autoNameStatus.kind,
+    selectedSession?.id,
+    selectedSession?.hostId,
+    updateChatTabs,
+  ]);
   const handleRenameSession = useCallback(
     async (name: string) => {
       const sessionId = selectedSession?.id;
+      const hostId = selectedSession?.hostId;
       if (!sessionId) return;
       try {
         const response = await fetch(
-          `/api/sessions/${encodeURIComponent(sessionId)}`,
+          sessionUrl(`/api/sessions/${encodeURIComponent(sessionId)}`, hostId),
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -2254,31 +2533,38 @@ export function AppShell({ appName }: { appName: string }) {
         const title = name.trim();
         updateChatTabs((tabs) =>
           tabs.map((tab) =>
-            tab.session?.id === sessionId
+            tab.session &&
+            sessionKey(tab.session.id, tab.session.hostId) ===
+              sessionKey(sessionId, hostId)
               ? { ...tab, session: { ...tab.session, name: title } }
               : tab,
           ),
         );
         setSelectedSession((current) =>
-          current?.id === sessionId ? { ...current, name: title } : current,
+          current &&
+          sessionKey(current.id, current.hostId) ===
+            sessionKey(sessionId, hostId)
+            ? { ...current, name: title }
+            : current,
         );
         setSessionStats((current) =>
+          activeSessionIdRef.current === sessionKey(sessionId, hostId) &&
           current?.sessionId === sessionId
             ? { ...current, sessionName: title }
             : current,
         );
-        publishSessionsChanged([sessionId]);
+        publishSessionsChanged([sessionKey(sessionId, hostId)]);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : String(error));
       }
     },
-    [selectedSession?.id, updateChatTabs],
+    [selectedSession?.id, selectedSession?.hostId, updateChatTabs],
   );
 
   useEffect(() => {
     clearTimeout(autoNameTimerRef.current);
     setAutoNameStatus({ kind: "idle" });
-  }, [selectedSession?.id]);
+  }, [selectedSession?.id, selectedSession?.hostId]);
 
   const handleExplorerRefresh = useCallback(() => {
     setExplorerRefreshing(true);
@@ -2304,27 +2590,38 @@ export function AppShell({ appName }: { appName: string }) {
       };
       updateChatTabs((tabs) => [...tabs, tab]);
       activateChat(tab);
-      hydrateSelectedSession(newSessionId);
-      router.replace(`?session=${encodeURIComponent(newSessionId)}`);
+      hydrateSelectedSession(newSessionId, source.session.hostId);
+      router.replace(
+        sessionUrl(
+          `?session=${encodeURIComponent(newSessionId)}`,
+          source.session.hostId,
+        ),
+      );
     },
     [router, hydrateSelectedSession, updateChatTabs, activateChat],
   );
 
   const handleSessionDeleted = useCallback(
-    (sessionId: string) => {
+    (sessionId: string, hostId = LOCAL_HOST_ID) => {
+      const key = sessionKey(sessionId, hostId);
       // The composer for this session can never be reopened, so its draft would
       // otherwise keep the exit guard armed for unreachable content.
-      clearDraft(sessionId);
+      clearDraft(key);
       setRefreshKey((k) => k + 1);
       const removed = chatTabsRef.current.find(
-        (tab) => tab.session?.id === sessionId,
+        (tab) =>
+          tab.session && sessionKey(tab.session.id, tab.session.hostId) === key,
       );
       updateChatTabs((tabs) =>
-        tabs.filter((tab) => tab.session?.id !== sessionId),
+        tabs.filter(
+          (tab) =>
+            !tab.session ||
+            sessionKey(tab.session.id, tab.session.hostId) !== key,
+        ),
       );
       if (
         (removed && activeChatIdRef.current === removed.id) ||
-        activeSessionIdRef.current === sessionId
+        activeSessionIdRef.current === key
       ) {
         const next = chatTabsRef.current.find((tab) =>
           tabInWorkspace(
@@ -2337,7 +2634,10 @@ export function AppShell({ appName }: { appName: string }) {
         activateChat(next ?? null);
         router.replace(
           next?.session
-            ? `?session=${encodeURIComponent(next.session.id)}`
+            ? sessionUrl(
+                `?session=${encodeURIComponent(next.session.id)}`,
+                next.session.hostId,
+              )
             : "/",
         );
       }
@@ -2355,9 +2655,9 @@ export function AppShell({ appName }: { appName: string }) {
   }, []);
 
   const handleArchiveRestored = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, hostId = LOCAL_HOST_ID) => {
       setArchiveBrowserOpen(false);
-      publishSessionsChanged([sessionId]);
+      publishSessionsChanged([sessionKey(sessionId, hostId)]);
       setRefreshKey((k) => k + 1);
 
       // The poll must not yank the UI back to the restored session if the user
@@ -2368,10 +2668,15 @@ export function AppShell({ appName }: { appName: string }) {
       const selectRestoredSession = async (attemptsLeft = 5): Promise<void> => {
         if (activeSessionIdRef.current !== sessionAtRestoreStart) return;
         try {
-          const res = await fetch("/api/sessions");
+          const res = await fetch(
+            `/api/sessions?${new URLSearchParams({ id: sessionId, hostId })}`,
+          );
           if (res.ok) {
             const data = (await res.json()) as { sessions?: SessionInfo[] };
-            const found = data.sessions?.find((s) => s.id === sessionId);
+            const found = data.sessions?.find(
+              (s) =>
+                sessionKey(s.id, s.hostId) === sessionKey(sessionId, hostId),
+            );
             if (found) {
               if (activeSessionIdRef.current !== sessionAtRestoreStart) return;
               handleSelectSession(found, false);
@@ -2388,13 +2693,13 @@ export function AppShell({ appName }: { appName: string }) {
             300,
           );
         } else if (activeSessionIdRef.current === sessionAtRestoreStart) {
-          router.replace(`?session=${encodeURIComponent(sessionId)}`);
+          void openLinkedSession(sessionId, hostId);
         }
       };
 
       void selectRestoredSession();
     },
-    [handleSelectSession, router],
+    [handleSelectSession, openLinkedSession],
   );
 
   const handleCloseFileTab = useCallback(
@@ -2424,7 +2729,10 @@ export function AppShell({ appName }: { appName: string }) {
       const target = filePath.startsWith("~/")
         ? filePath
         : normalizeLocalPath(rooted);
-      const tabId = `file:${source.sessionId ?? hostProjectKey(source.hostId, source.cwd ?? "")}:${target}`;
+      const owner = source.sessionId
+        ? sessionKey(source.sessionId, source.hostId)
+        : hostProjectKey(source.hostId, source.cwd ?? "");
+      const tabId = `file:${owner}:${target}`;
       setFileTabs((prev) =>
         prev.some((tab) => tab.id === tabId)
           ? prev
@@ -2496,14 +2804,14 @@ export function AppShell({ appName }: { appName: string }) {
   const pendingCrossHostToolsRef = useRef(new Map<string, AbortController>());
   const handleCrossSessionHostTool = useCallback(
     async (call: CrossSessionHostToolCall) => {
-      const key = JSON.stringify([call.sessionId, call.id]);
+      const owner = sessionKey(call.sessionId, call.hostId);
+      const key = JSON.stringify([owner, call.id]);
       if (pendingCrossHostToolsRef.current.has(key)) return;
       const controller = new AbortController();
       pendingCrossHostToolsRef.current.set(key, controller);
       // Full-page Settings hides the chat, so its session counts as not viewed.
       const viewing = () =>
-        call.sessionId === activeSessionIdRef.current &&
-        !activeSettingsTabRef.current;
+        owner === activeSessionIdRef.current && !activeSettingsTabRef.current;
 
       try {
         const { text, isError } = await runHostTool(
@@ -2530,14 +2838,19 @@ export function AppShell({ appName }: { appName: string }) {
           },
           call.sessionId,
           controller.signal,
+          call.hostId,
         );
         if (controller.signal.aborted) return;
-        await sendAgentCommand(call.sessionId, {
-          type: "host_tool_result",
-          id: call.id,
-          isError,
-          result: { content: [{ type: "text", text }] },
-        });
+        await sendAgentCommand(
+          call.sessionId,
+          {
+            type: "host_tool_result",
+            id: call.id,
+            isError,
+            result: { content: [{ type: "text", text }] },
+          },
+          { hostId: call.hostId },
+        );
       } catch (e) {
         console.error("Failed to send host tool result:", e);
       } finally {
@@ -2563,7 +2876,14 @@ export function AppShell({ appName }: { appName: string }) {
           typeof call.sessionId === "string" &&
           typeof call.targetId === "string"
         ) {
-          pending.get(JSON.stringify([call.sessionId, call.targetId]))?.abort();
+          pending
+            .get(
+              JSON.stringify([
+                sessionKey(call.sessionId, call.hostId),
+                call.targetId,
+              ]),
+            )
+            ?.abort();
         } else if (
           call.type === "host_tool_call" &&
           call.sessionId &&
@@ -2631,7 +2951,9 @@ export function AppShell({ appName }: { appName: string }) {
   const handleMentionActiveFile = useCallback(() => {
     if (
       !activeFileTab ||
-      activeFileTab.sourceSessionId !== (selectedSession?.id ?? null)
+      activeFileTab.sourceSessionId !== (selectedSession?.id ?? null) ||
+      (activeFileTab.hostId ?? LOCAL_HOST_ID) !==
+        (selectedSession?.hostId ?? workspaceHostId)
     )
       return;
     if (activeFileTab.hostId !== workspaceHostId) {
@@ -2645,7 +2967,14 @@ export function AppShell({ appName }: { appName: string }) {
       ),
       false,
     );
-  }, [activeFileTab, selectedSession?.id, handleAtMention, workspaceHostId, t]);
+  }, [
+    activeFileTab,
+    selectedSession?.id,
+    selectedSession?.hostId,
+    handleAtMention,
+    workspaceHostId,
+    t,
+  ]);
 
   const handleCopyActiveFilePath = useCallback(() => {
     if (!activeFileTab) return;
@@ -2675,7 +3004,11 @@ export function AppShell({ appName }: { appName: string }) {
   }, [activeFileTab]);
   const handleRevealActiveFile = useCallback(() => {
     if (!activeFileTab) return;
-    if (activeFileTab.sourceSessionId !== (selectedSession?.id ?? null)) {
+    if (
+      activeFileTab.sourceSessionId !== (selectedSession?.id ?? null) ||
+      (activeFileTab.hostId ?? LOCAL_HOST_ID) !==
+        (selectedSession?.hostId ?? workspaceHostId)
+    ) {
       toast.info(t("appShell.revealSourceSession"));
       return;
     }
@@ -2689,7 +3022,13 @@ export function AppShell({ appName }: { appName: string }) {
     });
     setRightView("explorer");
     setRightPanelOpen(true);
-  }, [activeFileTab, selectedSession?.id, workspaceHostId, t]);
+  }, [
+    activeFileTab,
+    selectedSession?.id,
+    selectedSession?.hostId,
+    workspaceHostId,
+    t,
+  ]);
 
   const handleSelectFileTab = useCallback((tabId: string) => {
     setActiveFileTabId(tabId);
@@ -2720,7 +3059,6 @@ export function AppShell({ appName }: { appName: string }) {
     setRightView("explorer");
   }, []);
 
-
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
   const candidateCwd = newSessionCwd;
   const newSessionHost =
@@ -2747,36 +3085,82 @@ export function AppShell({ appName }: { appName: string }) {
       return path === root || path.startsWith(root === "/" ? "/" : `${root}/`);
     })
     .sort((a, b) => b.path.length - a.path.length)[0];
-  const activeEffort = !pendingWorkspace && explorerCwd ? effortForPath(workspaceHostId, explorerCwd) : undefined;
-  const detailEffort = effortDetails && effortsByHost.find(({ host, effort }) => host === effortDetails.host && effort.id === effortDetails.id)?.effort;
-  const detailHost = effortDetails && hosts?.find((host) => host.id === effortDetails.host);
-  const openEffortPath = (host: string, path: string, latestSession?: SessionInfo, allowDraft = true) => {
+  const activeEffort =
+    !pendingWorkspace && explorerCwd
+      ? effortForPath(workspaceHostId, explorerCwd)
+      : undefined;
+  const detailEffort =
+    effortDetails &&
+    effortsByHost.find(
+      ({ host, effort }) =>
+        host === effortDetails.host && effort.id === effortDetails.id,
+    )?.effort;
+  const detailHost =
+    effortDetails && hosts?.find((host) => host.id === effortDetails.host);
+  const openEffortPath = (
+    host: string,
+    path: string,
+    latestSession?: SessionInfo,
+    allowDraft = true,
+  ) => {
     setPlanning(null);
     setSettingsTab(null);
     setEffortDetails(null);
-    handleCwdChange(path, path, host, undefined, false, latestSession, undefined, allowDraft);
+    handleCwdChange(
+      path,
+      path,
+      host,
+      undefined,
+      false,
+      latestSession,
+      undefined,
+      allowDraft,
+    );
     if (isMobile) setSidebarOpen(false);
   };
   useEffect(() => {
-    if (!activeEffort || !["cleaning", "cleanup_failed", "cleaned"].includes(activeEffort.status)) return;
+    if (
+      !activeEffort ||
+      !["cleaning", "cleanup_failed", "cleaned"].includes(activeEffort.status)
+    )
+      return;
     const root = comparableProjectPath(activeEffort.root);
     const belongs = (tab: ChatTab) => {
       const path = comparableProjectPath(tab.cwd);
-      return (tab.hostId ?? LOCAL_HOST_ID) === workspaceHostId && (path === root || path.startsWith(`${root}/`));
+      return (
+        (tab.hostId ?? LOCAL_HOST_ID) === workspaceHostId &&
+        (path === root || path.startsWith(`${root}/`))
+      );
     };
-    if (chatTabsRef.current.some(belongs)) updateChatTabs((tabs) => tabs.filter((tab) => !belongs(tab)));
+    if (chatTabsRef.current.some(belongs))
+      updateChatTabs((tabs) => tabs.filter((tab) => !belongs(tab)));
     setActiveTerminalId(null);
     if (activeChatIdRef.current) {
       activateChat(null);
       router.replace("/");
     }
   }, [activeEffort, workspaceHostId, activateChat, updateChatTabs, router]);
-  const visibleShipKey = !settingsTab && terminalWorkspace && !activeEffort
-    ? hostProjectKey(workspaceHostId, terminalWorkspace.path)
-    : null;
-  const shipVisible = shipFlows.some((flow) => hostProjectKey(flow.host, flow.path) === visibleShipKey);
-  const shipSelectionRef = useRef({ visibleShipKey, projects: workspaceOptions.projects, explorerCwd, workspaceHostId, settingsTab });
-  shipSelectionRef.current = { visibleShipKey, projects: workspaceOptions.projects, explorerCwd, workspaceHostId, settingsTab };
+  const visibleShipKey =
+    !settingsTab && terminalWorkspace && !activeEffort
+      ? hostProjectKey(workspaceHostId, terminalWorkspace.path)
+      : null;
+  const shipVisible = shipFlows.some(
+    (flow) => hostProjectKey(flow.host, flow.path) === visibleShipKey,
+  );
+  const shipSelectionRef = useRef({
+    visibleShipKey,
+    projects: workspaceOptions.projects,
+    explorerCwd,
+    workspaceHostId,
+    settingsTab,
+  });
+  shipSelectionRef.current = {
+    visibleShipKey,
+    projects: workspaceOptions.projects,
+    explorerCwd,
+    workspaceHostId,
+    settingsTab,
+  };
   useEffect(() => {
     if (shipVisible && rightPanelIsModal) closeRightPanel();
   }, [shipVisible, rightPanelIsModal, closeRightPanel]);
@@ -2945,13 +3329,19 @@ export function AppShell({ appName }: { appName: string }) {
   // A target still pending when another session opens must not jump when its own session reopens.
   useEffect(() => {
     setSearchMatchTarget((target) =>
-      target && target.sessionId !== selectedSession?.id ? null : target,
+      target &&
+      (!selectedSession ||
+        sessionKey(target.sessionId, target.hostId) !==
+          sessionKey(selectedSession.id, selectedSession.hostId))
+        ? null
+        : target,
     );
-  }, [selectedSession?.id]);
+  }, [selectedSession?.id, selectedSession?.hostId]);
 
   const sidebarContent = (
     <SessionSidebar
       selectedSessionId={selectedSession?.id ?? null}
+      selectedSessionHostId={selectedSession?.hostId}
       dismissExitedChatRef={dismissExitedChatRef}
       optimisticSession={selectedSession?.path === "" ? selectedSession : null}
       onSelectSession={handleSelectSession}
@@ -2993,12 +3383,18 @@ export function AppShell({ appName }: { appName: string }) {
           router.replace("/");
         }
       }}
-      selectedCwd={selectedSession?.cwd ?? newSessionCwd ?? (activeEffort ? activeCwd : null)}
+      selectedCwd={
+        selectedSession?.cwd ??
+        newSessionCwd ??
+        (activeEffort ? activeCwd : null)
+      }
       pendingWorkspace={Boolean(pendingWorkspace)}
       selectedHostId={
         selectedSession
           ? (selectedSession.hostId ?? LOCAL_HOST_ID)
-          : (newSessionHostId ?? (activeEffort ? activeHostId : undefined) ?? LOCAL_HOST_ID)
+          : (newSessionHostId ??
+            (activeEffort ? activeHostId : undefined) ??
+            LOCAL_HOST_ID)
       }
       selectedLogicalProjectKey={null}
       onCwdChange={handleCwdChange}
@@ -3032,13 +3428,23 @@ export function AppShell({ appName }: { appName: string }) {
             effort={detailEffort}
             action={async (input) => {
               const result = await systemsHosts.run(effortDetails.host, input);
-              if (input.action === "cleanup" && input.mode !== "stop") setRefreshKey((key) => key + 1);
+              if (input.action === "cleanup" && input.mode !== "stop")
+                setRefreshKey((key) => key + 1);
               return result;
             }}
-            unavailable={detailHost && !isLinkUp(detailHost.status) ? "This host is unavailable." : systemsHosts.byHost[effortDetails.host]?.error}
+            unavailable={
+              detailHost && !isLinkUp(detailHost.status)
+                ? "This host is unavailable."
+                : systemsHosts.byHost[effortDetails.host]?.error
+            }
             onClose={() => setEffortDetails(null)}
             onOpenWorkspace={(path) => {
-              openEffortPath(effortDetails.host, path, undefined, path === detailEffort.root);
+              openEffortPath(
+                effortDetails.host,
+                path,
+                undefined,
+                path === detailEffort.root,
+              );
               if (path !== detailEffort.root) {
                 setRightView("explorer");
                 setRightPanelOpen(true);
@@ -3046,9 +3452,19 @@ export function AppShell({ appName }: { appName: string }) {
             }}
             onNewChat={() => {
               setEffortDetails(null);
-              handleNewSession(browserUUID(), detailEffort.root, effortDetails.host, undefined, undefined, false, true);
+              handleNewSession(
+                browserUUID(),
+                detailEffort.root,
+                effortDetails.host,
+                undefined,
+                false,
+                true,
+              );
             }}
-            onOpenSession={(session) => { setEffortDetails(null); handleSelectSession(session); }}
+            onOpenSession={(session) => {
+              setEffortDetails(null);
+              handleSelectSession(session);
+            }}
             onOpenTerminal={(id) => {
               openEffortPath(effortDetails.host, detailEffort.root);
               setActiveTerminalId(id);
@@ -3288,16 +3704,44 @@ export function AppShell({ appName }: { appName: string }) {
             }}
           >
             {!settingsTab && activeEffort && (
-              <div style={{ ...systemsRow, borderBottom: "1px solid var(--border)", padding: "4px 8px" }}>
-                <SystemsButton onClick={() => setEffortDetails({ host: workspaceHostId, id: activeEffort.id })}>{activeEffort.name} · Effort details</SystemsButton>
-                {terminalWorkspace && terminalWorkspace.path !== activeEffort.root && <span style={{ ...systemsMuted, overflowWrap: "anywhere", fontSize: 12 }}>{projectLabel(terminalWorkspace.path)}</span>}
+              <div
+                style={{
+                  ...systemsRow,
+                  borderBottom: "1px solid var(--border)",
+                  padding: "4px 8px",
+                }}
+              >
+                <SystemsButton
+                  onClick={() =>
+                    setEffortDetails({
+                      host: workspaceHostId,
+                      id: activeEffort.id,
+                    })
+                  }
+                >
+                  {activeEffort.name} · Effort details
+                </SystemsButton>
+                {terminalWorkspace &&
+                  terminalWorkspace.path !== activeEffort.root && (
+                    <span
+                      style={{
+                        ...systemsMuted,
+                        overflowWrap: "anywhere",
+                        fontSize: 12,
+                      }}
+                    >
+                      {projectLabel(terminalWorkspace.path)}
+                    </span>
+                  )}
               </div>
             )}
             <WorkspaceTerminalTabs
               contentInert={shipVisible}
               hostId={workspaceHostId}
               cwd={terminalWorkspace?.path ?? null}
-              effort={activeEffort?.status === "ready" ? activeEffort : undefined}
+              effort={
+                activeEffort?.status === "ready" ? activeEffort : undefined
+              }
               activeId={activeTerminalId}
               onSelect={setActiveTerminalId}
               enabled={!settingsTab}
@@ -3309,7 +3753,9 @@ export function AppShell({ appName }: { appName: string }) {
                 ...new Set([
                   ...openSessionIds,
                   ...chatTabs.flatMap((tab) =>
-                    tab.session ? [tab.session.id] : [],
+                    tab.session
+                      ? [sessionKey(tab.session.id, tab.session.hostId)]
+                      : [],
                   ),
                 ]),
               ]}
@@ -3327,12 +3773,21 @@ export function AppShell({ appName }: { appName: string }) {
                 ...sharedSessions
                   .filter(
                     (session) =>
-                      openSessionIds.includes(session.id) &&
-                      !hiddenSharedIds.has(session.id) &&
-                      !chatTabs.some((tab) => tab.session?.id === session.id),
+                      openSessionIds.includes(
+                        sessionKey(session.id, session.hostId),
+                      ) &&
+                      !hiddenSharedIds.has(
+                        sessionKey(session.id, session.hostId),
+                      ) &&
+                      !chatTabs.some(
+                        ({ session: open }) =>
+                          open &&
+                          sessionKey(open.id, open.hostId) ===
+                            sessionKey(session.id, session.hostId),
+                      ),
                   )
                   .map((session): ChatTab => ({
-                    id: `shared:${session.id}`,
+                    id: `shared:${sessionKey(session.id, session.hostId)}`,
                     cwd: session.cwd,
                     hostId: remoteHostId(session.hostId),
                     session,
@@ -3354,7 +3809,9 @@ export function AppShell({ appName }: { appName: string }) {
                   sessionId: tab.session?.id,
                   title:
                     tab.session?.name ||
-                    (tab.session?.messageCount ? temporarySessionTitle(tab.session.firstMessage) : null) ||
+                    (tab.session?.messageCount
+                      ? temporarySessionTitle(tab.session.firstMessage)
+                      : null) ||
                     (tabs.filter((item) => !item.session).length > 1
                       ? `New chat ${tabs.slice(0, index + 1).filter((item) => !item.session).length}`
                       : "New chat"),
@@ -3364,7 +3821,7 @@ export function AppShell({ appName }: { appName: string }) {
                 const tab = chatTabsRef.current.find((item) => item.id === id);
                 if (!tab && id.startsWith("shared:")) {
                   const session = sharedSessions.find(
-                    (item) => item.id === id.slice(7),
+                    (item) => sessionKey(item.id, item.hostId) === id.slice(7),
                   );
                   if (session) handleSelectSession(session);
                   return;
@@ -3373,7 +3830,10 @@ export function AppShell({ appName }: { appName: string }) {
                 activateChat(tab);
                 router.replace(
                   tab.session
-                    ? `?session=${encodeURIComponent(tab.session.id)}`
+                    ? sessionUrl(
+                        `?session=${encodeURIComponent(tab.session.id)}`,
+                        tab.session.hostId,
+                      )
                     : "/",
                 );
               }}
@@ -3382,7 +3842,11 @@ export function AppShell({ appName }: { appName: string }) {
                   (tab) => tab.id === id,
                 );
                 if (!closing && id.startsWith("shared:")) {
-                  dismissExitedChatRef.current?.(id.slice(7));
+                  const session = sharedSessions.find(
+                    (item) => sessionKey(item.id, item.hostId) === id.slice(7),
+                  );
+                  if (session)
+                    dismissExitedChatRef.current?.(session.id, session.hostId);
                   setHiddenSharedIds((hidden) =>
                     new Set(hidden).add(id.slice(7)),
                   );
@@ -3390,10 +3854,15 @@ export function AppShell({ appName }: { appName: string }) {
                 }
                 if (!closing) return;
                 if (closing.session) {
-                  dismissExitedChatRef.current?.(closing.session.id);
-                  setHiddenSharedIds((hidden) =>
-                    new Set(hidden).add(closing.session!.id),
+                  dismissExitedChatRef.current?.(
+                    closing.session.id,
+                    closing.session.hostId,
                   );
+                  const key = sessionKey(
+                    closing.session.id,
+                    closing.session.hostId,
+                  );
+                  setHiddenSharedIds((hidden) => new Set(hidden).add(key));
                 }
                 const visible = chatTabsRef.current.filter(
                   (tab) =>
@@ -3410,7 +3879,8 @@ export function AppShell({ appName }: { appName: string }) {
                 if (
                   activeChatIdRef.current === id ||
                   (closing.session &&
-                    activeSessionIdRef.current === closing.session.id)
+                    activeSessionIdRef.current ===
+                      sessionKey(closing.session.id, closing.session.hostId))
                 ) {
                   const next = visible[index + 1] ?? visible[index - 1] ?? null;
                   if (!next && terminalWorkspace) {
@@ -3426,7 +3896,10 @@ export function AppShell({ appName }: { appName: string }) {
                   activateChat(next);
                   router.replace(
                     next?.session
-                      ? `?session=${encodeURIComponent(next.session.id)}`
+                      ? sessionUrl(
+                          `?session=${encodeURIComponent(next.session.id)}`,
+                          next.session.hostId,
+                        )
                       : "/",
                   );
                 }
@@ -3437,1109 +3910,1237 @@ export function AppShell({ appName }: { appName: string }) {
                   activeEffort?.root ?? terminalWorkspace?.path ?? null,
                   workspaceHostId,
                   undefined,
-                  undefined,
                   false,
                   true,
                 )
               }
             />
-            <div style={{ flex: !settingsTab && activeTerminalId?.startsWith("browser:") ? "0 0 auto" : 1, minHeight: 0, minWidth: 0, position: "relative", display: "flex", flexDirection: "column" }}>
-            <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {settingsTab ? (
-              <SettingsConfig
-                activeTab={settingsTab}
-                toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
-                onToolCallsDefaultCollapsedChange={
-                  handleToolCallsDefaultCollapsedChange
-                }
-                hideToolActivity={hideToolActivity}
-                onHideToolActivityChange={handleHideToolActivityChange}
-                neverFoldActivity={neverFoldActivity}
-                onNeverFoldActivityChange={handleNeverFoldActivityChange}
-                showToolCallsUnfolded={showToolCallsUnfolded}
-                onShowToolCallsUnfoldedChange={
-                  handleShowToolCallsUnfoldedChange
-                }
-                expandThinkingByDefault={expandThinkingByDefault}
-                onExpandThinkingByDefaultChange={
-                  handleExpandThinkingByDefaultChange
-                }
-                onHideThinkingBlockChange={setHideThinkingBlock}
-                providerUsageVisible={providerUsageVisible}
-                onProviderUsageVisibleChange={handleProviderUsageVisibleChange}
-                scopeNativeSelectAll={scopeNativeSelectAll}
-                onScopeNativeSelectAllChange={handleScopeNativeSelectAllChange}
-                openUrlAutomatically={openUrlAutomatically}
-                onOpenUrlAutomaticallyChange={handleOpenUrlAutomaticallyChange}
-                cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd}
-                remoteHost={remoteSettings}
-                sessionId={selectedSession?.id ?? null}
-                onModelsSaved={() => setModelsRefreshKey((k) => k + 1)}
-                onPluginsReloaded={() => setSessionKey((k) => k + 1)}
-                onSelectTab={setSettingsTab}
-                onClose={() => setSettingsTab(null)}
-              />
-            ) : (
-              <>
-                {/* Top bar: 3-zone segmented control bar */}
-                <div
-                  ref={topBarRef}
-                  className="shell-topbar"
-                  style={{
-                    position: "relative",
-                    alignItems: "center",
-                    flexShrink: 0,
-                    borderBottom: "1px solid var(--border)",
-                    minHeight: "var(--shell-topbar-height)",
-                    background: "var(--bg-panel)",
-                    padding: isMobile
-                      ? "var(--shell-topbar-inset) max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px))"
-                      : "0 8px",
-                    gap: "0 8px",
-                    minWidth: 0,
-                  }}
-                >
-                  {/* Left Zone: Utility group (sidebar, theme, language) & session controls (history, branches, system) */}
-                  <div
-                    className="shell-topbar-tools"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      height: isMobile ? 43 : 35,
-                      minWidth: 0,
-                      flexShrink: 0,
-                    }}
-                  >
-                    <button
-                      onClick={handleSidebarToggle}
-                      aria-expanded={sidebarOpen}
-                      aria-controls="workspace-sidebar"
-                      title={
-                        sidebarOpen
-                          ? t("appShell.hideSidebar")
-                          : t("appShell.showSidebar")
-                      }
-                      aria-label={
-                        sidebarOpen
-                          ? t("appShell.hideSidebar")
-                          : t("appShell.showSidebar")
-                      }
-                      className="shell-toolbar-btn ui-focus-ring"
-                    >
-                      <Menu size={16} strokeWidth={1.8} aria-hidden="true" />
-                    </button>
-                    <details
-                      ref={mobileToolsRef}
-                      className="shell-topbar-overflow"
-                      data-compact={
-                        isMobile
-                          ? "true"
-                          : compactTopbar === null
-                            ? "pending"
-                            : compactTopbar
-                      }
-                      open={
-                        isMobile ? undefined : compactTopbar ? undefined : true
-                      }
-                      onToggle={(event) => {
-                        if (!event.currentTarget.open) setActiveTopPanel(null);
+            <div
+              style={{
+                flex:
+                  !settingsTab && activeTerminalId?.startsWith("browser:")
+                    ? "0 0 auto"
+                    : 1,
+                minHeight: 0,
+                minWidth: 0,
+                position: "relative",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                }}
+              >
+                {settingsTab ? (
+                  <SettingsConfig
+                    activeTab={settingsTab}
+                    hostId={settingsHostId}
+                    toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
+                    onToolCallsDefaultCollapsedChange={
+                      handleToolCallsDefaultCollapsedChange
+                    }
+                    hideToolActivity={hideToolActivity}
+                    onHideToolActivityChange={handleHideToolActivityChange}
+                    neverFoldActivity={neverFoldActivity}
+                    onNeverFoldActivityChange={handleNeverFoldActivityChange}
+                    showToolCallsUnfolded={showToolCallsUnfolded}
+                    onShowToolCallsUnfoldedChange={
+                      handleShowToolCallsUnfoldedChange
+                    }
+                    expandThinkingByDefault={expandThinkingByDefault}
+                    onExpandThinkingByDefaultChange={
+                      handleExpandThinkingByDefaultChange
+                    }
+                    onHideThinkingBlockChange={setHideThinkingBlock}
+                    providerUsageVisible={providerUsageVisible}
+                    onProviderUsageVisibleChange={
+                      handleProviderUsageVisibleChange
+                    }
+                    scopeNativeSelectAll={scopeNativeSelectAll}
+                    onScopeNativeSelectAllChange={
+                      handleScopeNativeSelectAllChange
+                    }
+                    openUrlAutomatically={openUrlAutomatically}
+                    onOpenUrlAutomaticallyChange={
+                      handleOpenUrlAutomaticallyChange
+                    }
+                    cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd}
+                    remoteHost={remoteSettings}
+                    sessionId={selectedSession?.id ?? null}
+                    onModelsSaved={() => setModelsRefreshKey((k) => k + 1)}
+                    onPluginsReloaded={() => setSessionKey((k) => k + 1)}
+                    onSelectTab={setSettingsTab}
+                    onClose={() => setSettingsTab(null)}
+                  />
+                ) : (
+                  <>
+                    {/* Top bar: 3-zone segmented control bar */}
+                    <div
+                      ref={topBarRef}
+                      className="shell-topbar"
+                      style={{
+                        position: "relative",
+                        alignItems: "center",
+                        flexShrink: 0,
+                        borderBottom: "1px solid var(--border)",
+                        minHeight: "var(--shell-topbar-height)",
+                        background: "var(--bg-panel)",
+                        padding: isMobile
+                          ? "var(--shell-topbar-inset) max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px))"
+                          : "0 8px",
+                        gap: "0 8px",
+                        minWidth: 0,
                       }}
                     >
-                      <summary
-                        className="shell-toolbar-btn ui-focus-ring"
-                        title={t("chatInput.moreControls")}
-                        aria-label={t("chatInput.moreControls")}
-                      >
-                        <Ellipsis
-                          size={16}
-                          strokeWidth={1.8}
-                          aria-hidden="true"
-                        />
-                      </summary>
+                      {/* Left Zone: Utility group (sidebar, theme, language) & session controls (history, branches, system) */}
                       <div
-                        ref={mobileToolsContentRef}
-                        className="shell-topbar-overflow-content"
+                        className="shell-topbar-tools"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          height: isMobile ? 43 : 35,
+                          minWidth: 0,
+                          flexShrink: 0,
+                        }}
                       >
-                        <ThemeSwitcher />
                         <button
-                          type="button"
-                          onClick={() => {
-                            if (isMobile && mobileToolsRef.current) {
-                              mobileToolsRef.current.open = false;
-                              setActiveTopPanel(null);
-                            }
-                            window.dispatchEvent(
-                              new Event("omp:open-command-palette"),
-                            );
-                          }}
-                          title={`${t("commandPalette.label")} (Ctrl/⌘ K)`}
-                          aria-label={t("commandPalette.label")}
-                          aria-keyshortcuts="Control+K Meta+K"
+                          onClick={handleSidebarToggle}
+                          aria-expanded={sidebarOpen}
+                          aria-controls="workspace-sidebar"
+                          title={
+                            sidebarOpen
+                              ? t("appShell.hideSidebar")
+                              : t("appShell.showSidebar")
+                          }
+                          aria-label={
+                            sidebarOpen
+                              ? t("appShell.hideSidebar")
+                              : t("appShell.showSidebar")
+                          }
                           className="shell-toolbar-btn ui-focus-ring"
                         >
-                          <Command
+                          <Menu
                             size={16}
                             strokeWidth={1.8}
                             aria-hidden="true"
                           />
                         </button>
-                        {showChat && (
-                          <>
-                            <div
-                              className="shell-toolbar-divider"
-                              aria-hidden="true"
-                            />
-                            <BranchNavigator
-                              tree={branchTree}
-                              activeLeafId={branchActiveLeafId}
-                              onLeafChange={handleBranchLeafChange}
-                              inline
-                              containerRef={
-                                compactTopbar
-                                  ? mobileToolsContentRef
-                                  : topBarRef
-                              }
-                              open={activeTopPanel === "branches"}
-                              onToggle={() => toggleTopPanel("branches")}
-                              hasSession
-                            />
-                          </>
-                        )}
-                      </div>
-                    </details>
-                  </div>
-                  {isMobile && (
-                    <div
-                      ref={setWorkspaceSwitcherTarget}
-                      className="workspace-switcher-header"
-                    />
-                  )}
-
-                  {/* Center Zone: Workspace & Session Breadcrumb + Auto-name action */}
-                  {!isMobile &&
-                    showChat &&
-                    (() => {
-                      const effectiveProject =
-                        selectedSession?.projectRoot ??
-                        selectedSession?.cwd ??
-                        activeCwd ??
-                        "";
-                      const sessionTitle =
-                        selectedSession?.name ||
-                        (selectedSession?.messageCount ? temporarySessionTitle(selectedSession.firstMessage) : null) ||
-                        t("appShell.newSession");
-                      const hasMessages = Boolean(
-                        selectedSession &&
-                        (sessionStats?.userMessages ??
-                          selectedSession.messageCount) > 0,
-                      );
-                      const wandDisabled =
-                        !selectedSession ||
-                        !hasMessages ||
-                        autoNameStatus.kind === "naming";
-                      const wandIsSuccess = autoNameStatus.kind === "success";
-                      const wandIsError = autoNameStatus.kind === "error";
-                      const wandLabel =
-                        autoNameStatus.kind === "naming"
-                          ? t("appShell.generating")
-                          : wandIsSuccess
-                            ? t("appShell.titleUpdated")
-                            : wandIsError
-                              ? t("appShell.generationFailed")
-                              : t("appShell.generateTitle");
-                      const wandTooltip = !selectedSession
-                        ? t("appShell.titleGenUnavailable")
-                        : !hasMessages
-                          ? t("appShell.titleGenNeedsMessage")
-                          : wandIsError
-                            ? autoNameStatus.message
-                            : t("appShell.generateSessionTitle");
-
-                      return (
-                        <div
-                          className="shell-topbar-center"
-                          style={{
-                            minWidth: 0,
-                            containerType: "inline-size",
-                            containerName: "breadcrumb",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
+                        <details
+                          ref={mobileToolsRef}
+                          className="shell-topbar-overflow"
+                          data-compact={
+                            isMobile
+                              ? "true"
+                              : compactTopbar === null
+                                ? "pending"
+                                : compactTopbar
+                          }
+                          open={
+                            isMobile
+                              ? undefined
+                              : compactTopbar
+                                ? undefined
+                                : true
+                          }
+                          onToggle={(event) => {
+                            if (!event.currentTarget.open)
+                              setActiveTopPanel(null);
                           }}
                         >
-                          <div
-                            className="shell-topbar-breadcrumb"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                              height: 26,
-                              padding: "0 8px",
-                              borderRadius: "var(--radius-control)",
-                              background: "var(--bg-subtle)",
-                              border: "1px solid var(--border)",
-                              fontSize: 11,
-                              color: "var(--text-muted)",
-                              whiteSpace: "nowrap",
-                              minWidth: 0,
-                              width: "fit-content",
-                              justifyContent: "center",
-                              flexShrink: 1,
-                            }}
+                          <summary
+                            className="shell-toolbar-btn ui-focus-ring"
+                            title={t("chatInput.moreControls")}
+                            aria-label={t("chatInput.moreControls")}
                           >
-                            {effectiveProject ? (
-                              <span
-                                className="shell-topbar-project-context"
-                                style={{ display: "contents" }}
-                              >
-                                <Folder
-                                  size={12}
-                                  strokeWidth={1.8}
-                                  style={{ opacity: 0.6, flexShrink: 0 }}
-                                  aria-hidden="true"
-                                />
-                                <span
-                                  style={{
-                                    fontWeight: 600,
-                                    color: "var(--text)",
-                                    flexShrink: 0,
-                                    maxWidth: 120,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                  title={effectiveProject}
-                                >
-                                  {projectLabel(effectiveProject)}
-                                </span>
-                                <span
-                                  style={{
-                                    color: "var(--text-dim)",
-                                    flexShrink: 0,
-                                    opacity: 0.5,
-                                  }}
-                                >
-                                  /
-                                </span>
-                              </span>
-                            ) : null}
-                            <span
-                              style={{
-                                color: "var(--text)",
-                                fontWeight: 500,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                minWidth: 0,
-                              }}
-                              title={sessionTitle}
-                            >
-                              {sessionTitle}
-                            </span>
-                            {selectedSession && (
-                              <button
-                                type="button"
-                                onClick={() => void handleAutoName()}
-                                disabled={wandDisabled}
-                                title={wandTooltip}
-                                aria-label={wandLabel}
-                                className="ui-focus-ring"
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  width: 18,
-                                  height: 18,
-                                  padding: 0,
-                                  marginLeft: 2,
-                                  border: "none",
-                                  borderRadius: 4,
-                                  background: "transparent",
-                                  color: wandIsSuccess
-                                    ? "var(--accent)"
-                                    : wandIsError
-                                      ? "var(--status-error)"
-                                      : "var(--text-dim)",
-                                  cursor: wandDisabled ? "default" : "pointer",
-                                  flexShrink: 0,
-                                  opacity:
-                                    autoNameStatus.kind === "naming"
-                                      ? 1
-                                      : wandDisabled
-                                        ? 0.35
-                                        : 0.75,
-                                  transition:
-                                    "color var(--dur-fast), opacity var(--dur-fast)",
-                                }}
-                              >
-                                {autoNameStatus.kind === "naming" ? (
-                                  <svg
-                                    className="animate-spin"
-                                    width="12"
-                                    height="12"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    aria-hidden="true"
-                                  >
-                                    <circle
-                                      cx="12"
-                                      cy="12"
-                                      r="9"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      opacity="0.25"
-                                    />
-                                    <path
-                                      d="M21 12a9 9 0 0 0-9-9"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                    />
-                                  </svg>
-                                ) : wandIsSuccess ? (
-                                  <Check
-                                    size={12}
-                                    strokeWidth={2}
-                                    aria-hidden="true"
-                                  />
-                                ) : (
-                                  <Wand2
-                                    size={12}
-                                    strokeWidth={1.8}
-                                    aria-hidden="true"
-                                  />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                  {/* Right zone: speed, mobile session information, and the file-panel opener. */}
-                  <div
-                    data-topbar-right-group
-                    style={{
-                      marginLeft: "auto",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: isMobile ? 2 : 6,
-                      height: isMobile
-                        ? 43
-                        : "calc(var(--shell-topbar-height) - 1px)",
-                      flexShrink: 1,
-                      minWidth: 0,
-                    }}
-                  >
-                    {hasGenerationSpeed && (
-                      <div
-                        className="shell-topbar-metrics"
-                        style={{
-                          flex: "0 1 calc(10ch + 33px)",
-                          minWidth: 0,
-                          fontSize: 11,
-                          fontFamily: "var(--font-mono)",
-                          containerType: "inline-size",
-                          containerName: "topbar-speed",
-                        }}
-                      >
-                        {/* Generation speed pill */}
-                        {showChat &&
-                          (() => {
-                            if (!speed || rate == null) return null;
-                            const isLive = currentRate != null;
-                            const speedTitle = t(
-                              isLive
-                                ? "appShell.tooltipCurrentSpeed"
-                                : "appShell.tooltipAverageSpeed",
-                              {
-                                value: `${rate.toFixed(1)} t/s`,
-                              },
-                            );
-
-                            return (
-                              <div
-                                title={speedTitle}
-                                role="img"
-                                aria-label={speedTitle}
-                                className="shell-metric-pill shell-pill-extra"
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 4,
-                                  height: 26,
-                                  padding: "0 8px",
-                                  borderRadius: "var(--radius-control)",
-                                  border: "1px solid var(--border)",
-                                  background: "var(--bg-subtle)",
-                                  color: isLive
-                                    ? "var(--accent)"
-                                    : "var(--text-muted)",
-                                  fontSize: 11,
-                                  fontFamily: "var(--font-mono)",
-                                  fontVariantNumeric: "tabular-nums",
-                                  whiteSpace: "nowrap",
-                                  cursor: "default",
-                                  width: "calc(10ch + 33px)",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {isLive ? (
-                                  <Zap
-                                    size={11}
-                                    strokeWidth={2}
-                                    aria-hidden="true"
-                                    style={{
-                                      flexShrink: 0,
-                                      color: "var(--accent)",
-                                    }}
-                                  />
-                                ) : (
-                                  <span
-                                    aria-hidden="true"
-                                    style={{
-                                      width: 11,
-                                      lineHeight: "11px",
-                                      textAlign: "center",
-                                      flexShrink: 0,
-                                      color: "var(--text-dim)",
-                                    }}
-                                  >
-                                    ~
-                                  </span>
-                                )}
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    gap: "1ch",
-                                    fontWeight: isLive ? 600 : 400,
-                                  }}
-                                >
-                                  <span
-                                    style={{ width: "5ch", textAlign: "right" }}
-                                  >
-                                    {speed.value}
-                                  </span>
-                                  <span style={{ width: "4ch" }}>
-                                    {speed.unit}
-                                  </span>
-                                </span>
-                              </div>
-                            );
-                          })()}
-                      </div>
-                    )}
-                    {isMobile && showChat && (
-                      <div
-                        ref={setSessionInfoContainer}
-                        className="shell-session-info"
-                        style={{
-                          display: "flex",
-                          height: 44,
-                          flexShrink: 0,
-                          alignSelf: "flex-start",
-                        }}
-                      />
-                    )}
-                    <div
-                      ref={setShipButtonContainer}
-                      style={{ flexShrink: 0 }}
-                    />
-                    {!isMobile && (
-                      <NotificationBell
-                        open={notificationsOpen}
-                        onOpenChange={setNotificationsOpen}
-                      />
-                    )}
-                    <button
-                      type="button"
-                      className="shell-toolbar-btn shell-panel-opener ui-focus-ring"
-                      onClick={() => {
-                        // Unread notifications turn the panel toggle into their shortcut.
-                        if (opensNotifications) {
-                          setRightView("notifications");
-                          setRightPanelOpen(true);
-                        } else {
-                          setRightPanelOpen((open) => !open);
-                        }
-                      }}
-                      aria-expanded={rightPanelOpen}
-                      aria-controls="workspace-file-panel"
-                      aria-pressed={rightPanelOpen}
-                      title={panelOpenerLabel}
-                      aria-label={panelOpenerLabel}
-                    >
-                      <PanelRight
-                        size={16}
-                        strokeWidth={1.8}
-                        aria-hidden="true"
-                      />
-                      {isMobile && unreadNotifications > 0 && (
-                        <span aria-hidden="true" className="panel-opener-badge">
-                          {unreadNotifications > 99
-                            ? "99+"
-                            : unreadNotifications}
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Chat content */}
-                <div
-                  inert={shipVisible ? true : undefined}
-                  style={{
-                    flex: 1,
-                    overflow: "hidden",
-                    position: "relative",
-                    display: activeTerminalId ? "none" : undefined,
-                  }}
-                >
-                  {showChat ? (
-                    <ChatWindow
-                      key={sessionKey}
-                      session={selectedSession}
-                      shipButtonContainer={
-                        activeTerminalId ? null : shipButtonContainer
-                      }
-                      shipWorkspace={(() => {
-                        if (!selectedSession) return undefined;
-                        const host = selectedSession.hostId ?? LOCAL_HOST_ID;
-                        const cwd = comparableProjectPath(selectedSession.cwd);
-                        const workspace = workspaceOptions.projects
-                          .filter(
-                            (item) =>
-                              (item.hostId ?? LOCAL_HOST_ID) === host &&
-                              (cwd === comparableProjectPath(item.path) ||
-                                cwd.startsWith(
-                                  `${comparableProjectPath(item.path)}/`,
-                                )),
-                          )
-                          .sort((a, b) => b.path.length - a.path.length)[0];
-                        if (
-                          !workspace ||
-                          workspace.projectKind !== "git" ||
-                          workspace.isDefaultWorkspace ||
-                          !workspace.projectPath
-                        )
-                          return undefined;
-                        return {
-                          host,
-                          projectPath: workspace.projectPath,
-                          path: workspace.path,
-                          sessionId: selectedSession.id,
-                        };
-                      })()}
-                      onShip={openShip}
-                      activityContainer={activityContainer}
-                      sidebarActivityContainer={
-                        isMobile ? null : sidebarActivityContainer
-                      }
-                      newSessionCwd={effectiveNewSessionCwd}
-                      newSessionHostId={newSessionHost}
-                      prepareNewWorkspace={prepareNewWorkspace}
-                      startupStage={activeChatId ? chatStartup[activeChatId] : undefined}
-                      onStartupStage={updateStartupStage}
-                      workspaceSourceRequired={
-                        !!workspaceDraft &&
-                        !workspaceDraft.workspaceJob &&
-                        !workspaceBaseRef
-                      }
-                      newSessionCreationId={undefined}
-                      newSessionDraftKey={
-                        activeChatId ? `new:tab:${activeChatId}` : undefined
-                      }
-                      newSessionInitialization={
-                        newSessionCreation.initialization
-                      }
-                      onNewSessionInitialization={
-                        handleNewSessionInitialization
-                      }
-                      hostStatus={chatHost?.status}
-                      hostLabel={chatHost ? hostName(t, chatHost) : undefined}
-                      workspaceBaseSelector={
-                        pendingWorkspace && (
-                          <>
-                            <span
-                              className="composer-workspace-name"
-                              title={pendingWorkspace}
-                            >
-                              {hostProjects.find(
-                                (project) =>
-                                  (project.projectPath ?? project.path) ===
-                                  pendingWorkspace,
-                              )?.projectName ?? projectLabel(pendingWorkspace)}
-                            </span>
-                            {sourceTabId && (
-                              <WorkspaceSourcePicker
-                                key={sourceTabId}
-                                branches={workspaceSources?.branches}
-                                error={workspaceSources?.error}
-                                selection={workspaceDraft?.workspaceSource}
-                                onChange={(workspaceSource) =>
-                                  updateChatTabs((tabs) =>
-                                    tabs.map((tab) =>
-                                      tab.id === sourceTabId
-                                        ? { ...tab, workspaceSource }
-                                        : tab,
-                                    ),
-                                  )
-                                }
-                              />
-                            )}
-                          </>
-                        )
-                      }
-                      newSessionWorkspace={
-                        !pendingWorkspace && !activeEffort && !chatTabs.find((tab) => tab.id === activeChatId)?.workspaceFixed && (
-                          effectiveNewSessionCwd && (
-                            <div className="new-session-workspace">
-                              {creationTargets.length > 1 && (
-                                <>
-                                  <label
-                                    htmlFor="new-session-host"
-                                    className="new-session-workspace-label"
-                                  >
-                                    {t("hosts.pickerLabel")}
-                                  </label>
-                                  <div className="new-session-workspace-control">
-                                    <span
-                                      className="new-session-workspace-icon"
-                                      aria-hidden="true"
-                                    >
-                                      <Server size={17} strokeWidth={1.8} />
-                                    </span>
-                                    <ThemedSelect
-                                      className="workspace-select-trigger"
-                                      id="new-session-host"
-                                      value={newSessionGroupKey}
-                                      onChange={(key) => {
-                                        const first =
-                                          workspaceOptions.projects.find(
-                                            (project) =>
-                                              (project.hostId ??
-                                                LOCAL_HOST_ID) === key,
-                                          );
-                                        if (
-                                          !first ||
-                                          key === newSessionGroupKey
-                                        )
-                                          return;
-                                        setActiveCwd(first.path);
-                                        setActiveHostId(
-                                          remoteHostId(first.hostId),
-                                        );
-                                        handleNewSession(
-                                          browserUUID(),
-                                          first.path,
-                                          first.hostId,
-                                          first,
-                                        );
-                                      }}
-                                      options={creationTargets.map(
-                                        (target) => ({
-                                          value: target.id,
-                                          label: target.label,
-                                          disabled:
-                                            !workspaceOptions.projects.some(
-                                              (project) =>
-                                                (project.hostId ??
-                                                  LOCAL_HOST_ID) === target.id,
-                                            ),
-                                        }),
-                                      )}
-                                    />
-                                    <ChevronDown
-                                      className="new-session-workspace-chevron"
-                                      size={16}
-                                      strokeWidth={1.8}
-                                      aria-hidden="true"
-                                    />
-                                  </div>
-                                </>
-                              )}
-                              <div className="new-session-workspace-fields">
-                                <div className="new-session-workspace-field">
-                                  <label
-                                    htmlFor="new-session-project"
-                                    className="new-session-workspace-label"
-                                  >
-                                    Project
-                                  </label>
-                                  <div className="new-session-workspace-control">
-                                    <span
-                                      className="new-session-workspace-icon"
-                                      aria-hidden="true"
-                                    >
-                                      <Folder size={17} strokeWidth={1.8} />
-                                    </span>
-                                    <ThemedSelect
-                                      className="workspace-select-trigger"
-                                      id="new-session-project"
-                                      value={selectedNewProjectId}
-                                      onChange={(key) => {
-                                        if (!key) {
-                                          openAddProject(
-                                            true,
-                                            newSessionGroupKey,
-                                          );
-                                          return;
-                                        }
-                                        const workspace =
-                                          hostProjects.find(
-                                            (candidate) =>
-                                              candidate.projectId === key &&
-                                              candidate.isDefaultWorkspace,
-                                          ) ??
-                                          hostProjects.find(
-                                            (candidate) =>
-                                              candidate.projectId === key,
-                                          );
-                                        if (!workspace) return;
-                                        setActiveCwd(workspace.path);
-                                        setActiveHostId(
-                                          remoteHostId(workspace.hostId),
-                                        );
-                                        handleNewSession(
-                                          browserUUID(),
-                                          workspace.path,
-                                          workspace.hostId,
-                                          workspace,
-                                        );
-                                      }}
-                                      options={[
-                                        ...newSessionProjects.map((project) => {
-                                          const label =
-                                            project.projectName ??
-                                            projectLabel(
-                                              project.projectPath ??
-                                                project.path,
-                                            );
-                                          // Native option values fall back to their text when value is undefined.
-                                          return {
-                                            value: project.projectId ?? label,
-                                            label,
-                                          };
-                                        }),
-                                        {
-                                          value: "",
-                                          label: t("projects.add"),
-                                          action: true,
-                                        },
-                                      ]}
-                                    />
-                                    <ChevronDown
-                                      className="new-session-workspace-chevron"
-                                      size={16}
-                                      strokeWidth={1.8}
-                                      aria-hidden="true"
-                                    />
-                                  </div>
-                                </div>
-                                <div className="new-session-workspace-field">
-                                  <label
-                                    id="new-session-workspace-label"
-                                    htmlFor="new-session-workspace"
-                                    className="new-session-workspace-label"
-                                  >
-                                    {t("settingsConfig.chipWorkspace")}
-                                  </label>
-                                  <div className="new-session-workspace-control">
-                                    <span
-                                      className="new-session-workspace-icon"
-                                      aria-hidden="true"
-                                    >
-                                      <Folder size={17} strokeWidth={1.8} />
-                                    </span>
-                                    <ThemedSelect
-                                      className="workspace-select-trigger"
-                                      id="new-session-workspace"
-                                      aria-describedby="new-session-workspace-path"
-                                      value={newSessionWorkspaceValue}
-                                      onChange={(key) => {
-                                        if (key === "__add_workspace__") {
-                                          if (selectedNewWorkspace)
-                                            handleNewWorkspace(
-                                              selectedNewWorkspace,
-                                            );
-                                          return;
-                                        }
-                                        const project = projectWorkspaces.find(
-                                          (candidate) =>
-                                            hostProjectKey(
-                                              candidate.hostId,
-                                              candidate.path,
-                                            ) === key,
-                                        );
-                                        if (!project) return;
-                                        setActiveCwd(project.path);
-                                        setActiveHostId(
-                                          remoteHostId(project.hostId),
-                                        );
-                                        handleNewSession(
-                                          browserUUID(),
-                                          project.path,
-                                          project.hostId,
-                                          project,
-                                        );
-                                      }}
-                                      options={[
-                                        // Keylime creates a workspace for the selected project rather than an upstream worktree selection.
-                                        ...projectWorkspaces.map((project) => ({
-                                          value: hostProjectKey(
-                                            project.hostId,
-                                            project.path,
-                                          ),
-                                          label:
-                                            project.alias ??
-                                            project.name ??
-                                            projectLabel(project.path),
-                                        })),
-                                        ...(selectedNewWorkspace?.projectKind ===
-                                        "git"
-                                          ? [
-                                              {
-                                                value: "__add_workspace__",
-                                                label: "Add workspace",
-                                                action: true,
-                                              },
-                                            ]
-                                          : []),
-                                      ]}
-                                    />
-                                    <ChevronDown
-                                      className="new-session-workspace-chevron"
-                                      size={16}
-                                      strokeWidth={1.8}
-                                      aria-hidden="true"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                              <div
-                                id="new-session-workspace-path"
-                                className="new-session-workspace-path"
-                                title={effectiveNewSessionCwd ?? undefined}
-                              >
-                                {effectiveNewSessionCwd}
-                              </div>
-                            </div>
-                          )
-                        )
-                      }
-                      onAgentEnd={handleAgentEnd}
-                      onSessionCreated={(session) =>
-                        handleSessionCreated(activeChatId, session)
-                      }
-                      onBackgroundSessionCreated={(session) =>
-                        handleSessionCreated(activeChatId, session)
-                      }
-                      onSessionForked={handleSessionForked}
-                      onSessionMoved={handleSessionMoved}
-                      modelsRefreshKey={modelsRefreshKey}
-                      chatInputRef={chatInputRef}
-                      onOpenFile={handleOpenFile}
-                      onOpenUrl={handleSessionOpenUrl}
-                      onBranchDataChange={handleBranchDataChange}
-                      onSessionStatsChange={handleSessionStatsChange}
-                      onSessionStatsPanelOpen={openSessionStatsPanel}
-                      sessionInfoContainer={sessionInfoContainer}
-                      onGenerationSpeedChange={handleGenerationSpeedChange}
-                      toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
-                      hideToolActivity={hideToolActivity}
-                      neverFoldActivity={neverFoldActivity}
-                      showToolCallsUnfolded={showToolCallsUnfolded}
-                      expandThinkingByDefault={expandThinkingByDefault}
-                      hideThinkingBlock={hideThinkingBlock}
-                      searchQuery={chatSearchQuery}
-                      searchTarget={
-                        searchMatchTarget &&
-                        searchMatchTarget.sessionId === selectedSession?.id
-                          ? searchMatchTarget
-                          : null
-                      }
-                      onSearchTargetHandled={clearSearchMatchTarget}
-                    />
-                  ) : initialCwdStatus === "validating" ? (
-                    <WorkspaceState
-                      kind="loading"
-                      title={t("appShell.openingWorkspace")}
-                      detail={
-                        <span className="workspace-state-path">
-                          {initialNavigation.requestedCwd}
-                        </span>
-                      }
-                    />
-                  ) : initialCwdStatus === "error" ? (
-                    <WorkspaceState
-                      kind="error"
-                      title={t("appShell.unableToOpenWorkspace")}
-                      detail={
-                        <>
-                          <span className="workspace-state-path">
-                            {initialNavigation.requestedCwd}
-                          </span>
-                          <span>{initialCwdError}</span>
-                        </>
-                      }
-                    />
-                  ) : !showPlaceholder ? (
-                    <PanelLoadingFallback />
-                  ) : activeCwd ? (
-                    <WorkspaceState
-                      kind="empty"
-                      title={t("appShell.selectSessionHint")}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 12,
-                        left: 12,
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 8,
-                        userSelect: "none",
-                      }}
-                    >
-                      <svg
-                        width="44"
-                        height="44"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="var(--accent)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{ opacity: 0.7, flexShrink: 0 }}
-                      >
-                        <line x1="20" y1="12" x2="4" y2="12" />
-                        <polyline points="10 6 4 12 10 18" />
-                      </svg>
-                      <div>
-                        <div
-                          className="display-heading"
-                          style={{
-                            fontSize: 20,
-                            color: "var(--text)",
-                            marginBottom: 8,
-                          }}
-                        >
-                          {t("appShell.getStarted")}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "var(--text-muted)",
-                            lineHeight: 1.8,
-                          }}
-                        >
-                          <span
-                            style={{ color: "var(--text-dim)", marginRight: 6 }}
-                          >
-                            1.
-                          </span>
-                          {t("appShell.getStartedStep1")}
-                          <br />
-                          <span
-                            style={{ color: "var(--text-dim)", marginRight: 6 }}
-                          >
-                            2.
-                          </span>
-                          {(() => {
-                            // One translatable sentence; the {models} slot is rendered
-                            // as the emphasized button name so word order stays free.
-                            const [before, after] = t(
-                              "appShell.getStartedStep2",
-                            ).split("{models}");
-                            return (
-                              <>
-                                {before}
-                                <strong style={{ color: "var(--text)" }}>
-                                  {t("appShell.models")}
-                                </strong>
-                                {after}
-                              </>
-                            );
-                          })()}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSidebarOpen(true);
-                              openAddProject(true);
-                            }}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                              width: "fit-content",
-                              minHeight: 36,
-                              marginTop: 12,
-                              padding: "7px 10px",
-                              border: "1px solid var(--border)",
-                              borderRadius: "var(--radius-control)",
-                              background: "var(--bg-panel)",
-                              color: "var(--text)",
-                              cursor: "pointer",
-                              fontSize: 12,
-                              fontWeight: 600,
-                              boxShadow: "var(--shadow-card)",
-                            }}
-                            className="ui-focus-ring"
-                          >
-                            <Folder
-                              size={14}
+                            <Ellipsis
+                              size={16}
                               strokeWidth={1.8}
                               aria-hidden="true"
                             />
-                            {t("appShell.openWorkspaces")}
-                          </button>
-                        </div>
+                          </summary>
+                          <div
+                            ref={mobileToolsContentRef}
+                            className="shell-topbar-overflow-content"
+                          >
+                            <ThemeSwitcher />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isMobile && mobileToolsRef.current) {
+                                  mobileToolsRef.current.open = false;
+                                  setActiveTopPanel(null);
+                                }
+                                window.dispatchEvent(
+                                  new Event("omp:open-command-palette"),
+                                );
+                              }}
+                              title={`${t("commandPalette.label")} (Ctrl/⌘ K)`}
+                              aria-label={t("commandPalette.label")}
+                              aria-keyshortcuts="Control+K Meta+K"
+                              className="shell-toolbar-btn ui-focus-ring"
+                            >
+                              <Command
+                                size={16}
+                                strokeWidth={1.8}
+                                aria-hidden="true"
+                              />
+                            </button>
+                            {showChat && (
+                              <>
+                                <div
+                                  className="shell-toolbar-divider"
+                                  aria-hidden="true"
+                                />
+                                <BranchNavigator
+                                  tree={branchTree}
+                                  activeLeafId={branchActiveLeafId}
+                                  onLeafChange={handleBranchLeafChange}
+                                  inline
+                                  containerRef={
+                                    compactTopbar
+                                      ? mobileToolsContentRef
+                                      : topBarRef
+                                  }
+                                  open={activeTopPanel === "branches"}
+                                  onToggle={() => toggleTopPanel("branches")}
+                                  hasSession
+                                />
+                              </>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                      {isMobile && (
+                        <div
+                          ref={setWorkspaceSwitcherTarget}
+                          className="workspace-switcher-header"
+                        />
+                      )}
+
+                      {/* Center Zone: Workspace & Session Breadcrumb + Auto-name action */}
+                      {!isMobile &&
+                        showChat &&
+                        (() => {
+                          const effectiveProject =
+                            selectedSession?.projectRoot ??
+                            selectedSession?.cwd ??
+                            activeCwd ??
+                            "";
+                          const sessionTitle =
+                            selectedSession?.name ||
+                            (selectedSession?.messageCount
+                              ? temporarySessionTitle(
+                                  selectedSession.firstMessage,
+                                )
+                              : null) ||
+                            t("appShell.newSession");
+                          const hasMessages = Boolean(
+                            selectedSession &&
+                            (sessionStats?.userMessages ??
+                              selectedSession.messageCount) > 0,
+                          );
+                          const wandDisabled =
+                            !selectedSession ||
+                            !hasMessages ||
+                            autoNameStatus.kind === "naming";
+                          const wandIsSuccess =
+                            autoNameStatus.kind === "success";
+                          const wandIsError = autoNameStatus.kind === "error";
+                          const wandLabel =
+                            autoNameStatus.kind === "naming"
+                              ? t("appShell.generating")
+                              : wandIsSuccess
+                                ? t("appShell.titleUpdated")
+                                : wandIsError
+                                  ? t("appShell.generationFailed")
+                                  : t("appShell.generateTitle");
+                          const wandTooltip = !selectedSession
+                            ? t("appShell.titleGenUnavailable")
+                            : !hasMessages
+                              ? t("appShell.titleGenNeedsMessage")
+                              : wandIsError
+                                ? autoNameStatus.message
+                                : t("appShell.generateSessionTitle");
+
+                          return (
+                            <div
+                              className="shell-topbar-center"
+                              style={{
+                                minWidth: 0,
+                                containerType: "inline-size",
+                                containerName: "breadcrumb",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <div
+                                className="shell-topbar-breadcrumb"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  height: 26,
+                                  padding: "0 8px",
+                                  borderRadius: "var(--radius-control)",
+                                  background: "var(--bg-subtle)",
+                                  border: "1px solid var(--border)",
+                                  fontSize: 11,
+                                  color: "var(--text-muted)",
+                                  whiteSpace: "nowrap",
+                                  minWidth: 0,
+                                  width: "fit-content",
+                                  justifyContent: "center",
+                                  flexShrink: 1,
+                                }}
+                              >
+                                {effectiveProject ? (
+                                  <span
+                                    className="shell-topbar-project-context"
+                                    style={{ display: "contents" }}
+                                  >
+                                    <Folder
+                                      size={12}
+                                      strokeWidth={1.8}
+                                      style={{ opacity: 0.6, flexShrink: 0 }}
+                                      aria-hidden="true"
+                                    />
+                                    <span
+                                      style={{
+                                        fontWeight: 600,
+                                        color: "var(--text)",
+                                        flexShrink: 0,
+                                        maxWidth: 120,
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                      title={effectiveProject}
+                                    >
+                                      {projectLabel(effectiveProject)}
+                                    </span>
+                                    <span
+                                      style={{
+                                        color: "var(--text-dim)",
+                                        flexShrink: 0,
+                                        opacity: 0.5,
+                                      }}
+                                    >
+                                      /
+                                    </span>
+                                  </span>
+                                ) : null}
+                                <span
+                                  style={{
+                                    color: "var(--text)",
+                                    fontWeight: 500,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    minWidth: 0,
+                                  }}
+                                  title={sessionTitle}
+                                >
+                                  {sessionTitle}
+                                </span>
+                                {selectedSession && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleAutoName()}
+                                    disabled={wandDisabled}
+                                    title={wandTooltip}
+                                    aria-label={wandLabel}
+                                    className="ui-focus-ring"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      width: 18,
+                                      height: 18,
+                                      padding: 0,
+                                      marginLeft: 2,
+                                      border: "none",
+                                      borderRadius: 4,
+                                      background: "transparent",
+                                      color: wandIsSuccess
+                                        ? "var(--accent)"
+                                        : wandIsError
+                                          ? "var(--status-error)"
+                                          : "var(--text-dim)",
+                                      cursor: wandDisabled
+                                        ? "default"
+                                        : "pointer",
+                                      flexShrink: 0,
+                                      opacity:
+                                        autoNameStatus.kind === "naming"
+                                          ? 1
+                                          : wandDisabled
+                                            ? 0.35
+                                            : 0.75,
+                                      transition:
+                                        "color var(--dur-fast), opacity var(--dur-fast)",
+                                    }}
+                                  >
+                                    {autoNameStatus.kind === "naming" ? (
+                                      <svg
+                                        className="animate-spin"
+                                        width="12"
+                                        height="12"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        aria-hidden="true"
+                                      >
+                                        <circle
+                                          cx="12"
+                                          cy="12"
+                                          r="9"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          opacity="0.25"
+                                        />
+                                        <path
+                                          d="M21 12a9 9 0 0 0-9-9"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                        />
+                                      </svg>
+                                    ) : wandIsSuccess ? (
+                                      <Check
+                                        size={12}
+                                        strokeWidth={2}
+                                        aria-hidden="true"
+                                      />
+                                    ) : (
+                                      <Wand2
+                                        size={12}
+                                        strokeWidth={1.8}
+                                        aria-hidden="true"
+                                      />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                      {/* Right zone: speed, mobile session information, and the file-panel opener. */}
+                      <div
+                        data-topbar-right-group
+                        style={{
+                          marginLeft: "auto",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: isMobile ? 2 : 6,
+                          height: isMobile
+                            ? 43
+                            : "calc(var(--shell-topbar-height) - 1px)",
+                          flexShrink: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        {hasGenerationSpeed && (
+                          <div
+                            className="shell-topbar-metrics"
+                            style={{
+                              flex: "0 1 calc(10ch + 33px)",
+                              minWidth: 0,
+                              fontSize: 11,
+                              fontFamily: "var(--font-mono)",
+                              containerType: "inline-size",
+                              containerName: "topbar-speed",
+                            }}
+                          >
+                            {/* Generation speed pill */}
+                            {showChat &&
+                              (() => {
+                                if (!speed || rate == null) return null;
+                                const isLive = currentRate != null;
+                                const speedTitle = t(
+                                  isLive
+                                    ? "appShell.tooltipCurrentSpeed"
+                                    : "appShell.tooltipAverageSpeed",
+                                  {
+                                    value: `${rate.toFixed(1)} t/s`,
+                                  },
+                                );
+
+                                return (
+                                  <div
+                                    title={speedTitle}
+                                    role="img"
+                                    aria-label={speedTitle}
+                                    className="shell-metric-pill shell-pill-extra"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      height: 26,
+                                      padding: "0 8px",
+                                      borderRadius: "var(--radius-control)",
+                                      border: "1px solid var(--border)",
+                                      background: "var(--bg-subtle)",
+                                      color: isLive
+                                        ? "var(--accent)"
+                                        : "var(--text-muted)",
+                                      fontSize: 11,
+                                      fontFamily: "var(--font-mono)",
+                                      fontVariantNumeric: "tabular-nums",
+                                      whiteSpace: "nowrap",
+                                      cursor: "default",
+                                      width: "calc(10ch + 33px)",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {isLive ? (
+                                      <Zap
+                                        size={11}
+                                        strokeWidth={2}
+                                        aria-hidden="true"
+                                        style={{
+                                          flexShrink: 0,
+                                          color: "var(--accent)",
+                                        }}
+                                      />
+                                    ) : (
+                                      <span
+                                        aria-hidden="true"
+                                        style={{
+                                          width: 11,
+                                          lineHeight: "11px",
+                                          textAlign: "center",
+                                          flexShrink: 0,
+                                          color: "var(--text-dim)",
+                                        }}
+                                      >
+                                        ~
+                                      </span>
+                                    )}
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        gap: "1ch",
+                                        fontWeight: isLive ? 600 : 400,
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          width: "5ch",
+                                          textAlign: "right",
+                                        }}
+                                      >
+                                        {speed.value}
+                                      </span>
+                                      <span style={{ width: "4ch" }}>
+                                        {speed.unit}
+                                      </span>
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                          </div>
+                        )}
+                        {isMobile && showChat && (
+                          <div
+                            ref={setSessionInfoContainer}
+                            className="shell-session-info"
+                            style={{
+                              display: "flex",
+                              height: 44,
+                              flexShrink: 0,
+                              alignSelf: "flex-start",
+                            }}
+                          />
+                        )}
+                        <div
+                          ref={setShipButtonContainer}
+                          style={{ flexShrink: 0 }}
+                        />
+                        {!isMobile && (
+                          <NotificationBell
+                            open={notificationsOpen}
+                            onOpenChange={setNotificationsOpen}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          className="shell-toolbar-btn shell-panel-opener ui-focus-ring"
+                          onClick={() => {
+                            // Unread notifications turn the panel toggle into their shortcut.
+                            if (opensNotifications) {
+                              setRightView("notifications");
+                              setRightPanelOpen(true);
+                            } else {
+                              setRightPanelOpen((open) => !open);
+                            }
+                          }}
+                          aria-expanded={rightPanelOpen}
+                          aria-controls="workspace-file-panel"
+                          aria-pressed={rightPanelOpen}
+                          title={panelOpenerLabel}
+                          aria-label={panelOpenerLabel}
+                        >
+                          <PanelRight
+                            size={16}
+                            strokeWidth={1.8}
+                            aria-hidden="true"
+                          />
+                          {isMobile && unreadNotifications > 0 && (
+                            <span
+                              aria-hidden="true"
+                              className="panel-opener-badge"
+                            >
+                              {unreadNotifications > 99
+                                ? "99+"
+                                : unreadNotifications}
+                            </span>
+                          )}
+                        </button>
                       </div>
                     </div>
-                  )}
-                </div>
-              </>
-            )}
-            </div>
-            <div style={{ position: "absolute", inset: "var(--shell-topbar-height) 0 0", pointerEvents: shipVisible ? "auto" : "none" }}>
-            {shipFlows.map((target) => {
-              const key = hostProjectKey(target.host, target.path);
-              return <ShipDialog
-                key={key}
-                open
-                visible={key === visibleShipKey}
-                onOpenChange={(open) => {
-                  if (!open) setShipFlows((flows) => flows.filter((flow) => hostProjectKey(flow.host, flow.path) !== key));
+
+                    {/* Chat content */}
+                    <div
+                      inert={shipVisible ? true : undefined}
+                      style={{
+                        flex: 1,
+                        overflow: "hidden",
+                        position: "relative",
+                        display: activeTerminalId ? "none" : undefined,
+                      }}
+                    >
+                      {showChat ? (
+                        <ChatWindow
+                          key={chatMountKey}
+                          session={selectedSession}
+                          shipButtonContainer={
+                            activeTerminalId ? null : shipButtonContainer
+                          }
+                          shipWorkspace={(() => {
+                            if (!selectedSession) return undefined;
+                            const host =
+                              selectedSession.hostId ?? LOCAL_HOST_ID;
+                            const cwd = comparableProjectPath(
+                              selectedSession.cwd,
+                            );
+                            const workspace = workspaceOptions.projects
+                              .filter(
+                                (item) =>
+                                  (item.hostId ?? LOCAL_HOST_ID) === host &&
+                                  (cwd === comparableProjectPath(item.path) ||
+                                    cwd.startsWith(
+                                      `${comparableProjectPath(item.path)}/`,
+                                    )),
+                              )
+                              .sort((a, b) => b.path.length - a.path.length)[0];
+                            if (
+                              !workspace ||
+                              workspace.projectKind !== "git" ||
+                              workspace.isDefaultWorkspace ||
+                              !workspace.projectPath
+                            )
+                              return undefined;
+                            return {
+                              host,
+                              projectPath: workspace.projectPath,
+                              path: workspace.path,
+                              sessionId: selectedSession.id,
+                            };
+                          })()}
+                          onShip={openShip}
+                          activityContainer={activityContainer}
+                          sidebarActivityContainer={
+                            isMobile ? null : sidebarActivityContainer
+                          }
+                          newSessionCwd={effectiveNewSessionCwd}
+                          newSessionHostId={newSessionHost}
+                          prepareNewWorkspace={prepareNewWorkspace}
+                          startupStage={
+                            activeChatId ? chatStartup[activeChatId] : undefined
+                          }
+                          onStartupStage={updateStartupStage}
+                          workspaceSourceRequired={
+                            !!workspaceDraft &&
+                            !workspaceDraft.workspaceJob &&
+                            !workspaceBaseRef
+                          }
+                          newSessionDraftKey={
+                            activeChatId
+                              ? sessionKey(
+                                  `new:tab:${activeChatId}`,
+                                  newSessionHost,
+                                )
+                              : undefined
+                          }
+                          hostStatus={chatHost?.status}
+                          hostLabel={
+                            chatHost ? hostName(t, chatHost) : undefined
+                          }
+                          workspaceBaseSelector={
+                            pendingWorkspace && (
+                              <>
+                                <span
+                                  className="composer-workspace-name"
+                                  title={pendingWorkspace}
+                                >
+                                  {hostProjects.find(
+                                    (project) =>
+                                      (project.projectPath ?? project.path) ===
+                                      pendingWorkspace,
+                                  )?.projectName ??
+                                    projectLabel(pendingWorkspace)}
+                                </span>
+                                {sourceTabId && (
+                                  <WorkspaceSourcePicker
+                                    key={sourceTabId}
+                                    branches={workspaceSources?.branches}
+                                    error={workspaceSources?.error}
+                                    selection={workspaceDraft?.workspaceSource}
+                                    onChange={(workspaceSource) =>
+                                      updateChatTabs((tabs) =>
+                                        tabs.map((tab) =>
+                                          tab.id === sourceTabId
+                                            ? { ...tab, workspaceSource }
+                                            : tab,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                )}
+                              </>
+                            )
+                          }
+                          newSessionWorkspace={
+                            !pendingWorkspace &&
+                            !activeEffort &&
+                            !chatTabs.find((tab) => tab.id === activeChatId)
+                              ?.workspaceFixed &&
+                            effectiveNewSessionCwd && (
+                              <div className="new-session-workspace">
+                                {creationTargets.length > 1 && (
+                                  <>
+                                    <label
+                                      htmlFor="new-session-host"
+                                      className="new-session-workspace-label"
+                                    >
+                                      {t("hosts.pickerLabel")}
+                                    </label>
+                                    <div className="new-session-workspace-control">
+                                      <span
+                                        className="new-session-workspace-icon"
+                                        aria-hidden="true"
+                                      >
+                                        <Server size={17} strokeWidth={1.8} />
+                                      </span>
+                                      <ThemedSelect
+                                        className="workspace-select-trigger"
+                                        id="new-session-host"
+                                        value={newSessionGroupKey}
+                                        onChange={(key) => {
+                                          const first =
+                                            workspaceOptions.projects.find(
+                                              (project) =>
+                                                (project.hostId ??
+                                                  LOCAL_HOST_ID) === key,
+                                            );
+                                          if (
+                                            !first ||
+                                            key === newSessionGroupKey
+                                          )
+                                            return;
+                                          setActiveCwd(first.path);
+                                          setActiveHostId(
+                                            remoteHostId(first.hostId),
+                                          );
+                                          handleNewSession(
+                                            browserUUID(),
+                                            first.path,
+                                            first.hostId,
+                                            first,
+                                          );
+                                        }}
+                                        options={creationTargets.map(
+                                          (target) => ({
+                                            value: target.id,
+                                            label: target.label,
+                                            disabled:
+                                              !workspaceOptions.projects.some(
+                                                (project) =>
+                                                  (project.hostId ??
+                                                    LOCAL_HOST_ID) ===
+                                                  target.id,
+                                              ),
+                                          }),
+                                        )}
+                                      />
+                                      <ChevronDown
+                                        className="new-session-workspace-chevron"
+                                        size={16}
+                                        strokeWidth={1.8}
+                                        aria-hidden="true"
+                                      />
+                                    </div>
+                                  </>
+                                )}
+                                <div className="new-session-workspace-fields">
+                                  <div className="new-session-workspace-field">
+                                    <label
+                                      htmlFor="new-session-project"
+                                      className="new-session-workspace-label"
+                                    >
+                                      Project
+                                    </label>
+                                    <div className="new-session-workspace-control">
+                                      <span
+                                        className="new-session-workspace-icon"
+                                        aria-hidden="true"
+                                      >
+                                        <Folder size={17} strokeWidth={1.8} />
+                                      </span>
+                                      <ThemedSelect
+                                        className="workspace-select-trigger"
+                                        id="new-session-project"
+                                        value={selectedNewProjectId}
+                                        onChange={(key) => {
+                                          if (!key) {
+                                            openAddProject(
+                                              true,
+                                              newSessionGroupKey,
+                                            );
+                                            return;
+                                          }
+                                          const workspace =
+                                            hostProjects.find(
+                                              (candidate) =>
+                                                candidate.projectId === key &&
+                                                candidate.isDefaultWorkspace,
+                                            ) ??
+                                            hostProjects.find(
+                                              (candidate) =>
+                                                candidate.projectId === key,
+                                            );
+                                          if (!workspace) return;
+                                          setActiveCwd(workspace.path);
+                                          setActiveHostId(
+                                            remoteHostId(workspace.hostId),
+                                          );
+                                          handleNewSession(
+                                            browserUUID(),
+                                            workspace.path,
+                                            workspace.hostId,
+                                            workspace,
+                                          );
+                                        }}
+                                        options={[
+                                          ...newSessionProjects.map(
+                                            (project) => {
+                                              const label =
+                                                project.projectName ??
+                                                projectLabel(
+                                                  project.projectPath ??
+                                                    project.path,
+                                                );
+                                              // Native option values fall back to their text when value is undefined.
+                                              return {
+                                                value:
+                                                  project.projectId ?? label,
+                                                label,
+                                              };
+                                            },
+                                          ),
+                                          {
+                                            value: "",
+                                            label: t("projects.add"),
+                                            action: true,
+                                          },
+                                        ]}
+                                      />
+                                      <ChevronDown
+                                        className="new-session-workspace-chevron"
+                                        size={16}
+                                        strokeWidth={1.8}
+                                        aria-hidden="true"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="new-session-workspace-field">
+                                    <label
+                                      id="new-session-workspace-label"
+                                      htmlFor="new-session-workspace"
+                                      className="new-session-workspace-label"
+                                    >
+                                      {t("settingsConfig.chipWorkspace")}
+                                    </label>
+                                    <div className="new-session-workspace-control">
+                                      <span
+                                        className="new-session-workspace-icon"
+                                        aria-hidden="true"
+                                      >
+                                        <Folder size={17} strokeWidth={1.8} />
+                                      </span>
+                                      <ThemedSelect
+                                        className="workspace-select-trigger"
+                                        id="new-session-workspace"
+                                        aria-describedby="new-session-workspace-path"
+                                        value={newSessionWorkspaceValue}
+                                        onChange={(key) => {
+                                          if (key === "__add_workspace__") {
+                                            if (selectedNewWorkspace)
+                                              handleNewWorkspace(
+                                                selectedNewWorkspace,
+                                              );
+                                            return;
+                                          }
+                                          const project =
+                                            projectWorkspaces.find(
+                                              (candidate) =>
+                                                hostProjectKey(
+                                                  candidate.hostId,
+                                                  candidate.path,
+                                                ) === key,
+                                            );
+                                          if (!project) return;
+                                          setActiveCwd(project.path);
+                                          setActiveHostId(
+                                            remoteHostId(project.hostId),
+                                          );
+                                          handleNewSession(
+                                            browserUUID(),
+                                            project.path,
+                                            project.hostId,
+                                            project,
+                                          );
+                                        }}
+                                        options={[
+                                          // Keylime creates a workspace for the selected project rather than an upstream worktree selection.
+                                          ...projectWorkspaces.map(
+                                            (project) => ({
+                                              value: hostProjectKey(
+                                                project.hostId,
+                                                project.path,
+                                              ),
+                                              label:
+                                                project.alias ??
+                                                project.name ??
+                                                projectLabel(project.path),
+                                            }),
+                                          ),
+                                          ...(selectedNewWorkspace?.projectKind ===
+                                          "git"
+                                            ? [
+                                                {
+                                                  value: "__add_workspace__",
+                                                  label: "Add workspace",
+                                                  action: true,
+                                                },
+                                              ]
+                                            : []),
+                                        ]}
+                                      />
+                                      <ChevronDown
+                                        className="new-session-workspace-chevron"
+                                        size={16}
+                                        strokeWidth={1.8}
+                                        aria-hidden="true"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div
+                                  id="new-session-workspace-path"
+                                  className="new-session-workspace-path"
+                                  title={effectiveNewSessionCwd ?? undefined}
+                                >
+                                  {effectiveNewSessionCwd}
+                                </div>
+                              </div>
+                            )
+                          }
+                          onAgentEnd={handleAgentEnd}
+                          onSessionCreated={(session) =>
+                            handleSessionCreated(activeChatId, session)
+                          }
+                          onBackgroundSessionCreated={(session) =>
+                            handleSessionCreated(activeChatId, session)
+                          }
+                          onSessionForked={handleSessionForked}
+                          onSessionMoved={handleSessionMoved}
+                          modelsRefreshKey={modelsRefreshKey}
+                          chatInputRef={chatInputRef}
+                          onOpenFile={handleOpenFile}
+                          onOpenUrl={handleSessionOpenUrl}
+                          onBranchDataChange={handleBranchDataChange}
+                          onSessionStatsChange={handleSessionStatsChange}
+                          onSessionStatsPanelOpen={openSessionStatsPanel}
+                          sessionInfoContainer={sessionInfoContainer}
+                          onGenerationSpeedChange={handleGenerationSpeedChange}
+                          toolCallsDefaultCollapsed={toolCallsDefaultCollapsed}
+                          hideToolActivity={hideToolActivity}
+                          neverFoldActivity={neverFoldActivity}
+                          showToolCallsUnfolded={showToolCallsUnfolded}
+                          expandThinkingByDefault={expandThinkingByDefault}
+                          hideThinkingBlock={hideThinkingBlock}
+                          searchQuery={chatSearchQuery}
+                          searchTarget={
+                            searchMatchTarget &&
+                            selectedSession &&
+                            sessionKey(
+                              searchMatchTarget.sessionId,
+                              searchMatchTarget.hostId,
+                            ) ===
+                              sessionKey(
+                                selectedSession.id,
+                                selectedSession.hostId,
+                              )
+                              ? searchMatchTarget
+                              : null
+                          }
+                          onSearchTargetHandled={clearSearchMatchTarget}
+                        />
+                      ) : initialCwdStatus === "validating" ? (
+                        <WorkspaceState
+                          kind="loading"
+                          title={t("appShell.openingWorkspace")}
+                          detail={
+                            <span className="workspace-state-path">
+                              {initialNavigation.requestedCwd}
+                            </span>
+                          }
+                        />
+                      ) : initialCwdStatus === "error" ? (
+                        <WorkspaceState
+                          kind="error"
+                          title={t("appShell.unableToOpenWorkspace")}
+                          detail={
+                            <>
+                              <span className="workspace-state-path">
+                                {initialNavigation.requestedCwd}
+                              </span>
+                              <span>{initialCwdError}</span>
+                            </>
+                          }
+                        />
+                      ) : !showPlaceholder ? (
+                        <PanelLoadingFallback />
+                      ) : activeCwd ? (
+                        <WorkspaceState
+                          kind="empty"
+                          title={t("appShell.selectSessionHint")}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 12,
+                            left: 12,
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 8,
+                            userSelect: "none",
+                          }}
+                        >
+                          <svg
+                            width="44"
+                            height="44"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="var(--accent)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            style={{ opacity: 0.7, flexShrink: 0 }}
+                          >
+                            <line x1="20" y1="12" x2="4" y2="12" />
+                            <polyline points="10 6 4 12 10 18" />
+                          </svg>
+                          <div>
+                            <div
+                              className="display-heading"
+                              style={{
+                                fontSize: 20,
+                                color: "var(--text)",
+                                marginBottom: 8,
+                              }}
+                            >
+                              {t("appShell.getStarted")}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: "var(--text-muted)",
+                                lineHeight: 1.8,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color: "var(--text-dim)",
+                                  marginRight: 6,
+                                }}
+                              >
+                                1.
+                              </span>
+                              {t("appShell.getStartedStep1")}
+                              <br />
+                              <span
+                                style={{
+                                  color: "var(--text-dim)",
+                                  marginRight: 6,
+                                }}
+                              >
+                                2.
+                              </span>
+                              {(() => {
+                                // One translatable sentence; the {models} slot is rendered
+                                // as the emphasized button name so word order stays free.
+                                const [before, after] = t(
+                                  "appShell.getStartedStep2",
+                                ).split("{models}");
+                                return (
+                                  <>
+                                    {before}
+                                    <strong style={{ color: "var(--text)" }}>
+                                      {t("appShell.models")}
+                                    </strong>
+                                    {after}
+                                  </>
+                                );
+                              })()}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSidebarOpen(true);
+                                  openAddProject(true);
+                                }}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  width: "fit-content",
+                                  minHeight: 36,
+                                  marginTop: 12,
+                                  padding: "7px 10px",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: "var(--radius-control)",
+                                  background: "var(--bg-panel)",
+                                  color: "var(--text)",
+                                  cursor: "pointer",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  boxShadow: "var(--shadow-card)",
+                                }}
+                                className="ui-focus-ring"
+                              >
+                                <Folder
+                                  size={14}
+                                  strokeWidth={1.8}
+                                  aria-hidden="true"
+                                />
+                                {t("appShell.openWorkspaces")}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: "var(--shell-topbar-height) 0 0",
+                  pointerEvents: shipVisible ? "auto" : "none",
                 }}
-                {...target}
-                onAskAgentToResolve={async (message) => {
-                  let advisor = false;
-                  try {
-                    advisor = localStorage.getItem(`omp-advisor-enabled:${target.sessionId}`) === "true";
-                  } catch {
-                    // Storage can be unavailable; match the normal session default.
-                  }
-                  await addToOutbox({ id: newOutboxId(), sessionId: target.sessionId, scope: await getOutboxScope(target.sessionId), advisor, mode: "prompt", message, createdAt: Date.now() });
-                }}
-                onRemoved={() => {
-                  const selection = shipSelectionRef.current;
-                  updateChatTabs((tabs) => tabs.filter((tab) => !tabInWorkspace(tab, target.path, target.host, selection.projects)));
-                  setRefreshKey((value) => value + 1);
-                  const selectedPath = comparableProjectPath(selection.explorerCwd ?? "");
-                  const removedPath = comparableProjectPath(target.path);
-                  if (!selection.settingsTab && selection.workspaceHostId === target.host &&
-                    (selection.visibleShipKey === key || selectedPath === removedPath || selectedPath.startsWith(removedPath === "/" ? "/" : `${removedPath}/`))) {
-                    activateChat(null);
-                    setActiveCwd(target.projectPath);
-                    setActiveHostId(remoteHostId(target.host));
-                    router.replace("/");
-                  }
-                }}
-              />;
-            })}
-            </div>
+              >
+                {shipFlows.map((target) => {
+                  const key = hostProjectKey(target.host, target.path);
+                  return (
+                    <ShipDialog
+                      key={key}
+                      open
+                      visible={key === visibleShipKey}
+                      onOpenChange={(open) => {
+                        if (!open)
+                          setShipFlows((flows) =>
+                            flows.filter(
+                              (flow) =>
+                                hostProjectKey(flow.host, flow.path) !== key,
+                            ),
+                          );
+                      }}
+                      {...target}
+                      onAskAgentToResolve={async (message) => {
+                        let advisor = false;
+                        try {
+                          advisor =
+                            localStorage.getItem(
+                              `omp-advisor-enabled:${sessionKey(target.sessionId, target.host)}`,
+                            ) === "true";
+                        } catch {
+                          // Storage can be unavailable; match the normal session default.
+                        }
+                        await addToOutbox(
+                          {
+                            id: newOutboxId(),
+                            sessionId: target.sessionId,
+                            scope: await getOutboxScope(
+                              target.sessionId,
+                              target.host,
+                            ),
+                            advisor,
+                            mode: "prompt",
+                            message,
+                            createdAt: Date.now(),
+                          },
+                          target.host,
+                        );
+                      }}
+                      onRemoved={() => {
+                        const selection = shipSelectionRef.current;
+                        updateChatTabs((tabs) =>
+                          tabs.filter(
+                            (tab) =>
+                              !tabInWorkspace(
+                                tab,
+                                target.path,
+                                target.host,
+                                selection.projects,
+                              ),
+                          ),
+                        );
+                        setRefreshKey((value) => value + 1);
+                        const selectedPath = comparableProjectPath(
+                          selection.explorerCwd ?? "",
+                        );
+                        const removedPath = comparableProjectPath(target.path);
+                        if (
+                          !selection.settingsTab &&
+                          selection.workspaceHostId === target.host &&
+                          (selection.visibleShipKey === key ||
+                            selectedPath === removedPath ||
+                            selectedPath.startsWith(
+                              removedPath === "/" ? "/" : `${removedPath}/`,
+                            ))
+                        ) {
+                          activateChat(null);
+                          setActiveCwd(target.projectPath);
+                          setActiveHostId(remoteHostId(target.host));
+                          router.replace("/");
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </div>
             </div>
           </main>
           {planning && (
@@ -4562,7 +5163,11 @@ export function AppShell({ appName }: { appName: string }) {
                     onClick={handleSidebarToggle}
                     aria-expanded={sidebarOpen}
                     aria-controls="workspace-sidebar"
-                    aria-label={t(sidebarOpen ? "appShell.hideSidebar" : "appShell.showSidebar")}
+                    aria-label={t(
+                      sidebarOpen
+                        ? "appShell.hideSidebar"
+                        : "appShell.showSidebar",
+                    )}
                     className="shell-toolbar-btn ui-focus-ring"
                   >
                     <Menu size={16} strokeWidth={1.8} aria-hidden="true" />
@@ -4570,24 +5175,34 @@ export function AppShell({ appName }: { appName: string }) {
                 </div>
               )}
               <PlanningPage
-                key={JSON.stringify([planning.host, planning.owner.kind, planning.owner.id])}
+                key={JSON.stringify([
+                  planning.host,
+                  planning.owner.kind,
+                  planning.owner.id,
+                ])}
                 {...planning}
                 launchDisabled={(() => {
                   const host = hosts?.find(({ id }) => id === planning.host);
                   if (host && !isLinkUp(host.status)) return true;
                   if (planning.owner.kind === "repo") return false;
                   const systems = systemsHosts.byHost[planning.host];
-                  return !!systems?.error || !systems?.data?.systems.some(
-                    ({ id, archived }) => id === planning.owner.id && !archived,
+                  return (
+                    !!systems?.error ||
+                    !systems?.data?.systems.some(
+                      ({ id, archived }) =>
+                        id === planning.owner.id && !archived,
+                    )
                   );
                 })()}
                 onClose={closePlanning}
                 onChanged={() => {
                   planning.onChanged();
                   if (planning.owner.kind === "system") {
-                    void systemsHosts.run(planning.host, { action: "list" }).catch(() => {
-                      // The Systems poll handles transient errors and refreshes the sidebar.
-                    });
+                    void systemsHosts
+                      .run(planning.host, { action: "list" })
+                      .catch(() => {
+                        // The Systems poll handles transient errors and refreshes the sidebar.
+                      });
                   }
                 }}
               />
@@ -4601,59 +5216,63 @@ export function AppShell({ appName }: { appName: string }) {
             />
           )}
           {!settingsTab && rightPanelHasOpened && (
-            <div hidden={Boolean(planning)} inert={shipVisible ? true : undefined} style={{ display: planning ? "none" : "contents" }}>
-            <RightPanel
-              onActivityContainerChange={setActivityContainer}
-              fileTabs={fileTabs}
-              activeFileTabId={activeFileTabId}
-              rightView={rightView}
-              onSelectView={handleSelectRightView}
-              rightPanelOpen={rightPanelOpen}
-              onClose={closeRightPanel}
-              rightPanelWidth={rightPanelWidth}
-              rightPanelResizing={rightPanelResizing}
-              rightPanelRef={attachRightPanel}
-              fileExplorerRef={fileExplorerRef}
-              revealPath={
-                revealTarget?.hostId === workspaceHostId
-                  ? revealTarget.path
-                  : null
-              }
-              onRevealDone={handleRevealDone}
-              explorerCwd={explorerCwd}
-              sourceSessionId={selectedSession?.id ?? null}
-              hostId={workspaceHostId}
-              connectionDiagnosticsOn={connectionDiagnosticsOn}
-              explorerRefreshKey={explorerRefreshKey}
-              fileSearchOpen={fileSearchOpen}
-              onToggleFileSearch={handleToggleFileSearch}
-              onFileSearchOpenChange={setFileSearchOpen}
-              explorerUploadBusy={explorerUploadBusy}
-              onUploadBusyChange={setExplorerUploadBusy}
-              explorerGitCount={explorerGitCount}
-              explorerIsRepo={explorerIsRepo}
-              explorerRefreshing={explorerRefreshing}
-              isMobile={isMobile}
-              isCompactOverlay={isCompactOverlay}
-              onOpenFile={handleOpenFile}
-              onSelectFileTab={handleSelectFileTab}
-              onCloseFileTab={handleCloseFileTab}
-              onCloseOtherFileTabs={handleCloseOtherFileTabs}
-              onCloseAllFileTabs={handleCloseAllFileTabs}
-              onMentionActiveFile={handleMentionActiveFile}
-              onCopyActiveFilePath={handleCopyActiveFilePath}
-              onDownloadActiveFile={handleDownloadActiveFile}
-              onRevealActiveFile={handleRevealActiveFile}
-              onExplorerRefresh={handleExplorerRefresh}
-              onExplorerRefreshDone={handleExplorerRefreshDone}
-              onAtMention={handleAtMention}
-              onAtMentions={handleAtMentions}
-              onMentionLines={handleFileLineMention}
-              onExplorerGitStatus={handleExplorerGitStatus}
-              onResetRightPanelWidth={resetRightPanelWidth}
-              onRightPanelResizeStart={handleRightPanelResizeStart}
-              onRightPanelResizeKey={handleRightPanelResizeKey}
-            />
+            <div
+              hidden={Boolean(planning)}
+              inert={shipVisible ? true : undefined}
+              style={{ display: planning ? "none" : "contents" }}
+            >
+              <RightPanel
+                onActivityContainerChange={setActivityContainer}
+                fileTabs={fileTabs}
+                activeFileTabId={activeFileTabId}
+                rightView={rightView}
+                onSelectView={handleSelectRightView}
+                rightPanelOpen={rightPanelOpen}
+                onClose={closeRightPanel}
+                rightPanelWidth={rightPanelWidth}
+                rightPanelResizing={rightPanelResizing}
+                rightPanelRef={attachRightPanel}
+                fileExplorerRef={fileExplorerRef}
+                revealPath={
+                  revealTarget?.hostId === workspaceHostId
+                    ? revealTarget.path
+                    : null
+                }
+                onRevealDone={handleRevealDone}
+                explorerCwd={explorerCwd}
+                sourceSessionId={selectedSession?.id ?? null}
+                hostId={workspaceHostId}
+                connectionDiagnosticsOn={connectionDiagnosticsOn}
+                explorerRefreshKey={explorerRefreshKey}
+                fileSearchOpen={fileSearchOpen}
+                onToggleFileSearch={handleToggleFileSearch}
+                onFileSearchOpenChange={setFileSearchOpen}
+                explorerUploadBusy={explorerUploadBusy}
+                onUploadBusyChange={setExplorerUploadBusy}
+                explorerGitCount={explorerGitCount}
+                explorerIsRepo={explorerIsRepo}
+                explorerRefreshing={explorerRefreshing}
+                isMobile={isMobile}
+                isCompactOverlay={isCompactOverlay}
+                onOpenFile={handleOpenFile}
+                onSelectFileTab={handleSelectFileTab}
+                onCloseFileTab={handleCloseFileTab}
+                onCloseOtherFileTabs={handleCloseOtherFileTabs}
+                onCloseAllFileTabs={handleCloseAllFileTabs}
+                onMentionActiveFile={handleMentionActiveFile}
+                onCopyActiveFilePath={handleCopyActiveFilePath}
+                onDownloadActiveFile={handleDownloadActiveFile}
+                onRevealActiveFile={handleRevealActiveFile}
+                onExplorerRefresh={handleExplorerRefresh}
+                onExplorerRefreshDone={handleExplorerRefreshDone}
+                onAtMention={handleAtMention}
+                onAtMentions={handleAtMentions}
+                onMentionLines={handleFileLineMention}
+                onExplorerGitStatus={handleExplorerGitStatus}
+                onResetRightPanelWidth={resetRightPanelWidth}
+                onRightPanelResizeStart={handleRightPanelResizeStart}
+                onRightPanelResizeKey={handleRightPanelResizeKey}
+              />
             </div>
           )}
         </div>
