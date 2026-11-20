@@ -1,6 +1,6 @@
 // The web server's side of the local daemon link: keep the `local` host record
 // and the daemon's host.json in step. Pure Node: no Next or `@/` imports.
-import { isLoopbackHost, loginHost } from "./host-login";
+import { isLoopbackHost, updateLocalHostLogin } from "./host-login";
 import { hostForToken, LOCAL_HOST_ID, rotateLocalHostToken } from "./registry";
 
 /** Where the daemon dials this server, or why it cannot: the daemon uses plain http only on loopback, so a bind address elsewhere gets no link. */
@@ -33,7 +33,7 @@ export async function ensureLocalHostLink(input: {
   const url = input.url.replace(/\/+$/, "");
   let token = "";
   let written = false;
-  await loginHost((saved) => {
+  await updateLocalHostLogin((saved) => {
     if (saved && saved.url !== url) {
       throw new Error(
         `host.json links this machine's daemon to ${saved.url}, not to this server; remove it to use this server for "This machine"`,
@@ -45,7 +45,7 @@ export async function ensureLocalHostLink(input: {
         ? saved.token
         : rotateLocalHostToken();
     written = saved?.token !== token;
-    return { url, token };
+    return written ? { url, token } : null;
   });
   return { token, written };
 }

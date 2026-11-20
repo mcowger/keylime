@@ -27,9 +27,9 @@ import type {
 } from "../api-contracts/host-control-models";
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
 
-/** v14 hard cut: single controller, no election or scheduler samples. */
+/** New daemons speak v14; the controller still accepts v13 for rolling upgrades. */
 export const LINK_PROTOCOL_VERSION = 14;
-export const MIN_LINK_PROTOCOL_VERSION = 14;
+export const MIN_LINK_PROTOCOL_VERSION = 13;
 // CREATION_ID_RE is shared with the host-link schema.
 
 export const LINK_LIMITS = {

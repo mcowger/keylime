@@ -45,17 +45,20 @@ Each daemon uses its own OMP settings, plugins, environment, and provider
 logins for new and recovered sessions. Neither linking nor binary deployment
 copies or shares them.
 
-A daemon connects to one controller. One controller can manage several hosts.
-For the host-independence upgrade, stop old writers and confirm no restores
-are in progress. This release requires link protocol 14 on both sides; use
-the host console to update daemons that can no longer connect. Do not replay
-old outbox messages or clear filesystem restore claims during the upgrade.
+A new daemon connects to one controller. One controller can manage several
+hosts. Stop any secondary controllers that still use a v13 daemon and confirm
+no restores are in progress. Upgrade the controller first, then reload open
+browser tabs. Enrolled v13 daemons reconnect without a new token.
 
-Old `host.json` files with a `links` array are not loaded. On each stopped
-daemon, back up that private file and retain only the `url` and `token` for
-the controller you want, as a top-level pair. Do not print or share the
-token. If its token is unavailable, enroll the host again.
-See [host independence](specs/2026-11-20-host-independence.md) for the cutover.
+Upgrade the daemons individually. Use **Deploy release** for supported
+standalone hosts; otherwise use the host console. Host policy editing and the
+host-wide model catalog become available once the selected daemon is on v14.
+
+No `host.json` edit is required for the saved primary controller. If the file
+has a `links` array, the new daemon uses its first entry only. If you want to
+change controllers, explicitly run `keylime host login` with the intended URL
+and token. Do not replay old outbox messages or clear filesystem restore
+claims during the upgrade. See [host independence](specs/2026-11-20-host-independence.md).
 
 ## Deploy a release without SSH
 

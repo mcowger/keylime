@@ -56,6 +56,46 @@ test("login replaces the controller, preserving unrelated config", async () => {
   assert.deepEqual(saved(), { note: "keep" });
 });
 
+test("v13 reads select the first link, not the stale top-level mirror", () => {
+  for (const mirror of [{}, primary]) {
+    const first = { url: `${staging.url}/`, token: ` ${staging.token} ` };
+    const text = JSON.stringify(
+      { ...mirror, links: [first, other], note: "keep" },
+      null,
+      2,
+    );
+    writeFileSync(file, text);
+    assert.deepEqual(readHostLogin(), { url: staging.url, token: first.token });
+    assert.equal(readFileSync(file, "utf8"), text);
+  }
+});
+
+test("an empty v13 links array does not revive a stale top-level login", () => {
+  const text = JSON.stringify({ ...primary, links: [] });
+  writeFileSync(file, text);
+  assert.equal(readHostLogin(), null);
+  assert.equal(readFileSync(file, "utf8"), text);
+});
+
+test("explicit login and logout discard old v13 memberships", async () => {
+  const config = { ...primary, links: [staging, other], note: "keep" };
+  seed(config);
+  await removeHostLink(other.url);
+  await removeHostLink(primary.url);
+  assert.deepEqual(saved(), config);
+  await removeHostLink(staging.url);
+  assert.equal(readHostLogin(), null);
+  assert.deepEqual(saved(), { note: "keep" });
+
+  seed(config);
+  await loginHost(primary);
+  assert.deepEqual(readHostLogin(), primary);
+  assert.deepEqual(saved(), { ...primary, note: "keep" });
+  await removeHostLink(primary.url);
+  assert.equal(readHostLogin(), null);
+  assert.deepEqual(saved(), { note: "keep" });
+});
+
 test("malformed or unreadable configuration is never silently replaced", async () => {
   for (const contents of [
     "{broken",
@@ -63,6 +103,9 @@ test("malformed or unreadable configuration is never silently replaced", async (
     "[]",
     '{"links":null}',
     '{"links":[{"url":"https://example.com"}]}',
+    JSON.stringify({ links: [staging, { ...other, url: "file:///tmp" }] }),
+    JSON.stringify({ links: [{ ...staging, token: " " }] }),
+    JSON.stringify({ url: primary.url, links: [staging] }),
     '{"url":123,"token":"keep"}',
   ]) {
     writeFileSync(file, contents);

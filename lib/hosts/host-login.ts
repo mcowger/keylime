@@ -19,9 +19,11 @@ const loginFile = () => join(getAgentDir(), "keylime", "host.json");
 const trimUrl = (url: string) => url.replace(/\/+$/, "");
 
 export type HostLink = { url: string; token: string };
+type SavedLink = HostLink & Record<string, unknown>;
 type HostConfig = Record<string, unknown> & {
   url?: string;
   token?: string;
+  links?: SavedLink[];
 };
 
 export const isLoopbackHost = (hostname: string) =>
@@ -57,11 +59,20 @@ function readConfig(): HostConfig {
   let saved: unknown;
   try {
     saved = JSON.parse(text);
-    if (!isRecord(saved) || "links" in saved) throw new Error();
-    if ("url" in saved || "token" in saved) {
-      if (typeof saved.url !== "string" || typeof saved.token !== "string")
+    if (!isRecord(saved)) throw new Error();
+    const checkLink = (link: unknown) => {
+      if (
+        !isRecord(link) ||
+        typeof link.url !== "string" ||
+        typeof link.token !== "string"
+      )
         throw new Error();
-      normalizeLink({ url: saved.url, token: saved.token });
+      normalizeLink({ url: link.url, token: link.token });
+    };
+    if ("url" in saved || "token" in saved) checkLink(saved);
+    if ("links" in saved) {
+      if (!Array.isArray(saved.links)) throw new Error();
+      saved.links.forEach(checkLink);
     }
   } catch {
     throw new HostLoginUnreadableError(
@@ -72,6 +83,11 @@ function readConfig(): HostConfig {
 }
 
 function configLogin(saved: HostConfig): HostLink | null {
+  // v13 daemons took membership and order from links, not the legacy mirror.
+  if (saved.links) {
+    const first = saved.links[0];
+    return first ? { url: trimUrl(first.url), token: first.token } : null;
+  }
   return saved.url !== undefined && saved.token !== undefined
     ? normalizeLink({ url: saved.url, token: saved.token })
     : null;
@@ -210,17 +226,25 @@ async function mutateConfig(
   if (failure) throw failure.error;
 }
 
-/** Replace the controller, preserving unrelated config. Bootstrap selects the token under this lock. */
-export async function loginHost(
-  input: HostLink | ((saved: HostLink | null) => HostLink),
+/** Explicit login replaces all previous memberships, preserving unrelated config. */
+export async function loginHost(input: HostLink): Promise<void> {
+  const link = normalizeLink(input);
+  await mutateConfig((saved) => {
+    Object.assign(saved, link);
+    delete saved.links;
+  });
+}
+
+/** Select credentials under the config lock without migrating v13 peer membership. */
+export async function updateLocalHostLogin(
+  update: (saved: HostLink | null) => HostLink | null,
 ): Promise<void> {
   await mutateConfig((saved) => {
-    Object.assign(
-      saved,
-      normalizeLink(
-        typeof input === "function" ? input(configLogin(saved)) : input,
-      ),
-    );
+    const input = update(configLogin(saved));
+    if (!input) return;
+    const link = normalizeLink(input);
+    if (saved.links) saved.links[0] = { ...saved.links[0], ...link };
+    else Object.assign(saved, link);
   });
 }
 
@@ -229,5 +253,6 @@ export async function removeHostLink(url: string): Promise<void> {
     if (configLogin(saved)?.url !== trimUrl(url)) return;
     delete saved.url;
     delete saved.token;
+    delete saved.links;
   });
 }

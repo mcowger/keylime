@@ -527,7 +527,7 @@ data}` messages (`PartJoiner` joins them, one partial line at a time, ≤ 512
   `bun scripts/link-hol-probe.ts` makes the load; `scripts/transport-metrics.ts` prints `link small ackMs` (`clear`
   vs `behind-large`, 64 KiB ahead), `link bytesAhead` and `link dropped` per host and direction (`--session` for one
   session's link samples).
-- **Link protocol 14.** Both `MIN_LINK_PROTOCOL_VERSION` and `LINK_PROTOCOL_VERSION` are 14 (literal one-liners parsed by the deploy script). A mismatched hello gets close 4426 with `{"serverVersion":N}`. Stop old writers, update the controller and daemons together, and use the host console where an old link cannot reconnect. A new socket with the same token replaces the old socket. The hub ignores frames from sockets it no longer owns. No two daemon processes may write the same agent directory.
+- **Link protocol 14.** The controller accepts v13 and v14 (the deploy script reads the literal `MIN_LINK_PROTOCOL_VERSION` and `LINK_PROTOCOL_VERSION`). Upgrade the controller first; old v13 standalone daemons can still use managed deployment. Host settings and model catalog operations require v14. New daemons only dial the primary saved enrollment and require a v14 welcome. A mismatched hello gets close 4426 with `{"serverVersion":N}`. A new socket with the same token replaces the old socket; the hub ignores frames from sockets it no longer owns. No two daemon processes may write the same agent directory.
   A revoked token is refused during upgrade (401) and at hello (close 1000).
 - **Transport down is not exited.** While the link is down the omp child keeps
   running on its machine. A wrapper on a host whose `isLinkUp(status)` is false

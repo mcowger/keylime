@@ -1397,13 +1397,20 @@ test("a failed settle read leaves the unsent message held for a retry", async (t
   );
 });
 
-test("a settle read keeps the taint for compaction, another session or an admission completed during it", async () => {
-  for (const shape of ["compacting", "moved", "admission", "settled"]) {
+test("a settle read keeps the taint for compaction, another session, or a concurrent admission", async () => {
+  for (const shape of [
+    "compacting",
+    "moved",
+    "v13-peer",
+    "admission",
+    "settled",
+  ]) {
     const sid = `settle-read-${shape}`;
     const { session, transport } = await ambiguousSession(sid);
     const hold = holdState(transport);
     const read = session.clearMessageProofTaintIfSettled();
     await until(() => hold.command !== undefined, "settle read in flight");
+    if (shape === "v13-peer") transport.emit({ type: "peer_message_command" });
     if (shape === "admission") {
       const builtin = session.send({ type: "prompt", message: "/model" });
       await until(

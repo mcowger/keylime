@@ -7,7 +7,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Breaking Changes
-- Removed host pools and shared project identities; each daemon now has one controller, and both ends must use link protocol 14
+- Removed host pools and shared project identities. New daemons use one controller and link protocol 14. Upgrade the controller first; it still accepts enrolled v13 daemons so you can upgrade them individually.
 
 ### Added
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
@@ -230,6 +230,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Images in saved chats on linked hosts remain available after server configuration refreshes
 - Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged
 - Agent tools remain on their calling host, and pending work from before this release is neither migrated nor replayed
+- Linked hosts retain per-server login state and reject v14-only settings and model catalog operations on v13 daemons with an upgrade-required response
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

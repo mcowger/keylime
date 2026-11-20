@@ -1424,6 +1424,20 @@ function request(
       new HostOpError(503, "host_offline", `${label} is offline`),
     );
   }
+  if (
+    link.hostVersion === 13 &&
+    (op === "hostSettingsGet" ||
+      op === "hostSettingsSet" ||
+      op === "modelsList")
+  ) {
+    return Promise.reject(
+      new HostOpError(
+        501,
+        "host_upgrade_required",
+        `Upgrade ${label} to use this feature`,
+      ),
+    );
+  }
   const { promise, resolve, reject } = Promise.withResolvers<unknown>();
   const id = randomUUID();
   const timer = setTimeout(

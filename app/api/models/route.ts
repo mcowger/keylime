@@ -6,7 +6,7 @@ import { apiErrorResponse, resolveHostOrError } from "@/lib/api-utils";
  * @apiInputs Optional hostId selects the daemon; omission selects the local daemon.
  * @apiInvariants The catalog is cached on its daemon for 60 seconds and never falls back across hosts. Token limits are in tokens.
  * @apiEffects Queries the daemon's OMP registry on cache misses; runner failures produce a safe empty catalog with an error marker.
- * @apiRecovery Reconnect the selected daemon or check its provider configuration before retrying.
+ * @apiRecovery Upgrade a v13 daemon on 501 host_upgrade_required. On 503, reconnect the selected daemon or check its provider configuration.
  */
 export async function GET(req: Request) {
   const target = resolveHostOrError(
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
  * @apiInputs Optional hostId selects the daemon; omission selects the local daemon. No request body.
  * @apiInvariants Bypasses the daemon catalog cache and OMP discovery cache without stopping active sessions.
  * @apiEffects Runs online discovery on the selected daemon and caches the refreshed catalog on success.
- * @apiRecovery On a 503, reconnect the selected daemon or check its provider configuration before retrying.
+ * @apiRecovery Upgrade a v13 daemon on 501 host_upgrade_required. On 503, reconnect the selected daemon or check its provider configuration.
  */
 export async function POST(req: Request) {
   const target = resolveHostOrError(

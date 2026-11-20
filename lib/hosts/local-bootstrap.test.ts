@@ -165,3 +165,68 @@ test("a host.json that points at another server is left alone", async () => {
   );
   assert.equal(readFileSync(hostJson, "utf8"), remote);
 });
+
+test("bootstrap keeps a valid v13 local token and leaves the file byte-for-byte unchanged", async () => {
+  const url = "http://127.0.0.1:40000";
+  rmSync(hostJson);
+  const { token } = await ensureLocalHostLink({ url });
+  const config = {
+    url: "https://stale.example.com",
+    token: "stale-token",
+    links: [
+      { url: `${url}/`, token, label: "local" },
+      { url: "https://peer.example.com", token: "peer-token" },
+    ],
+    note: "keep",
+  };
+  const before = JSON.stringify(config, null, 2);
+  writeFileSync(hostJson, before);
+
+  assert.deepEqual(await ensureLocalHostLink({ url }), {
+    token,
+    written: false,
+  });
+  assert.equal(readFileSync(hostJson, "utf8"), before);
+  assert.equal(hostForToken(token)?.id, "local");
+
+  const remoteFirst = JSON.stringify({
+    ...config,
+    links: [...config.links].reverse(),
+  });
+  writeFileSync(hostJson, remoteFirst);
+  await assert.rejects(ensureLocalHostLink({ url }), /peer\.example\.com/);
+  assert.equal(readFileSync(hostJson, "utf8"), remoteFirst);
+  assert.equal(hostForToken(token)?.id, "local");
+});
+
+test("bootstrap repairs only the selected v13 link when its token is invalid", async () => {
+  const url = "http://127.0.0.1:40000";
+  const first = { url, token: "unknown", label: "local" };
+  const peer = { url: "https://peer.example.com", token: "peer-token" };
+  const config = { ...peer, links: [first, peer], note: "keep" };
+  writeFileSync(hostJson, JSON.stringify(config));
+
+  const { token, written } = await ensureLocalHostLink({ url });
+  assert.equal(written, true);
+  assert.equal(hostForToken(token)?.id, "local");
+  assert.deepEqual(readLogin(), {
+    ...config,
+    links: [{ ...first, token }, peer],
+  });
+});
+
+test("bootstrap treats an empty v13 links array as unenrolled", async () => {
+  const url = "http://127.0.0.1:40000";
+  const config = {
+    url: "https://stale.example.com",
+    token: "stale-token",
+    links: [],
+    note: "keep",
+  };
+  writeFileSync(hostJson, JSON.stringify(config));
+
+  const { token, written } = await ensureLocalHostLink({ url });
+  assert.equal(written, true);
+  assert.equal(hostForToken(token)?.id, "local");
+  assert.deepEqual(readLogin(), { ...config, links: [{ url, token }] });
+});

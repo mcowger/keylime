@@ -460,6 +460,10 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
     ],
     responses: {
       404: error("Unknown daemon."),
+      501: codeError(
+        ["host_upgrade_required"],
+        "Model catalog requires a v14 daemon.",
+      ),
       503: error("Daemon unavailable."),
     },
   }),
@@ -480,6 +484,10 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
       ],
       responses: {
         404: error("Unknown daemon."),
+        501: codeError(
+          ["host_upgrade_required"],
+          "Model catalog requires a v14 daemon.",
+        ),
         503: error("Daemon unavailable or model refresh failed."),
       },
     },
@@ -893,6 +901,10 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
       responses: {
         400: error("Invalid scope."),
         404: error("Unknown daemon."),
+        501: codeError(
+          ["host_upgrade_required"],
+          "Host policy requires a v14 daemon.",
+        ),
         503: error("Daemon unavailable."),
       },
     },
@@ -922,6 +934,10 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
       responses: {
         400: error("Invalid scope or settings patch."),
         404: error("Unknown daemon."),
+        501: codeError(
+          ["host_upgrade_required"],
+          "Host policy requires a v14 daemon.",
+        ),
         503: error("Daemon unavailable."),
       },
     },

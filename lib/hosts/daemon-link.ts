@@ -12,7 +12,6 @@ import {
   LINK_CLOSE,
   LINK_LIMITS,
   LINK_PROTOCOL_VERSION,
-  MIN_LINK_PROTOCOL_VERSION,
   LinkLimitError,
   LinkProtocolError,
   LinkSender,
@@ -512,9 +511,8 @@ function linkRuntime(owner: DaemonLink, deps: LinkDeps) {
     }
     switch (message.type) {
       case "welcome":
-        if (message.v < MIN_LINK_PROTOCOL_VERSION || message.v > owner.version)
+        if (message.v !== owner.version)
           throw new LinkProtocolError("Invalid welcome protocol version");
-        owner.version = message.v;
         log("linked to " + serverUrl);
         unknownLog.reset();
         linked = socket;

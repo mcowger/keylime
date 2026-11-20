@@ -316,6 +316,80 @@ test("a hello with another version is closed 4426 with the server's version and 
   }
 });
 
+test("an enrolled v13 daemon can list sessions and serve deployment while the controller is on v14", async (t) => {
+  const link = await linkedHost("Rolling upgrade", {
+    v: 13,
+    link: { id: "old-controller", notifier: true },
+    canStageArtifact: true,
+    canActivateArtifact: true,
+    arch: "x64",
+  });
+  t.after(() => hub.closeHostLink(link.id));
+  assert.equal(link.remote.status(), "online");
+  assert.deepEqual(hub.hostReleaseTarget(link.id), {
+    platform: "linux",
+    arch: "x64",
+  });
+
+  const listing = link.remote.sessionOps.listSessions();
+  const listRequest = await link.down.nextRequest();
+  assert.equal(listRequest.op, "listSessions");
+  const session = listedSession(randomUUID(), "/w");
+  const acks = linkPost(
+    link,
+    [
+      {
+        type: "capacity",
+        sample: {
+          effectiveCpus: 2,
+          load1: 0,
+          busyFraction: 0,
+          stealFraction: 0,
+          availableMemoryBytes: 1_000_000,
+          activeSessions: 0,
+        },
+      },
+      { type: "notifier", seq: 1, on: true },
+      { type: "res", seq: 2, id: listRequest.id, ok: true, result: [session] },
+    ],
+    listRequest.seq,
+  );
+  assert.equal(acks.at(-1), 2);
+  assert.equal((await listing)[0]?.id, session.id);
+
+  await assert.rejects(link.remote.getSettings(), {
+    status: 501,
+    code: "host_upgrade_required",
+  });
+  await assert.rejects(link.remote.listModels(), {
+    status: 501,
+    code: "host_upgrade_required",
+  });
+  const operationId = randomUUID();
+  const activation = hub.hostArtifactActivationOp(
+    link.id,
+    "hostArtifactActivationStatus",
+    { operationId },
+  );
+  const deployment = await link.down.nextRequest();
+  assert.equal(deployment.op, "hostArtifactActivationStatus");
+  assert.deepEqual(deployment.args, { operationId });
+  linkPost(
+    link,
+    [
+      {
+        type: "res",
+        seq: 3,
+        id: deployment.id,
+        ok: true,
+        result: { state: "pending" },
+      },
+    ],
+    deployment.seq,
+  );
+  assert.deepEqual(await activation, { state: "pending" });
+});
+
 test("a pre-WebSocket daemon's hello POST gets 426 with both versions", async () => {
   const { host, token } = createHost("v3 daemon");
   const refused = await outdatedPost(

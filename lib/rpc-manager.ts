@@ -385,11 +385,13 @@ function watchReplacement(
   const clientMessageId = isClientMessageId(command.clientMessageId)
     ? command.clientMessageId
     : null;
-  // An exact ID identifies the message even when another tab submits at the same time.
+  // An exact ID identifies this message even when another origin submits at the same time.
+  const peers = wrapper.legacyPeerAdmissions;
   const ownsWindow = () =>
     clientMessageId !== null ||
     (!competingPending &&
-      wrapper.getMessageCommandGeneration() === generation + 1);
+      wrapper.getMessageCommandGeneration() === generation + 1 &&
+      wrapper.legacyPeerAdmissions === peers);
   // The text rules need omp's user attribution. An exact ID identifies a native custom message by itself, but only a
   // displayed one: the browser never shows a hidden message, so it cannot replace the pending row there.
   const isUserInput = (message: Record<string, unknown>) =>
@@ -505,7 +507,8 @@ function watchReplacement(
       if (
         !clientMessageId &&
         (competingPending ||
-          wrapper.getMessageCommandGeneration() > generation + 1)
+          wrapper.getMessageCommandGeneration() > generation + 1 ||
+          wrapper.legacyPeerAdmissions !== peers)
       ) {
         finish(ambiguous);
         return;
@@ -762,6 +765,8 @@ export class AgentSessionWrapper {
   private pendingHostUris: Map<string, UnsequencedAgentEvent> = new Map();
   /** Callback delivery is not permission to repeat an action after a snapshot/reconnect. */
   private deliveredCallbacks = new Set<string>();
+  /** v13 daemons can still relay a foreign admission during a rolling upgrade. */
+  legacyPeerAdmissions = 0;
   /** Resolves once an in-flight destroyAndWait finishes; null when idle. Read
    * by startRpcSession so a replacement spawn awaits the old child's exit. */
   destroyPromise: Promise<void> | null = null;
@@ -1596,6 +1601,11 @@ export class AgentSessionWrapper {
   private handleFrame(frame: RpcFrame): void {
     this.resetIdleTimer();
     const event = frame;
+    if (event.type === "peer_message_command") {
+      this.legacyPeerAdmissions++;
+      return;
+    }
+    if (event.type === "peer_prompt_outcome") return;
     if (
       this.hostOwnedLifecycle &&
       (event.type === "host_tool_call" || event.type === "host_uri_request") &&
@@ -3201,6 +3211,7 @@ export class AgentSessionWrapper {
       // A restart (the only child swap) advances the generation, so it needs no separate check. An admission
       // completed during the read advances it too; the taint then remains and the answer must be false.
       const generation = this.messageCommandGeneration;
+      const peers = this.legacyPeerAdmissions;
       const state = await this.getStateWithTimeout();
       if (
         state.isSettled !== true ||
@@ -3212,6 +3223,7 @@ export class AgentSessionWrapper {
         state.sessionId !== this._sessionId ||
         state.sessionFile !== this._sessionFile ||
         this.messageCommandGeneration !== generation ||
+        this.legacyPeerAdmissions !== peers ||
         this.restarting ||
         this.messageBoundaryBusy(1) ||
         !this.hasPendingMessageCommands()

@@ -48377,7 +48377,7 @@
     },
     "/api/models": {
       "get": {
-        "description": "### Usage\n\nRead the selected daemon's model catalog and Claude slow-mode setting.\n\n### Inputs\n\nOptional hostId selects the daemon; omission selects the local daemon.\n\n### Invariants\n\nThe catalog is cached on its daemon for 60 seconds and never falls back across hosts. Token limits are in tokens.\n\n### Effects\n\nQueries the daemon's OMP registry on cache misses; runner failures produce a safe empty catalog with an error marker.\n\n### Recovery\n\nReconnect the selected daemon or check its provider configuration before retrying.",
+        "description": "### Usage\n\nRead the selected daemon's model catalog and Claude slow-mode setting.\n\n### Inputs\n\nOptional hostId selects the daemon; omission selects the local daemon.\n\n### Invariants\n\nThe catalog is cached on its daemon for 60 seconds and never falls back across hosts. Token limits are in tokens.\n\n### Effects\n\nQueries the daemon's OMP registry on cache misses; runner failures produce a safe empty catalog with an error marker.\n\n### Recovery\n\nUpgrade a v13 daemon on 501 host_upgrade_required. On 503, reconnect the selected daemon or check its provider configuration.",
         "operationId": "getModels",
         "parameters": [
           {
@@ -48681,6 +48681,26 @@
             },
             "description": "The operation failed."
           },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": "host_upgrade_required",
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "code"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Model catalog requires a v14 daemon."
+          },
           "503": {
             "content": {
               "application/json": {
@@ -48715,12 +48735,12 @@
           "Effects": "Queries the daemon's OMP registry on cache misses; runner failures produce a safe empty catalog with an error marker.",
           "Inputs": "Optional hostId selects the daemon; omission selects the local daemon.",
           "Invariants": "The catalog is cached on its daemon for 60 seconds and never falls back across hosts. Token limits are in tokens.",
-          "Recovery": "Reconnect the selected daemon or check its provider configuration before retrying.",
+          "Recovery": "Upgrade a v13 daemon on 501 host_upgrade_required. On 503, reconnect the selected daemon or check its provider configuration.",
           "Usage": "Read the selected daemon's model catalog and Claude slow-mode setting."
         }
       },
       "post": {
-        "description": "### Usage\n\nRefresh models from providers configured on the selected daemon.\n\n### Inputs\n\nOptional hostId selects the daemon; omission selects the local daemon. No request body.\n\n### Invariants\n\nBypasses the daemon catalog cache and OMP discovery cache without stopping active sessions.\n\n### Effects\n\nRuns online discovery on the selected daemon and caches the refreshed catalog on success.\n\n### Recovery\n\nOn a 503, reconnect the selected daemon or check its provider configuration before retrying.",
+        "description": "### Usage\n\nRefresh models from providers configured on the selected daemon.\n\n### Inputs\n\nOptional hostId selects the daemon; omission selects the local daemon. No request body.\n\n### Invariants\n\nBypasses the daemon catalog cache and OMP discovery cache without stopping active sessions.\n\n### Effects\n\nRuns online discovery on the selected daemon and caches the refreshed catalog on success.\n\n### Recovery\n\nUpgrade a v13 daemon on 501 host_upgrade_required. On 503, reconnect the selected daemon or check its provider configuration.",
         "operationId": "refreshModels",
         "parameters": [
           {
@@ -49024,6 +49044,26 @@
             },
             "description": "The operation failed."
           },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": "host_upgrade_required",
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "code"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Model catalog requires a v14 daemon."
+          },
           "503": {
             "content": {
               "application/json": {
@@ -49058,7 +49098,7 @@
           "Effects": "Runs online discovery on the selected daemon and caches the refreshed catalog on success.",
           "Inputs": "Optional hostId selects the daemon; omission selects the local daemon. No request body.",
           "Invariants": "Bypasses the daemon catalog cache and OMP discovery cache without stopping active sessions.",
-          "Recovery": "On a 503, reconnect the selected daemon or check its provider configuration before retrying.",
+          "Recovery": "Upgrade a v13 daemon on 501 host_upgrade_required. On 503, reconnect the selected daemon or check its provider configuration.",
           "Usage": "Refresh models from providers configured on the selected daemon."
         }
       }
@@ -99308,7 +99348,7 @@
     },
     "/api/web-settings": {
       "get": {
-        "description": "### Usage\n\nRead one daemon's policy or the web server's browser transport.\n\n### Inputs\n\nOmit scope for host policy and supply hostId to select a daemon (default: local). Use scope=browser without hostId for browser transport.\n\n### Invariants\n\nHost policy never contains environment variables and never falls back to another host's policy.\n\n### Effects\n\nReads the selected owner's settings without mutation.\n\n### Recovery\n\nReconnect the selected daemon and retry if unavailable.",
+        "description": "### Usage\n\nRead one daemon's policy or the web server's browser transport.\n\n### Inputs\n\nOmit scope for host policy and supply hostId to select a daemon (default: local). Use scope=browser without hostId for browser transport.\n\n### Invariants\n\nHost policy never contains environment variables and never falls back to another host's policy.\n\n### Effects\n\nReads the selected owner's settings without mutation.\n\n### Recovery\n\nHost policy requires a v14 daemon; upgrade that host on 501 host_upgrade_required. On 503, reconnect and retry.",
         "operationId": "getWebSettings",
         "parameters": [
           {
@@ -99549,6 +99589,26 @@
             },
             "description": "The operation failed."
           },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": "host_upgrade_required",
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "code"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Host policy requires a v14 daemon."
+          },
           "503": {
             "content": {
               "application/json": {
@@ -99583,12 +99643,12 @@
           "Effects": "Reads the selected owner's settings without mutation.",
           "Inputs": "Omit scope for host policy and supply hostId to select a daemon (default: local). Use scope=browser without hostId for browser transport.",
           "Invariants": "Host policy never contains environment variables and never falls back to another host's policy.",
-          "Recovery": "Reconnect the selected daemon and retry if unavailable.",
+          "Recovery": "Host policy requires a v14 daemon; upgrade that host on 501 host_upgrade_required. On 503, reconnect and retry.",
           "Usage": "Read one daemon's policy or the web server's browser transport."
         }
       },
       "put": {
-        "description": "### Usage\n\nPatch one daemon's policy or set the web server's browser transport.\n\n### Inputs\n\nSelect the owner as for GET. Retention is in whole days (1–3650) or null to retain indefinitely. Browser scope accepts only browserTransport.\n\n### Invariants\n\nOmitted host fields are preserved; unknown fields are rejected, including agentEnv.\n\n### Effects\n\nWrites only to the selected owner. Changed browser transport is announced to this server's browsers; host policy is not broadcast.\n\n### Recovery\n\nRead the same scope and host after an uncertain response before retrying.",
+        "description": "### Usage\n\nPatch one daemon's policy or set the web server's browser transport.\n\n### Inputs\n\nSelect the owner as for GET. Retention is in whole days (1–3650) or null to retain indefinitely. Browser scope accepts only browserTransport.\n\n### Invariants\n\nOmitted host fields are preserved; unknown fields are rejected, including agentEnv.\n\n### Effects\n\nWrites only to the selected owner. Changed browser transport is announced to this server's browsers; host policy is not broadcast.\n\n### Recovery\n\nHost policy requires a v14 daemon; upgrade that host on 501 host_upgrade_required. After an uncertain response, read the same scope and host before retrying.",
         "operationId": "putWebSettings",
         "parameters": [
           {
@@ -99889,6 +99949,26 @@
             },
             "description": "The operation failed."
           },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": "host_upgrade_required",
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "code"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Host policy requires a v14 daemon."
+          },
           "503": {
             "content": {
               "application/json": {
@@ -99923,7 +100003,7 @@
           "Effects": "Writes only to the selected owner. Changed browser transport is announced to this server's browsers; host policy is not broadcast.",
           "Inputs": "Select the owner as for GET. Retention is in whole days (1–3650) or null to retain indefinitely. Browser scope accepts only browserTransport.",
           "Invariants": "Omitted host fields are preserved; unknown fields are rejected, including agentEnv.",
-          "Recovery": "Read the same scope and host after an uncertain response before retrying.",
+          "Recovery": "Host policy requires a v14 daemon; upgrade that host on 501 host_upgrade_required. After an uncertain response, read the same scope and host before retrying.",
           "Usage": "Patch one daemon's policy or set the web server's browser transport."
         }
       }

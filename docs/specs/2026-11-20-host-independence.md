@@ -17,6 +17,8 @@ The host owns its sessions, archives, repos, workspaces, Systems, and runtime se
 
 ## Cutover
 
-This is a breaking API and host-link change. Update the controller and its daemons together, then reload open browser tabs. Keep console access for any daemon whose old protocol cannot reconnect for managed deployment.
+Upgrade the controller first and reload open browser tabs. The new controller accepts v13 and v14 daemons, so existing v13 hosts can reconnect with their existing tokens. Upgrade standalone hosts one at a time in Settings → Hosts → Deploy release, where supported. The new v14 daemon requires the upgraded controller.
+
+New daemons read only the first entry in a legacy `host.json` `links` array, or the top-level `url` and `token` if the array is absent. Stop any secondary controller that still writes to a v13 daemon before cutover. If you want a different controller than the saved primary, choose it explicitly with `keylime host login`. Host policy editing and the host-wide model catalog require v14; they never fall back to another host.
 
 Stop old writers and confirm no restore is in progress before switching. There is no requirement to drain, migrate, or replay old pending messages or restore claims. Leave their old files and existing transcripts, archives, checkouts, and local configuration intact. An orphaned filesystem restore claim still requires the existing manual recovery procedure; the cutover does not clear it.

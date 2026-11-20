@@ -14,7 +14,7 @@ import { isRecord } from "@/lib/type-guards";
  * @apiInputs Omit scope for host policy and supply hostId to select a daemon (default: local). Use scope=browser without hostId for browser transport.
  * @apiInvariants Host policy never contains environment variables and never falls back to another host's policy.
  * @apiEffects Reads the selected owner's settings without mutation.
- * @apiRecovery Reconnect the selected daemon and retry if unavailable.
+ * @apiRecovery Host policy requires a v14 daemon; upgrade that host on 501 host_upgrade_required. On 503, reconnect and retry.
  */
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
  * @apiInputs Select the owner as for GET. Retention is in whole days (1–3650) or null to retain indefinitely. Browser scope accepts only browserTransport.
  * @apiInvariants Omitted host fields are preserved; unknown fields are rejected, including agentEnv.
  * @apiEffects Writes only to the selected owner. Changed browser transport is announced to this server's browsers; host policy is not broadcast.
- * @apiRecovery Read the same scope and host after an uncertain response before retrying.
+ * @apiRecovery Host policy requires a v14 daemon; upgrade that host on 501 host_upgrade_required. After an uncertain response, read the same scope and host before retrying.
  */
 export async function PUT(req: Request) {
   const params = new URL(req.url).searchParams;
