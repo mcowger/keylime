@@ -1289,92 +1289,10 @@ test("a pooled creation joins across shared links once and cannot change intent 
   );
 });
 
-test("only the opening link's own flag names the credentials server; a join never respawns", async (t) => {
+test("a session-file move updates the recorded recovery launch", async (t) => {
   const h = harness();
   t.after(() => h.table.stop());
-  h.a.version = 9;
-  h.a.login = { url: "https://a.example", token: "a" };
-  h.b.version = 9;
-  h.b.login = { url: "https://b.example", token: "b" };
-  const first = await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch: { ...launch, shareCredentials: true },
-  });
-  assert.equal(h.children[0].request.credentialsServer, "https://a.example");
-  assert.equal("shareCredentials" in h.children[0].request, false);
-  const joined = await h.table.open(h.b, { sessionId: SAVED, launch });
-  assert.equal(joined.ch, first.ch);
-  assert.equal(
-    h.children.length,
-    1,
-    "the joining link reuses the sharing process",
-  );
-});
-
-test("a wire-supplied credentials server never reaches the spawn", async (t) => {
-  const h = harness();
-  t.after(() => h.table.stop());
-  h.a.version = 9;
-  h.a.login = { url: "https://a.example", token: "a" };
-  await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch: { ...launch, credentialsServer: "https://evil.example" },
-  });
-  assert.equal("credentialsServer" in h.children[0].request, false);
-  assert.equal("shareCredentials" in h.children[0].request, false);
-});
-
-test("an advisor replacement opened with sharing starts on the opening link's server", async (t) => {
-  const h = harness();
-  t.after(() => h.table.stop());
-  h.a.version = 9;
-  h.a.login = { url: "https://a.example", token: "a" };
-  h.b.version = 9;
-  h.b.login = { url: "https://b.example", token: "b" };
-  const first = await h.table.open(h.a, { sessionId: SAVED, launch });
-  h.table.release(h.a, first.ch);
-  assert.equal("credentialsServer" in h.children[0].request, false);
-  const next = await h.table.open(h.b, {
-    sessionId: SAVED,
-    launch: { ...launch, advisor: true, shareCredentials: true },
-    replaceAdvisor: true,
-  });
-  assert.notEqual(next.ch, first.ch);
-  assert.equal(h.children.length, 2);
-  assert.equal(h.children[1].request.credentialsServer, "https://b.example");
-  assert.equal("shareCredentials" in h.children[1].request, false);
-});
-
-test("an advisor replacement opened without sharing starts on the host's own logins", async (t) => {
-  const h = harness();
-  t.after(() => h.table.stop());
-  h.a.version = 9;
-  h.a.login = { url: "https://a.example", token: "a" };
-  const first = await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch: { ...launch, shareCredentials: true },
-  });
-  h.table.release(h.a, first.ch);
-  assert.equal(h.children[0].request.credentialsServer, "https://a.example");
-  const next = await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch: { ...launch, advisor: true },
-    replaceAdvisor: true,
-  });
-  assert.notEqual(next.ch, first.ch);
-  assert.equal(h.children.length, 2);
-  assert.equal("credentialsServer" in h.children[1].request, false);
-});
-
-test("a session-file move keeps the credentials server in the recorded launch", async (t) => {
-  const h = harness();
-  t.after(() => h.table.stop());
-  h.a.version = 9;
-  h.a.login = { url: "https://a.example", token: "a" };
-  const opened = await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch: { ...launch, shareCredentials: true },
-  });
+  const opened = await h.table.open(h.a, { sessionId: SAVED, launch });
   h.table.release(h.a, opened.ch);
   h.children[0].emit({
     t: "session",
@@ -1383,40 +1301,12 @@ test("a session-file move keeps the credentials server in the recorded launch", 
     cwd: "/tmp",
   });
   h.children[0].emit({ t: "event", event: { type: "agent_start" } });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(
-    h.table
-      .running()
-      .map(({ sessionId, launch: recorded }) => [
-        sessionId,
-        recorded.sessionFile,
-        recorded.credentialsServer,
-      ]),
-    [[MOVED, "/tmp/moved.jsonl", "https://a.example"]],
-  );
-});
-
-test("a malformed configuration version or missing server credentials refuses the start", async (t) => {
-  const h = harness();
-  t.after(() => h.table.stop());
-  h.a.login = { url: "https://a.example", token: "a" };
-  const version = "a".repeat(64);
-  for (const bad of [
-    { shareCredentials: true as const, configVersion: "x" },
-    { shareCredentials: true as const, configVersion: version.toUpperCase() },
-    { configVersion: version },
-  ]) {
-    await assert.rejects(
-      h.table.open(h.a, { sessionId: SAVED, launch: { ...launch, ...bad } }),
-      /requires a valid configuration version and server credentials/,
-    );
-  }
-  assert.equal(h.children.length, 0);
-  await h.table.open(h.a, {
-    sessionId: SAVED,
-    launch: { ...launch, shareCredentials: true, configVersion: version },
-  });
-  assert.equal(h.children[0].request.configVersion, version);
+  assert.deepEqual(h.table.running(), [
+    {
+      sessionId: MOVED,
+      launch: { ...launch, sessionFile: "/tmp/moved.jsonl" },
+    },
+  ]);
 });
 
 test("an omp that exits during startup logs the last 500 bytes of its stderr to the daemon log only", async (t) => {

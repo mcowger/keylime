@@ -15,7 +15,6 @@ import {
   updateHost,
   type HostRecord,
 } from "@/lib/hosts/registry";
-import { abortBrokerRequests } from "@/lib/omp/auth-broker";
 import { isRecord } from "@/lib/type-guards";
 
 const MAX_LABEL_LENGTH = 100;
@@ -98,7 +97,8 @@ export function GET() {
   } catch {
     return poolStorageFailure();
   }
-  return Response.json({ ...hostsSnapshot(), pools }, { headers: noStore });
+  const { hosts } = hostsSnapshot();
+  return Response.json({ hosts, pools }, { headers: noStore });
 }
 
 /**
@@ -291,7 +291,7 @@ function renamePool(body: Record<string, unknown>) {
  * @apiUsage Revoke a linked host by id.
  * @apiInputs The id query parameter identifies the remote host; local cannot be revoked.
  * @apiInvariants A cluster member leaves before its host record is revoked; an unreadable host registry prevents pool changes.
- * @apiEffects Removes the record, closes its link, aborts broker requests and notifies listeners; future daemon reconnects are unauthorized.
+ * @apiEffects Removes the record, closes its link and notifies listeners; future daemon reconnects are unauthorized.
  * @apiRecovery Supply a known remote id or repair registry storage before retrying.
  */
 export async function DELETE(req: Request) {
@@ -315,7 +315,6 @@ export async function DELETE(req: Request) {
     // Registry first: with the record gone a daemon that redials gets 401 instead of reconnecting.
     if (!revokeHost(id)) return fail("Unknown host", 404);
     closeHostLink(id);
-    abortBrokerRequests(id);
     notifyHostsChange();
     return Response.json({ ok: true }, { headers: noStore });
   } catch (error) {

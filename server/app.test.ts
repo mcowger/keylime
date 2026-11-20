@@ -334,15 +334,16 @@ test("a path that leaves its route after `..` resolution never reaches that rout
   );
 });
 
-test("only /api/hosts/broker/v1/ passes the gate to the broker route", async (t) => {
+test("the former broker route is gated", async (t) => {
+  const formerRoute = "/api/hosts/broker/v1/healthz";
+  assert.equal((await rawRequest("GET", formerRoute)).status, 404);
   process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
   t.after(() => {
     delete process.env.KEYLIME_PASSWORD_HASH;
   });
-  // The route's own refusal: no bearer token.
-  const healthz = await rawRequest("GET", "/api/hosts/broker/v1/healthz");
-  assert.equal(healthz.status, 401);
-  assert.match(healthz.body, /"error":"Unknown host token"/);
+  const gated = await rawRequest("GET", formerRoute);
+  assert.equal(gated.status, 401);
+  assert.match(gated.body, /"code":"password_required"/);
   for (const target of [
     "/api/hosts/broker/updates",
     "/api/hosts/broker/",
@@ -355,35 +356,6 @@ test("only /api/hosts/broker/v1/ passes the gate to the broker route", async (t)
     if (status === 401)
       assert.match(body, /"code":"password_required"/, target);
     else assert.equal(status, 404, target);
-  }
-});
-
-test("only the two cluster-config routes pass the gate, not hosts/[id]/cluster or hosts/[id]/updates", async (t) => {
-  process.env.KEYLIME_PASSWORD_HASH = hashPassword("pw", { logN: 12 });
-  t.after(() => {
-    delete process.env.KEYLIME_PASSWORD_HASH;
-  });
-  // The routes' own refusal: no bearer token.
-  for (const target of [
-    "/api/hosts/cluster-config/manifest",
-    `/api/hosts/cluster-config/file/${"a".repeat(64)}`,
-  ]) {
-    const { status, body } = await rawRequest("GET", target);
-    assert.equal(status, 401, target);
-    assert.match(body, /"error":"Unknown host token"/, target);
-  }
-  for (const [method, target] of [
-    ["DELETE", "/api/hosts/cluster-config/cluster"],
-    ["PUT", "/api/hosts/cluster-config/cluster"],
-    ["GET", "/api/hosts/cluster-config/updates"],
-    ["POST", "/api/hosts/cluster-config/updates"],
-    ["GET", `/api/hosts/cluster-config/file/${"a".repeat(64)}/x`],
-    ["GET", "/api/hosts/cluster-config/manifest/x"],
-  ] as const) {
-    const { status, body } = await rawRequest(method, target);
-    // The gate's 401: never the handler's answer (a 409 not_member, say).
-    assert.equal(status, 401, `${method} ${target}`);
-    assert.match(body, /"code":"password_required"/, `${method} ${target}`);
   }
 });
 

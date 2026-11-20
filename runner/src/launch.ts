@@ -3,8 +3,6 @@
  * hosts the session for keylime, and `--headless` boots omp for `keylime host` on stdio (see
  * `headless.ts`). Keep it in step with upstream's copy on every omp bump.
  */
-import { isAbsolute, relative, resolve, sep } from "node:path";
-import { getCapability, listCapabilities } from "@oh-my-pi/pi-coding-agent/capability";
 import {
   type Args,
   parseArgs,
@@ -49,25 +47,6 @@ export default class Index extends Command {
     }
     // Startup boundary, as upstream: the session graph loads only once argv is accepted.
     const { runRootCommand } = await import("@oh-my-pi/pi-coding-agent/main");
-    // A non-repo workspace can otherwise walk through the daemon's real home,
-    // treating its global .agents/skills as project skills under the scoped HOME.
-    const hostHome = process.env.KEYLIME_MIRROR_HOST_HOME;
-    if (hostHome) {
-      for (const id of listCapabilities()) {
-        for (const provider of getCapability(id)?.providers ?? []) {
-          const load = provider.load.bind(provider);
-          provider.load = (ctx) => {
-            const rel = relative(hostHome, ctx.cwd);
-            if (!rel || isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`))
-              return load(ctx);
-            const boundary = resolve(hostHome, rel.split(sep)[0]!);
-            if (ctx.repoRoot === boundary || ctx.repoRoot?.startsWith(boundary + sep))
-              return load(ctx);
-            return load({ ...ctx, repoRoot: boundary });
-          };
-        }
-      }
-    }
     try {
       await runRootCommand(parsed, args, {
         createAgentSession: createHostedAgentSession,

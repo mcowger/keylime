@@ -35,13 +35,14 @@ type OmpLogEntry = {
   sessionId: string;
   line: string;
   n: number;
-  brokerConfigured?: boolean;
+  hasBrokerEnv?: boolean;
   config?: {
     agentDir: string;
     home: string;
     settings: string | null;
     skill: string | null;
     marker?: string;
+    usesHostProviderKey: boolean;
   };
   command?: {
     t?: string;
@@ -89,8 +90,6 @@ const previousOmpBin = process.env.KEYLIME_OMP_BIN;
 process.env.PI_CODING_AGENT_DIR = mainAgentDir;
 
 const linkRoute = await import("../../app/api/hosts/link/route.ts");
-const configManifestRoute = await import("../../app/api/hosts/cluster-config/manifest/route.ts");
-const configFileRoute = await import("../../app/api/hosts/cluster-config/file/[hash]/route.ts");
 const hub = await import("./hub.ts");
 const { createHost, revokeHost } = await import("./registry.ts");
 const {
@@ -132,8 +131,7 @@ const fakeOmp = join(scratch, "fake-omp");
 process.env.KEYLIME_OMP_BIN = fakeOmp;
 writeFakeOmp(
   fakeOmp,
-  `if (process.argv.includes("--version")) { console.log("15.13.1"); process.exit(0); }
-if (process.argv.slice(2, 4).join(" ") === "plugin list") { console.log('{"npm":[],"marketplace":[]}'); process.exit(0); }
+  `if (process.argv.includes("--version")) { console.log("15.13.0"); process.exit(0); }
 ${fakeRunnerSocket}
 const fs = require("node:fs");
 const path = require("node:path");
@@ -179,9 +177,13 @@ const configSnapshot = () => {
     settings: agentDir ? read(path.join(agentDir, "config.yml")) : null,
     skill: read(path.join(home, ".agents", "skills", "link-test", "SKILL.md")),
     marker: process.env.LINK_TEST_MARKER,
+    usesHostProviderKey: process.env.OPENAI_API_KEY === "test-laptop-provider-key",
   };
 };
-log({ kind: "start", sessionId, brokerConfigured: Boolean(process.env.OMP_AUTH_BROKER_URL && process.env.OMP_AUTH_BROKER_TOKEN), config: process.env.LINK_TEST_LOG_FILE ? configSnapshot() : undefined });
+log({ kind: "start", sessionId,
+  hasBrokerEnv: process.env.OMP_AUTH_BROKER_URL !== undefined || process.env.OMP_AUTH_BROKER_TOKEN !== undefined,
+  config: process.env.LINK_TEST_LOG_FILE ? configSnapshot() : undefined,
+});
 out({ t: "hello", proto: 1, pid: process.pid, sessionId, sessionFile, cwd: process.cwd() });
 require("node:readline").createInterface({ input: rpcSocket }).on("line", (line) => {
   const command = JSON.parse(line);
@@ -383,11 +385,6 @@ const server: Bun.Server<LinkSocketData> = Bun.serve<LinkSocketData>({
   port: 0,
   hostname: "127.0.0.1",
   routes: {
-    "/api/hosts/cluster-config/manifest": { GET: configManifestRoute.GET },
-    "/api/hosts/cluster-config/file/:hash": {
-      GET: (req: Bun.BunRequest<"/api/hosts/cluster-config/file/:hash">) =>
-        configFileRoute.GET(req, { params: Promise.resolve(req.params) }),
-    },
     "/api/hosts/link": {
       GET(req: Request) {
         const response = linkRoute.GET(req, {
@@ -600,7 +597,7 @@ after(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-test("two cold links launch runners with their own config without changing daemon-local config", async (t) => {
+test("two cold links launch runners with host-local configuration and credentials", async (t) => {
   const root = join(scratch, "cold-start");
   mkdirSync(root, { mode: 0o700 });
   const coldLog = join(root, "omp.log");
@@ -609,7 +606,12 @@ test("two cold links launch runners with their own config without changing daemo
   const skillDir = join(".agents", "skills", "link-test");
   const skillPath = join(skillDir, "SKILL.md");
   const localSettings = "# Keep these local bytes\ndefaultModel: local-model\n";
-  const localWebSettings = '{"agentEnv":{"LINK_TEST_MARKER":"local"}}\n';
+  const localWebSettings = `${JSON.stringify({
+    agentEnv: {
+      LINK_TEST_MARKER: "local",
+      OPENAI_API_KEY: "test-laptop-provider-key",
+    },
+  })}\n`;
   const localSkill = "# Local skill\n";
   mkdirSync(join(laptopAgent, "keylime"), { recursive: true });
   mkdirSync(join(laptopAgent, "sessions", "-project"), { recursive: true });
@@ -669,15 +671,18 @@ test("two cold links launch runners with their own config without changing daemo
       return { marker, login };
     }),
   );
-  // Both links are present on the daemon's first boot, with no cached config.
+  // Neither server fixture serves broker or mirror endpoints.
   writeFileSync(
     join(laptopAgent, "keylime", "host.json"),
     JSON.stringify({ ...links[0].login, links: links.map(({ login }) => login) }),
     { mode: 0o600 },
   );
+  const daemonEnv = { ...process.env };
+  delete daemonEnv.OMP_AUTH_BROKER_URL;
+  delete daemonEnv.OMP_AUTH_BROKER_TOKEN;
   const coldDaemon = spawn(process.execPath, [hostBin], {
     env: {
-      ...process.env,
+      ...daemonEnv,
       HOME: laptop,
       PI_CODING_AGENT_DIR: laptopAgent,
       OMP_CODING_AGENT_DIR: laptopAgent,
@@ -688,7 +693,7 @@ test("two cold links launch runners with their own config without changing daemo
   });
   children.push(coldDaemon);
 
-  const configs = await Promise.all(
+  await Promise.all(
     links.map(async ({ marker, login }) => {
       const launch = await fetch(`${login.url}/launch`, {
         method: "POST",
@@ -697,23 +702,34 @@ test("two cold links launch runners with their own config without changing daemo
       const body = await launch.text();
       assert.ok(launch.ok, `${marker} launch: ${body}`);
       const { sessionId } = JSON.parse(body) as { sessionId: string };
-      const config = ompLog(coldLog).find(
+      const entry = ompLog(coldLog).find(
         (entry) => entry.kind === "start" && entry.sessionId === sessionId,
-      )?.config;
-      assert.ok(config, `${marker} runner recorded its config before hello`);
-      assert.equal(config.marker, marker);
-      assert.equal(config.skill, `# ${marker} skill\n`);
-      assert.match(
-        config.settings ?? "",
-        new RegExp(`^defaultModel: ${marker}-model$`, "m"),
       );
-      assert.notEqual(config.agentDir, laptopAgent);
-      assert.notEqual(config.home, laptop);
-      return config;
+      assert.ok(
+        entry?.config,
+        `${marker} runner recorded its config before hello`,
+      );
+      assert.equal(entry.hasBrokerEnv, false);
+      assert.deepEqual(entry.config, {
+        agentDir: laptopAgent,
+        home: laptop,
+        settings: localSettings,
+        skill: localSkill,
+        marker: "local",
+        usesHostProviderKey: true,
+      });
+
+      const response = await fetch(`${login.url}/api/hosts`);
+      assert.equal(response.status, 200);
+      const snapshot = (await response.json()) as {
+        hosts: { label: string }[];
+      };
+      assert.equal("masterConfigError" in snapshot, false);
+      assert.ok(snapshot.hosts.some((row) => row.label === marker));
+      for (const row of snapshot.hosts)
+        assert.equal("clusterConfig" in row, false);
     }),
   );
-  assert.notEqual(configs[0].agentDir, configs[1].agentDir);
-  assert.notEqual(configs[0].home, configs[1].home);
   assert.equal(readFileSync(join(laptopAgent, "config.yml"), "utf8"), localSettings);
   assert.equal(readFileSync(localWebSettingsFile, "utf8"), localWebSettings);
   assert.equal(readFileSync(join(laptop, skillPath), "utf8"), localSkill);
@@ -723,7 +739,7 @@ test("the linked host reports itself and lists its sessions", async () => {
   const listed = hub.listHosts().find((h) => h.id === hostId);
   assert.ok(listed);
   assert.equal(listed.status, "online");
-  assert.equal(listed.ompVersion, "15.13.1");
+  assert.equal(listed.ompVersion, "15.13.0");
   assert.equal(listed.platform, process.platform);
   const ids = (await host().sessionOps.listSessions()).map((s) => s.id);
   assert.ok(ids.includes(SMALL_ID) && ids.includes(BIG_ID), ids.join(","));
@@ -824,10 +840,7 @@ test("a remote session streams a reply with no frame lost or duplicated across l
   assert.equal(session.host, remote);
   assert.ok(
     ompLog().some(
-      (entry) =>
-        entry.kind === "start" &&
-        entry.sessionId === realSessionId &&
-        entry.brokerConfigured,
+      (entry) => entry.kind === "start" && entry.sessionId === realSessionId,
     ),
   );
   const texts: number[] = [];

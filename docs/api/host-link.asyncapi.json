@@ -19,9 +19,6 @@
         "HostLinkChannelsChanged": {
           "$ref": "#/components/messages/HostLinkChannelsChanged"
         },
-        "HostLinkConfigState": {
-          "$ref": "#/components/messages/HostLinkConfigState"
-        },
         "HostLinkError": {
           "$ref": "#/components/messages/HostLinkError"
         },
@@ -144,9 +141,6 @@
         },
         "HostReply_closeFile": {
           "$ref": "#/components/messages/HostReply_closeFile"
-        },
-        "HostReply_clusterConfig": {
-          "$ref": "#/components/messages/HostReply_clusterConfig"
         },
         "HostReply_createWorkspace": {
           "$ref": "#/components/messages/HostReply_createWorkspace"
@@ -394,9 +388,6 @@
         "HostRequest_closeFile": {
           "$ref": "#/components/messages/HostRequest_closeFile"
         },
-        "HostRequest_clusterConfig": {
-          "$ref": "#/components/messages/HostRequest_clusterConfig"
-        },
         "HostRequest_createWorkspace": {
           "$ref": "#/components/messages/HostRequest_createWorkspace"
         },
@@ -635,15 +626,6 @@
           "$ref": "#/components/schemas/HostLinkChannelsChanged"
         },
         "title": "HostLinkChannelsChanged"
-      },
-      "HostLinkConfigState": {
-        "contentType": "application/json",
-        "description": "Unsequenced cluster configuration state and whether it belongs to this server; not retained for replay. The latest state delayed by a full window is sent when room is available.",
-        "name": "HostLinkConfigState",
-        "payload": {
-          "$ref": "#/components/schemas/HostLinkConfigState"
-        },
-        "title": "HostLinkConfigState"
       },
       "HostLinkError": {
         "contentType": "application/json",
@@ -1052,18 +1034,6 @@
           "$ref": "#/components/schemas/HostReply_closeFile"
         },
         "title": "HostReply_closeFile"
-      },
-      "HostReply_clusterConfig": {
-        "contentType": "application/json",
-        "correlationId": {
-          "location": "$message.payload#/id"
-        },
-        "description": "Reply to clusterConfig; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Apply or clear the requesting server's mirrored runner configuration.\nInputs: Apply takes a lowercase SHA-256 version; restore takes no version.\nInvariants: A cold runner uses the configuration of its opening server; joining a running runner does not change it. A departed link cannot apply configuration.\nEffects: Updates only that server's mirror and reports its state; the daemon's local configuration and other mirrors are unchanged.\nRecovery: Inspect the returned or current state before retrying an uncertain result.",
-        "name": "HostReply_clusterConfig",
-        "payload": {
-          "$ref": "#/components/schemas/HostReply_clusterConfig"
-        },
-        "title": "HostReply_clusterConfig"
       },
       "HostReply_createWorkspace": {
         "contentType": "application/json",
@@ -2049,18 +2019,6 @@
         },
         "title": "HostRequest_closeFile"
       },
-      "HostRequest_clusterConfig": {
-        "contentType": "application/json",
-        "correlationId": {
-          "location": "$message.payload#/id"
-        },
-        "description": "Usage: Apply or clear the requesting server's mirrored runner configuration.\nInputs: Apply takes a lowercase SHA-256 version; restore takes no version.\nInvariants: A cold runner uses the configuration of its opening server; joining a running runner does not change it. A departed link cannot apply configuration.\nEffects: Updates only that server's mirror and reports its state; the daemon's local configuration and other mirrors are unchanged.\nRecovery: Inspect the returned or current state before retrying an uncertain result.",
-        "name": "HostRequest_clusterConfig",
-        "payload": {
-          "$ref": "#/components/schemas/HostRequest_clusterConfig"
-        },
-        "title": "HostRequest_clusterConfig"
-      },
       "HostRequest_createWorkspace": {
         "contentType": "application/json",
         "correlationId": {
@@ -3019,99 +2977,6 @@
         },
         "required": ["type", "seq", "channels"],
         "title": "HostLinkChannelsChanged",
-        "type": "object"
-      },
-      "HostLinkConfigState": {
-        "description": "Unsequenced cluster configuration state and whether it belongs to this server; not retained for replay. The latest state delayed by a full window is sent when room is available.",
-        "properties": {
-          "owned": {
-            "type": "boolean"
-          },
-          "state": {
-            "description": "The daemon's cluster configuration application state.",
-            "properties": {
-              "error": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Application error when present; null means no error is reported."
-              },
-              "files": {
-                "anyOf": [
-                  {
-                    "const": "none",
-                    "type": "string"
-                  },
-                  {
-                    "const": "current",
-                    "type": "string"
-                  },
-                  {
-                    "const": "failed",
-                    "type": "string"
-                  }
-                ]
-              },
-              "missingCommands": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "plugins": {
-                "anyOf": [
-                  {
-                    "const": "none",
-                    "type": "string"
-                  },
-                  {
-                    "const": "pending",
-                    "type": "string"
-                  },
-                  {
-                    "const": "current",
-                    "type": "string"
-                  },
-                  {
-                    "const": "failed",
-                    "type": "string"
-                  }
-                ]
-              },
-              "version": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Configuration version applied or attempted; null means no version is reported."
-              }
-            },
-            "required": [
-              "version",
-              "files",
-              "plugins",
-              "error",
-              "missingCommands"
-            ],
-            "title": "ConfigState",
-            "type": "object"
-          },
-          "type": {
-            "const": "config_state",
-            "type": "string"
-          }
-        },
-        "required": ["type", "state", "owned"],
-        "title": "HostLinkConfigState",
         "type": "object"
       },
       "HostLinkError": {
@@ -45453,278 +45318,6 @@
         "description": "Reply to closeFile; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Close a chunked file reader.\nInputs: id identifies the host reader.\nInvariants: The handle is no longer usable after close.\nEffects: Releases reader resources.\nRecovery: If uncertain, discard the handle and open a new reader when needed.",
         "title": "HostReply_closeFile"
       },
-      "HostReply_clusterConfig": {
-        "anyOf": [
-          {
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": true,
-                "type": "boolean"
-              },
-              "result": {
-                "properties": {
-                  "owned": {
-                    "type": "boolean"
-                  },
-                  "state": {
-                    "description": "The daemon's cluster configuration application state.",
-                    "properties": {
-                      "error": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ],
-                        "description": "Application error when present; null means no error is reported."
-                      },
-                      "files": {
-                        "anyOf": [
-                          {
-                            "const": "none",
-                            "type": "string"
-                          },
-                          {
-                            "const": "current",
-                            "type": "string"
-                          },
-                          {
-                            "const": "failed",
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      "missingCommands": {
-                        "items": {
-                          "type": "string"
-                        },
-                        "type": "array"
-                      },
-                      "plugins": {
-                        "anyOf": [
-                          {
-                            "const": "none",
-                            "type": "string"
-                          },
-                          {
-                            "const": "pending",
-                            "type": "string"
-                          },
-                          {
-                            "const": "current",
-                            "type": "string"
-                          },
-                          {
-                            "const": "failed",
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      "version": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ],
-                        "description": "Configuration version applied or attempted; null means no version is reported."
-                      }
-                    },
-                    "required": [
-                      "version",
-                      "files",
-                      "plugins",
-                      "error",
-                      "missingCommands"
-                    ],
-                    "title": "ConfigState",
-                    "type": "object"
-                  }
-                },
-                "required": ["state", "owned"],
-                "type": "object"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "result"],
-            "type": "object"
-          },
-          {
-            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
-            "properties": {
-              "blob": {
-                "properties": {
-                  "bytes": {
-                    "minimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "required": ["bytes"],
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": true,
-                "type": "boolean"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "blob"],
-            "type": "object",
-            "x-decoded-result": {
-              "properties": {
-                "owned": {
-                  "type": "boolean"
-                },
-                "state": {
-                  "description": "The daemon's cluster configuration application state.",
-                  "properties": {
-                    "error": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Application error when present; null means no error is reported."
-                    },
-                    "files": {
-                      "anyOf": [
-                        {
-                          "const": "none",
-                          "type": "string"
-                        },
-                        {
-                          "const": "current",
-                          "type": "string"
-                        },
-                        {
-                          "const": "failed",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "missingCommands": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    },
-                    "plugins": {
-                      "anyOf": [
-                        {
-                          "const": "none",
-                          "type": "string"
-                        },
-                        {
-                          "const": "pending",
-                          "type": "string"
-                        },
-                        {
-                          "const": "current",
-                          "type": "string"
-                        },
-                        {
-                          "const": "failed",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "version": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Configuration version applied or attempted; null means no version is reported."
-                    }
-                  },
-                  "required": [
-                    "version",
-                    "files",
-                    "plugins",
-                    "error",
-                    "missingCommands"
-                  ],
-                  "title": "ConfigState",
-                  "type": "object"
-                }
-              },
-              "required": ["state", "owned"],
-              "type": "object"
-            }
-          },
-          {
-            "properties": {
-              "error": {
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  },
-                  "status": {
-                    "type": "number"
-                  }
-                },
-                "required": ["status", "code", "message"],
-                "type": "object"
-              },
-              "id": {
-                "type": "string"
-              },
-              "ok": {
-                "const": false,
-                "type": "boolean"
-              },
-              "seq": {
-                "maximum": 9007199254740991,
-                "minimum": 0,
-                "type": "integer"
-              },
-              "type": {
-                "const": "res",
-                "type": "string"
-              }
-            },
-            "required": ["type", "seq", "id", "ok", "error"],
-            "type": "object"
-          }
-        ],
-        "description": "Reply to clusterConfig; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Apply or clear the requesting server's mirrored runner configuration.\nInputs: Apply takes a lowercase SHA-256 version; restore takes no version.\nInvariants: A cold runner uses the configuration of its opening server; joining a running runner does not change it. A departed link cannot apply configuration.\nEffects: Updates only that server's mirror and reports its state; the daemon's local configuration and other mirrors are unchanged.\nRecovery: Inspect the returned or current state before retrying an uncertain result.",
-        "title": "HostReply_clusterConfig"
-      },
       "HostReply_createWorkspace": {
         "anyOf": [
           {
@@ -79915,58 +79508,6 @@
         "title": "HostRequest_closeFile",
         "type": "object"
       },
-      "HostRequest_clusterConfig": {
-        "description": "Usage: Apply or clear the requesting server's mirrored runner configuration.\nInputs: Apply takes a lowercase SHA-256 version; restore takes no version.\nInvariants: A cold runner uses the configuration of its opening server; joining a running runner does not change it. A departed link cannot apply configuration.\nEffects: Updates only that server's mirror and reports its state; the daemon's local configuration and other mirrors are unchanged.\nRecovery: Inspect the returned or current state before retrying an uncertain result.",
-        "properties": {
-          "args": {
-            "anyOf": [
-              {
-                "properties": {
-                  "action": {
-                    "const": "apply",
-                    "type": "string"
-                  },
-                  "version": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
-                  }
-                },
-                "required": ["action", "version"],
-                "type": "object"
-              },
-              {
-                "properties": {
-                  "action": {
-                    "const": "restore",
-                    "type": "string"
-                  }
-                },
-                "required": ["action"],
-                "type": "object"
-              }
-            ]
-          },
-          "id": {
-            "type": "string"
-          },
-          "op": {
-            "const": "clusterConfig",
-            "type": "string"
-          },
-          "seq": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": {
-            "const": "req",
-            "type": "string"
-          }
-        },
-        "required": ["type", "seq", "id", "op", "args"],
-        "title": "HostRequest_clusterConfig",
-        "type": "object"
-      },
       "HostRequest_createWorkspace": {
         "description": "Usage: Start an asynchronous workspace creation job.\nInputs: projectPath, branch, mode, baseRef and name select the host checkout and branch. New branches can use refs/pull/<number>/head for GitHub pull requests.\nInvariants: The job captures its pipeline and progresses through stages; failure can leave partial work.\nEffects: Runs configured commands and creates a worktree and registration.\nRecovery: Poll the job and inspect the checkout before retrying after an uncertain response.",
         "properties": {
@@ -81296,23 +80837,14 @@
                 "type": "string"
               },
               "launch": {
-                "description": "A launch request. A linked-host start uses the opening server's configuration and credentials; a pure join starts nothing.",
+                "description": "A launch request. A linked-host start uses the daemon's own provider credentials; a pure join starts nothing.",
                 "properties": {
                   "advisor": {
                     "type": "boolean"
                   },
-                  "configVersion": {
-                    "description": "Required on linked-host opens that can start a process. Identifies the opening server's configuration. Not persisted in resume manifests.",
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
-                  },
                   "creationId": {
                     "description": "Stable identity of an independent start; retry arguments must remain identical.",
                     "pattern": "^[A-Za-z0-9_-]{1,128}$",
-                    "type": "string"
-                  },
-                  "credentialsServer": {
-                    "description": "Daemon-local recorded credential owner; wire-provided values are ignored and replaced with the opening link's identity.",
                     "type": "string"
                   },
                   "cwd": {
@@ -81331,11 +80863,6 @@
                   "sessionFile": {
                     "description": "Session transcript path on the daemon machine, checked against its session roots.",
                     "type": "string"
-                  },
-                  "shareCredentials": {
-                    "const": true,
-                    "description": "Required on linked-host opens that can start a process. Use the opening server's provider credentials.",
-                    "type": "boolean"
                   },
                   "spawnModel": {
                     "description": "Provider/model identifier bound before resuming a session.",
@@ -84993,7 +84520,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 83 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 82 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "13"
   },
@@ -85296,29 +84823,6 @@
         ]
       },
       "summary": "closeFile"
-    },
-    "operation_clusterConfig": {
-      "action": "send",
-      "channel": {
-        "$ref": "#/channels/link"
-      },
-      "description": "Usage: Apply or clear the requesting server's mirrored runner configuration.\nInputs: Apply takes a lowercase SHA-256 version; restore takes no version.\nInvariants: A cold runner uses the configuration of its opening server; joining a running runner does not change it. A departed link cannot apply configuration.\nEffects: Updates only that server's mirror and reports its state; the daemon's local configuration and other mirrors are unchanged.\nRecovery: Inspect the returned or current state before retrying an uncertain result.",
-      "messages": [
-        {
-          "$ref": "#/channels/link/messages/HostRequest_clusterConfig"
-        }
-      ],
-      "reply": {
-        "channel": {
-          "$ref": "#/channels/link"
-        },
-        "messages": [
-          {
-            "$ref": "#/channels/link/messages/HostReply_clusterConfig"
-          }
-        ]
-      },
-      "summary": "clusterConfig"
     },
     "operation_createWorkspace": {
       "action": "send",
@@ -86948,9 +86452,6 @@
         },
         {
           "$ref": "#/channels/link/messages/HostLinkCapacity"
-        },
-        {
-          "$ref": "#/channels/link/messages/HostLinkConfigState"
         },
         {
           "$ref": "#/channels/link/messages/HostLinkUploadAck"

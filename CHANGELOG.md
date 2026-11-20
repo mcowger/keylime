@@ -155,6 +155,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The `keylime host install-artifact` command verifies staged binary checksums, runs preflight, and replaces supported standalone daemon or runner installs
 
 ### Changed
+- Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged.
 - Repo and System Notes & Tasks use the workspace's compact typography, with a shorter notes editor and task actions on one row where space allows.
 - Drop image files onto the Notes or task attachment buttons, or click to choose files. Missing the button won't open the file or discard your draft.
 - The sidebar indents Systems and Repos under their host, and Efforts and Workspaces under their parent. Collapse each host, section, System, or Repo independently.
@@ -215,6 +216,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Linked hosts use the server's OMP configuration and provider logins for new sessions; host settings no longer expose cluster membership, provider sharing or agent-start switches
 - Daemons linked to multiple servers keep each server's OMP configuration separate, and workspace access blocks mirrored settings and cached copies through symlinks
 - Images in saved chats on linked hosts remain available after server configuration refreshes
+- Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen

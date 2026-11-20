@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { OpenChannelRequestSchema } from "../api-contracts/host-control-models.ts";
 import { LINK_PROTOCOL_VERSION } from "./link-protocol.ts";
 import type {
   DownMessage,
@@ -114,6 +115,26 @@ test("Ship offers and receipts are sequenced, bounded and direction-specific", a
     seq: receipt.seq,
     wrongDirection: true,
   });
+});
+
+test("retired mirror traffic uses the unknown message and operation paths", async () => {
+  const { decodeDown, decodeUp, isHostOp } = await load();
+  assert.deepEqual(decodeUp('{"type":"config_state"}'), {
+    type: "unknown",
+    messageType: "config_state",
+    seq: null,
+    wrongDirection: false,
+  });
+
+  const request = { type: "req", seq: 1, id: "r1", op: "clusterConfig", args: {} };
+  assert.deepEqual(decodeDown(JSON.stringify(request)), request);
+  assert.equal(isHostOp(request.op), false);
+});
+
+test("host opens do not advertise credential sharing", () => {
+  const { properties } = OpenChannelRequestSchema.properties.launch;
+  assert.equal(Object.hasOwn(properties, "shareCredentials"), false);
+  assert.equal(Object.hasOwn(properties, "credentialsServer"), false);
 });
 
 const DOWN = [

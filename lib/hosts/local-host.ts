@@ -184,7 +184,6 @@ export async function launchConfigForCwd(
 export async function prepareInteractiveLaunch(
   request: SpawnRequest,
   overrides?: Record<string, string>,
-  mirrorEnv?: Record<string, string>,
 ) {
   const { cwd } = request;
   const launchConfig = await launchConfigForCwd(cwd);
@@ -198,7 +197,7 @@ export async function prepareInteractiveLaunch(
   }
   const bin = resolveOmpBin();
   if (!bin) throw new Error(OMP_NOT_FOUND);
-  const extraEnv = { ...(mirrorEnv ?? getAgentEnvOverrides()), ...overrides };
+  const extraEnv = { ...getAgentEnvOverrides(), ...overrides };
   const env = sanitizeProjectCommandEnvironment({ ...process.env, ...extraEnv });
   if (extraEnv.OMP_PROFILE === undefined) delete env.OMP_PROFILE;
   if (extraEnv.PI_PROFILE === undefined) delete env.PI_PROFILE;

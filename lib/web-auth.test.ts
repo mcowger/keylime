@@ -435,53 +435,17 @@ test("leaves the host link to its own bearer check, and nothing else under /api/
   });
 });
 
-test("leaves everything below /api/hosts/broker/v1/ to its bearer check, and nothing else under /api/hosts/broker", () => {
+test("gates the former host broker paths", () => {
   withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
-    assert.equal(
-      gate("http://localhost:30177/api/hosts/broker/v1/healthz"),
-      "public",
-    );
     for (const path of [
       "/api/hosts/broker",
       "/api/hosts/brokerx/v1/healthz",
       "/api/hosts/broker/",
       "/api/hosts/broker/updates",
       "/api/hosts/broker/v1",
+      "/api/hosts/broker/v1/healthz",
       "/api/hosts/broker/v2/x",
       "/api/hosts/broker/v1x/healthz",
-    ]) {
-      assert.equal(
-        response(gate(`http://localhost:30177${path}`)).status,
-        401,
-        path,
-      );
-    }
-  });
-});
-
-test("leaves only the two cluster-config routes to their bearer check, and nothing beside them", () => {
-  withEnvVars({ KEYLIME_PASSWORD_HASH: PASSWORD_HASH }, () => {
-    for (const path of [
-      "/api/hosts/cluster-config/manifest",
-      `/api/hosts/cluster-config/file/${"a".repeat(64)}`,
-    ]) {
-      assert.equal(gate(`http://localhost:30177${path}`), "public", path);
-    }
-    // A host's updates route with id = "cluster-config" is still password-gated.
-    for (const path of [
-      "/api/hosts/cluster-config",
-      "/api/hosts/cluster-configx",
-      "/api/hosts/cluster-configx/manifest",
-      "/api/hosts/cluster-config/cluster",
-      "/api/hosts/cluster-config/updates",
-      "/api/hosts/cluster-config/",
-      "/api/hosts/cluster-config/manifest/",
-      "/api/hosts/cluster-config/manifest/x",
-      "/api/hosts/cluster-config/file",
-      `/api/hosts/cluster-config/file/${"a".repeat(63)}`,
-      `/api/hosts/cluster-config/file/${"a".repeat(65)}`,
-      `/api/hosts/cluster-config/file/${"A".repeat(64)}`,
-      `/api/hosts/cluster-config/file/${"a".repeat(64)}/x`,
     ]) {
       assert.equal(
         response(gate(`http://localhost:30177${path}`)).status,

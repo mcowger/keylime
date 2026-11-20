@@ -428,7 +428,7 @@ test("only omp's own credential files are denied, not files of the same name els
   );
 });
 
-test("workspace reads deny mirrored credentials and cached objects by canonical path", async (t) => {
+test("workspace reads deny credentials and cached objects left by legacy cluster mirroring", async (t) => {
   const workspace = workspaceRoot(t);
   const agentDir = path.join(workspace, "agent");
   const configuredAgentDir = path.join(workspace, "linked-agent");

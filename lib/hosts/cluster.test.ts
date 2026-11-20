@@ -5,72 +5,14 @@ import {
   CLUSTER_LABEL,
   CLUSTER_PROJECTS_DIR,
   ClusterError,
-  clusterJoinBlock,
   clusterOf,
   isClusterMember,
   joinCluster,
   leaveCluster,
-  ompSharesCredentials,
 } from "./cluster.ts";
 import { validatePools } from "./pools.ts";
 import type { HostProjectFacts } from "./cluster.ts";
 import type { HostPool, PoolMember, PoolProject } from "./pools.ts";
-
-test("clusterJoinBlock shares readiness and distinct blocking reasons between the route and the client", () => {
-  const supports = (operation: "gitOrigins") => operation === "gitOrigins";
-  const ompVersion = "omp/15.13.1";
-  assert.equal(
-    clusterJoinBlock({ status: "online", ompVersion, supports }),
-    null,
-  );
-  assert.equal(
-    clusterJoinBlock({ status: "online", ompVersion: "16.0.0", supports }),
-    null,
-  );
-  assert.equal(
-    clusterJoinBlock({ status: "online", ompVersion, supports: () => false }),
-    "upgrade",
-  );
-  // Members always share credentials: an omp that cannot, or an unknown one, has its own reason, after the daemon's.
-  for (const old of ["omp/15.13.0", "15.13.1-beta.1", "omp/next", null]) {
-    assert.equal(
-      clusterJoinBlock({ status: "online", ompVersion: old, supports }),
-      "omp-old",
-      String(old),
-    );
-  }
-  assert.equal(
-    clusterJoinBlock({
-      status: "online",
-      ompVersion: "omp/15.13.0",
-      supports: () => false,
-    }),
-    "upgrade",
-  );
-  for (const status of ["offline", "needs-upgrade", "omp-missing"] as const) {
-    assert.equal(clusterJoinBlock({ status, ompVersion, supports }), status);
-  }
-});
-
-test("ompSharesCredentials takes omp 15.13.1 and newer, with or without the omp/ prefix", () => {
-  for (const version of [
-    "omp/15.13.1",
-    "15.13.1",
-    "omp/15.14.0",
-    "omp/16.0.0-beta.1",
-    "omp/18.20.0-int.202611130355.gd2c2eff",
-  ])
-    assert.equal(ompSharesCredentials(version), true, version);
-  for (const version of [
-    "omp/15.13.0",
-    "omp/15.13.1-rc.1",
-    "omp/",
-    "",
-    "garbage",
-    null,
-  ])
-    assert.equal(ompSharesCredentials(version), false, String(version));
-});
 
 const NOW = "2026-11-11T10:00:00.000Z";
 const APP = "https://github.com/a/app.git";

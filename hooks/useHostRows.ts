@@ -2,31 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { openEventStream } from "@/lib/event-stream";
-import type { HostRow, MasterConfigError } from "@/lib/hosts/hub";
+import type { HostRow } from "@/lib/hosts/hub";
 import type { HostPool } from "@/lib/hosts/pools";
 
 type Snapshot = {
   hosts?: HostRow[];
   pools?: HostPool[];
-  masterConfigError?: MasterConfigError;
 };
 
 /** Live host status plus pool configuration: the authenticated snapshot, then each SSE frame that carries it.
- * A frame without pools cannot erase the configured logical targets. `masterConfigError` comes with the hosts. `reload`
- * fetches the snapshot again and resolves with the pools known afterwards, or null when it failed. */
+ * A frame without pools cannot erase the configured logical targets. `reload` fetches the snapshot again
+ * and resolves with the pools known afterwards, or null when it failed. */
 export function useHostRows(): {
   hosts: HostRow[] | null;
   pools: HostPool[];
   poolsLoaded: boolean;
   poolsFailed: boolean;
   failed: boolean;
-  masterConfigError: MasterConfigError | null;
   reload: () => Promise<HostPool[] | null>;
 } {
-  const [rows, setRows] = useState<{
-    hosts: HostRow[];
-    masterConfigError: MasterConfigError | null;
-  } | null>(null);
+  const [hosts, setHosts] = useState<HostRow[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [pools, setPools] = useState<HostPool[]>([]);
   const [poolsLoaded, setPoolsLoaded] = useState(false);
@@ -50,14 +45,9 @@ export function useHostRows(): {
       setPoolsLoaded(true);
       setPoolsFailed(false);
       // SSE owns host status; this request supplies the retained pool configuration.
-      if (Array.isArray(data.hosts))
-        setRows(
-          (current) =>
-            current ?? {
-              hosts: data.hosts!,
-              masterConfigError: data.masterConfigError ?? null,
-            },
-        );
+      const snapshotHosts = data.hosts;
+      if (Array.isArray(snapshotHosts))
+        setHosts((current) => current ?? snapshotHosts);
       return data.pools;
     } catch {
       // Cancelled by a frame that carried pools: those are the current ones.
@@ -75,10 +65,7 @@ export function useHostRows(): {
       try {
         const data = JSON.parse(event.data) as Snapshot;
         if (Array.isArray(data.hosts)) {
-          setRows({
-            hosts: data.hosts,
-            masterConfigError: data.masterConfigError ?? null,
-          });
+          setHosts(data.hosts);
           setFailed(false);
         }
         // A frame that carries pools is as good as the snapshot: it also recovers from a failed first request,
@@ -102,12 +89,11 @@ export function useHostRows(): {
   }, [reload]);
 
   return {
-    hosts: rows?.hosts ?? null,
+    hosts,
     pools,
     poolsLoaded,
     poolsFailed,
     failed,
-    masterConfigError: rows?.masterConfigError ?? null,
     reload,
   };
 }

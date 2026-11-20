@@ -79,6 +79,15 @@ test("the one-time host token survives Escape; only Done closes it", async (t) =
   render(createElement(HostsConfig));
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Add host" }));
+  const enrollment = within(screen.getByRole("dialog", { name: "Add a host" }));
+  assert.ok(
+    enrollment.getByText(/the host uses its own provider credentials and setup/i),
+  );
+  assert.ok(
+    enrollment.getByText(
+      /this server can run sessions and access files on the host/i,
+    ),
+  );
   await user.type(screen.getByPlaceholderText("Build server"), "Laptop");
   await user.click(screen.getByRole("button", { name: "Create host" }));
   await screen.findByText("tok-once");

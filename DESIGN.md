@@ -106,11 +106,9 @@ a run: the restarted server adopts the live children from the daemon's hello,
 with their open blocking requests replayed. A direct spawn path would tie
 every run to the web server's lifetime, which is why none exists.
 
-The omp boundary above holds on every machine: a remote machine runs its own
-runner build, its own `~/.omp/agent` and its own credentials, unless sharing is
-turned on for that host (Settings → Hosts): then its sessions use the server's
-provider logins through `omp auth-broker serve`, and the host never gets a
-refresh token. key lime only routes. `RpcProcess` takes its byte pipe
+The omp boundary holds on every machine: a remote machine runs its own runner
+build with its own `~/.omp/agent` settings, plugins, and credentials. Keylime
+only routes. `RpcProcess` takes its byte pipe
 (`RpcTransport`) from the host, so the
 session wrapper, event streams, notifications and queue handle frames without
 knowing where omp runs. Session routes address a session by id; the owning

@@ -41,6 +41,10 @@ directory. It won't overwrite existing installs or host configuration. Verify
 the result in **Settings → Hosts**: the host should show `online`. See the
 manual steps below for token revocation, service logs, and troubleshooting.
 
+Each daemon uses its own OMP settings, plugins, environment, and provider
+logins for new and recovered sessions. Neither linking nor binary deployment
+copies or shares them.
+
 ## Deploy a release without SSH
 
 In **Settings → Hosts**, choose **Deploy release** on the target host. Pick
@@ -188,11 +192,8 @@ credentials your projects need separately on the new host.
 3. Check that the host shows `online` in **Settings → Hosts**. Expand that
    host in the sidebar and click **+** next to **Repos** to register or clone a
    repo there, then start a chat in its workspace. Linking doesn't copy repos,
-   sessions, or logins. Configure provider credentials on the host, or enable
-   **Use this server's provider logins** only if you trust the host with those
-   credentials. For shared logins, the proxy must also pass
-   `/api/hosts/broker/v1/` requests with the host's `Authorization` header and
-   without browser authentication, redirects, or response buffering.
+   sessions, or logins. Configure provider credentials on the host under the
+   account that runs the daemon.
 
 If the host stays `offline`, check the daemon output, the URL and TLS trust from
 that host, and the proxy's WebSocket settings. For `omp not installed`, rerun

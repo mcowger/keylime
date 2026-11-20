@@ -198,23 +198,17 @@ test("sessions whose resume failed stay claimed alone; the next start takes them
   tracker.dispose();
 });
 
-test("a sharing session keeps its credentials server across a restart; a malformed one is refused", (t) => {
-  const f = fixture(t),
-    sharing = {
-      ...f.entry,
-      launch: { ...f.entry.launch, credentialsServer: "https://a.example" },
-    };
-  writeFileSync(f.path, JSON.stringify([sharing]));
-  const tracker = new HostResumeTracker(f);
-  assert.deepEqual(tracker.takeRunning(), [sharing]);
-  tracker.dispose();
-  writeFileSync(
-    f.path,
-    JSON.stringify([
-      { ...f.entry, launch: { ...f.entry.launch, credentialsServer: 5 } },
-    ]),
-  );
-  const bad = new HostResumeTracker(f);
-  assert.throws(() => bad.takeRunning(), /Invalid recovery launch/);
-  bad.dispose();
+test("recovery ignores the retired credentials server field", (t) => {
+  for (const credentialsServer of ["https://a.example", 5]) {
+    const f = fixture(t);
+    writeFileSync(
+      f.path,
+      JSON.stringify([
+        { ...f.entry, launch: { ...f.entry.launch, credentialsServer } },
+      ]),
+    );
+    const tracker = new HostResumeTracker(f);
+    assert.deepEqual(tracker.takeRunning(), [f.entry]);
+    tracker.dispose();
+  }
 });

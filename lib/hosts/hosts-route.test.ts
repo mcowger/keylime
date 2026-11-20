@@ -10,7 +10,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after, type TestContext } from "node:test";
-import { mock } from "bun:test";
 import type { HostRow as HubHostRow } from "./hub";
 import type { HostPool } from "./pools";
 
@@ -37,14 +36,6 @@ after(() => {
   }
   rmSync(agentDir, { recursive: true, force: true });
 });
-
-// abortBrokerRequests is the only part of the broker module this file looks at.
-const realBroker = await import("../omp/auth-broker.ts");
-const abortedBrokerHosts: string[] = [];
-mock.module("../omp/auth-broker.ts", () => ({
-  ...realBroker,
-  abortBrokerRequests: (id: string) => abortedBrokerHosts.push(id),
-}));
 
 const route = await import("../../app/api/hosts/route.ts");
 const hub = await import("./hub.ts");
@@ -92,7 +83,6 @@ test("POST returns the token once; GET lists the host without any secret", async
   assert.equal(hosts[0].id, "local");
   for (const row of [host, ...hosts]) {
     assert.ok(!("allowAgentStart" in row));
-    assert.ok(!("shareCredentials" in row));
   }
   assert.equal(hosts[0].serverPlatform, process.platform);
   assert.deepEqual(
@@ -153,26 +143,23 @@ test("PATCH renames a linked host", async () => {
   );
 });
 
-test("PATCH rejects both legacy toggles, even alongside a valid rename", async () => {
+test("PATCH rejects unknown fields, even alongside a valid rename", async () => {
   const { host } = await (await send("POST", { label: "linked" })).json();
   const before = await get();
   for (const id of [host.id, "local"]) {
-    for (const key of ["allowAgentStart", "shareCredentials"]) {
-      for (const label of [undefined, "new"]) {
-        const response = await send("PATCH", { id, label, [key]: true });
-        assert.equal(response.status, 400);
-      }
+    for (const label of [undefined, "new"]) {
+      const response = await send("PATCH", { id, label, allowAgentStart: true });
+      assert.equal(response.status, 400);
     }
   }
   assert.deepEqual(await get(), before);
 });
 
-test("revoking a cluster member removes it and aborts its broker requests", async (t) => {
+test("revoking a cluster member removes it from the pool", async (t) => {
   const { host: member } = await (
     await send("POST", { label: "member" })
   ).json();
   seedPools(t, [member.id]);
-  abortedBrokerHosts.length = 0;
   writeFileSync(poolsFile, "{not json");
 
   const revoke = () =>
@@ -183,11 +170,11 @@ test("revoking a cluster member removes it and aborts its broker requests", asyn
     "membership unknown: the revoke could leave a stale member",
   );
   assert.equal(readFileSync(poolsFile, "utf8"), "{not json");
-  assert.deepEqual(abortedBrokerHosts, []);
 
   const pool = seedPools(t, ["local", member.id]);
+  assert.ok((await get()).hosts.some((host) => host.id === member.id));
   assert.equal((await revoke()).status, 200);
-  assert.deepEqual(abortedBrokerHosts, [member.id]);
+  assert.ok(!(await get()).hosts.some((host) => host.id === member.id));
   // Revoking leaves the cluster by leaveCluster's rules: the member is gone, its checkout inside its folder stays bound.
   assert.deepEqual((await get()).pools, [
     { ...pool, members: pool.members.filter((m) => m.hostId !== member.id) },
@@ -540,13 +527,12 @@ test("PUT accepts only known members but retains clone paths after a member is r
   );
 });
 
-test("removing a pool member doesn't abort its broker requests", async (t) => {
+test("removing a pool member does not revoke the host", async (t) => {
   const { host } = await (await send("POST", { label: "worker" })).json();
   const pool = seedPools(t, [host.id]);
-  abortedBrokerHosts.length = 0;
   const response = await send("PUT", { pools: [{ ...pool, members: [] }] });
   assert.equal(response.status, 200);
-  assert.deepEqual(abortedBrokerHosts, []);
+  assert.ok((await get()).hosts.some((row) => row.id === host.id));
 });
 
 test("GET and PUT fail closed for damaged existing pool registries without overwriting them", async (t) => {

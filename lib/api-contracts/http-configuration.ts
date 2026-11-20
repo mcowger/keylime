@@ -187,7 +187,7 @@ const mcpResponse = Type.Object({
       }),
     }),
   ),
-  user: Type.Object({
+  user: opt(Type.Object({
     path: S,
     disabledServers: strings,
     error: opt(S),
@@ -203,7 +203,7 @@ const mcpResponse = Type.Object({
         valid: B,
       }),
     ),
-  }),
+  })),
   inventory: Type.Array(liveServer),
   liveServers: opt(Type.Array(liveServer)),
   liveError: opt(S),
@@ -651,7 +651,7 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
         query("attach"),
       ],
       description:
-        "Project server env and headers are redacted; user servers expose only status and type. Live errors are sanitized.",
+        "Attach-only reads omit local configuration and never spawn a session. Project server env and headers are redacted; user servers expose only status and type. Live errors are sanitized.",
     },
   ),
   op("/api/mcp", "post", "postMcp", "Save an MCP server", pathResult, {

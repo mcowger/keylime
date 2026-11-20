@@ -119,35 +119,6 @@ export const HostCapacitySchema = Type.Object(
   },
 );
 export type HostCapacity = Static<typeof HostCapacitySchema>;
-export const ConfigStateSchema = Type.Object(
-  {
-    version: Type.Union([Type.String(), Type.Null()], {
-      description:
-        "Configuration version applied or attempted; null means no version is reported.",
-    }),
-    files: Type.Union([
-      Type.Literal("none"),
-      Type.Literal("current"),
-      Type.Literal("failed"),
-    ]),
-    plugins: Type.Union([
-      Type.Literal("none"),
-      Type.Literal("pending"),
-      Type.Literal("current"),
-      Type.Literal("failed"),
-    ]),
-    error: Type.Union([Type.String(), Type.Null()], {
-      description:
-        "Application error when present; null means no error is reported.",
-    }),
-    missingCommands: Type.Array(Type.String()),
-  },
-  {
-    title: "ConfigState",
-    description: "The daemon's cluster configuration application state.",
-  },
-);
-export type ConfigState = Static<typeof ConfigStateSchema>;
 export const TerminalEventSchema = Type.Union(
   [
     Type.Object({
@@ -531,18 +502,6 @@ export const UpMessageSchema = Type.Union(
         title: "HostLinkCapacity",
         description:
           "Unsequenced advisory capacity sample, not retained for replay.",
-      },
-    ),
-    Type.Object(
-      {
-        type: Type.Literal("config_state"),
-        state: ConfigStateSchema,
-        owned: Type.Boolean(),
-      },
-      {
-        title: "HostLinkConfigState",
-        description:
-          "Unsequenced cluster configuration state and whether it belongs to this server; not retained for replay. The latest state delayed by a full window is sent when room is available.",
       },
     ),
     Type.Object(

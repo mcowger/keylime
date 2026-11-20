@@ -13,7 +13,6 @@ import {
   HostArtifactActivationArgsSchema,
   HostArtifactActivationResultSchema,
 } from "./host-control-models";
-import { ConfigStateSchema } from "./host-schemas";
 import { BrowserListResultSchema, BrowserCaptureResultSchema, BrowserControlArgsSchema, BrowserControlResultSchema } from "./runner-lifecycle";
 import { BrowserVideoStartArgsSchema, BrowserVideoStreamArgsSchema, BrowserVideoStartResultSchema, BrowserVideoNextResultSchema, BrowserVideoStopResultSchema } from "./runner-lifecycle";
 
@@ -143,18 +142,5 @@ export const hostControlOperations: readonly OperationContract[] = [
       days: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
     }),
     result: Type.Null(),
-  },
-  {
-    name: "clusterConfig",
-    description:
-      "Usage: Apply or clear the requesting server's mirrored runner configuration.\nInputs: Apply takes a lowercase SHA-256 version; restore takes no version.\nInvariants: A cold runner uses the configuration of its opening server; joining a running runner does not change it. A departed link cannot apply configuration.\nEffects: Updates only that server's mirror and reports its state; the daemon's local configuration and other mirrors are unchanged.\nRecovery: Inspect the returned or current state before retrying an uncertain result.",
-    args: Type.Union([
-      Type.Object({
-        action: Type.Literal("apply"),
-        version: Type.String({ pattern: "^[0-9a-f]{64}$" }),
-      }),
-      Type.Object({ action: Type.Literal("restore") }),
-    ]),
-    result: Type.Object({ state: ConfigStateSchema, owned: Type.Boolean() }),
   },
 ];

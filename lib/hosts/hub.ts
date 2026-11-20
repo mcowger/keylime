@@ -54,7 +54,6 @@ import {
 } from "./host";
 import {
   CREATION_ID_RE,
-  decodeConfigState,
   decodeBlobFrame,
   decodeUp,
   encodeLine,
@@ -82,9 +81,6 @@ import {
   UnknownMessageLog,
   type UpMessage,
 } from "./link-protocol";
-import { ClusterConfigError } from "./cluster-config";
-import { clusterConfigVersion } from "./cluster-config-server";
-import type { ConfigState } from "./daemon-cluster-config";
 import {
   customLocalLabel,
   DEFAULT_LOCAL_LABEL,
@@ -188,14 +184,6 @@ interface Link {
   /** Shared lifecycle (v7) is advertised independently of the v8 pool extensions. */
   shared: boolean;
   capacity: CapacitySnapshot | null;
-  /** v10: the daemon's last cluster configuration report (`config_state`, or a `clusterConfig` answer); null until one. */
-  configState: ConfigState | null;
-  /** v10: that report says the configuration the host holds is this server's (a non-member holding it gets `restore`). */
-  configOwned: boolean;
-  /** `clusterConfig` ops sent and not answered: the sync never piles another on. */
-  configOps: number;
-  /** v10: a `config_state` arrived since the link came up: from then on reports, never op answers, set `configState`. */
-  configReported: boolean;
   ompVersion: string | null;
   keylimeVersion: string | null;
   workspaceOps: Set<string>;
@@ -264,10 +252,6 @@ interface HubState {
   terminalListeners: Map<string, Set<(event: TerminalEvent) => void>>;
   ptyListeners: Map<string, (event: TerminalAttachServer | null) => void>;
   pendingPtyDetaches: WeakMap<LinkSocket, Map<string, string>>;
-  /** The master's configuration version as last computed (null after a failure), and that failure. */
-  masterConfig: { version: string | null; error: MasterConfigError | null };
-  /** startClusterConfigSync's 30 s timer. */
-  configSync: NodeJS.Timeout | undefined;
 }
 
 declare global {
@@ -288,8 +272,6 @@ function hub(): HubState {
     terminalListeners: new Map(),
     ptyListeners: new Map(),
     pendingPtyDetaches: new WeakMap(),
-    masterConfig: { version: null, error: null },
-    configSync: undefined,
   };
   // A state kept from before a field existed (`bun --hot`) lacks it.
   globalThis.__ompHostHub.linkSamples ??= {
@@ -303,7 +285,6 @@ function hub(): HubState {
   globalThis.__ompHostHub.pendingPtyDetaches ??= new WeakMap();
   globalThis.__ompHostHub.terminalListeners ??= new Map();
   globalThis.__ompHostHub.sessionChangeListeners ??= new Set();
-  globalThis.__ompHostHub.masterConfig ??= { version: null, error: null };
   return globalThis.__ompHostHub;
 }
 
@@ -435,10 +416,6 @@ function linkFor(id: string): Link {
       hostVersion: null,
       shared: false,
       capacity: null,
-      configState: null,
-      configOwned: false,
-      configOps: 0,
-      configReported: false,
       ompVersion: null,
       keylimeVersion: null,
       workspaceOps: new Set(),
@@ -1010,9 +987,6 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
   const previous = link.socket;
   link.socket = ws;
   link.capacity = null;
-  link.configState = null;
-  link.configOwned = false;
-  link.configReported = false;
   previous?.close(LINK_CLOSE.replaced, "replaced by a newer link");
   if (previous) {
     // Upload bytes the old socket may have lost must not be followed by later ones on this socket: they resume instead.
@@ -1251,31 +1225,6 @@ async function adopt(
   }
 }
 
-/** A configuration report: a change reaches Settings (`hosts` subscribers). */
-function noteConfigState(link: Link, state: ConfigState, owned: boolean): void {
-  if (
-    link.configOwned === owned &&
-    JSON.stringify(link.configState) === JSON.stringify(state)
-  )
-    return;
-  link.configState = state;
-  link.configOwned = owned;
-  notifyHostsChange();
-}
-
-/** The member runs this server's configuration as it is now, plugins included: Settings' `current`, and the sync's target otherwise. */
-function configCurrent(link: Link): boolean {
-  const state = link.configState;
-  return (
-    link.configOwned &&
-    state !== null &&
-    state.version !== null &&
-    state.version === hub().masterConfig.version &&
-    state.files === "current" &&
-    state.plugins === "current"
-  );
-}
-
 /** `whole`: for a `part` that completes a line, that line decoded. `joined`: that line itself, which gets no dedup of
  * its own (its parts were deduped). */
 function applyUp(
@@ -1294,11 +1243,6 @@ function applyUp(
     return;
   if (message.type === "capacity") {
     link.capacity = { sample: message.sample, receivedAt: performance.now() };
-    return;
-  }
-  if (message.type === "config_state") {
-    link.configReported = true;
-    noteConfigState(link, message.state, message.owned);
     return;
   }
   if (message.type === "pty_event") {
@@ -2307,22 +2251,8 @@ export class RemoteHost implements Host {
         );
       }
     }
-    let launch = spawnRequest;
-    // A pure join cannot start a child. Every other remote open carries both server policies.
+    // A pure join cannot start a child; new remote launches require a registry record.
     if (options?.expectedChannel === undefined && this.id !== LOCAL_HOST_ID) {
-      let configVersion: string;
-      try {
-        configVersion = await masterConfigVersion();
-      } catch (error) {
-        throw new HostOpError(
-          409,
-          "cluster_config_invalid",
-          error instanceof ClusterConfigError
-            ? error.message
-            : "The server configuration cannot be read",
-        );
-      }
-      // Check after the await so revocation cannot race the open.
       try {
         if (!readHosts().some((host) => host.id === this.id))
           throw new HostOpError(
@@ -2338,9 +2268,12 @@ export class RemoteHost implements Host {
           "The linked-hosts registry cannot be read; no session was started",
         );
       }
-      launch = { ...spawnRequest, shareCredentials: true, configVersion };
     }
-    const opening: OpenChannelRequest = { sessionId, launch, ...options };
+    const opening: OpenChannelRequest = {
+      sessionId,
+      launch: spawnRequest,
+      ...options,
+    };
     // An open may wait for a cold child's `ready`, which sends nothing meanwhile.
     return (await request(
       this.id,
@@ -2456,9 +2389,6 @@ export interface LinkedHostRow {
   canStageArtifact?: boolean;
   canActivateArtifact?: boolean;
   arch?: string;
-  /** v10: the daemon's last cluster configuration report; `owned` when the configuration it holds is this server's,
-   * `current` when that is the master's version with its plugins in line. */
-  clusterConfig?: ConfigState & { owned: boolean; current: boolean };
 }
 
 export function listHosts(): LinkedHostRow[] {
@@ -2480,139 +2410,8 @@ export function listHosts(): LinkedHostRow[] {
         ...(link?.canStageArtifact && { canStageArtifact: true }),
         ...(link?.canActivateArtifact && { canActivateArtifact: true }),
         ...(link?.releaseArch && { arch: link.releaseArch }),
-        ...(link?.configState
-          ? {
-              clusterConfig: {
-                ...link.configState,
-                owned: link.configOwned,
-                current: configCurrent(link),
-              },
-            }
-          : {}),
       };
     });
-}
-
-/** Why the members cannot get this machine's configuration (spec K1, shown in Settings → Hosts): a ClusterConfigError's
- * code and message, which name a file and never its content; any other error only by its name. */
-export interface MasterConfigError {
-  code: string;
-  message: string;
-}
-
-/** The master's configuration version (lib/hosts/cluster-config-server.ts), kept for the rows' `current`. Throws its
- * error, which the hosts snapshot carries until the configuration works again and is logged once per change. */
-export async function masterConfigVersion(): Promise<string> {
-  const master = hub().masterConfig;
-  let version: string | null = null;
-  let failure: MasterConfigError | null = null;
-  try {
-    version = await clusterConfigVersion();
-    return version;
-  } catch (error) {
-    failure =
-      error instanceof ClusterConfigError
-        ? { code: error.code, message: error.message }
-        : {
-            code: "unknown",
-            message: error instanceof Error ? error.name : "unknown error",
-          };
-    throw error;
-  } finally {
-    // A state kept from before `error` existed (`bun --hot`) lacks it.
-    const errorChanged =
-      JSON.stringify(master.error ?? null) !== JSON.stringify(failure);
-    if (failure && errorChanged)
-      console.warn(
-        `[keylime] cluster members cannot get this machine's configuration (${failure.code}: ${failure.message})`,
-      );
-    if (master.version !== version || errorChanged) {
-      // A new version reaches the members now, not at the next 30 s round (spec K3); the sync piles no op on another.
-      const changed =
-        master.version !== null &&
-        version !== null &&
-        master.version !== version;
-      master.version = version;
-      master.error = failure;
-      notifyHostsChange();
-      if (changed) void syncClusterConfig();
-    }
-  }
-}
-
-const CLUSTER_CONFIG_OP_MS = 60_000;
-
-/** `clusterConfig` on a host's daemon (v10), waiting at most 60 s. The state it answers is kept only while the link has
- * sent no `config_state` since it came up: the daemon reports each change at once, ahead of its sequenced answer, so a
- * report that arrived first may already be newer (the plugin step finishing) and an answer must not take it back. */
-export async function clusterConfigOp(
-  hostId: string,
-  args: { action: "apply"; version: string } | { action: "restore" },
-): Promise<{ state: ConfigState; owned: boolean }> {
-  const link = linkFor(hostId);
-  link.configOps += 1;
-  let result: unknown;
-  try {
-    result = await request(hostId, "clusterConfig", args, CLUSTER_CONFIG_OP_MS);
-  } finally {
-    link.configOps -= 1;
-  }
-  let state: ConfigState;
-  try {
-    if (!isRecord(result) || typeof result.owned !== "boolean")
-      throw new Error("owned must be a boolean");
-    state = decodeConfigState(result.state);
-  } catch {
-    throw new HostOpError(
-      502,
-      "host_bad_result",
-      `${labelOf(hostId)} sent an invalid clusterConfig result`,
-    );
-  }
-  if (!link.configReported) noteConfigState(link, state, result.owned);
-  return { state, owned: result.owned };
-}
-
-/** Apply the server configuration to every linked host that is behind. */
-export async function syncClusterConfig(): Promise<void> {
-  try {
-    if (!readHosts().some((host) => host.id !== LOCAL_HOST_ID)) return;
-  } catch {
-    return;
-  }
-  let version: string;
-  try {
-    version = await masterConfigVersion();
-  } catch {
-    return; // logged by masterConfigVersion
-  }
-  let hosts: HostRecord[];
-  try {
-    hosts = readHosts();
-  } catch {
-    return;
-  }
-  for (const { id: hostId } of hosts) {
-    if (hostId === LOCAL_HOST_ID) continue;
-    const link = hub().links.get(hostId);
-    if (
-      !link ||
-      link.status !== "online" ||
-      link.configOps !== 0 ||
-      configCurrent(link)
-    )
-      continue;
-    clusterConfigOp(hostId, { action: "apply", version }).catch(() => {}); // the daemon reports a failure in its state
-  }
-}
-
-/** Start syncing server configuration now and every 30 seconds. */
-export function startClusterConfigSync(): void {
-  const state = hub();
-  if (state.configSync) return;
-  state.configSync = setInterval(() => void syncClusterConfig(), 30_000);
-  state.configSync.unref?.();
-  void syncClusterConfig();
 }
 
 export interface LocalHostRow {
@@ -2639,12 +2438,10 @@ export interface LocalHostRow {
 export type HostRow = LocalHostRow | LinkedHostRow;
 
 /** Settings → Hosts payload (`GET /api/hosts` and the `hosts` channel): this machine first, then linked hosts. This machine's status is its daemon link's.
- * `pools` is left out while pools.json cannot be read: a client keeps the last it had. `masterConfigError`: only while
- * the members cannot get this machine's configuration. */
+ * `pools` is left out while pools.json cannot be read: a client keeps the last it had. */
 export function hostsSnapshot(): {
   hosts: HostRow[];
   pools?: HostPool[];
-  masterConfigError?: MasterConfigError;
 } {
   const link = hub().links.get(LOCAL_HOST_ID);
   const local: LocalHostRow = {
@@ -2668,11 +2465,9 @@ export function hostsSnapshot(): {
   } catch {
     // Left out; see above.
   }
-  const { error } = hub().masterConfig;
   return {
     hosts: [local, ...listHosts()],
     ...(pools && { pools }),
-    ...(error && { masterConfigError: error }),
   };
 }
 
@@ -2694,13 +2489,6 @@ export function getHostCapacity(hostId: string): CapacitySnapshot | null {
 
 export function getHostLinkProtocol(hostId: string): number | null {
   return hub().links.get(hostId)?.hostVersion ?? null;
-}
-
-/** Linked hosts are current only after reporting this server's applied configuration. */
-export function isHostConfigCurrent(hostId: string): boolean {
-  if (hostId === LOCAL_HOST_ID) return true;
-  const link = hub().links.get(hostId);
-  return link !== undefined && configCurrent(link);
 }
 
 export function getHostOmpVersion(hostId: string): string | null {

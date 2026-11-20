@@ -43887,101 +43887,6 @@
                               "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
                               "type": "boolean"
                             },
-                            "clusterConfig": {
-                              "allOf": [
-                                {
-                                  "description": "The daemon's cluster configuration application state.",
-                                  "properties": {
-                                    "error": {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ],
-                                      "description": "Application error when present; null means no error is reported."
-                                    },
-                                    "files": {
-                                      "anyOf": [
-                                        {
-                                          "const": "none",
-                                          "type": "string"
-                                        },
-                                        {
-                                          "const": "current",
-                                          "type": "string"
-                                        },
-                                        {
-                                          "const": "failed",
-                                          "type": "string"
-                                        }
-                                      ]
-                                    },
-                                    "missingCommands": {
-                                      "items": {
-                                        "type": "string"
-                                      },
-                                      "type": "array"
-                                    },
-                                    "plugins": {
-                                      "anyOf": [
-                                        {
-                                          "const": "none",
-                                          "type": "string"
-                                        },
-                                        {
-                                          "const": "pending",
-                                          "type": "string"
-                                        },
-                                        {
-                                          "const": "current",
-                                          "type": "string"
-                                        },
-                                        {
-                                          "const": "failed",
-                                          "type": "string"
-                                        }
-                                      ]
-                                    },
-                                    "version": {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ],
-                                      "description": "Configuration version applied or attempted; null means no version is reported."
-                                    }
-                                  },
-                                  "required": [
-                                    "version",
-                                    "files",
-                                    "plugins",
-                                    "error",
-                                    "missingCommands"
-                                  ],
-                                  "title": "ConfigState",
-                                  "type": "object"
-                                },
-                                {
-                                  "properties": {
-                                    "current": {
-                                      "type": "boolean"
-                                    },
-                                    "owned": {
-                                      "type": "boolean"
-                                    }
-                                  },
-                                  "required": ["owned", "current"],
-                                  "type": "object"
-                                }
-                              ],
-                              "type": "object"
-                            },
                             "hostVersion": {
                               "anyOf": [
                                 {
@@ -44084,18 +43989,6 @@
                       ]
                     },
                     "type": "array"
-                  },
-                  "masterConfigError": {
-                    "properties": {
-                      "code": {
-                        "type": "string"
-                      },
-                      "message": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["code", "message"],
-                    "type": "object"
                   },
                   "pools": {
                     "items": {

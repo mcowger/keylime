@@ -2809,8 +2809,6 @@ export function AppShell({ appName }: { appName: string }) {
     : undefined;
   const settingsHostId = activeCwd ? activeHostId : currentHostId;
   const remoteSettings = remoteHostId(settingsHostId) !== undefined;
-  const sharedSettings =
-    remoteSettings || (hosts?.some((host) => host.id !== LOCAL_HOST_ID) ?? false);
   const showChat = selectedSession !== null || effectiveNewSessionCwd !== null;
   const currentRate = generationSpeed?.current;
   const rate = currentRate ?? generationSpeed?.average;
@@ -3475,7 +3473,6 @@ export function AppShell({ appName }: { appName: string }) {
                 onOpenUrlAutomaticallyChange={handleOpenUrlAutomaticallyChange}
                 cwd={activeCwd ?? selectedSession?.cwd ?? newSessionCwd}
                 remoteHost={remoteSettings}
-                cluster={sharedSettings}
                 sessionId={selectedSession?.id ?? null}
                 onModelsSaved={() => setModelsRefreshKey((k) => k + 1)}
                 onPluginsReloaded={() => setSessionKey((k) => k + 1)}

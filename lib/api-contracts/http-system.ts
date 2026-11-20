@@ -9,7 +9,6 @@ import {
   webSecurity,
 } from "./http-helpers";
 import { EventStreamChannelSchema } from "./browser-link";
-import { ConfigStateSchema } from "./host-schemas";
 import {
   StageHostArtifactArgsSchema,
   StageHostArtifactResultSchema,
@@ -96,9 +95,6 @@ const host = Type.Union([
   }),
   obj({
     ...hostBase,
-    clusterConfig: Type.Optional(
-      Type.Intersect([ConfigStateSchema, obj({ owned: B, current: B })]),
-    ),
   }),
 ]);
 const poolResult = obj({ pools });
@@ -345,7 +341,6 @@ add(
   obj({
     hosts: Type.Array(host),
     pools,
-    masterConfigError: Type.Optional(obj({ code: S, message: S })),
   }),
 );
 add("/api/hosts/[id]/terminal-sessions", "get", "getHostsIdTerminalSessions", "List live session terminals", obj({ sessionIds: Type.Array(S) }), { parameters: [id] });

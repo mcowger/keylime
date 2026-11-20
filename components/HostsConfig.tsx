@@ -22,11 +22,7 @@ import type {
   StageHostArtifactResult,
 } from "@/lib/api-contracts/host-control-models";
 import { newUploadId, uploadFile, type UploadHandle } from "@/lib/event-stream";
-import {
-  clusterJoinBlock,
-  clusterOf,
-  isClusterMember,
-} from "@/lib/hosts/cluster";
+import { clusterOf, isClusterMember } from "@/lib/hosts/cluster";
 import type { HostRow } from "@/lib/hosts/hub";
 import type { HostPool } from "@/lib/hosts/pools";
 import { useI18n } from "@/lib/i18n";
@@ -245,7 +241,7 @@ function HostDialog({
             onSubmit={(event) => void submit(event)}
             style={{ display: "flex", flexDirection: "column", gap: 12 }}
           >
-            {adding && <p>{t("hostsConfig.linkTrustNotice")}</p>}
+            {adding && <p>{t("hostsConfig.linkEnrollmentNotice")}</p>}
             <label
               style={{
                 display: "flex",
@@ -861,26 +857,14 @@ function StageArtifactDialog({
   );
 }
 
-type ClusterState = {
-  pools: HostPool[];
-  masterFailed: boolean;
-};
-
-const joinBlock = (row: HostRow) =>
-  clusterJoinBlock({
-    status: row.status,
-    ompVersion: row.ompVersion,
-    supports: (operation) => row.workspaceOps.includes(operation),
-  });
-
 function HostCard({
   host,
-  cluster,
+  pools,
   onRename,
   onRevoke,
 }: {
   host: HostRow;
-  cluster: ClusterState;
+  pools: HostPool[];
   onRename: () => void;
   onRevoke: () => void;
 }) {
@@ -889,7 +873,7 @@ function HostCard({
   const [artifactMode, setArtifactMode] = useState<"manual" | "release" | null>(null);
   const linked = isLocalRow(host) ? null : host;
   const releaseAvailable = !!linked && !!linked.canActivateArtifact && !!linked.arch && isLinkUp(linked.status);
-  const member = isClusterMember(cluster.pools, host.id);
+  const member = isClusterMember(pools, host.id);
   const details = [
     host.platform,
     host.hostVersion !== null &&
@@ -904,26 +888,6 @@ function HostCard({
   ]
     .filter(Boolean)
     .join(" · ");
-  const memberBlock = linked ? joinBlock(host) : null;
-  const outdated = memberBlock === "upgrade" || memberBlock === "needs-upgrade";
-  const config = !outdated ? linked?.clusterConfig : undefined;
-  const updating = cluster.masterFailed
-    ? null
-    : t("hostsConfig.configUpdating");
-  const configLine =
-    !linked || host.status === "offline"
-      ? null
-      : outdated
-        ? t("hostsConfig.joinUpgrade")
-        : !config
-          ? updating
-          : config.version !== null && !config.owned
-            ? t("hostsConfig.configHeldElsewhere")
-            : config.error
-              ? t("hostsConfig.configFailed", { reason: config.error })
-              : config.current
-                ? t("hostsConfig.configCurrent")
-                : updating;
 
   return (
     <li
@@ -971,32 +935,6 @@ function HostCard({
             {details}
           </div>
         )}
-        {configLine && (
-          <div
-            style={{
-              marginTop: 4,
-              fontSize: 11,
-              color: "var(--text-muted)",
-              overflowWrap: "anywhere",
-            }}
-          >
-            {configLine}
-          </div>
-        )}
-        {configLine && config?.missingCommands.length ? (
-          <div
-            style={{
-              marginTop: 2,
-              fontSize: 11,
-              color: "var(--text-muted)",
-              overflowWrap: "anywhere",
-            }}
-          >
-            {t("hostsConfig.configMissing", {
-              commands: config.missingCommands.join(", "),
-            })}
-          </div>
-        ) : null}
         {isLocalRow(host) &&
           host.daemonManaged &&
           host.status === "offline" && (
@@ -1103,18 +1041,12 @@ function HostCard({
 
 export function HostsConfig() {
   const { t } = useI18n();
-  const {
-    hosts,
-    pools,
-    failed: loadFailed,
-    masterConfigError,
-  } = useHostRows();
+  const { hosts, pools, failed: loadFailed } = useHostRows();
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [revoking, setRevoking] = useState<HostRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [creationHostId, setCreationHostId] = useState(LOCAL_HOST_ID);
   const cluster = clusterOf(pools);
-  const hasLinkedHosts = hosts?.some((host) => !isLocalRow(host));
 
   const revoke = async () => {
     if (!revoking) return;
@@ -1224,20 +1156,6 @@ export function HostsConfig() {
           {t("hostsConfig.loadFailed")}
         </div>
       )}
-      {masterConfigError && hasLinkedHosts && (
-        <div
-          role="alert"
-          style={{
-            fontSize: 12,
-            color: "var(--status-error)",
-            overflowWrap: "anywhere",
-          }}
-        >
-          {t("hostsConfig.masterConfigFailed", {
-            reason: masterConfigError.message,
-          })}
-        </div>
-      )}
       {hosts === null ? (
         !loadFailed && (
           <div role="status" style={{ fontSize: 12, color: "var(--text-dim)" }}>
@@ -1253,10 +1171,7 @@ export function HostsConfig() {
             <HostCard
               key={host.id}
               host={host}
-              cluster={{
-                pools,
-                masterFailed: masterConfigError !== null,
-              }}
+              pools={pools}
               onRename={() => setDialog({ kind: "rename", host })}
               onRevoke={() => setRevoking(host)}
             />

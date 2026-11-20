@@ -100,8 +100,7 @@ function serverSummary(config: Record<string, unknown>): {
   };
 }
 
-/** `liveOnly`: the session runs on another cluster member. Its live status is read from its running process (never one
- * started here); servers are changed in the master's configuration, so the switches stay off (spec K7). */
+/** Remote sessions show status from the running process, with no configuration editor. */
 export function McpConfig({
   cwd,
   sessionId,
@@ -165,7 +164,7 @@ export function McpConfig({
         return data;
       };
 
-      const data = await read(false);
+      const data = await read(liveOnly);
       if (generation !== loadGeneration.current) return;
       setServers(data.servers ?? []);
       setUserConfig(data.user ?? null);
@@ -182,7 +181,7 @@ export function McpConfig({
       // Live status can start or reuse an OMP child and wait for /mcp list.
       // Keep it off the initial paint path; the static inventory is already
       // useful and the live result can replace it when the command responds.
-      if (sessionId) {
+      if (sessionId && !liveOnly) {
         await read(true)
           .then((liveData) => {
             if (generation !== loadGeneration.current) return;

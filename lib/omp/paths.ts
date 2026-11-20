@@ -14,6 +14,7 @@ import * as path from "path";
 
 const APP_NAME = "omp";
 const CONFIG_DIR_NAME = ".omp";
+/** Legacy mirror directory; file access still blocks cached credentials here. */
 export const HOST_CONFIG_MIRROR_DIR = "cluster-config";
 
 export function getConfigDirName(): string {

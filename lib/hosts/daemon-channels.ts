@@ -9,7 +9,6 @@ import { isValidSessionId } from "../session-file-references-core";
 import { isRecord } from "../type-guards";
 import type { DaemonLink } from "./daemon-link";
 import {
-  CONFIG_VERSION_RE,
   CREATION_ID_RE,
   HISTORY_MUTATING_COMMANDS,
   HostOpError,
@@ -125,32 +124,6 @@ const collision = () =>
   );
 const invalid = (message = "Invalid channel request") =>
   new HostOpError(400, "invalid_request", message);
-/** A process start's launch, from what its opener asked: the wire never names the credentials server (it is the opening
- * link's own, and only when the hub asks), and a configuration version passes only in its one valid form. */
-function forStart(
-  launch: SpawnRequest,
-  link: DaemonLink,
-  opener: SpawnRequest,
-): SpawnRequest {
-  const result = { ...launch };
-  delete result.shareCredentials;
-  delete result.credentialsServer;
-  delete result.configVersion;
-  if (opener.shareCredentials === true)
-    result.credentialsServer = link.login.url;
-  if (opener.configVersion !== undefined) {
-    if (
-      typeof opener.configVersion !== "string" ||
-      !CONFIG_VERSION_RE.test(opener.configVersion) ||
-      opener.shareCredentials !== true
-    )
-      throw invalid(
-        "A configured launch requires a valid configuration version and server credentials",
-      );
-    result.configVersion = opener.configVersion;
-  }
-  return result;
-}
 
 export class ChannelTable {
   private readonly channels = new Map<string, Channel>();
@@ -477,7 +450,7 @@ export class ChannelTable {
     } else {
       channel = await this.ensure(
         args.sessionId,
-        forStart(args.launch, link, args.launch),
+        args.launch,
         args.preparing ? link.id : undefined,
       );
     }
@@ -551,20 +524,11 @@ export class ChannelTable {
       channel.transport.onExit(() => exit.resolve());
       this.stopChannel(channel);
       await exit.promise;
-      // A new process: the opener's flags decide its credentials and configuration, as for any start (spec C6, K4).
-      const launch = this.deps.prepareLaunch(
-        forStart(
-          {
-            ...channel.launch,
-            advisor: args.launch.advisor,
-            ...(args.launch.spawnModel
-              ? { spawnModel: args.launch.spawnModel }
-              : {}),
-          },
-          link,
-          args.launch,
-        ),
-      );
+      const launch = this.deps.prepareLaunch({
+        ...channel.launch,
+        advisor: args.launch.advisor,
+        ...(args.launch.spawnModel ? { spawnModel: args.launch.spawnModel } : {}),
+      });
       const spawning = this.create(
         launch,
         channel.pending.sessionId,

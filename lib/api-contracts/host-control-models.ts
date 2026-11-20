@@ -12,25 +12,6 @@ export const SpawnRequestSchema = Type.Object(
           "Stable identity of an independent start; retry arguments must remain identical.",
       }),
     ),
-    shareCredentials: Type.Optional(
-      Type.Literal(true, {
-        description:
-          "Required on linked-host opens that can start a process. Use the opening server's provider credentials.",
-      }),
-    ),
-    credentialsServer: Type.Optional(
-      Type.String({
-        description:
-          "Daemon-local recorded credential owner; wire-provided values are ignored and replaced with the opening link's identity.",
-      }),
-    ),
-    configVersion: Type.Optional(
-      Type.String({
-        pattern: "^[0-9a-f]{64}$",
-        description:
-          "Required on linked-host opens that can start a process. Identifies the opening server's configuration. Not persisted in resume manifests.",
-      }),
-    ),
     cwd: Type.String(),
     recordedCwd: Type.Union([Type.String(), Type.Null()]),
     sessionFile: Type.String({
@@ -49,7 +30,7 @@ export const SpawnRequestSchema = Type.Object(
   {
     title: "SpawnRequest",
     description:
-      "A launch request. A linked-host start uses the opening server's configuration and credentials; a pure join starts nothing.",
+      "A launch request. A linked-host start uses the daemon's own provider credentials; a pure join starts nothing.",
   },
 );
 export type SpawnRequest = Static<typeof SpawnRequestSchema>;

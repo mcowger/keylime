@@ -1,4 +1,3 @@
-import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import {
@@ -16,7 +15,6 @@ import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
 import {
   encodeBlobFrame,
   encodeLine,
-  LINK_LIMITS,
   LINK_PROTOCOL_VERSION,
   PartJoiner,
 } from "./link-protocol.ts";
@@ -25,31 +23,21 @@ const scratch = mkdtempSync(join(os.tmpdir(), "daemon-multi-runtime-"));
 const old = {
   agent: process.env.PI_CODING_AGENT_DIR,
   bin: process.env.KEYLIME_OMP_BIN,
-  home: process.env.HOME,
 };
 process.env.PI_CODING_AGENT_DIR = join(scratch, "agent");
-// A member applies the master's configuration under its home directory too (`~/.agents/skills`).
-const home = join(scratch, "home");
-process.env.HOME = home;
-mkdirSync(home, { recursive: true });
-// Bun can cache homedir() before this file changes HOME.
-const scratchOs = { ...os, homedir: () => home };
-mock.module("node:os", () => ({ ...scratchOs, default: scratchOs }));
 const fakeOmp = join(scratch, "omp");
 const spawns = join(scratch, "spawns");
 const envs = join(scratch, "envs");
 const LINK_TOKEN = "link-token-that-must-never-reach-a-child";
-// Records whether the broker variables arrived, whether the link's token leaked and the AGENTS.md omp starts on; never the broker token itself.
-// `omp plugin list` (a member's plugin step) answers no plugins and starts nothing.
+// Record host-local configuration and check for link-token leakage without logging secrets.
 const source = (
   version: string,
 ) => `if (process.argv.includes("--version")) { console.log(${JSON.stringify(version)}); process.exit(0); }
-if (process.argv[2] === "plugin") { console.log(JSON.stringify({ npm: [], marketplace: [] })); process.exit(0); }
 const fs = require("node:fs");
 fs.appendFileSync(${JSON.stringify(spawns)}, process.pid + "\\n");
-const rules = (() => { try { return fs.readFileSync(${JSON.stringify(join(scratch, "agent", "AGENTS.md"))}, "utf8"); } catch { return null; } })();
-fs.appendFileSync(${JSON.stringify(envs)}, JSON.stringify({ url: process.env.OMP_AUTH_BROKER_URL ?? null, token: !!process.env.OMP_AUTH_BROKER_TOKEN,
-  leaked: JSON.stringify([process.env, process.argv]).includes(${JSON.stringify(LINK_TOKEN)}), rules }) + "\\n");
+fs.appendFileSync(${JSON.stringify(envs)}, JSON.stringify({ localBroker: process.env.OMP_AUTH_BROKER_URL === "https://host-local.example" && process.env.OMP_AUTH_BROKER_TOKEN === "host-local-test-token",
+  localAuth: process.env.OPENAI_API_KEY === "host-local-test-key",
+  leaked: JSON.stringify([process.env, process.argv]).includes(${JSON.stringify(LINK_TOKEN)}) }) + "\\n");
 const file = process.argv[process.argv.indexOf("--resume") + 1];
 const id = JSON.parse(fs.readFileSync(file, "utf8").split("\\n")[0]).id;
 ${fakeRunnerSocket}
@@ -75,7 +63,6 @@ test.after(() => {
   for (const [key, value] of [
     ["PI_CODING_AGENT_DIR", old.agent],
     ["KEYLIME_OMP_BIN", old.bin],
-    ["HOME", old.home],
   ] as const) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -104,59 +91,29 @@ type HubMessage = {
     ch: string;
     joined: boolean;
     ok: boolean;
-    owned: boolean;
     value: { id: string };
-    state: { version: string | null };
   };
 };
-type HubState = {
-  owned: boolean;
-  version: string | null;
-  files: string;
-  plugins: string;
-};
-/** A fake server. `version`: the link protocol it welcomes; `config`: the master's configuration it serves (masterConfig).
- * `states` holds each `config_state` with its `owned`. `holdAcks()` leaves every frame unanswered until `releaseAcks()`. */
+/** A fake server. `version` is the link protocol it welcomes. */
 function hub(
   t: TestContext,
   autoWelcome = true,
-  {
-    version = LINK_PROTOCOL_VERSION,
-    config = null,
-  }: { version?: number; config?: ReturnType<typeof masterConfig> | null } = {},
+  { version = LINK_PROTOCOL_VERSION }: { version?: number } = {},
 ) {
   const hellos: {
       link: { id: string; notifier: boolean };
       channels: unknown[];
     }[] = [],
     messages: HubMessage[] = [],
-    states: HubState[] = [],
     closed: number[] = [],
     joiner = new PartJoiner();
   let socket: Bun.ServerWebSocket<unknown>,
     ack = 0,
-    seq = 0,
-    holding = false,
-    owed = 0;
+    seq = 0;
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
     fetch(req, server) {
-      const path = new URL(req.url).pathname;
-      if (config && path.startsWith("/api/hosts/cluster-config/")) {
-        config.auth.push(req.headers.get("authorization"));
-        if (path.endsWith("/manifest")) {
-          config.manifests++;
-          if (config.stall) return new Promise<Response>(() => {});
-          return config.fail
-            ? new Response("", { status: 500 })
-            : Response.json(config.build.manifest);
-        }
-        const bytes = config.build.content(path.split("/").at(-1)!);
-        return bytes
-          ? new Response(bytes as Uint8Array<ArrayBuffer>)
-          : new Response("", { status: 404 });
-      }
       return server.upgrade(req)
         ? undefined
         : new Response("", { status: 426 });
@@ -174,9 +131,7 @@ function hub(
               ws.send(
                 encodeLine({ type: "welcome", v: version, hostId: "fixture" }),
               );
-          } else if (message.type === "config_state")
-            states.push({ ...message.state, owned: message.owned });
-          else if (typeof message.seq === "number") {
+          } else if (typeof message.seq === "number") {
             ack = Math.max(ack, message.seq);
             if (message.type === "part") {
               const whole = joiner.add(message);
@@ -184,8 +139,7 @@ function hub(
             } else messages.push(message);
           }
         }
-        if (holding) owed++;
-        else ws.send(encodeLine({ type: "ack", ack }));
+        ws.send(encodeLine({ type: "ack", ack }));
       },
       close(_ws, code) {
         closed.push(code);
@@ -197,7 +151,6 @@ function hub(
     url: `http://127.0.0.1:${server.port}`,
     hellos,
     messages,
-    states,
     closed,
     send(
       message:
@@ -216,14 +169,6 @@ function hub(
     },
     close(code: number) {
       socket.close(code);
-    },
-    holdAcks() {
-      holding = true;
-    },
-    // One ack per frame: the daemon counts its unanswered frames.
-    releaseAcks() {
-      holding = false;
-      for (; owed > 0; owed--) socket.send(encodeLine({ type: "ack", ack }));
     },
     result(id: string) {
       return messages.find(
@@ -663,7 +608,7 @@ const lines = (path: string) =>
     ? readFileSync(path, "utf8").trim().split("\n").filter(Boolean)
     : [];
 function sessionFile(name: string, id: string) {
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "sessions", "-sharing");
+  const dir = join(process.env.PI_CODING_AGENT_DIR!, "sessions", "-local-auth");
   mkdirSync(dir, { recursive: true });
   const file = join(dir, name + ".jsonl");
   writeFileSync(
@@ -673,9 +618,23 @@ function sessionFile(name: string, id: string) {
   return file;
 }
 
-test("a sharing open on an omp too old to share starts no process and leaves no channel", async (t) => {
+function configureHostAuth(t: TestContext): void {
+  saveWebServerSettings({
+    agentEnv: {
+      OPENAI_API_KEY: "host-local-test-key",
+      OMP_AUTH_BROKER_URL: "https://host-local.example",
+      OMP_AUTH_BROKER_TOKEN: "host-local-test-token",
+    },
+  });
+  t.after(() => saveWebServerSettings({ agentEnv: {} }));
+}
+
+const hostAuth = { localBroker: true, localAuth: true, leaked: false };
+
+test("legacy credential fields on an open do not override host-local auth or gate the runner version", async (t) => {
   writeFakeOmp("15.13.0");
   t.after(() => writeFakeOmp("99.0.0-fake"));
+  configureHostAuth(t);
   const a = hub(t),
     id = "12121212-1212-4121-8121-121212121212",
     file = sessionFile("old-omp", id);
@@ -685,49 +644,10 @@ test("a sharing open on an omp too old to share starts no process and leaves no 
   });
   t.after(() => daemon.stop());
   await until(() => a.hellos.length === 1);
-  const before = lines(spawns).length;
-  a.send({
-    type: "req",
-    id: "old",
-    op: "open",
-    args: {
-      sessionId: id,
-      launch: {
-        cwd: scratch,
-        recordedCwd: scratch,
-        sessionFile: file,
-        advisor: false,
-        shareCredentials: true,
-      },
-    },
-  });
-  await until(() => a.result("old"));
-  assert.equal(a.result("old").error.code, "host_omp_too_old");
-  assert.equal(lines(spawns).length, before, "no omp process started");
-  assert.equal(
-    a.messages.some(
-      (message) =>
-        message.type === "channels_changed" && message.channels.length > 0,
-    ),
-    false,
-    "no channel left behind",
-  );
-});
-
-test("a sharing open starts omp with the loopback broker, never with the link's token", async (t) => {
-  const a = hub(t),
-    id = "13131313-1313-4131-8131-131313131313",
-    file = sessionFile("sharing", id);
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1);
   const before = lines(envs).length;
   a.send({
     type: "req",
-    id: "share",
+    id: "open",
     op: "open",
     args: {
       sessionId: id,
@@ -737,680 +657,46 @@ test("a sharing open starts omp with the loopback broker, never with the link's 
         sessionFile: file,
         advisor: false,
         shareCredentials: true,
+        credentialsServer: "https://gone.example",
       },
     },
   });
-  await until(() => a.result("share"));
-  assert.equal(a.result("share").ok, true);
-  const started = lines(envs)
-    .slice(before)
-    .map((line) => JSON.parse(line));
-  assert.equal(started.length, 1);
-  const url = new URL(started[0].url);
-  assert.equal(url.hostname, "127.0.0.1");
-  assert.equal(
-    url.pathname,
-    "/" + Buffer.from(a.url).toString("base64url"),
-    "the broker forwards to the opening link's server",
-  );
-  assert.equal(started[0].token, true);
-  assert.equal(
-    started[0].leaked,
-    false,
-    "the link's token is in neither the environment nor the arguments",
+  await until(() => a.result("open"));
+  assert.equal(a.result("open").ok, true);
+  assert.deepEqual(
+    lines(envs).slice(before).map((line) => JSON.parse(line)),
+    [hostAuth],
   );
 });
 
-test("a recovered sharing session resumes through its link; one whose server is no longer linked is not started", async (t) => {
-  const a = hub(t),
-    linked = "14141414-1414-4141-8141-141414141414",
-    gone = "15151515-1515-4151-8151-151515151515";
-  const entry = (
-    sessionId: string,
-    name: string,
-    credentialsServer: string,
-  ) => ({
-    sessionId,
-    launch: {
-      cwd: scratch,
-      recordedCwd: scratch,
-      sessionFile: sessionFile(name, sessionId),
-      advisor: false,
-      credentialsServer,
-    },
-  });
+test("a legacy session resumes with host-local auth even when its former credential owner is gone", async (t) => {
+  configureHostAuth(t);
+  const id = "15151515-1515-4151-8151-151515151515";
   const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, "host-running.json"),
     JSON.stringify([
-      entry(linked, "recovered-linked", a.url),
-      entry(gone, "recovered-gone", "https://gone.example"),
+      {
+        sessionId: id,
+        launch: {
+          cwd: scratch,
+          recordedCwd: scratch,
+          sessionFile: sessionFile("recovered-gone", id),
+          advisor: false,
+          credentialsServer: "https://gone.example",
+        },
+      },
     ]),
   );
   saveWebServerSettings({ autoResumeSessions: true });
   t.after(() => saveWebServerSettings({ autoResumeSessions: false }));
-  const logs: string[] = [],
-    error = console.error;
-  console.error = (...args) => {
-    logs.push(args.join(" "));
-  };
-  t.after(() => {
-    console.error = error;
-  });
   const before = lines(envs).length;
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
+  const daemon = runHostDaemon({ allowHttp: false, links: [] });
   t.after(() => daemon.stop());
-  await until(() =>
-    logs.some(
-      (line) =>
-        line.includes(gone) &&
-        line.includes(
-          "The web server that shares its credentials with this session is no longer linked to this host",
-        ),
-    ),
-  );
-  await until(() => lines(envs).length > before);
-  const started = lines(envs)
-    .slice(before)
-    .map((line) => JSON.parse(line));
-  assert.equal(started.length, 1, "only the linked session started");
-  assert.equal(
-    new URL(started[0].url).pathname,
-    "/" + Buffer.from(a.url).toString("base64url"),
-  );
-});
-
-// Link protocol 10: a cluster session starts only on the master's configuration (spec K3, K4, K6).
-const { buildManifest } = await import("./cluster-config.ts");
-const memberRules = join(process.env.PI_CODING_AGENT_DIR!, "AGENTS.md");
-// The member's own file, which the first apply backs up and a restore puts back.
-mkdirSync(process.env.PI_CODING_AGENT_DIR!, { recursive: true });
-writeFileSync(memberRules, "member rules\n");
-/** A master configuration whose AGENTS.md says `rules`; the fake server counts its manifest requests and their bearer tokens. */
-function masterConfig(rules: string) {
-  const root = mkdtempSync(join(scratch, "master-"));
-  const roots = { agent: join(root, "agent"), home: join(root, "home") };
-  for (const dir of Object.values(roots)) mkdirSync(dir, { recursive: true });
-  writeFileSync(join(roots.agent, "AGENTS.md"), rules);
-  return {
-    build: buildManifest(roots, { agentEnv: {}, plugins: [] }),
-    manifests: 0,
-    auth: [] as (string | null)[],
-    fail: false,
-    stall: false,
-  };
-}
-const memberLaunch = (name: string, id: string, version: string) => ({
-  cwd: scratch,
-  recordedCwd: scratch,
-  sessionFile: sessionFile(name, id),
-  advisor: false,
-  shareCredentials: true,
-  configVersion: version,
-});
-/** `server`'s leave: its restore answers, and the member's own AGENTS.md is back. */
-async function restoreOver(server: ReturnType<typeof hub>, id: string) {
-  server.send({
-    type: "req",
-    id,
-    op: "clusterConfig",
-    args: { action: "restore" },
-  });
-  await until(() => server.result(id));
-  assert.equal(
-    server.result(id).ok,
-    true,
-    JSON.stringify(server.result(id).error),
-  );
-  assert.equal(readFileSync(memberRules, "utf8"), "member rules\n");
-}
-const clusterConfigReq = (
-  server: ReturnType<typeof hub>,
-  id: string,
-  args: object,
-) => {
-  server.send({ type: "req", id, op: "clusterConfig", args });
-  return until(() => server.result(id)).then(() => server.result(id));
-};
-
-test("an open with a version the member lacks applies it before omp starts; host-running.json never records the version", async (t) => {
-  const config = masterConfig("master rules one\n"),
-    version = config.build.manifest.version;
-  const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config }),
-    id = "16161616-1616-4161-8161-161616161616";
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1 && a.states.length > 0);
-  const before = lines(envs).length;
-  a.send({
-    type: "req",
-    id: "apply-open",
-    op: "open",
-    args: { sessionId: id, launch: memberLaunch("config-apply", id, version) },
-  });
-  await until(() => a.result("apply-open"));
-  assert.equal(a.result("apply-open").ok, true);
+  await daemon.started;
   assert.deepEqual(
-    lines(envs)
-      .slice(before)
-      .map((line) => JSON.parse(line).rules),
-    ["master rules one\n"],
-    "omp started on the applied files",
+    lines(envs).slice(before).map((line) => JSON.parse(line)),
+    [hostAuth],
   );
-  assert.equal(config.manifests, 1);
-  assert.ok(
-    config.auth.length > 1 &&
-      config.auth.every((header) => header === `Bearer ${LINK_TOKEN}`),
-    "every fetch carried the link's token",
-  );
-  await until(() =>
-    a.states.some(
-      (state) => state.version === version && state.files === "current",
-    ),
-  );
-  const ch = a.result("apply-open").result.ch;
-  a.send({
-    type: "stdin",
-    ch,
-    line:
-      JSON.stringify({
-        t: "cmd",
-        id: 1,
-        op: "prompt",
-        args: { message: "go" },
-      }) + "\n",
-  });
-  const running = join(
-    process.env.PI_CODING_AGENT_DIR!,
-    "keylime",
-    "host-running.json",
-  );
-  await until(
-    () => existsSync(running) && readFileSync(running, "utf8").includes(id),
-  );
-  const recorded = JSON.parse(readFileSync(running, "utf8")).find(
-    (entry: { sessionId: string }) => entry.sessionId === id,
-  );
-  assert.equal(recorded.launch.credentialsServer, a.url);
-  assert.equal("configVersion" in recorded.launch, false);
-  await restoreOver(a, "leave-one");
-});
-
-test("a failing apply starts no process and answers cluster_config_failed", async (t) => {
-  captureExpectedConsole(
-    t,
-    "error",
-    (message) =>
-      message ===
-      "[keylime host] cluster-config: applying failed: the master answered 500 for the manifest",
-  );
-  const config = masterConfig("master rules two\n");
-  config.fail = true;
-  const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config }),
-    id = "17171717-1717-4171-8171-171717171717";
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1);
-  const before = lines(spawns).length;
-  a.send({
-    type: "req",
-    id: "failed-open",
-    op: "open",
-    args: {
-      sessionId: id,
-      launch: memberLaunch("config-fail", id, config.build.manifest.version),
-    },
-  });
-  await until(() => a.result("failed-open"));
-  assert.equal(a.result("failed-open").error.code, "cluster_config_failed");
-  assert.equal(lines(spawns).length, before, "no omp process started");
-  await until(() => a.states.some((state) => state.files === "failed"));
-});
-
-test("two opens at once apply the version once", async (t) => {
-  const config = masterConfig("master rules three\n"),
-    version = config.build.manifest.version;
-  const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config });
-  const ids = [
-    "18181818-1818-4181-8181-181818181818",
-    "19191919-1919-4191-8191-191919191919",
-  ];
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1);
-  ids.forEach((id, i) =>
-    a.send({
-      type: "req",
-      id: `both-${i}`,
-      op: "open",
-      args: {
-        sessionId: id,
-        launch: memberLaunch(`config-both-${i}`, id, version),
-      },
-    }),
-  );
-  await until(() => a.result("both-0") && a.result("both-1"));
-  assert.deepEqual(
-    [a.result("both-0").ok, a.result("both-1").ok],
-    [true, true],
-  );
-  assert.equal(config.manifests, 1);
-  await restoreOver(a, "leave-three");
-});
-
-test("the clusterConfig op applies through the link that sent it, and restore puts the member's own files back", async (t) => {
-  const config = masterConfig("master rules four\n"),
-    version = config.build.manifest.version;
-  const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config });
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1);
-  a.send({
-    type: "req",
-    id: "apply",
-    op: "clusterConfig",
-    args: { action: "apply", version },
-  });
-  await until(() => a.result("apply"));
-  assert.equal(a.result("apply").result.state.version, version);
-  assert.equal(readFileSync(memberRules, "utf8"), "master rules four\n");
-  a.send({
-    type: "req",
-    id: "restore",
-    op: "clusterConfig",
-    args: { action: "restore" },
-  });
-  await until(() => a.result("restore"));
-  assert.deepEqual(a.result("restore").result.state, {
-    version: null,
-    files: "none",
-    plugins: "none",
-    error: null,
-    missingCommands: [],
-  });
-  assert.equal(readFileSync(memberRules, "utf8"), "member rules\n");
-  a.send({
-    type: "req",
-    id: "bad",
-    op: "clusterConfig",
-    args: { action: "apply", version: "x" },
-  });
-  await until(() => a.result("bad"));
-  assert.equal(a.result("bad").error.code, "invalid_request");
-});
-
-test("after its server's restore, a start with that server's version is refused until its next apply; a drained host still restores", async (t) => {
-  const config = masterConfig("master rules five\n"),
-    version = config.build.manifest.version;
-  const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config }),
-    id = "1a1a1a1a-1a1a-41a1-81a1-1a1a1a1a1a1a";
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1);
-  await until(() => {
-    try {
-      return daemon.control("drain").drained;
-    } catch (error) {
-      if ((error as { code?: string }).code !== "host_busy") throw error;
-      return false;
-    }
-  });
-  const left = await clusterConfigReq(a, "drained-restore", {
-    action: "restore",
-  });
-  assert.deepEqual(left.result, {
-    state: {
-      version: null,
-      files: "none",
-      plugins: "none",
-      error: null,
-      missingCommands: [],
-    },
-    owned: false,
-  });
-  assert.equal(
-    (await clusterConfigReq(a, "drained-apply", { action: "apply", version }))
-      .error.code,
-    "host_drained",
-  );
-  daemon.control("resume");
-
-  const before = lines(spawns).length;
-  a.send({
-    type: "req",
-    id: "late-open",
-    op: "open",
-    args: { sessionId: id, launch: memberLaunch("config-left", id, version) },
-  });
-  await until(() => a.result("late-open"));
-  assert.deepEqual(
-    [a.result("late-open").error.code, a.result("late-open").error.message],
-    ["cluster_config_failed", "This host has left the cluster"],
-  );
-  assert.equal(lines(spawns).length, before, "no omp process started");
-  assert.equal(config.manifests, 0);
-  assert.equal(readFileSync(memberRules, "utf8"), "member rules\n");
-
-  assert.equal(
-    (await clusterConfigReq(a, "rejoin", { action: "apply", version })).result
-      .owned,
-    true,
-  );
-  assert.equal(readFileSync(memberRules, "utf8"), "master rules five\n");
-  a.send({
-    type: "req",
-    id: "member-open",
-    op: "open",
-    args: { sessionId: id, launch: memberLaunch("config-left", id, version) },
-  });
-  await until(() => a.result("member-open"));
-  assert.equal(a.result("member-open").ok, true);
-  await restoreOver(a, "leave-five");
-});
-
-test("one cluster per host: another server is refused naming the holding one, which alone restores; each link hears whether it holds the configuration", async (t) => {
-  const ca = masterConfig("master rules six\n"),
-    cb = masterConfig("other rules\n");
-  const a = hub(t, true, { config: ca }),
-    b = hub(t, true, { config: cb });
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [a, b].map((server) => ({ url: server.url, token: LINK_TOKEN })),
-  });
-  t.after(() => daemon.stop());
-  await until(
-    () =>
-      a.hellos.length === 1 &&
-      b.hellos.length === 1 &&
-      a.states.length > 0 &&
-      b.states.length > 0,
-  );
-  assert.equal(
-    (
-      await clusterConfigReq(a, "a-apply", {
-        action: "apply",
-        version: ca.build.manifest.version,
-      })
-    ).result.owned,
-    true,
-  );
-  await until(
-    () =>
-      a.states.at(-1)!.owned &&
-      a.states.at(-1)!.version === ca.build.manifest.version &&
-      b.states.at(-1)!.version === ca.build.manifest.version,
-  );
-  assert.equal(b.states.at(-1)!.owned, false);
-
-  const refusal = `This host runs the cluster configuration of ${a.url}; it must leave that cluster first`;
-  const bApply = await clusterConfigReq(b, "b-apply", {
-    action: "apply",
-    version: cb.build.manifest.version,
-  });
-  assert.deepEqual(
-    [bApply.error.code, bApply.error.message],
-    ["cluster_config_failed", refusal],
-  );
-  const id = "1b1b1b1b-1b1b-41b1-81b1-1b1b1b1b1b1b",
-    before = lines(spawns).length;
-  b.send({
-    type: "req",
-    id: "b-open",
-    op: "open",
-    args: {
-      sessionId: id,
-      launch: memberLaunch("config-other", id, cb.build.manifest.version),
-    },
-  });
-  await until(() => b.result("b-open"));
-  assert.deepEqual(
-    [b.result("b-open").error.code, b.result("b-open").error.message],
-    ["cluster_config_failed", refusal],
-  );
-  assert.equal(lines(spawns).length, before, "no omp process started");
-  assert.equal(cb.manifests, 0);
-  // The other server's leave keeps the holding server's configuration.
-  assert.equal(
-    (await clusterConfigReq(b, "b-restore", { action: "restore" })).result
-      .owned,
-    false,
-  );
-  assert.equal(readFileSync(memberRules, "utf8"), "master rules six\n");
-
-  await restoreOver(a, "a-restore");
-  await until(
-    () => !a.states.at(-1)!.owned && a.states.at(-1)!.version === null,
-  );
-  assert.equal(
-    (
-      await clusterConfigReq(b, "b-apply-again", {
-        action: "apply",
-        version: cb.build.manifest.version,
-      })
-    ).result.owned,
-    true,
-  );
-  assert.equal(readFileSync(memberRules, "utf8"), "other rules\n");
-  await restoreOver(b, "b-leave");
-});
-
-test("a master that stops answering fails the apply within the time limit, and the daemon stops at once during a stalled request", async (t) => {
-  captureExpectedConsole(
-    t,
-    "error",
-    (message) =>
-      message ===
-        "[keylime host] cluster-config: applying failed: the master did not send the manifest within 0.3 s" ||
-      message ===
-        "[keylime host] cluster-config: applying failed: the host daemon is stopping",
-  );
-  const { clusterConfigTimings } = await import("./daemon-cluster-config.ts");
-  const config = masterConfig("master rules seven\n"),
-    version = config.build.manifest.version;
-  config.stall = true;
-  const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config });
-  const saved = clusterConfigTimings.fetchMs;
-  clusterConfigTimings.fetchMs = 300;
-  t.after(() => {
-    clusterConfigTimings.fetchMs = saved;
-  });
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1);
-  let started = Date.now();
-  const failed = await clusterConfigReq(a, "stalled", {
-    action: "apply",
-    version,
-  });
-  assert.deepEqual(
-    [failed.error.code, failed.error.message],
-    [
-      "cluster_config_failed",
-      "the master did not send the manifest within 0.3 s",
-    ],
-  );
-  assert.ok(Date.now() - started < 5000, "failed at the time limit");
-
-  clusterConfigTimings.fetchMs = saved;
-  a.send({
-    type: "req",
-    id: "stalled-again",
-    op: "clusterConfig",
-    args: { action: "apply", version },
-  });
-  await until(() => config.manifests === 2);
-  started = Date.now();
-  await daemon.stop();
-  assert.ok(
-    Date.now() - started < 5000,
-    "the stop did not wait for the request's 30 s limit",
-  );
-  assert.equal(readFileSync(memberRules, "utf8"), "member rules\n");
-});
-
-test("a member re-linked to its server at a new address: that address holds the configuration, its apply takes it over without a download and its restore puts the member's own back", async (t) => {
-  const config = masterConfig("master rules eight\n"),
-    version = config.build.manifest.version;
-  // One server at two addresses: the same configuration behind both.
-  const before = hub(t, true, { version: LINK_PROTOCOL_VERSION, config }),
-    after = hub(t, true, { version: LINK_PROTOCOL_VERSION, config });
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
-  mkdirSync(dir, { recursive: true });
-  const relink = (server: ReturnType<typeof hub>) =>
-    writeFileSync(
-      join(dir, "host.json"),
-      JSON.stringify({
-        url: server.url,
-        token: LINK_TOKEN,
-        links: [{ url: server.url, token: LINK_TOKEN }],
-      }),
-    );
-  relink(before);
-  const daemon = runHostDaemon({ allowHttp: false });
-  t.after(() => daemon.stop());
-  await until(() => before.hellos.length === 1);
-  assert.equal(
-    (await clusterConfigReq(before, "old-apply", { action: "apply", version }))
-      .result.owned,
-    true,
-  );
-
-  relink(after);
-  await until(
-    () =>
-      after.hellos.length === 1 &&
-      before.closed.length > 0 &&
-      after.states.length > 0,
-  );
-  assert.equal(
-    after.states.at(-1)!.owned,
-    true,
-    "the old address is no longer linked: the new one decides",
-  );
-  assert.equal(
-    (await clusterConfigReq(after, "new-apply", { action: "apply", version }))
-      .result.owned,
-    true,
-  );
-  assert.equal(
-    config.manifests,
-    1,
-    "the version it holds is not downloaded again",
-  );
-  assert.equal(
-    JSON.parse(readFileSync(join(dir, "own-config", "server.json"), "utf8")),
-    after.url,
-  );
-  await restoreOver(after, "new-restore");
-});
-
-for (const fullWindow of [false, true])
-  test(`removing the holding server from host.json tells each surviving link it now holds the configuration${fullWindow ? ", once a full send window has room again," : ""} and its restore puts the member's own back`, async (t) => {
-    const config = masterConfig("master rules ten\n"),
-      version = config.build.manifest.version;
-    const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config }),
-      b = hub(t, true, { version: LINK_PROTOCOL_VERSION });
-    const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
-    mkdirSync(dir, { recursive: true });
-    const save = (servers: ReturnType<typeof hub>[]) =>
-      writeFileSync(
-        join(dir, "host.json"),
-        JSON.stringify({
-          url: b.url,
-          token: LINK_TOKEN,
-          links: servers.map((server) => ({
-            url: server.url,
-            token: LINK_TOKEN,
-          })),
-        }),
-      );
-    save([a, b]);
-    const daemon = runHostDaemon({ allowHttp: false });
-    t.after(() => daemon.stop());
-    await until(
-      () =>
-        a.hellos.length === 1 && b.hellos.length === 1 && b.states.length > 0,
-    );
-    assert.equal(
-      (await clusterConfigReq(a, "a-apply", { action: "apply", version }))
-        .result.owned,
-      true,
-    );
-    // Settled: the plugin step's own report must not stand in for the one the host.json change sends.
-    await until(
-      () =>
-        b.states.at(-1)!.version === version &&
-        b.states.at(-1)!.plugins !== "pending",
-    );
-    await sleep(300);
-    const reports = b.states.length;
-    assert.equal(b.states.at(-1)!.owned, false);
-
-    const window = LINK_LIMITS.unackedBytes;
-    t.after(() => {
-      LINK_LIMITS.unackedBytes = window;
-    });
-    if (fullWindow) {
-      // b answers nothing more, and the one frame it leaves unanswered fills the window.
-      b.holdAcks();
-      await clusterConfigReq(b, "unanswered", { action: "restore" });
-      LINK_LIMITS.unackedBytes = 1;
-    }
-    save([b]);
-    await until(() => a.closed.length > 0);
-    if (fullWindow) {
-      await sleep(500);
-      assert.equal(b.states.length, reports, "no room for the report yet");
-      LINK_LIMITS.unackedBytes = window;
-      b.releaseAcks();
-    }
-    await until(() => b.states.length > reports);
-    assert.equal(b.states.at(-1)!.owned, true);
-    await restoreOver(b, "b-restore");
-  });
-
-test("a member whose server revokes it gets its own configuration back before the daemon exits", async (t) => {
-  const config = masterConfig("master rules nine\n"),
-    version = config.build.manifest.version;
-  const a = hub(t, true, { version: LINK_PROTOCOL_VERSION, config });
-  const dir = join(process.env.PI_CODING_AGENT_DIR!, "keylime");
-  rmSync(join(dir, "host.json"), { force: true });
-  const daemon = runHostDaemon({
-    allowHttp: false,
-    links: [{ url: a.url, token: LINK_TOKEN }],
-  });
-  t.after(() => daemon.stop());
-  await until(() => a.hellos.length === 1);
-  assert.equal(
-    (await clusterConfigReq(a, "apply", { action: "apply", version })).result
-      .owned,
-    true,
-  );
-  assert.equal(readFileSync(memberRules, "utf8"), "master rules nine\n");
-  a.close(1000); // a revoke: the server closes the link plainly
-  assert.equal(await daemon.done, 1);
-  assert.equal(readFileSync(memberRules, "utf8"), "member rules\n");
-  assert.equal(existsSync(join(dir, "own-config")), false);
 });

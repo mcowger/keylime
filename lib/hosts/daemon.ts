@@ -24,11 +24,9 @@ import {
   BrowserVideoNextResultSchema,
   BrowserVideoStopResultSchema,
 } from "../api-contracts/runner-lifecycle";
-import { access, constants } from "node:fs/promises";
 import { homedir } from "node:os";
 import {
   basename,
-  delimiter,
   dirname,
   isAbsolute,
   join,
@@ -36,7 +34,7 @@ import {
   sep,
 } from "node:path";
 import { getOmpVersion } from "../omp/omp-cli";
-import { getAgentDir, getBlobsDir, getSessionsDir } from "../omp/paths";
+import { getAgentDir, getSessionsDir } from "../omp/paths";
 import { ProjectPathError } from "../project-registry";
 import { isValidSessionId } from "../session-file-references-core";
 import { isRecord } from "../type-guards";
@@ -64,17 +62,9 @@ import {
   systemsBusy,
   systemsOperation,
 } from "./systems";
-import {
-  credentialsEnv,
-  serverFetch,
-  startBrokerForwarder,
-} from "./daemon-broker";
-import { createClusterConfig } from "./daemon-cluster-config";
-import { runOmpCli } from "../omp/plugins-cli";
 import { HostResumeTracker, type HostResumeEntry } from "./host-resume";
 import { ManagedArtifactActivation } from "./managed-artifact-activation";
 import {
-  CONFIG_VERSION_RE,
   CREATION_ID_RE,
   encodeLine,
   HostOpError,
@@ -154,24 +144,6 @@ function sessionsPath(value: unknown): string {
   return target;
 }
 
-/** Whether `command` names an executable: a path as given, else a name on PATH. */
-async function commandExists(command: string): Promise<boolean> {
-  const dirs = command.includes("/")
-    ? [""]
-    : (process.env.PATH ?? "").split(delimiter).filter(Boolean);
-  for (const dir of dirs)
-    if (
-      await access(join(dir, command), constants.X_OK).then(
-        () => true,
-        () => false,
-      )
-    )
-      return true;
-  return false;
-}
-
-const CONFIG_API = "/api/hosts/cluster-config/";
-
 export interface HostDaemon {
   stop(): Promise<void>;
   done: Promise<number>;
@@ -227,32 +199,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     resolve(process.argv[1] || process.execPath);
   const activation = new ManagedArtifactActivation(getAgentDir(), options.standaloneControl === true);
   const resume = new HostResumeTracker();
-  // Each mirror is fetched over its own authenticated link.
-  const config = createClusterConfig({
-    roots: () => ({ agent: getAgentDir(), home: homedir() }),
-    sessionsDir: getSessionsDir,
-    blobsDir: getBlobsDir,
-    stateDir: () => join(getAgentDir(), "keylime"),
-    fetch: async (serverUrl, path, signal) => {
-      const login = links.get(serverUrl)?.login;
-      const pending =
-        login &&
-        serverFetch(login, CONFIG_API, path.slice(CONFIG_API.length), {
-          signal,
-        });
-      if (!pending)
-        throw new Error("the web server is no longer linked to this host");
-      return pending;
-    },
-    runOmp: runOmpCli,
-    commandExists,
-    onState: (state, url) => reportConfig(url, state),
-    log,
-  });
-  const forwarder = startBrokerForwarder({
-    login: (url) => links.get(url)?.login ?? null,
-    log,
-  });
   const socketPath = options.hostSocket ?? hostSocketPath();
   const attached = new Set<string>();
   const ptys = new SessionPtyManager(
@@ -374,7 +320,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     }
   >();
   const channels = new ChannelTable({
-    spawn: async (launch, recoveringSession) => {
+    spawn: async (launch) => {
       if (!launch.sessionFile) {
         let cwd = resolve(launch.cwd);
         try {
@@ -404,44 +350,15 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         launch.creationId === undefined
           ? resolveSpawnCwdResult(launch.recordedCwd ?? launch.cwd)
           : { cwd: launch.cwd, fellBack: false };
-      // A sharing session never starts on this host's own logins: no link, or no usable broker, refuses.
-      if (
-        launch.credentialsServer !== undefined &&
-        !links.has(launch.credentialsServer)
-      )
-        throw new HostOpError(
-          409,
-          "credentials_link_gone",
-          "The web server that shares its credentials with this session is no longer linked to this host",
-        );
-      const env = await credentialsEnv(launch, {
-        forwarder,
-        ompVersion: getOmpVersion,
-      });
-      let mirrorEnv: Record<string, string> | undefined;
-      if (launch.configVersion !== undefined) {
-        if (launch.credentialsServer === undefined)
-          throw new HostOpError(
-            409,
-            "cluster_config_failed",
-            "A cluster session must start through the web server that shares its configuration",
-          );
-        mirrorEnv = recoveringSession
-          ? config.recover(launch.credentialsServer)
-          : await config.ensure(launch.configVersion, launch.credentialsServer);
-      }
       await ptyStarted;
       if (!(await hostSocket))
         throw new Error("Host socket is unavailable for terminal launch");
       if (stopped) throw new Error("Host is stopping");
       const prepared = await prepareInteractiveLaunch(
         { ...launch, cwd: resolved.cwd },
-        { ...env, KEYLIME_HOST_SOCKET: socketPath, ...(mirrorEnv && { KEYLIME_MIRROR_HOST_HOME: resolve(homedir()) }) },
-        mirrorEnv,
+        { KEYLIME_HOST_SOCKET: socketPath },
       );
       if (stopped) throw new Error("Host is stopping");
-      if (mirrorEnv && (!launch.credentialsServer || !links.has(launch.credentialsServer) || !config.holds(launch.credentialsServer)))
-        throw new HostOpError(409, "cluster_config_failed", "The session's configuration link is no longer available");
       const runtimeId = randomUUID();
       const child = ptys.spawn({
         runtimeId,
@@ -523,10 +440,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           typeof launch.spawnModel === "string"
         ) ||
         !(
-          launch.credentialsServer === undefined ||
-          typeof launch.credentialsServer === "string"
-        ) ||
-        !(
           launch.creationId === undefined ||
           (typeof launch.creationId === "string" &&
             CREATION_ID_RE.test(launch.creationId))
@@ -534,9 +447,17 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       )
         throw new HostOpError(400, "invalid_request", "Invalid spawn request");
       return {
-        ...launch,
+        cwd: launch.cwd,
         recordedCwd: launch.recordedCwd ?? null,
         sessionFile: launch.sessionFile ? sessionsPath(launch.sessionFile) : "",
+        advisor: launch.advisor,
+        ...(launch.toolNames === undefined
+          ? {}
+          : { toolNames: launch.toolNames }),
+        ...(launch.spawnModel === undefined
+          ? {}
+          : { spawnModel: launch.spawnModel }),
+        ...(launch.creationId === undefined ? {} : { creationId: launch.creationId }),
       };
     },
     autoApproveExtension: () => localHost.autoApproveExtension(),
@@ -768,15 +689,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       if (link.id === old || link.id === next)
         link.queue({ type: "notifier", on: link.id === next }, "notifier");
   }
-  /** Tells each link the configuration state and whether it holds that configuration. */
-  function reportConfig(url: string, state = config.state(url)): void {
-    if (!stopped)
-      links.get(url)?.report({
-        type: "config_state",
-        state,
-        owned: config.holds(url),
-      });
-  }
   /** Stops a removed link's workspace service (tracked so shutdown awaits it) and frees its upload ownership so other servers can take those uploads. */
   function dropLink(link: DaemonLink): void {
     const shipOwner = shipOwnerByLink.get(link);
@@ -831,11 +743,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         if (up) {
           channels.linkUp(link);
           reportCapacity();
-          link.report({
-            type: "config_state",
-            state: config.state(link.login.url),
-            owned: config.holds(link.login.url),
-          });
           link.queue(
             {
               type: "channels_changed",
@@ -862,12 +769,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         channels.linkGone(link);
         dropLink(link);
         electNotifier();
-        // Revocation drops only the revoked link's mirror, including an apply still in flight.
-        const restored = why === "revoked"
-          ? config.restore(login.url).catch((error) =>
-              log("could not discard the revoked server's configuration: " + reason(error)),
-            )
-          : null;
         if (links.size === 0) {
           log(
             why === "revoked"
@@ -875,9 +776,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
               : "the last host link ended",
           );
           const code = why === "replaced" ? 0 : 1;
-          void (restored
-            ? restored.then(() => shutdown(code))
-            : shutdown(code));
+          void shutdown(code);
         }
       },
     });
@@ -1074,8 +973,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         "close",
         "ptySessions",
         "hostArtifactActivationStatus",
-      ].includes(op) &&
-      !(op === "clusterConfig" && args.action === "restore")
+      ].includes(op)
     ) {
       throw new HostOpError(
         409,
@@ -1419,24 +1317,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         );
       case "setUploadRetention":
         return uploadRetention.set(args.days);
-      case "clusterConfig":
-        // `apply`: the server counts this host as its member and sends its configuration over this link; `restore`: it no
-        // longer does. Called before any await, so a `restore` sent after an `apply` on this link is queued after it.
-        if (
-          args.action === "apply" &&
-          typeof args.version === "string" &&
-          CONFIG_VERSION_RE.test(args.version)
-        )
-          await config.apply(args.version, link.login.url);
-        else if (args.action === "restore")
-          await config.restore(link.login.url);
-        else
-          throw new HostOpError(
-            400,
-            "invalid_request",
-            "Invalid cluster configuration request",
-          );
-        return { state: config.state(link.login.url), owned: config.holds(link.login.url) };
       default: {
         const run = sessionOps[op] as (
           ...params: unknown[]
@@ -1475,8 +1355,6 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     uploadRetention.stop();
     // Freeze before exit handlers observe children stopping.
     resume.freeze();
-    // The configuration first: its requests to a server are aborted at once, so no start waiting on them holds the stop.
-    const configStopped = config.stop();
     stopping = (async () => {
       stopShipWatcher();
       const shutdownWork = await Promise.allSettled([
@@ -1499,14 +1377,11 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
       }
       await channels.stop();
       await ptys.close();
-      await configStopped;
-      await forwarder.stop();
       resume.dispose();
       finish(code);
     })();
     return stopping;
   }
-  // Links first: a recovered sharing session needs its link to start.
   for (const saved of initial)
     makeLink(
       { ...saved, url: saved.url.replace(/\/+$/, "") },

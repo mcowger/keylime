@@ -1327,8 +1327,8 @@ function BrowserTransportSetting() {
 
 /** Server-side keylime setting (issue #104): KEY=VALUE text injected into the
  * `omp` child process. Parsing/validation lives in lib/omp/agent-env.ts; this only
- * feeds it localized messages and renders the result. `cluster`: the members run it too (spec K1). */
-function AgentEnvSetting({ cluster }: { cluster: boolean }) {
+ * feeds it localized messages and renders the result. */
+function AgentEnvSetting() {
   const { t } = useI18n();
   const [text, setText] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -1494,18 +1494,6 @@ function AgentEnvSetting({ cluster }: { cluster: boolean }) {
         >
           {t("settingsConfig.agentEnvNote")}
         </p>
-        {cluster && (
-          <p
-            style={{
-              margin: 0,
-              fontSize: 11,
-              color: "var(--text-muted)",
-              lineHeight: 1.45,
-            }}
-          >
-            {t("settings.clusterConfigNotice")}
-          </p>
-        )}
         <div>
           <button
             type="button"
@@ -1975,15 +1963,13 @@ function CompactionMethodOrder({
   );
 }
 
-/** Tabs that edit the mirrored configuration (spec K1): `config.yml`, `models.yml`, MCP servers, skills, plugins and
- * agents. Interface, System, usage, hosts and notifications belong to this browser or this server only. */
-const CLUSTER_CONFIG_TABS: readonly SettingsTab[] = [
+/** OMP configuration editors use the web server's filesystem, not a remote host's. */
+const LOCAL_OMP_TABS: readonly SettingsTab[] = [
   "safety",
   "models",
   "providers",
   "intelligence",
   "agents",
-  "mcp",
   "skills",
   "plugins",
 ];
@@ -2009,7 +1995,6 @@ export function SettingsConfig({
   onOpenUrlAutomaticallyChange,
   cwd,
   remoteHost,
-  cluster,
   sessionId,
   onModelsSaved,
   onPluginsReloaded,
@@ -2039,8 +2024,6 @@ export function SettingsConfig({
   cwd: string | null;
   /** Remote workspace paths do not exist on the web server's filesystem. */
   remoteHost: boolean;
-  /** Server settings are shared with linked hosts. */
-  cluster: boolean;
   sessionId: string | null;
   onModelsSaved: () => void;
   onPluginsReloaded: () => void;
@@ -2050,10 +2033,6 @@ export function SettingsConfig({
   const isMobile = useIsMobile();
   const { t } = useI18n();
   const workspaceReady = cwd !== null;
-  // User-level settings live on the server. Don't pass remote paths or sessions to local panels.
-  // MCP keeps the session ID to show live status from the remote process.
-  const panelCwd = remoteHost ? null : cwd;
-  const panelSessionId = remoteHost ? null : sessionId;
   const { fontSize, setFontSize } = useFontSize();
   const { uiScale, setUiScale } = useUiScale();
   const chatWidth = useChatWidth();
@@ -2132,8 +2111,8 @@ export function SettingsConfig({
   }, []);
 
   useEffect(() => {
-    void loadNativeSettings();
-  }, [loadNativeSettings]);
+    if (!remoteHost) void loadNativeSettings();
+  }, [loadNativeSettings, remoteHost]);
 
   const saveNativeSettings = useCallback((next: NativeSettings) => {
     nativeSettingsMutatedRef.current = true;
@@ -2223,12 +2202,13 @@ export function SettingsConfig({
 
   const currentTab =
     activeTab === "skills" ? activeTab : getNormalizedActive(activeTab);
+  const remoteOmpTab = remoteHost && LOCAL_OMP_TABS.includes(currentTab);
   const nativeSettingsRequired =
-    currentTab === "general" ||
-    currentTab === "safety" ||
-    currentTab === "models" ||
-    currentTab === "intelligence" ||
-    currentTab === "mcp";
+    !remoteHost &&
+    (currentTab === "safety" ||
+      currentTab === "models" ||
+      currentTab === "intelligence" ||
+      currentTab === "mcp");
 
   const trimmedQuery = searchQuery.trim().toLowerCase();
   const searchActive = trimmedQuery.length > 0;
@@ -2532,7 +2512,7 @@ export function SettingsConfig({
             />
 
             <div className="settings-content" style={contentStyle}>
-              {cluster && CLUSTER_CONFIG_TABS.includes(currentTab) && (
+              {remoteOmpTab ? (
                 <p
                   style={{
                     flexShrink: 0,
@@ -2542,10 +2522,9 @@ export function SettingsConfig({
                     lineHeight: 1.45,
                   }}
                 >
-                  {t("settings.clusterConfigNotice")}
+                  {t("settingsConfig.remoteOmpUnavailable")}
                 </p>
-              )}
-              {nativeSettingsRequired && nativeSettingsLoading ? (
+              ) : nativeSettingsRequired && nativeSettingsLoading ? (
                 <div
                   className="settings-loading-state"
                   role="status"
@@ -4006,7 +3985,7 @@ export function SettingsConfig({
                           </button>
                         )}
                       </div>
-                      {cwd && (
+                      {!remoteHost && cwd && (
                         <div
                           style={{
                             display: "flex",
@@ -4071,12 +4050,16 @@ export function SettingsConfig({
                           </NativeSetting>
                         </div>
                       )}
-                      <McpConfig
-                        cwd={panelCwd}
-                        sessionId={sessionId}
-                        liveOnly={remoteHost}
-                      />
-                      {!cwd && (
+                      {(!remoteHost || sessionId) ? (
+                        <McpConfig
+                          cwd={remoteHost ? null : cwd}
+                          sessionId={sessionId}
+                          liveOnly={remoteHost}
+                        />
+                      ) : (
+                        <p>{t("mcpConfig.selectSessionHint")}</p>
+                      )}
+                      {!remoteHost && !cwd && (
                         <p
                           style={{
                             margin: 0,
@@ -4106,7 +4089,7 @@ export function SettingsConfig({
                         padding: isMobile ? "16px 14px 32px" : "32px 24px 64px",
                       }}
                     >
-                      <SkillsConfig embedded cwd={panelCwd} onClose={onClose} />
+                      <SkillsConfig embedded cwd={cwd} onClose={onClose} />
                     </div>
                   )}
 
@@ -4128,8 +4111,8 @@ export function SettingsConfig({
                     >
                       <PluginsConfig
                         embedded
-                        cwd={panelCwd}
-                        sessionId={panelSessionId}
+                        cwd={cwd}
+                        sessionId={sessionId}
                         onClose={onClose}
                         onReloaded={onPluginsReloaded}
                       />
@@ -4187,7 +4170,7 @@ export function SettingsConfig({
                           {t("settingsConfig.agentsDesc")}
                         </p>
                       </div>
-                      <AgentsConfig cwd={panelCwd} userOnly={remoteHost} />
+                      <AgentsConfig cwd={cwd} />
                     </div>
                   )}
 
@@ -4344,7 +4327,7 @@ export function SettingsConfig({
 
                       <UploadRetentionSetting />
 
-                      <AgentEnvSetting cluster={cluster} />
+                      {!remoteHost && <AgentEnvSetting />}
                     </div>
                   )}
                 </>

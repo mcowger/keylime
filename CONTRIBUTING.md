@@ -200,8 +200,7 @@ parsed HTTP conversation models use normalized `toolCallId`/`toolName`/`input`.
 Do not accidentally use a display DTO to describe the runner wire.
 
 Open shapes remain only where data is genuinely extensible: provider/tool/plugin
-JSON, future message compatibility and external auth-broker payloads forwarded
-without interpretation. A native app normally uses the web HTTP and browser-link
+JSON and future message compatibility. A native app normally uses the web HTTP and browser-link
 contracts, not the daemon link. Generated models do not implement sequencing,
 replay, ownership fences or reconciliation; those semantics are emitted from
 source descriptions and must be implemented by the client.

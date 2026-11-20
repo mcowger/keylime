@@ -181,13 +181,12 @@ test("this machine can be renamed and reset, never revoked", () =>
     );
   }));
 
-test("legacy toggles are ignored on read and dropped on the next registry write", () =>
+test("unknown fields are ignored on read and dropped on the next registry write", () =>
   withAgentDir(async (file) => {
     const { host, token } = createHost("laptop");
 
     const stored = JSON.parse(readFileSync(file, "utf8"));
     stored.hosts[0].allowAgentStart = true;
-    stored.hosts[0].shareCredentials = true;
     writeFileSync(file, JSON.stringify(stored));
     assert.deepEqual(loadHosts(), [host]);
     assert.deepEqual(hostForToken(token), host);

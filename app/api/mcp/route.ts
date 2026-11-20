@@ -87,12 +87,27 @@ async function allowedCwd(cwd: unknown): Promise<string> {
  * @apiUsage Inspect local user/project MCP configuration and optionally a session's live inventory.
  * @apiInputs cwd is optional and must be allowed; live=0 disables live lookup, attach=1 avoids starting a session, and advisor=1 applies only to a fresh spawn.
  * @apiInvariants Without cwd there is no project config. User secrets are not returned and project server configuration is redacted; live errors are sanitized.
- * @apiEffects Reads local files; a live lookup with sessionId may start a local session unless attach=1.
+ * @apiEffects With attach=1 returns only live status, never local configuration or a new process. Otherwise reads local files and may start a local session.
  * @apiRecovery Inspect liveError separately from configuration; use attach=1 to avoid spawning while retrying.
  */
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
+    const sessionId = params.get("sessionId");
+    const includeLive = params.get("live") !== "0";
+    if (params.get("attach") === "1") {
+      const empty = { root: null, path: null, exists: false, servers: [], inventory: [] };
+      if (!includeLive || !sessionId) return Response.json(empty);
+      const session = getRpcSession(sessionId);
+      if (!session?.isAlive())
+        return Response.json({ ...empty, liveError: "The session is not running" });
+      try {
+        const liveServers = parseMcpListOutput(await session.getMcpList());
+        return Response.json({ ...empty, liveServers });
+      } catch (error) {
+        return Response.json({ ...empty, liveError: sanitizeMcpLiveError(error) });
+      }
+    }
     const requestedCwd = params.get("cwd");
     const cwd = requestedCwd ? await allowedCwd(requestedCwd) : null;
     const file = cwd ? readMcpConfig(cwd) : null;
@@ -173,26 +188,16 @@ export async function GET(request: Request) {
         };
       }),
     };
-    const sessionId = params.get("sessionId");
-    const includeLive = params.get("live") !== "0";
     // Advisor opinion for a fresh spawn only (same ?advisor=1 convention as
     // /api/agent/[id]): an alive child is reused as-is below, never replaced —
     // listing servers must stay side-effect-free.
     const advisor = params.get("advisor") === "1";
-    // `attach=1`: live status from a process already running, never one started here. A cluster session on another
-    // member is read where it runs (spec K7); its file is not this machine's to start.
-    const attachOnly = params.get("attach") === "1";
     let liveServers: ReturnType<typeof parseMcpListOutput> | undefined;
     let liveError: string | undefined;
     if (includeLive && sessionId) {
       try {
         let session = getRpcSession(sessionId);
         if (!session?.isAlive()) {
-          if (attachOnly)
-            throw new WebRpcError(
-              "The session is not running",
-              "session_not_running",
-            );
           // MCP settings are this machine's only.
           const host = getHost(LOCAL_HOST_ID);
           const target = await sessionSpawnTarget(sessionId, host);
