@@ -189,6 +189,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- The sidebar no longer flashes the Provider Usage bar on reload when Provider usage limits is off.
 - Repos and Systems use matching sidebar headings, collapse independently, and share one search control above both sections.
 - Sidebar search reveals matches in collapsed Repos and Systems sections. Clearing the query restores their previous collapse state.
 - Failed commits show their full output in a scrollable area inside the Ship dialog.

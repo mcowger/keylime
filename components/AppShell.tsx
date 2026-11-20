@@ -515,7 +515,16 @@ export function AppShell({ appName }: { appName: string }) {
     window.addEventListener("focus", load);
     return () => window.removeEventListener("focus", load);
   }, []);
-  const [providerUsageVisible, setProviderUsageVisible] = useState(true);
+  const [providerUsageVisible, setProviderUsageVisible] = useState(() => {
+    try {
+      return (
+        window.localStorage.getItem(PROVIDER_USAGE_VISIBLE_STORAGE_KEY) !==
+        "false"
+      );
+    } catch {
+      return true;
+    }
+  });
   const [scopeNativeSelectAll, setScopeNativeSelectAll] = useState(false);
   const [openUrlAutomatically, setOpenUrlAutomatically] = useState(false);
   const [sidebarResizing, setSidebarResizing] = useState(false);
@@ -556,10 +565,6 @@ export function AppShell({ appName }: { appName: string }) {
           : expandThinking === "latest"
             ? "latest"
             : "off",
-      );
-      setProviderUsageVisible(
-        window.localStorage.getItem(PROVIDER_USAGE_VISIBLE_STORAGE_KEY) !==
-          "false",
       );
       setScopeNativeSelectAll(
         window.localStorage.getItem(NATIVE_SELECT_ALL_STORAGE_KEY) === "true",
