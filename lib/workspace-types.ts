@@ -1,6 +1,10 @@
 import type { Static } from "@sinclair/typebox";
 import type * as M from "./api-contracts/workspace-models";
 import type { SystemsRequest, SystemsResult } from "./api-contracts/systems";
+import type {
+  PlanningBoard,
+  PlanningOperation,
+} from "./api-contracts/planning";
 import type { WorkspaceFileEvent as SchemaWorkspaceFileEvent } from "./api-contracts/host-schemas";
 import type {
   UploadConflictStrategy,
@@ -77,6 +81,8 @@ export interface WorkspaceOps {
   >;
   /** Read or mutate Systems and Efforts owned by this daemon. */
   systems(input: SystemsRequest): Promise<OpResult<SystemsResult>>;
+  /** Read or mutate the board owned by the selected daemon. */
+  planning(operation: PlanningOperation): Promise<PlanningBoard>;
   hierarchy(input: HierarchyRequest): Promise<OpResult<HierarchySnapshot>>;
   shipPreview(input: {
     projectPath: string;
@@ -236,6 +242,7 @@ export const WORKSPACE_OP_PARAMS: {
   stopShipMonitor: ["input"],
   shipMonitorStatus: ["input"],
   systems: ["input"],
+  planning: ["operation"],
 };
 
 export function isWorkspaceOp(value: string): value is keyof WorkspaceOps {

@@ -44,6 +44,7 @@ import * as notificationsTest from "@/app/api/notifications/test/route";
 import * as ompSettings from "@/app/api/omp-settings/route";
 import * as ompUpdate from "@/app/api/omp-update/route";
 import * as ompVersion from "@/app/api/omp-version/route";
+import * as planning from "@/app/api/planning/route";
 import * as plugins from "@/app/api/plugins/route";
 import * as projectsClone from "@/app/api/projects/clone/route";
 import * as projects from "@/app/api/projects/route";
@@ -160,6 +161,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "omp-settings": ompSettings,
   "omp-update": ompUpdate,
   "omp-version": ompVersion,
+  planning,
   plugins: plugins,
   "projects/clone": projectsClone,
   projects: projects,

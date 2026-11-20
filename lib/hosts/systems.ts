@@ -46,6 +46,9 @@ export type SystemsRuntime = {
   terminals: TerminalManager;
   processes: WorkspaceDeletionAdapter;
   sessionsChanged: () => void;
+  checkPlanningAdmission?: (
+    input: Extract<SystemsRequest, { action: "create" }>,
+  ) => void;
 };
 
 type Stage = WorkspaceCreationJob["stage"];
@@ -67,6 +70,7 @@ type Effort = Omit<EffortRecord, "members" | "sessionIds"> & {
   docsWritten?: boolean;
   instructions: string;
   servicesAdmitted?: boolean;
+  retryAttempt?: number;
 };
 type State = { root?: string; systems: SystemRecord[]; efforts: Effort[] };
 type PlanInput = Extract<SystemsRequest, { action: "preview" | "create" }>;
@@ -165,6 +169,10 @@ function matchingEffort(value: string, matches: (effort: Effort) => boolean) {
 }
 export function isEffortPath(value: string): boolean {
   return matchingEffort(value, (effort) => effort.status !== "cleaned");
+}
+/** True even after cleanup: once admitted, this Effort's plan cannot be replaced. */
+export function hasAdmittedEffort(id: string): boolean {
+  return load().efforts.some((effort) => effort.id === id);
 }
 export function isEffortCleaningPath(value: string): boolean {
   return matchingEffort(
@@ -481,7 +489,9 @@ async function prepare(state: State, input: PlanInput) {
       "Restore this System before creating an Effort",
     );
   const name = nameOf(input.name);
-  const slug = slugFor(name);
+  const slug = input.branchKey
+    ? `${slugOf(name).slice(0, 44) || "task"}-${fingerprint(input.branchKey).slice(0, 12)}`
+    : slugFor(name);
   const configuredRoot = rootOf(state);
   const root = path.join(configuredRoot, system.slug, slug);
   checkTarget(state, root);
@@ -523,10 +533,11 @@ async function prepare(state: State, input: PlanInput) {
         workspaceSetupPlan(repoPath),
         checkBranch(repoPath, branch),
       ]);
-      const base = await baseFor(
-        repoPath,
-        selected.get(repoPath) ?? branches.defaultRef,
-      );
+      const ref = selected.get(repoPath) ?? branches.defaultRef;
+      const base =
+        !ref && input.action === "preview" && input.allowUnresolved
+          ? { baseRef: "", baseCommit: "" }
+          : await baseFor(repoPath, ref);
       const skipsCustomCreate = setup.pipeline.create.length > 0;
       const plan = {
         repoPath,
@@ -1430,11 +1441,41 @@ export async function systemsOperation(
         preview: (await prepare(state, input)).preview,
       };
     case "create": {
+      const prior =
+        input.creationId &&
+        state.efforts.find((effort) => effort.id === input.creationId);
+      if (prior) {
+        if (prior.systemId !== input.systemId)
+          throw conflict(
+            "effort_creation_conflict",
+            "Effort creation ID belongs to another System",
+          );
+        return { ...result(runtime), effortId: prior.id };
+      }
       const { preview, members, system, configuredRoot } = await prepare(
         state,
         input,
       );
       const current = load();
+      const admitted =
+        input.creationId &&
+        current.efforts.find((effort) => effort.id === input.creationId);
+      if (admitted) {
+        if (admitted.systemId !== input.systemId)
+          throw conflict(
+            "effort_creation_conflict",
+            "Effort creation ID belongs to another System",
+          );
+        return { ...result(runtime), effortId: admitted.id };
+      }
+      if (input.creationId !== undefined) {
+        if (!runtime.checkPlanningAdmission)
+          throw invalid(
+            "Planned Effort creation requires a planning admission check",
+          );
+        // No await between this check and the durable Effort checkpoint.
+        runtime.checkPlanningAdmission(input);
+      }
       if (
         preview.confirmation !== input.confirmation ||
         configuredRoot !== rootOf(current) ||
@@ -1456,7 +1497,7 @@ export async function systemsOperation(
           `An Effort already uses branch ${preview.branch}`,
         );
       const effort: Effort = {
-        id: randomUUID(),
+        id: input.creationId ?? randomUUID(),
         systemId: system.id,
         systemName: system.name,
         name: preview.name,
@@ -1482,6 +1523,11 @@ export async function systemsOperation(
     }
     case "retry": {
       const effort = effortFor(state, input.effortId);
+      if (
+        input.attempt !== undefined &&
+        (effort.retryAttempt ?? -1) >= input.attempt
+      )
+        return { ...result(runtime), effortId: effort.id };
       if (busy.has(effort.id))
         throw conflict("effort_busy", "An Effort operation is already running");
       if (effort.status !== "failed")
@@ -1489,6 +1535,7 @@ export async function systemsOperation(
           "effort_retry_unavailable",
           "Only an Effort with incomplete setup can retry",
         );
+      effort.retryAttempt = input.attempt;
       launchSetup(effort, runtime);
       return { ...result(runtime), effortId: effort.id };
     }

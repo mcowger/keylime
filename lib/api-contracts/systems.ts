@@ -147,6 +147,7 @@ const planInput = {
   systemId: text,
   name: text,
   bases: optional(Type.Array(Type.Object({ repoPath: text, ref: text }))),
+  branchKey: optional(Type.String({ pattern: "^[a-zA-Z0-9_-]{1,128}$" })),
 };
 export const SystemsRequestSchema = Type.Union(
   [
@@ -162,13 +163,36 @@ export const SystemsRequestSchema = Type.Union(
       id: text,
       archived: Type.Boolean(),
     }),
-    Type.Object({ action: Type.Literal("preview"), ...planInput }),
+    Type.Object({
+      action: Type.Literal("preview"),
+      ...planInput,
+      allowUnresolved: optional(Type.Boolean()),
+    }),
     Type.Object({
       action: Type.Literal("create"),
       ...planInput,
+      creationId: optional(
+        Type.String({
+          pattern: "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          description:
+            "Stable launch identity for idempotent Effort admission.",
+        }),
+      ),
+      planningVersion: optional(
+        Type.Integer({
+          minimum: 0,
+          maximum: Number.MAX_SAFE_INTEGER,
+          description:
+            "Current planning launch version; required with a planned creation ID.",
+        }),
+      ),
       confirmation: text,
     }),
-    Type.Object({ action: Type.Literal("retry"), ...effortId }),
+    Type.Object({
+      action: Type.Literal("retry"),
+      ...effortId,
+      attempt: optional(Type.Integer({ minimum: 0 })),
+    }),
     Type.Object({
       action: Type.Literal("renameEffort"),
       ...effortId,

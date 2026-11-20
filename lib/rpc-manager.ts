@@ -3372,7 +3372,9 @@ export class AgentSessionWrapper {
     timeoutMs?: number,
     origin?: object,
   ): Promise<T> {
-    const message = IMAGE_BEARING_COMMANDS.has(command.type);
+    const message =
+      IMAGE_BEARING_COMMANDS.has(command.type) ||
+      command.type === "prompt_literal";
     const proof =
       message && !this.messageReplacement && !this.hasPendingMessageCommands()
         ? watchReplacement(
@@ -3463,13 +3465,52 @@ export class AgentSessionWrapper {
     if (mutatesHistory) this.historyMutationPendingCount += 1;
     try {
       return await this.withPendingCommand(() =>
-        this.dispatchCommand(
-          command,
-          options?.preserveUnknownDelivery === true,
-        ),
+        command.type === "prompt_literal"
+          ? this.sendLiteralPrompt(command)
+          : this.dispatchCommand(
+              command,
+              options?.preserveUnknownDelivery === true,
+            ),
       );
     } finally {
       if (mutatesHistory) this.historyMutationPendingCount -= 1;
+    }
+  }
+
+  private async sendLiteralPrompt(
+    command: Record<string, unknown>,
+  ): Promise<unknown> {
+    if (this.bashRunning)
+      throw new RpcCommandError(
+        "prompt_literal",
+        "The launch chat is running a shell command",
+        "session_busy",
+      );
+    const imageError = validateAgentImages(command.images);
+    if (imageError)
+      throw new RpcCommandError("prompt_literal", imageError, "invalid_images");
+    try {
+      return await this.sendNativeMessageCommand(
+        {
+          type: "prompt_literal",
+          message: command.message,
+          images: command.images,
+        },
+        PROMPT_ACK_TIMEOUT_MS,
+        command,
+      );
+    } catch (error) {
+      if (
+        error instanceof RpcCommandTimeoutError ||
+        (error instanceof RpcCommandError &&
+          error.code === "literal_delivery_unknown")
+      )
+        throw new WebRpcError(
+          "The first message may have been delivered. Check the linked chat.",
+          "literal_delivery_unknown",
+          "unknown",
+        );
+      throw error;
     }
   }
 
@@ -4927,7 +4968,11 @@ export async function startRpcSession(
   const existing = registry.get(sessionId);
   const checkHost = (session: AgentSessionWrapper) => {
     if (requireHost && session.host.id !== host.id)
-      throw new WebRpcError("Session is active on another host", "session_host_conflict", "refused");
+      throw new WebRpcError(
+        "Session is active on another host",
+        "session_host_conflict",
+        "refused",
+      );
   };
   if (existing?.isAlive()) checkHost(existing);
   // Union semantics, matching the spawn below and the wrapper identity:

@@ -10,6 +10,20 @@ Importing sessions finds sessions whose working directory is inside the selected
 
 Unregistering a project forgets its child registrations without stopping processes or deleting files. Unregistering a linked workspace removes its worktree as described below. The default workspace cannot be unregistered separately from its project. Duplicate imports of the same canonical resource are idempotent, and each resource has one parent.
 
+## Notes and Tasks
+
+Open **Notes & Tasks** from a Repo or System’s sidebar menu. Keylime keeps the Markdown notebook and four-column task board on the owning daemon, outside Git. Other browsers and web servers linked to the same daemon see the same saved board; it’s unavailable while that host is offline.
+
+Enter a one-liner in **Brief**. Select **Improve** to replace it with a fuller prompt, then edit the same field if needed. The web server’s OMP `plan` model receives only the text in **Brief** and the target name, not the notes or checkout contents.
+
+**Launch** saves the current Brief and sends it verbatim as the first message in the Workspace or Effort root chat. Use **Save task** if you want to keep it on the board without launching. Keylime uses the current defaults unless setup needs review. The task links to the resulting work; mark it **Done** yourself. Resume failed setup from the task. If Keylime can’t confirm whether the first message was sent, open the linked chat to check.
+
+Launch treats the Brief as text, even if it starts with a slash command such as `/rename`. Keylime marks it sent only after the runner confirms the first user message was saved.
+
+Attach PNG, JPEG, GIF, or WebP images to **Notes** for context shared by every launch, or to a task for that task only. Save Notes before launching to include new Notes images. Launch includes up to 10 images and 5 MiB total. **Improve** uses the task’s current attachments with a vision-capable planning model; it never sends shared Notes images or notebook text.
+
+If an Effort’s base commit or System setup changes before creation, **Resume** shows the updated plan and starting commits for confirmation. It keeps the same launch and saved prompt. Once the daemon has admitted the Effort, **Resume** uses its original setup plan instead.
+
 ## Systems and Efforts
 
 Use **Systems → New System** under a host to group existing Git checkouts. Pick registered Repos or browse for a checkout on that host. A System-only checkout doesn't appear under standalone **Repos**. Add named foreground service commands and the content for `AGENTS.md` in System settings.

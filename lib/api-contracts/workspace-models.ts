@@ -86,6 +86,8 @@ export const WorkspaceCreateRequestSchema = Type.Object(
     mode: WorkspaceBranchModeSchema,
     baseRef: Type.String(),
     name: Type.String(),
+    creationId: Type.Optional(Type.String({ format: "uuid" })),
+    retryAttempt: Type.Optional(Type.Integer({ minimum: 0 })),
   },
   {
     description:
@@ -157,6 +159,10 @@ export const WorkspaceCreationJobSchema = Type.Object(
       }),
     ),
     workspaceId: Type.Optional(Type.String()),
+    nextCommand: Type.Optional(Type.Integer({ minimum: 0 })),
+    includesDone: Type.Optional(Type.Boolean()),
+    retryAttempt: Type.Optional(Type.Integer({ minimum: 0 })),
+    baseCommit: Type.Optional(Type.String()),
   },
   {
     description:

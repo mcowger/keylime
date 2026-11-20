@@ -200,13 +200,14 @@ export interface TestSession {
 }
 
 /**
- * A real `AgentSession` from the runner's factory (so it connects to the host), in memory, on a
+ * A real `AgentSession` from the runner's factory (so it connects to the host), in memory by default, on a
  * mock model (`mock/mock-model`) that replies with `responses` in order.
  */
 export async function createTestSession(
   options: {
     responses?: MockResponse[];
     toolNames?: string[];
+    persist?: boolean;
     ui?: Partial<ExtensionUIContext>;
   } = {},
 ): Promise<TestSession> {
@@ -222,7 +223,9 @@ export async function createTestSession(
     agentDir: dir,
     modelRegistry,
     model: mock,
-    sessionManager: SessionManager.inMemory(dir),
+    sessionManager: options.persist
+      ? SessionManager.create(dir, path.join(dir, "sessions"))
+      : SessionManager.inMemory(dir),
     settings: Settings.isolated({
       "compaction.enabled": false,
       "retry.enabled": false,

@@ -194,24 +194,52 @@ export const BrowserListResultSchema = Type.Object(
     tabs: Type.Array(
       Type.Object(
         {
-          id: Type.String({ minLength: 1, maxLength: 1024, description: "Exact CDP target identifier used for capture." }),
-          title: Type.String({ maxLength: 2048, description: "Last reported page title, truncated when necessary." }),
-          url: Type.String({ maxLength: 8192, description: "Last reported page URL, truncated when necessary." }),
+          id: Type.String({
+            minLength: 1,
+            maxLength: 1024,
+            description: "Exact CDP target identifier used for capture.",
+          }),
+          title: Type.String({
+            maxLength: 2048,
+            description: "Last reported page title, truncated when necessary.",
+          }),
+          url: Type.String({
+            maxLength: 8192,
+            description: "Last reported page URL, truncated when necessary.",
+          }),
         },
         { description: "A live managed Chromium tab owned by this session." },
       ),
-      { maxItems: 128, description: "Session-owned live Chromium tabs, limited to 128." },
+      {
+        maxItems: 128,
+        description: "Session-owned live Chromium tabs, limited to 128.",
+      },
     ),
   },
-  { description: "Session-owned Chromium tabs available for view-only capture." },
+  {
+    description: "Session-owned Chromium tabs available for view-only capture.",
+  },
 );
 export type BrowserListResult = Static<typeof BrowserListResultSchema>;
 export const BrowserCaptureResultSchema = Type.Object(
   {
-    mimeType: Type.Literal("image/jpeg", { description: "The captured image media type." }),
-    data: Type.String({ maxLength: 1024 * 1024, description: "Base64-encoded JPEG image, at most 1 MiB encoded." }),
-    width: Type.Number({ exclusiveMinimum: 0, description: "Visual viewport width in CSS pixels; use with the displayed image to map input coordinates." }),
-    height: Type.Number({ exclusiveMinimum: 0, description: "Visual viewport height in CSS pixels; use with the displayed image to map input coordinates." }),
+    mimeType: Type.Literal("image/jpeg", {
+      description: "The captured image media type.",
+    }),
+    data: Type.String({
+      maxLength: 1024 * 1024,
+      description: "Base64-encoded JPEG image, at most 1 MiB encoded.",
+    }),
+    width: Type.Number({
+      exclusiveMinimum: 0,
+      description:
+        "Visual viewport width in CSS pixels; use with the displayed image to map input coordinates.",
+    }),
+    height: Type.Number({
+      exclusiveMinimum: 0,
+      description:
+        "Visual viewport height in CSS pixels; use with the displayed image to map input coordinates.",
+    }),
   },
   { description: "Bounded view-only capture of a session-owned Chromium tab." },
 );
@@ -219,80 +247,255 @@ export type BrowserCaptureResult = Static<typeof BrowserCaptureResultSchema>;
 
 const videoTabId = Type.String({ minLength: 1, maxLength: 1024 });
 const videoStreamId = Type.String({ minLength: 1, maxLength: 128 });
-export const BrowserVideoStartArgsSchema = Type.Object({ id: videoTabId }, { additionalProperties: false, description: "Start an ephemeral video lease for this session-owned tab." });
-export const BrowserVideoStreamArgsSchema = Type.Object({ id: videoTabId, streamId: videoStreamId }, { additionalProperties: false, description: "Read or release a video lease for its exact session-owned tab." });
-export const BrowserVideoStartResultSchema = Type.Object({
-  streamId: videoStreamId,
-  codec: Type.String({ minLength: 1, maxLength: 128 }),
-  width: Type.Number({ exclusiveMinimum: 0 }),
-  height: Type.Number({ exclusiveMinimum: 0 }),
-}, { additionalProperties: false, description: "Ephemeral encoded video stream and its CSS viewport." });
-export const BrowserVideoNextResultSchema = Type.Object({
-  width: Type.Number({ exclusiveMinimum: 0 }),
-  height: Type.Number({ exclusiveMinimum: 0 }),
-  serverTime: Type.Integer({ minimum: 0, description: "Runner clock time in Unix milliseconds when this batch was dequeued." }),
-  packets: Type.Array(Type.Object({
-    type: Type.Union([Type.Literal("key"), Type.Literal("delta")]),
-    timestamp: Type.Integer({ minimum: 0 }),
-    capturedAt: Type.Integer({ minimum: 0, description: "Source capture time in Unix milliseconds." }),
-    width: Type.Number({ exclusiveMinimum: 0, description: "CSS viewport width at capture." }),
-    height: Type.Number({ exclusiveMinimum: 0, description: "CSS viewport height at capture." }),
-    duration: Type.Optional(Type.Integer({ minimum: 0 })),
-    data: Type.String({ minLength: 4, maxLength: 512 * 1024, pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$" }),
-  }, { additionalProperties: false }), { maxItems: 8 }),
-}, { additionalProperties: false, description: "Bounded encoded packets; timestamps and durations are in microseconds." });
-export const BrowserVideoRequestSchema = Type.Union([
-  Type.Object({ op: Type.Literal("start"), input: BrowserVideoStartArgsSchema }, { additionalProperties: false }),
-  Type.Object({ op: Type.Literal("next"), input: BrowserVideoStreamArgsSchema }, { additionalProperties: false }),
-  Type.Object({ op: Type.Literal("stop"), input: BrowserVideoStreamArgsSchema }, { additionalProperties: false }),
-], { description: "Start, read, or stop an ephemeral session browser video stream." });
+export const BrowserVideoStartArgsSchema = Type.Object(
+  { id: videoTabId },
+  {
+    additionalProperties: false,
+    description: "Start an ephemeral video lease for this session-owned tab.",
+  },
+);
+export const BrowserVideoStreamArgsSchema = Type.Object(
+  { id: videoTabId, streamId: videoStreamId },
+  {
+    additionalProperties: false,
+    description:
+      "Read or release a video lease for its exact session-owned tab.",
+  },
+);
+export const BrowserVideoStartResultSchema = Type.Object(
+  {
+    streamId: videoStreamId,
+    codec: Type.String({ minLength: 1, maxLength: 128 }),
+    width: Type.Number({ exclusiveMinimum: 0 }),
+    height: Type.Number({ exclusiveMinimum: 0 }),
+  },
+  {
+    additionalProperties: false,
+    description: "Ephemeral encoded video stream and its CSS viewport.",
+  },
+);
+export const BrowserVideoNextResultSchema = Type.Object(
+  {
+    width: Type.Number({ exclusiveMinimum: 0 }),
+    height: Type.Number({ exclusiveMinimum: 0 }),
+    serverTime: Type.Integer({
+      minimum: 0,
+      description:
+        "Runner clock time in Unix milliseconds when this batch was dequeued.",
+    }),
+    packets: Type.Array(
+      Type.Object(
+        {
+          type: Type.Union([Type.Literal("key"), Type.Literal("delta")]),
+          timestamp: Type.Integer({ minimum: 0 }),
+          capturedAt: Type.Integer({
+            minimum: 0,
+            description: "Source capture time in Unix milliseconds.",
+          }),
+          width: Type.Number({
+            exclusiveMinimum: 0,
+            description: "CSS viewport width at capture.",
+          }),
+          height: Type.Number({
+            exclusiveMinimum: 0,
+            description: "CSS viewport height at capture.",
+          }),
+          duration: Type.Optional(Type.Integer({ minimum: 0 })),
+          data: Type.String({
+            minLength: 4,
+            maxLength: 512 * 1024,
+            pattern:
+              "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+          }),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 8 },
+    ),
+  },
+  {
+    additionalProperties: false,
+    description:
+      "Bounded encoded packets; timestamps and durations are in microseconds.",
+  },
+);
+export const BrowserVideoRequestSchema = Type.Union(
+  [
+    Type.Object(
+      { op: Type.Literal("start"), input: BrowserVideoStartArgsSchema },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { op: Type.Literal("next"), input: BrowserVideoStreamArgsSchema },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { op: Type.Literal("stop"), input: BrowserVideoStreamArgsSchema },
+      { additionalProperties: false },
+    ),
+  ],
+  {
+    description:
+      "Start, read, or stop an ephemeral session browser video stream.",
+  },
+);
 export type BrowserVideoRequest = Static<typeof BrowserVideoRequestSchema>;
-export const BrowserVideoStopResultSchema = Type.Object({}, { additionalProperties: false, description: "The requested video lease has been released." });
-export type BrowserVideoStartResult = Static<typeof BrowserVideoStartResultSchema>;
-export type BrowserVideoNextResult = Static<typeof BrowserVideoNextResultSchema>;
-
+export const BrowserVideoStopResultSchema = Type.Object(
+  {},
+  {
+    additionalProperties: false,
+    description: "The requested video lease has been released.",
+  },
+);
+export type BrowserVideoStartResult = Static<
+  typeof BrowserVideoStartResultSchema
+>;
+export type BrowserVideoNextResult = Static<
+  typeof BrowserVideoNextResultSchema
+>;
 
 const browserCoordinate = () => Type.Number({ minimum: 0, maximum: 100000 });
 const browserDelta = () => Type.Number({ minimum: -100000, maximum: 100000 });
-const browserModifiers = () => Type.Integer({ minimum: 0, maximum: 15, description: "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8." });
+const browserModifiers = () =>
+  Type.Integer({
+    minimum: 0,
+    maximum: 15,
+    description: "CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8.",
+  });
 const browserActionObject = { additionalProperties: false };
-export const BrowserControlActionSchema = Type.Union([
-  Type.Object({ type: Type.Literal("navigate"), url: Type.String({ minLength: 1, maxLength: 8192 }) }, browserActionObject),
-  Type.Object({ type: Type.Literal("back") }, browserActionObject),
-  Type.Object({ type: Type.Literal("forward") }, browserActionObject),
-  Type.Object({ type: Type.Literal("reload") }, browserActionObject),
-  Type.Object({
-    type: Type.Literal("pointer"),
-    event: Type.Union([Type.Literal("move"), Type.Literal("down"), Type.Literal("up")]),
-    x: browserCoordinate(), y: browserCoordinate(),
-    button: Type.Union([Type.Literal("none"), Type.Literal("left"), Type.Literal("middle"), Type.Literal("right")]),
-    buttons: Type.Integer({ minimum: 0, maximum: 31, description: "Pressed mouse buttons as the DOM/CDP bitmask: left 1, right 2, middle 4, back 8, forward 16." }),
-    clickCount: Type.Integer({ minimum: 0, maximum: 3 }), modifiers: browserModifiers(),
-  }, browserActionObject),
-  Type.Object({ type: Type.Literal("wheel"), x: browserCoordinate(), y: browserCoordinate(), deltaX: browserDelta(), deltaY: browserDelta(), modifiers: browserModifiers() }, browserActionObject),
-  Type.Object({
-    type: Type.Literal("key"), event: Type.Union([Type.Literal("down"), Type.Literal("up")]),
-    key: Type.String({ maxLength: 128 }), code: Type.String({ maxLength: 128 }),
-    windowsVirtualKeyCode: Type.Integer({ minimum: 0, maximum: 65535 }),
-    modifiers: browserModifiers(), repeat: Type.Boolean(),
-  }, browserActionObject),
-  Type.Object({ type: Type.Literal("text"), text: Type.String({ maxLength: 65536 }) }, browserActionObject),
-  Type.Object({
-    type: Type.Literal("touch"), event: Type.Union([Type.Literal("start"), Type.Literal("move"), Type.Literal("end"), Type.Literal("cancel")]),
-    points: Type.Array(Type.Object({ id: Type.Integer({ minimum: 0, maximum: 2147483647 }), x: browserCoordinate(), y: browserCoordinate() }, browserActionObject), { maxItems: 10 }),
-    modifiers: browserModifiers(),
-  }, browserActionObject),
-], { description: "A single browser navigation or input action. Coordinates are visual viewport CSS pixels; touch points are the contacts remaining after the event." });
+export const BrowserControlActionSchema = Type.Union(
+  [
+    Type.Object(
+      {
+        type: Type.Literal("navigate"),
+        url: Type.String({ minLength: 1, maxLength: 8192 }),
+      },
+      browserActionObject,
+    ),
+    Type.Object({ type: Type.Literal("back") }, browserActionObject),
+    Type.Object({ type: Type.Literal("forward") }, browserActionObject),
+    Type.Object({ type: Type.Literal("reload") }, browserActionObject),
+    Type.Object(
+      {
+        type: Type.Literal("pointer"),
+        event: Type.Union([
+          Type.Literal("move"),
+          Type.Literal("down"),
+          Type.Literal("up"),
+        ]),
+        x: browserCoordinate(),
+        y: browserCoordinate(),
+        button: Type.Union([
+          Type.Literal("none"),
+          Type.Literal("left"),
+          Type.Literal("middle"),
+          Type.Literal("right"),
+        ]),
+        buttons: Type.Integer({
+          minimum: 0,
+          maximum: 31,
+          description:
+            "Pressed mouse buttons as the DOM/CDP bitmask: left 1, right 2, middle 4, back 8, forward 16.",
+        }),
+        clickCount: Type.Integer({ minimum: 0, maximum: 3 }),
+        modifiers: browserModifiers(),
+      },
+      browserActionObject,
+    ),
+    Type.Object(
+      {
+        type: Type.Literal("wheel"),
+        x: browserCoordinate(),
+        y: browserCoordinate(),
+        deltaX: browserDelta(),
+        deltaY: browserDelta(),
+        modifiers: browserModifiers(),
+      },
+      browserActionObject,
+    ),
+    Type.Object(
+      {
+        type: Type.Literal("key"),
+        event: Type.Union([Type.Literal("down"), Type.Literal("up")]),
+        key: Type.String({ maxLength: 128 }),
+        code: Type.String({ maxLength: 128 }),
+        windowsVirtualKeyCode: Type.Integer({ minimum: 0, maximum: 65535 }),
+        modifiers: browserModifiers(),
+        repeat: Type.Boolean(),
+      },
+      browserActionObject,
+    ),
+    Type.Object(
+      { type: Type.Literal("text"), text: Type.String({ maxLength: 65536 }) },
+      browserActionObject,
+    ),
+    Type.Object(
+      {
+        type: Type.Literal("touch"),
+        event: Type.Union([
+          Type.Literal("start"),
+          Type.Literal("move"),
+          Type.Literal("end"),
+          Type.Literal("cancel"),
+        ]),
+        points: Type.Array(
+          Type.Object(
+            {
+              id: Type.Integer({ minimum: 0, maximum: 2147483647 }),
+              x: browserCoordinate(),
+              y: browserCoordinate(),
+            },
+            browserActionObject,
+          ),
+          { maxItems: 10 },
+        ),
+        modifiers: browserModifiers(),
+      },
+      browserActionObject,
+    ),
+  ],
+  {
+    description:
+      "A single browser navigation or input action. Coordinates are visual viewport CSS pixels; touch points are the contacts remaining after the event.",
+  },
+);
 export type BrowserControlAction = Static<typeof BrowserControlActionSchema>;
 /** Bounds one ordered input dispatch without growing the per-command work indefinitely. */
 export const BROWSER_CONTROL_BATCH_MAX = 64;
-export const BrowserControlArgsSchema = Type.Object({
-  id: Type.String({ minLength: 1, maxLength: 1024 }),
-  actions: Type.Array(BrowserControlActionSchema, { minItems: 1, maxItems: BROWSER_CONTROL_BATCH_MAX, description: "Actions applied sequentially in array order after whole-batch validation. Ownership is rechecked before each action. Failure may leave an applied prefix; never retry the batch automatically." }),
-}, { additionalProperties: false, description: "A bounded ordered batch addressed to one exact session-owned Chromium target. HTTP request bodies are limited to 1 MiB. No atomicity or exclusive control against other viewers or the agent is promised." });
+export const BrowserControlArgsSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1, maxLength: 1024 }),
+    actions: Type.Array(BrowserControlActionSchema, {
+      minItems: 1,
+      maxItems: BROWSER_CONTROL_BATCH_MAX,
+      description:
+        "Actions applied sequentially in array order after whole-batch validation. Ownership is rechecked before each action. Failure may leave an applied prefix; never retry the batch automatically.",
+    }),
+  },
+  {
+    additionalProperties: false,
+    description:
+      "A bounded ordered batch addressed to one exact session-owned Chromium target. HTTP request bodies are limited to 1 MiB. No atomicity or exclusive control against other viewers or the agent is promised.",
+  },
+);
 export type BrowserControlArgs = Static<typeof BrowserControlArgsSchema>;
-export const BrowserControlResultSchema = Type.Object({}, { additionalProperties: false, description: "Every action in the batch was accepted in order; navigation and page effects may still be pending. Failure may leave an applied prefix." });
+export const BrowserControlResultSchema = Type.Object(
+  {},
+  {
+    additionalProperties: false,
+    description:
+      "Every action in the batch was accepted in order; navigation and page effects may still be pending. Failure may leave an applied prefix.",
+  },
+);
 export type BrowserControlResult = Static<typeof BrowserControlResultSchema>;
+
+export const LiteralPromptReceiptSchema = Type.Object(
+  { recorded: Type.Literal(true) },
+  {
+    description:
+      "The runner verified that the exact Brief is the first saved user message.",
+  },
+);
 
 /** Logical runner commands before command/response framing. */
 export const lifecycleRunnerOperations: readonly OperationContract[] = [
@@ -316,21 +519,36 @@ Recovery: List tabs again if the target is unavailable.`,
     Type.Object({ id: Type.String({ minLength: 1, maxLength: 1024 }) }),
     BrowserCaptureResultSchema,
   ),
-  command("browser_video_start", `Usage: Start encoded video for a session-owned tab.
+  command(
+    "browser_video_start",
+    `Usage: Start encoded video for a session-owned tab.
 Inputs: Supply the exact discovered target id.
 Invariants: Ownership is checked and no CDP endpoint is exposed.
 Effects: Starts an ephemeral bounded video stream.
-Recovery: Stop when hidden and start again after disconnect.`, BrowserVideoStartArgsSchema, BrowserVideoStartResultSchema),
-  command("browser_video_next", `Usage: Pull encoded packets from an active video stream.
+Recovery: Stop when hidden and start again after disconnect.`,
+    BrowserVideoStartArgsSchema,
+    BrowserVideoStartResultSchema,
+  ),
+  command(
+    "browser_video_next",
+    `Usage: Pull encoded packets from an active video stream.
 Inputs: Supply its target id and stream id.
 Invariants: Packets are bounded and ephemeral; ownership is rechecked.
 Effects: Consumes queued packets.
-Recovery: Restart the stream after an error or decoder failure.`, BrowserVideoStreamArgsSchema, BrowserVideoNextResultSchema),
-  command("browser_video_stop", `Usage: Stop an encoded video stream.
+Recovery: Restart the stream after an error or decoder failure.`,
+    BrowserVideoStreamArgsSchema,
+    BrowserVideoNextResultSchema,
+  ),
+  command(
+    "browser_video_stop",
+    `Usage: Stop an encoded video stream.
 Inputs: Supply its target id and stream id.
 Invariants: Only the owning session can stop the stream.
 Effects: Releases video resources.
-Recovery: Streams expire when the viewer disconnects.`, BrowserVideoStreamArgsSchema, BrowserVideoStopResultSchema),
+Recovery: Streams expire when the viewer disconnects.`,
+    BrowserVideoStreamArgsSchema,
+    BrowserVideoStopResultSchema,
+  ),
   command(
     "browser_control",
     `Usage: Send a bounded ordered batch of navigation or input actions to a session-owned Chromium tab.
@@ -353,6 +571,16 @@ Recovery: Reconcile an uncertain correlated submission with get_client_message_s
       streamingBehavior: opt(literals("steer", "followUp")),
     }),
     Type.Union([none, Type.Object({ agentInvoked: b() })]),
+  ),
+  command(
+    "prompt_literal",
+    `Usage: Record text as the first user message of a new task chat.
+Inputs: Provide the exact nonblank Brief and optional inline images. Preserve whitespace, slash prefixes and image order.
+Invariants: Only an idle chat without user messages or queued input can accept it. Input hooks, slash commands and template expansion do not run. Success confirms the first user message was saved, not that the model completed a turn.
+Effects: Submits literal user text through OMP's native input queue and waits for transcript persistence.
+Recovery: For literal_delivery_unknown, a timeout or a lost reply, check the linked chat and never resend automatically.`,
+    Type.Object({ message: input.message, images: input.images }),
+    LiteralPromptReceiptSchema,
   ),
   command(
     "steer",

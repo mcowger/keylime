@@ -46,6 +46,7 @@ import { readHostLinks, readHostLogin, type HostLink } from "./host-login";
 import { DaemonLink, dialable, nextRedialDelay } from "./daemon-link";
 import { ChannelTable } from "./daemon-channels";
 import { TerminalManager } from "./terminals";
+import { checkPlanningAdmission, planningOperation } from "./planning";
 import {
   readHierarchy,
   registerCreatedSession,
@@ -1101,6 +1102,13 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
           "link_not_authenticated",
           "The server link is no longer authenticated",
         );
+      if (op === "planning")
+        return planningOperation(args.operation, () =>
+          systemsOperation(
+            { action: "list" },
+            { terminals, processes, sessionsChanged },
+          ),
+        );
       if (op === "terminals" || op === "systems") {
         try {
           const input = args.input;
@@ -1115,6 +1123,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
               terminals,
               processes,
               sessionsChanged,
+              checkPlanningAdmission,
             });
             return { ok: true, value };
           }

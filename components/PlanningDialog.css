@@ -1,0 +1,138 @@
+.planning-dialog {
+  width: 1080px;
+  box-sizing: border-box;
+}
+.planning-dialog header > :first-child {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.planning-dialog
+  :is(header, .planning-column, .planning-editor, .planning-card)
+  > :is(h2, h3, h4, p) {
+  margin-block: 0;
+}
+.planning-dialog :is(section, form, article, label, fieldset) {
+  min-width: 0;
+}
+.planning-dialog :is(section, article, form, label, fieldset) {
+  display: grid;
+  gap: 8px;
+}
+.planning-dialog > * + * {
+  margin-top: 16px;
+}
+.planning-dialog header,
+.planning-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.planning-dialog header {
+  justify-content: space-between;
+}
+.planning-brief-heading {
+  justify-content: space-between;
+}
+.planning-brief-heading button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.planning-images {
+  display: grid;
+  gap: 8px;
+}
+.planning-image-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.planning-image-list li {
+  display: grid;
+  gap: 4px;
+}
+.planning-image-list img {
+  display: block;
+  width: 80px;
+  height: 60px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.planning-dialog :is(input, textarea, select) {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font: inherit;
+}
+.planning-dialog textarea {
+  resize: vertical;
+}
+.planning-columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+.planning-column,
+.planning-card,
+.planning-editor,
+.planning-preview {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  overflow-wrap: anywhere;
+}
+.planning-column,
+.planning-editor,
+.planning-preview {
+  background: var(--bg-panel);
+}
+.planning-card {
+  background: var(--bg);
+}
+.planning-column ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.planning-preview pre {
+  overflow: auto;
+}
+.planning-preview table {
+  display: block;
+  overflow: auto;
+}
+.planning-preview img {
+  max-width: 100%;
+}
+.planning-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.planning-muted {
+  color: var(--text-dim);
+}
+@media (max-width: 820px) {
+  .planning-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .planning-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .planning-dialog :is(input, textarea, select) {
+    font-size: 16px;
+  }
+}

@@ -59426,6 +59426,1977 @@
         }
       }
     },
+    "/api/planning": {
+      "get": {
+        "description": "### Usage\n\nPreview a saved Notes or task image.\n\n### Inputs\n\nProvide kind, ownerId, imageId and optional host.\n\n### Invariants\n\nThe authenticated owning daemon reads only images referenced by that board or its launch snapshots.\n\n### Effects\n\nReturns raster bytes without changing the board.\n\n### Recovery\n\nRefresh the board if an image was removed or the host reconnects.",
+        "operationId": "workspacePlanningImageGet",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "host",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "repo",
+                  "type": "string"
+                },
+                {
+                  "const": "system",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "ownerId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "imageId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/gif": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Saved raster image bytes"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host daemon does not support planning."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Read a saved planning image",
+        "x-client-semantics": {
+          "Effects": "Returns raster bytes without changing the board.",
+          "Inputs": "Provide kind, ownerId, imageId and optional host.",
+          "Invariants": "The authenticated owning daemon reads only images referenced by that board or its launch snapshots.",
+          "Recovery": "Refresh the board if an image was removed or the host reconnects.",
+          "Usage": "Preview a saved Notes or task image."
+        }
+      },
+      "post": {
+        "description": "### Usage\n\nRead or edit Repo and System notebooks and task boards, improve the contents of a task's Brief editor, or launch a saved task.\n\n### Inputs\n\nSelect an owning daemon and stable Repo or System ID. Writes use the current revision. Notes and tasks accept PNG, JPEG, GIF or WebP attachments. If launch or resume returns a review, repeat that action with confirmation and selected refs. Maximum request size is 8 MiB.\n\n### Invariants\n\nImprovement sends the Brief, target name and selected task images, never shared Notes or checkout contents. Saved attachment IDs must belong to the task.\n\n### Effects\n\nImprovement returns replacement text without saving edits. Launch snapshots saved Notes and task images (at most ten images and 5 MiB combined) with the literal first message. Refresh never resends an uncertain message.\n\n### Recovery\n\nRead the board after a conflict or lost reply. Resume a stale, unadmitted Effort to review a fresh plan under the same launch ID. Admitted Efforts retry their saved setup; never resend if first-message delivery is uncertain.",
+        "operationId": "workspacePlanningPost",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "description": "Read or edit a board, ask for an unsaved draft, or launch a saved task. Omit host for this machine.",
+                "properties": {
+                  "host": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "read",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "saveNotes",
+                            "type": "string"
+                          },
+                          "images": {
+                            "description": "Replacement attachment list. Use IDs to keep existing images, or include new image bytes. Omit to keep the list unchanged.",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "data": {
+                                      "description": "Base64 image bytes, without a data URL prefix.",
+                                      "maxLength": 6990508,
+                                      "minLength": 4,
+                                      "type": "string"
+                                    },
+                                    "mimeType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "image/png",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/jpeg",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/gif",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/webp",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["name", "mimeType", "data"],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxItems": 10,
+                            "type": "array"
+                          },
+                          "notes": {
+                            "description": "Free-form Markdown saved verbatim outside the checkout.",
+                            "maxLength": 131072,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["action", "notes", "revision"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "saveTask",
+                            "type": "string"
+                          },
+                          "brief": {
+                            "description": "One-line task description.",
+                            "maxLength": 240,
+                            "minLength": 1,
+                            "pattern": "^[^\\r\\n]+$",
+                            "type": "string"
+                          },
+                          "images": {
+                            "description": "Replacement attachment list. Use IDs to keep existing images, or include new image bytes. Omit to keep the list unchanged.",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "data": {
+                                      "description": "Base64 image bytes, without a data URL prefix.",
+                                      "maxLength": 6990508,
+                                      "minLength": 4,
+                                      "type": "string"
+                                    },
+                                    "mimeType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "image/png",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/jpeg",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/gif",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/webp",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["name", "mimeType", "data"],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxItems": 10,
+                            "type": "array"
+                          },
+                          "prompt": {
+                            "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                            "maxLength": 32768,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "backlog",
+                                "type": "string"
+                              },
+                              {
+                                "const": "ready",
+                                "type": "string"
+                              },
+                              {
+                                "const": "in_progress",
+                                "type": "string"
+                              },
+                              {
+                                "const": "done",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "brief", "prompt", "status"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "deleteTask",
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "taskId", "revision"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "draft",
+                            "type": "string"
+                          },
+                          "brief": {
+                            "description": "Current contents of the Brief editor to improve.",
+                            "maxLength": 32768,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "images": {
+                            "description": "Replacement attachment list. Use IDs to keep existing images, or include new image bytes. Omit to keep the list unchanged.",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "data": {
+                                      "description": "Base64 image bytes, without a data URL prefix.",
+                                      "maxLength": 6990508,
+                                      "minLength": 4,
+                                      "type": "string"
+                                    },
+                                    "mimeType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "image/png",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/jpeg",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/gif",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/webp",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["name", "mimeType", "data"],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxItems": 10,
+                            "type": "array"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "brief"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "launch",
+                            "type": "string"
+                          },
+                          "review": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "baseRef": {
+                                "type": "string"
+                              },
+                              "bases": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "repoPath": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["repoPath", "ref"],
+                                  "type": "object"
+                                },
+                                "maxItems": 200,
+                                "type": "array"
+                              },
+                              "confirmation": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["confirmation"],
+                            "type": "object"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "taskId", "revision"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "resume",
+                            "type": "string"
+                          },
+                          "review": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "baseRef": {
+                                "type": "string"
+                              },
+                              "bases": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "repoPath": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["repoPath", "ref"],
+                                  "type": "object"
+                                },
+                                "maxItems": 200,
+                                "type": "array"
+                              },
+                              "confirmation": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["confirmation"],
+                            "type": "object"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "taskId"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "refresh",
+                            "type": "string"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "taskId"],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "owner": {
+                    "additionalProperties": false,
+                    "description": "Stable Repo or System registration ID on the selected daemon, never a path.",
+                    "properties": {
+                      "id": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "const": "repo",
+                            "type": "string"
+                          },
+                          {
+                            "const": "system",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["kind", "id"],
+                    "type": "object"
+                  }
+                },
+                "required": ["owner", "input"],
+                "type": "object"
+              }
+            }
+          },
+          "description": "At most 8 MiB of JSON.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Board snapshot, unsaved model suggestion, or one-time setup review, depending on the operation.",
+                  "properties": {
+                    "board": {
+                      "description": "Host-owned Markdown notebook and task board. Revisions detect concurrent edits.",
+                      "properties": {
+                        "canLaunch": {
+                          "type": "boolean"
+                        },
+                        "imagePayloads": {
+                          "description": "Returned only when reading specific attached images; never included in board listings.",
+                          "items": {
+                            "properties": {
+                              "data": {
+                                "description": "Base64 image bytes, without a data URL prefix.",
+                                "maxLength": 6990508,
+                                "minLength": 4,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "anyOf": [
+                                  {
+                                    "const": "image/png",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/jpeg",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/gif",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/webp",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "type": {
+                                "const": "image",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["type", "mimeType", "data"],
+                            "type": "object"
+                          },
+                          "maxItems": 10,
+                          "type": "array"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "notes": {
+                          "description": "Free-form Markdown saved verbatim outside the checkout.",
+                          "maxLength": 131072,
+                          "type": "string"
+                        },
+                        "notesImages": {
+                          "items": {
+                            "properties": {
+                              "bytes": {
+                                "maximum": 5242880,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "id": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "anyOf": [
+                                  {
+                                    "const": "image/png",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/jpeg",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/gif",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/webp",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "name", "mimeType", "bytes"],
+                            "type": "object"
+                          },
+                          "maxItems": 10,
+                          "type": "array"
+                        },
+                        "notesRevision": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "tasks": {
+                          "items": {
+                            "description": "A planned task. Done is a manual board status, independent of launch and chat status.",
+                            "properties": {
+                              "brief": {
+                                "description": "One-line task description.",
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "pattern": "^[^\\r\\n]+$",
+                                "type": "string"
+                              },
+                              "id": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "images": {
+                                "items": {
+                                  "properties": {
+                                    "bytes": {
+                                      "maximum": 5242880,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "id": {
+                                      "maxLength": 128,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "mimeType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "image/png",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/jpeg",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/gif",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/webp",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name",
+                                    "mimeType",
+                                    "bytes"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 10,
+                                "type": "array"
+                              },
+                              "launch": {
+                                "additionalProperties": false,
+                                "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                                "properties": {
+                                  "effortId": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "error": {
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "images": {
+                                    "items": {
+                                      "properties": {
+                                        "bytes": {
+                                          "maximum": 5242880,
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "id": {
+                                          "maxLength": 128,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "mimeType": {
+                                          "anyOf": [
+                                            {
+                                              "const": "image/png",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "image/jpeg",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "image/gif",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "image/webp",
+                                              "type": "string"
+                                            }
+                                          ]
+                                        },
+                                        "name": {
+                                          "maxLength": 255,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "name",
+                                        "mimeType",
+                                        "bytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 10,
+                                    "type": "array"
+                                  },
+                                  "jobId": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "description": "One-line task description.",
+                                    "maxLength": 240,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\r\\n]+$",
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "phase": {
+                                    "anyOf": [
+                                      {
+                                        "const": "creating",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "setup_failed",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "review_required",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "ready",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "sending",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "sent",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "delivery_failed",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "delivery_unknown",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "prompt": {
+                                    "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                                    "maxLength": 32768,
+                                    "type": "string"
+                                  },
+                                  "retrySetup": {
+                                    "description": "An explicit setup retry is pending acknowledgement from the owning daemon.",
+                                    "type": "boolean"
+                                  },
+                                  "sendingSince": {
+                                    "description": "First-message claim time in epoch milliseconds.",
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "sessionId": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "setup": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "baseRef": {
+                                            "type": "string"
+                                          },
+                                          "branch": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "repo",
+                                            "type": "string"
+                                          },
+                                          "projectPath": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "projectPath",
+                                          "baseRef",
+                                          "branch"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "bases": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "ref": {
+                                                  "type": "string"
+                                                },
+                                                "repoPath": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": ["repoPath", "ref"],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 200,
+                                            "type": "array"
+                                          },
+                                          "confirmation": {
+                                            "maxLength": 128,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "system",
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "name",
+                                          "confirmation",
+                                          "bases"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ],
+                                    "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                                  },
+                                  "version": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version",
+                                  "phase",
+                                  "prompt",
+                                  "name"
+                                ],
+                                "type": "object"
+                              },
+                              "prompt": {
+                                "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                                "maxLength": 32768,
+                                "type": "string"
+                              },
+                              "revision": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "const": "backlog",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "ready",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "in_progress",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "done",
+                                    "type": "string"
+                                  }
+                                ],
+                                "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "revision",
+                              "brief",
+                              "prompt",
+                              "status"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "canLaunch",
+                        "notes",
+                        "notesRevision",
+                        "tasks"
+                      ],
+                      "type": "object"
+                    },
+                    "draft": {
+                      "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                      "maxLength": 32768,
+                      "type": "string"
+                    },
+                    "review": {
+                      "description": "Review required before creating a Workspace or Effort. Echo the confirmation and any chosen refs to continue.",
+                      "properties": {
+                        "confirmation": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "effort": {
+                          "description": "Non-mutating preview for creating one branch and worktree in each System member.",
+                          "properties": {
+                            "branch": {
+                              "type": "string"
+                            },
+                            "confirmation": {
+                              "description": "Opaque fingerprint of the previewed definition, paths, and resolved Git commits.",
+                              "type": "string"
+                            },
+                            "members": {
+                              "items": {
+                                "properties": {
+                                  "baseCommit": {
+                                    "type": "string"
+                                  },
+                                  "baseRef": {
+                                    "type": "string"
+                                  },
+                                  "branches": {
+                                    "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
+                                    "properties": {
+                                      "defaultRef": {
+                                        "description": "Full Git ref for the default base, or an empty string if no default is available.",
+                                        "type": "string"
+                                      },
+                                      "local": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "originAheadRef": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                                      },
+                                      "otherRefs": {
+                                        "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "pullRequests": {
+                                        "anyOf": [
+                                          {
+                                            "items": {
+                                              "properties": {
+                                                "isDraft": {
+                                                  "type": "boolean"
+                                                },
+                                                "number": {
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                },
+                                                "title": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "number",
+                                                "title",
+                                                "isDraft"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "type": "array"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                                      },
+                                      "remote": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "local",
+                                      "remote",
+                                      "defaultRef",
+                                      "originAheadRef",
+                                      "otherRefs",
+                                      "pullRequests"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "repoPath": {
+                                    "type": "string"
+                                  },
+                                  "skipsCustomCreate": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "repoPath",
+                                  "name",
+                                  "path",
+                                  "baseRef",
+                                  "baseCommit",
+                                  "skipsCustomCreate"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "root": {
+                              "type": "string"
+                            },
+                            "slug": {
+                              "type": "string"
+                            },
+                            "systemId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "systemId",
+                            "name",
+                            "slug",
+                            "root",
+                            "branch",
+                            "members",
+                            "confirmation"
+                          ],
+                          "type": "object"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "repo": {
+                          "properties": {
+                            "baseRef": {
+                              "type": "string"
+                            },
+                            "branches": {
+                              "description": "Point-in-time local and remote branch choices and default base ref for a host project.",
+                              "properties": {
+                                "defaultRef": {
+                                  "description": "Full Git ref for the default base, or an empty string if no default is available.",
+                                  "type": "string"
+                                },
+                                "local": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "originAheadRef": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "Full origin default ref if it contains commits missing from its local counterpart, otherwise null."
+                                },
+                                "otherRefs": {
+                                  "description": "Full local and remote-tracking refs not checked out in a worktree, excluding the primary choices. Local refs appear first.",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "pullRequests": {
+                                  "anyOf": [
+                                    {
+                                      "items": {
+                                        "properties": {
+                                          "isDraft": {
+                                            "type": "boolean"
+                                          },
+                                          "number": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "title": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "number",
+                                          "title",
+                                          "isDraft"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "Open GitHub pull requests, including drafts. Null if GitHub is configured but the host couldn't load the list."
+                                },
+                                "remote": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "local",
+                                "remote",
+                                "defaultRef",
+                                "originAheadRef",
+                                "otherRefs",
+                                "pullRequests"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": ["branches", "baseRef"],
+                          "type": "object"
+                        }
+                      },
+                      "required": ["confirmation", "name"],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request or rejected operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The requested resource does not exist."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Board or launch state changed, or the target cannot launch."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The request body or the combined attachment budget exceeds its limit."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The host daemon does not support planning."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The planning model was unavailable or did not return a usable draft."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or required service is unavailable."
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The owning host or planning model did not answer in time."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Manage Repo and System notes, tasks, and launches",
+        "x-client-semantics": {
+          "Effects": "Improvement returns replacement text without saving edits. Launch snapshots saved Notes and task images (at most ten images and 5 MiB combined) with the literal first message. Refresh never resends an uncertain message.",
+          "Inputs": "Select an owning daemon and stable Repo or System ID. Writes use the current revision. Notes and tasks accept PNG, JPEG, GIF or WebP attachments. If launch or resume returns a review, repeat that action with confirmation and selected refs. Maximum request size is 8 MiB.",
+          "Invariants": "Improvement sends the Brief, target name and selected task images, never shared Notes or checkout contents. Saved attachment IDs must belong to the task.",
+          "Recovery": "Read the board after a conflict or lost reply. Resume a stale, unadmitted Effort to review a fresh plan under the same launch ID. Admitted Efforts retry their saved setup; never resend if first-message delivery is uncertain.",
+          "Usage": "Read or edit Repo and System notebooks and task boards, improve the contents of a task's Brief editor, or launch a saved task."
+        }
+      }
+    },
     "/api/plugins": {
       "get": {
         "description": "### Usage\n\nList installed plugins, resources and diagnostics.\n\n### Inputs\n\nOptional cwd must be allowed; without it only user-level plugins are listed.\n\n### Invariants\n\nInventory reflects the local omp installation.\n\n### Effects\n\nExecutes omp plugin listing and scans resources.\n\n### Recovery\n\nCorrect access or CLI errors and retry the read.",
@@ -92947,6 +94918,9 @@
                             "const": "preview",
                             "type": "string"
                           },
+                          "allowUnresolved": {
+                            "type": "boolean"
+                          },
                           "bases": {
                             "items": {
                               "properties": {
@@ -92961,6 +94935,10 @@
                               "type": "object"
                             },
                             "type": "array"
+                          },
+                          "branchKey": {
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$",
+                            "type": "string"
                           },
                           "name": {
                             "type": "string"
@@ -92993,11 +94971,26 @@
                             },
                             "type": "array"
                           },
+                          "branchKey": {
+                            "pattern": "^[a-zA-Z0-9_-]{1,128}$",
+                            "type": "string"
+                          },
                           "confirmation": {
+                            "type": "string"
+                          },
+                          "creationId": {
+                            "description": "Stable launch identity for idempotent Effort admission.",
+                            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
                             "type": "string"
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "planningVersion": {
+                            "description": "Current planning launch version; required with a planned creation ID.",
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
                           },
                           "systemId": {
                             "type": "string"
@@ -93016,6 +95009,10 @@
                           "action": {
                             "const": "retry",
                             "type": "string"
+                          },
+                          "attempt": {
+                            "minimum": 0,
+                            "type": "integer"
                           },
                           "effortId": {
                             "type": "string"
@@ -100489,11 +102486,17 @@
                     {
                       "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
                       "properties": {
+                        "baseCommit": {
+                          "type": "string"
+                        },
                         "error": {
                           "type": "string"
                         },
                         "id": {
                           "type": "string"
+                        },
+                        "includesDone": {
+                          "type": "boolean"
                         },
                         "input": {
                           "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -100502,6 +102505,10 @@
                               "type": "string"
                             },
                             "branch": {
+                              "type": "string"
+                            },
+                            "creationId": {
+                              "format": "uuid",
                               "type": "string"
                             },
                             "mode": {
@@ -100526,6 +102533,10 @@
                             },
                             "projectPath": {
                               "type": "string"
+                            },
+                            "retryAttempt": {
+                              "minimum": 0,
+                              "type": "integer"
                             }
                           },
                           "required": [
@@ -100540,6 +102551,10 @@
                         "logs": {
                           "description": "Captured command output for this creation job.",
                           "type": "string"
+                        },
+                        "nextCommand": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "paseo": {
                           "properties": {
@@ -100588,6 +102603,10 @@
                             "postNonBlocking"
                           ],
                           "type": "object"
+                        },
+                        "retryAttempt": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "source": {
                           "anyOf": [
@@ -100978,6 +102997,10 @@
                           "branch": {
                             "type": "string"
                           },
+                          "creationId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
                           "mode": {
                             "anyOf": [
                               {
@@ -101000,6 +103023,10 @@
                           },
                           "projectPath": {
                             "type": "string"
+                          },
+                          "retryAttempt": {
+                            "minimum": 0,
+                            "type": "integer"
                           }
                         },
                         "required": [
@@ -101238,11 +103265,17 @@
                     {
                       "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
                       "properties": {
+                        "baseCommit": {
+                          "type": "string"
+                        },
                         "error": {
                           "type": "string"
                         },
                         "id": {
                           "type": "string"
+                        },
+                        "includesDone": {
+                          "type": "boolean"
                         },
                         "input": {
                           "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -101251,6 +103284,10 @@
                               "type": "string"
                             },
                             "branch": {
+                              "type": "string"
+                            },
+                            "creationId": {
+                              "format": "uuid",
                               "type": "string"
                             },
                             "mode": {
@@ -101275,6 +103312,10 @@
                             },
                             "projectPath": {
                               "type": "string"
+                            },
+                            "retryAttempt": {
+                              "minimum": 0,
+                              "type": "integer"
                             }
                           },
                           "required": [
@@ -101289,6 +103330,10 @@
                         "logs": {
                           "description": "Captured command output for this creation job.",
                           "type": "string"
+                        },
+                        "nextCommand": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "paseo": {
                           "properties": {
@@ -101337,6 +103382,10 @@
                             "postNonBlocking"
                           ],
                           "type": "object"
+                        },
+                        "retryAttempt": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "source": {
                           "anyOf": [

@@ -7,7 +7,11 @@ import { promisify } from "node:util";
 import { getAgentDir } from "../omp/paths";
 import { parseGithubRemoteUrl, resolveGithubRepo } from "../github-repo";
 import { createGitEnvironment } from "../project-command-env";
-import { invalidateProjectCache, listWorktrees, removeWorktree } from "../worktree";
+import {
+  invalidateProjectCache,
+  listWorktrees,
+  removeWorktree,
+} from "../worktree";
 import { isRecord } from "../type-guards";
 import type {
   WorkspaceBranches,
@@ -307,11 +311,17 @@ export async function workspaceBranches(
     remotes.map(async (name) => {
       const prefix = `${remoteRef}${name}/`;
       const [fetched, advertised] = await Promise.all([
-        options.localOnly ? false : git(cwd, ["fetch", "--prune", "--", name], remoteTimeout).then(
-          () => true,
-          () => false,
-        ),
-        git(cwd, ["ls-remote", "--symref", "--", name, "HEAD"], remoteTimeout).catch(() => ""),
+        options.localOnly
+          ? false
+          : git(cwd, ["fetch", "--prune", "--", name], remoteTimeout).then(
+              () => true,
+              () => false,
+            ),
+        git(
+          cwd,
+          ["ls-remote", "--symref", "--", name, "HEAD"],
+          remoteTimeout,
+        ).catch(() => ""),
       ]);
       const branch = /^ref: refs\/heads\/(.+)\tHEAD$/m.exec(advertised)?.[1];
       const cached = branch
@@ -383,7 +393,8 @@ export async function workspaceBranches(
 
   let originAheadRef: string | null = null;
   if (
-    origin && (origin.fetched || options.localOnly) &&
+    origin &&
+    (origin.fetched || options.localOnly) &&
     origin.branch &&
     remote.has(origin.ref) &&
     defaultRef === `${localRef}${origin.branch}`
@@ -408,7 +419,10 @@ export async function workspaceBranches(
   };
 }
 
-export async function resolvePullRequest(cwd: string, ref: string): Promise<string> {
+export async function resolvePullRequest(
+  cwd: string,
+  ref: string,
+): Promise<string> {
   const repo = await resolveGithubRepo(cwd);
   if (!repo)
     throw new HostOpError(
@@ -574,7 +588,9 @@ export async function runEffortWorkspaceJob(
   job: WorkspaceCreationJob,
   requested: string,
   paseo: WorkspacePaseoPreview | null,
-  executeSteps: (runCommand: (command: string, cwd: string) => Promise<void>) => Promise<void>,
+  executeSteps: (
+    runCommand: (command: string, cwd: string) => Promise<void>,
+  ) => Promise<void>,
 ): Promise<void> {
   const env = setupEnvironment(job, requested, paseo);
   active.set(job.id, job);
@@ -614,17 +630,19 @@ function setupEnvironment(
     OMP_BRANCH_MODE: input.mode,
     ...(resultFile ? { OMP_CREATE_RESULT: resultFile } : {}),
     GIT_TERMINAL_PROMPT: "0",
-    ...(paseo ? {
-      PASEO_PROJECT_PATH: input.projectPath,
-      PASEO_WORKSPACE_PATH: requested,
-      PASEO_BRANCH: input.branch,
-      PASEO_BASE_REF: input.baseRef,
-      PASEO_BRANCH_MODE: input.mode,
-      ...(resultFile ? { PASEO_CREATE_RESULT: resultFile } : {}),
-      PASEO_SOURCE_CHECKOUT_PATH: input.projectPath,
-      PASEO_WORKTREE_PATH: requested,
-      PASEO_BRANCH_NAME: input.branch,
-    } : {}),
+    ...(paseo
+      ? {
+          PASEO_PROJECT_PATH: input.projectPath,
+          PASEO_WORKSPACE_PATH: requested,
+          PASEO_BRANCH: input.branch,
+          PASEO_BASE_REF: input.baseRef,
+          PASEO_BRANCH_MODE: input.mode,
+          ...(resultFile ? { PASEO_CREATE_RESULT: resultFile } : {}),
+          PASEO_SOURCE_CHECKOUT_PATH: input.projectPath,
+          PASEO_WORKTREE_PATH: requested,
+          PASEO_BRANCH_NAME: input.branch,
+        }
+      : {}),
   });
 }
 async function execute(
@@ -636,13 +654,35 @@ async function execute(
   const resultFile = path.join(root(), `result-${job.id}.json`);
   const env = setupEnvironment(job, requested, paseo, resultFile);
   try {
-    for (const cmd of pipeline.pre) await run(cmd, input.projectPath, env, job);
-    job.stage = "create";
-    persist(job);
-    if (pipeline.create.length) {
-      for (const cmd of pipeline.create)
-        await run(cmd, input.projectPath, env, job);
-    } else {
+    const commands = async (list: string[], cwd: string) => {
+      for (let i = job.nextCommand ?? 0; i < list.length; i++) {
+        await run(list[i], cwd, env, job);
+        job.nextCommand = i + 1;
+        persist(job);
+      }
+    };
+    if (job.stage === "pre") {
+      await commands(pipeline.pre, input.projectPath);
+      job.stage = "create";
+      job.nextCommand = 0;
+      persist(job);
+    }
+    if (job.stage === "create" && pipeline.create.length) {
+      // A custom command may have created a worktree before its failure or
+      // before the daemon recorded its success. Don't create it a second time.
+      if (
+        job.retryAttempt !== undefined &&
+        (job.nextCommand ?? 0) < pipeline.create.length &&
+        (fs.existsSync(requested) || fs.existsSync(resultFile))
+      )
+        throw new Error(
+          "Custom creation did not finish but left a checkout or result file; inspect it before retrying",
+        );
+      await commands(pipeline.create, input.projectPath);
+    } else if (
+      job.stage === "create" &&
+      (job.retryAttempt === undefined || !fs.existsSync(requested))
+    ) {
       const args = ["worktree", "add"];
       if (input.mode === "new") args.push("-b", input.branch);
       else if (input.mode === "remote")
@@ -650,7 +690,9 @@ async function execute(
       args.push(
         "--",
         requested,
-        input.mode === "local" ? input.branch : input.baseRef,
+        input.mode === "local"
+          ? input.branch
+          : (job.baseCommit ?? input.baseRef),
       );
       await run(
         `git ${args.map((arg) => `'${arg.replace(/'/g, "'\\''")}'`).join(" ")}`,
@@ -660,47 +702,84 @@ async function execute(
       );
     }
     const result = read<{ path?: unknown }>(resultFile, {});
-    const actual = typeof result.path === "string" ? result.path : requested;
+    const actual =
+      job.workspacePath ??
+      (typeof result.path === "string" ? result.path : requested);
     if (!path.isAbsolute(actual))
       throw new Error("Create result path must be absolute");
     const actualReal = fs.realpathSync(actual);
     if (isEffortPath(actualReal))
-      throw new HostOpError(409, "effort_owned", "A standalone workspace cannot adopt an Effort path");
+      throw new HostOpError(
+        409,
+        "effort_owned",
+        "A standalone workspace cannot adopt an Effort path",
+      );
     const worktree = (await listWorktrees(input.projectPath)).find(
       (w) => fs.realpathSync(w.path) === actualReal && !w.isMain,
     );
-    if (!worktree)
-      throw new Error("Create result is not a linked worktree of this project");
+    if (
+      !worktree ||
+      (!pipeline.create.length && worktree.branch !== input.branch)
+    )
+      throw new Error(
+        "Create result is not the expected linked worktree of this project",
+      );
     job.workspacePath = worktree.path;
-    job.stage = "postBlocking";
-    const workspace = registerCreatedWorkspace(
-      input.projectPath,
-      worktree.path,
-      worktree.branch ?? input.branch,
-      { status: "running", jobId: job.id, stage: job.stage },
-      input.name,
-    );
-    job.workspaceId = workspace.id;
+    if (job.stage === "create") {
+      job.stage = "postBlocking";
+      job.nextCommand = 0;
+    }
+    const registered = readHierarchy()
+      .projects.flatMap(({ workspaces }) => workspaces)
+      .find(({ path: cwd }) => cwd === actualReal);
+    if (
+      (job.workspaceId && registered?.id !== job.workspaceId) ||
+      (registered && registered.setup?.jobId !== job.id)
+    )
+      throw new Error("Workspace registration changed during setup");
+    const setup = {
+      status: "running" as const,
+      jobId: job.id,
+      stage: job.stage,
+    };
+    if (registered) {
+      job.workspaceId = registered.id;
+      updateWorkspaceSetup(registered.id, setup);
+    } else {
+      job.workspaceId = registerCreatedWorkspace(
+        input.projectPath,
+        worktree.path,
+        worktree.branch ?? input.branch,
+        setup,
+        input.name,
+      ).id;
+    }
+    const workspaceId = job.workspaceId;
     persist(job);
     env.OMP_WORKSPACE_PATH = worktree.path;
     if (paseo) {
       env.PASEO_WORKSPACE_PATH = worktree.path;
       env.PASEO_WORKTREE_PATH = worktree.path;
-      copyPaseoIncludes(input.projectPath, worktree.path, paseo);
+      if (!job.includesDone) {
+        copyPaseoIncludes(input.projectPath, worktree.path, paseo);
+        job.includesDone = true;
+        persist(job);
+      }
     }
-    for (const cmd of pipeline.postBlocking)
-      await run(cmd, worktree.path, env, job);
-    job.stage = "postNonBlocking";
-    persist(job);
-    updateWorkspaceSetup(workspace.id, {
-      status: "running",
-      jobId: job.id,
-      stage: job.stage,
-    });
-    for (const cmd of pipeline.postNonBlocking)
-      await run(cmd, worktree.path, env, job);
+    if (job.stage === "postBlocking") {
+      await commands(pipeline.postBlocking, worktree.path);
+      job.stage = "postNonBlocking";
+      job.nextCommand = 0;
+      persist(job);
+      updateWorkspaceSetup(workspaceId, {
+        status: "running",
+        jobId: job.id,
+        stage: job.stage,
+      });
+    }
+    await commands(pipeline.postNonBlocking, worktree.path);
     job.status = "complete";
-    updateWorkspaceSetup(workspace.id, {
+    updateWorkspaceSetup(workspaceId, {
       status: "complete",
       jobId: job.id,
       stage: job.stage,
@@ -723,9 +802,11 @@ async function execute(
     persist(job);
     active.delete(job.id);
     interrupted.delete(job.id);
-    try {
-      fs.unlinkSync(resultFile);
-    } catch {}
+    if (job.status === "complete") {
+      try {
+        fs.unlinkSync(resultFile);
+      } catch {}
+    }
   }
 }
 export async function createWorkspace(
@@ -752,28 +833,80 @@ export async function createWorkspace(
       "Invalid workspace creation request",
     );
   await git(input.projectPath, ["check-ref-format", "--branch", input.branch]);
-  if (
+  const directoryName = input.branch.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const { retryAttempt, ...intent } = input;
+  input = intent;
+  const id = input.creationId ?? randomUUID();
+  if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id))
+    throw new HostOpError(
+      400,
+      "invalid_request",
+      "Invalid workspace creation ID",
+    );
+  const { pipeline, source, paseo } = await workspaceSetupPlan(
+    input.projectPath,
+  );
+  const previouslyAdmitted = active.has(id) || fs.existsSync(jobFile(id));
+  const baseCommit =
+    !previouslyAdmitted &&
     input.mode === "new" &&
     /^refs\/pull\/[1-9]\d*\/head$/.test(input.baseRef)
-  )
-    input = {
-      ...input,
-      baseRef: await resolvePullRequest(input.projectPath, input.baseRef),
-    };
-  const directoryName = input.branch.replace(/[^a-zA-Z0-9._-]/g, "-");
+      ? await resolvePullRequest(input.projectPath, input.baseRef)
+      : undefined;
+  const existing =
+    active.get(id) ?? read<WorkspaceCreationJob | null>(jobFile(id), null);
+  if (existing) {
+    if (
+      existing.input.projectPath !== input.projectPath ||
+      existing.input.branch !== input.branch ||
+      existing.input.mode !== input.mode ||
+      existing.input.baseRef !== input.baseRef ||
+      existing.input.name !== input.name
+    )
+      throw new HostOpError(
+        409,
+        "workspace_creation_conflict",
+        "Workspace creation ID already has a different request",
+      );
+    if (
+      retryAttempt === undefined ||
+      (existing.retryAttempt ?? -1) >= retryAttempt ||
+      existing.status === "running" ||
+      existing.status === "complete"
+    )
+      return existing;
+    if (existing.paseo?.fingerprint !== paseo?.fingerprint)
+      throw new HostOpError(
+        409,
+        "workspace_setup_changed",
+        "The Paseo recipe changed since setup started",
+      );
+    existing.retryAttempt = retryAttempt;
+    existing.status = "running";
+    delete existing.error;
+    return startWorkspaceJob(
+      existing,
+      path.join(`${input.projectPath}-worktrees`, directoryName),
+      paseo,
+    );
+  }
   const requested = path.join(`${input.projectPath}-worktrees`, directoryName);
   if (isEffortPath(requested))
-    throw new HostOpError(409, "effort_owned", "A standalone workspace cannot use an Effort path");
+    throw new HostOpError(
+      409,
+      "effort_owned",
+      "A standalone workspace cannot use an Effort path",
+    );
   if (fs.existsSync(requested))
     throw new HostOpError(
       409,
       "workspace_exists",
       "Workspace path already exists",
     );
-  const { pipeline, source, paseo } = await workspaceSetupPlan(input.projectPath);
   const job: WorkspaceCreationJob = {
-    id: randomUUID(),
+    id,
     input,
+    baseCommit,
     pipeline,
     source,
     ...(paseo?.fingerprint
@@ -785,8 +918,15 @@ export async function createWorkspace(
       ? `Paseo recipe: ${paseo.path} (sha256 ${paseo.fingerprint})\n`
       : "",
   };
-  active.set(job.id, job);
+  return startWorkspaceJob(job, requested, paseo);
+}
+function startWorkspaceJob(
+  job: WorkspaceCreationJob,
+  requested: string,
+  paseo: WorkspacePaseoPreview | null,
+) {
   persist(job);
+  active.set(job.id, job);
   const task = execute(job, requested, paseo);
   running.set(job.id, task);
   void task.finally(() => running.delete(job.id));
@@ -797,7 +937,9 @@ export type WorkspaceSetupPlan = {
   source: WorkspaceCreationSettings["source"];
   paseo: WorkspacePaseoPreview | null;
 };
-export async function workspaceSetupPlan(projectPath: string): Promise<WorkspaceSetupPlan> {
+export async function workspaceSetupPlan(
+  projectPath: string,
+): Promise<WorkspaceSetupPlan> {
   const config = await workspaceCreationSettings({ projectPath });
   const paseo = config.source === "paseo" ? config.paseo : null;
   if (
@@ -850,15 +992,33 @@ const deleting = new Set<string>();
 export async function removeRegisteredWorktree(
   input: WorkspaceDeleteRequest,
   beforeRemove?: (workspacePath: string) => Promise<void>,
-  effort?: { fencedRoot: string; processes: WorkspaceDeletionAdapter; verify: () => Promise<void> },
+  effort?: {
+    fencedRoot: string;
+    processes: WorkspaceDeletionAdapter;
+    verify: () => Promise<void>;
+  },
 ): Promise<WorkspaceDeleteResult> {
   recoverWorkspaceCreation();
   if (!effort && isEffortPath(input.path))
-    throw new HostOpError(409, "effort_owned", "Use Effort cleanup to remove this worktree");
+    throw new HostOpError(
+      409,
+      "effort_owned",
+      "Use Effort cleanup to remove this worktree",
+    );
   if (effort) {
     const relative = path.relative(effort.fencedRoot, input.path);
-    if (!relative || path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`) || !isEffortPath(input.path))
-      throw new HostOpError(409, "effort_owned", "The worktree must be inside the fenced Effort");
+    if (
+      !relative ||
+      path.isAbsolute(relative) ||
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      !isEffortPath(input.path)
+    )
+      throw new HostOpError(
+        409,
+        "effort_owned",
+        "The worktree must be inside the fenced Effort",
+      );
   }
   const adapter = effort?.processes ?? deletionAdapter;
   const owner = project(input.projectPath);
@@ -895,7 +1055,8 @@ export async function removeRegisteredWorktree(
   }
   // The caller already holds a fence covering the entire Effort. The daemon
   // rejects overlapping fences, including one on a member checkout.
-  const release = previous?.release ?? (effort ? undefined : adapter.fence(workspace.path));
+  const release =
+    previous?.release ?? (effort ? undefined : adapter.fence(workspace.path));
   deleting.add(workspace.path);
   let held = false;
   const hold = () => {
@@ -938,7 +1099,13 @@ export async function removeRegisteredWorktree(
       // The Effort owns an exact checkout identity, not a mutable teardown recipe.
       if (beforeRemove) await beforeRemove(workspace.path);
       await effort.verify();
-      await git(input.projectPath, ["worktree", "remove", ...(input.discardChanges ? ["--force"] : []), "--", workspace.path]);
+      await git(input.projectPath, [
+        "worktree",
+        "remove",
+        ...(input.discardChanges ? ["--force"] : []),
+        "--",
+        workspace.path,
+      ]);
       invalidateProjectCache();
       unregisterDeletedWorkspace(workspace.path);
       return { status: "deleted" };
@@ -1165,7 +1332,11 @@ export async function removeRegisteredWorktree(
       }
     }
     if (beforeRemove) await beforeRemove(workspace.path);
-    await removeWorktree(input.projectPath, workspace.path, input.discardChanges);
+    await removeWorktree(
+      input.projectPath,
+      workspace.path,
+      input.discardChanges,
+    );
     unregisterDeletedWorkspace(workspace.path);
     if (branch && (merged || input.keepBranch === false))
       await git(input.projectPath, ["branch", "-D", "--", branch]);

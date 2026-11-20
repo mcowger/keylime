@@ -1,7 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { planningOperation } from "../lib/hosts/planning";
 import { hierarchyOperation } from "../lib/hosts/project-hierarchy";
+import { systemsOperation, type SystemsRuntime } from "../lib/hosts/systems";
+import { TerminalManager } from "../lib/hosts/terminals";
 import { getSessionDirNameForCwd, getSessionsDir } from "../lib/omp/paths";
 import { saveWebServerSettings } from "../lib/web-settings";
 
@@ -14,9 +17,17 @@ if (
 )
   throw new Error("UI fixtures require the isolated dev launcher");
 
-const skillDir = path.join(process.env.HOME!, ".agents", "skills", "atlas-review");
+const skillDir = path.join(
+  process.env.HOME!,
+  ".agents",
+  "skills",
+  "atlas-review",
+);
 mkdirSync(skillDir, { recursive: true });
-writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: atlas-review\ndescription: Review Atlas changes\n---\n\nReview the workspace changes.\n");
+writeFileSync(
+  path.join(skillDir, "SKILL.md"),
+  "---\nname: atlas-review\ndescription: Review Atlas changes\n---\n\nReview the workspace changes.\n",
+);
 
 const projectsDir = path.join(root, "projects");
 mkdirSync(projectsDir, { recursive: true });
@@ -87,10 +98,26 @@ writeFileSync(
 // Keep this checkout out of Repos so the System directory picker exercises both sources.
 const serviceRepo = path.join(projects, "atlas-service");
 mkdirSync(serviceRepo);
-execFileSync("git", ["-C", serviceRepo, "init", "-b", "main"], { stdio: "pipe" });
+execFileSync("git", ["-C", serviceRepo, "init", "-b", "main"], {
+  stdio: "pipe",
+});
 writeFileSync(path.join(serviceRepo, "README.md"), "# Atlas service\n");
 execFileSync("git", ["-C", serviceRepo, "add", "README.md"], { stdio: "pipe" });
-execFileSync("git", ["-C", serviceRepo, "-c", "user.name=UI Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "Initial fixture"], { stdio: "pipe" });
+execFileSync(
+  "git",
+  [
+    "-C",
+    serviceRepo,
+    "-c",
+    "user.name=UI Fixture",
+    "-c",
+    "user.email=fixture@example.invalid",
+    "commit",
+    "-m",
+    "Initial fixture",
+  ],
+  { stdio: "pipe" },
+);
 
 const sessions = [
   {
@@ -166,55 +193,258 @@ for (const session of sessions) {
     },
     ...("skillTurn" in session && session.skillTurn
       ? (() => {
-          const prompt = "Please review the Atlas search plan with /skill:atlas-review.\n\nStart with **empty queries**, then check whether the plan covers long paths and failed lookups. Keep the review focused on behavior that a reader can verify.";
+          const prompt =
+            "Please review the Atlas search plan with /skill:atlas-review.\n\nStart with **empty queries**, then check whether the plan covers long paths and failed lookups. Keep the review focused on behavior that a reader can verify.";
           return [
-            { type: "custom_message", id: "00000003", parentId: "00000002", timestamp, customType: "eval-state-context", display: false, content: "Eval runtime state" },
-            { type: "custom_message", id: "00000004", parentId: "00000003", timestamp, customType: "skill-prompt", display: true, attribution: "user", content: `[IMPORTANT: User invoked the "atlas-review" skill; follow its instructions. Full skill below.]\n\nReview the workspace changes.\n\nUser:\n${prompt}`, details: { name: "atlas-review", prompt } },
-            { type: "message", id: "00000005", parentId: "00000004", timestamp, message: { role: "assistant", content: [
-              { type: "toolCall", id: "skill-turn-read", name: "read", arguments: { path: "ideas.md" } },
-              { type: "text", text: "Start by checking what the search returns for an empty query." },
-            ], timestamp: 1767225604000 } },
+            {
+              type: "custom_message",
+              id: "00000003",
+              parentId: "00000002",
+              timestamp,
+              customType: "eval-state-context",
+              display: false,
+              content: "Eval runtime state",
+            },
+            {
+              type: "custom_message",
+              id: "00000004",
+              parentId: "00000003",
+              timestamp,
+              customType: "skill-prompt",
+              display: true,
+              attribution: "user",
+              content: `[IMPORTANT: User invoked the "atlas-review" skill; follow its instructions. Full skill below.]\n\nReview the workspace changes.\n\nUser:\n${prompt}`,
+              details: { name: "atlas-review", prompt },
+            },
+            {
+              type: "message",
+              id: "00000005",
+              parentId: "00000004",
+              timestamp,
+              message: {
+                role: "assistant",
+                content: [
+                  {
+                    type: "toolCall",
+                    id: "skill-turn-read",
+                    name: "read",
+                    arguments: { path: "ideas.md" },
+                  },
+                  {
+                    type: "text",
+                    text: "Start by checking what the search returns for an empty query.",
+                  },
+                ],
+                timestamp: 1767225604000,
+              },
+            },
           ];
         })()
       : []),
     ...("tasks" in session && session.tasks
-      ? [{
-          type: "custom",
-          id: "00000003",
-          parentId: "00000002",
-          timestamp,
-          customType: "user_todo_edit",
-          data: { phases: [{ name: "Tasks", tasks: session.tasks }] },
-        }]
-      : []),
-    ...("advisor" in session && session.advisor
-      ? [{
-          type: "message",
-          id: "00000004",
-          parentId: "00000003",
-          timestamp,
-          message: { role: "custom", customType: "advisor", display: true, content: session.advisor, details: { notes: [{ note: session.advisor, severity: "concern" }] }, timestamp: 1767225602000 },
-        }]
-      : []),
-    ...("advisor" in session && session.advisor
-      ? [{
-          type: "message",
-          id: "00000005",
-          parentId: "00000004",
-          timestamp,
-          message: { role: "custom", customType: "lsp-late-diagnostic", display: true, content: `<system-notice>\nLate LSP diagnostics arrived after the edit returned:\n${repo}/src/index.ts — 1 error(s), 1 warning(s)\n${repo}/src/index.ts:12:8 [error] [ts] Type 'string' is not assignable to type 'number'.\n  The expected type comes from the return value.\n${repo}/src/index.ts:15:3 [warning] [eslint] Unused variable 'result'.\n</system-notice>`, timestamp: 1767225603000 },
-        }]
+      ? [
+          {
+            type: "custom",
+            id: "00000003",
+            parentId: "00000002",
+            timestamp,
+            customType: "user_todo_edit",
+            data: { phases: [{ name: "Tasks", tasks: session.tasks }] },
+          },
+        ]
       : []),
     ...("advisor" in session && session.advisor
       ? [
-          { type: "message", id: "00000006", parentId: "00000005", timestamp, message: { role: "custom", customType: "async-result", display: true, content: `<system-notice>\nBackground job bg_1 completed.\n${repo}/src/index.ts\nA long result with preserved line breaks and a path that wraps on narrow screens.\n  Indented output remains intact.\n</system-notice>`, details: { jobs: [{ jobId: "bg_1", type: "task", status: "completed", label: "Search review", durationMs: 194633 }] }, timestamp: 1767225604000 } },
-          { type: "message", id: "00000007", parentId: "00000006", timestamp, message: { role: "custom", customType: "developer", display: true, content: '<system-reminder reason="rule_violation" rule="example">\nReview **error handling** before continuing.\n</system-reminder>', details: { rule: "example" }, timestamp: 1767225605000 } },
-          { type: "message", id: "00000008", parentId: "00000007", timestamp, message: { role: "custom", customType: "job-result", display: true, content: "Search review finished.", details: { jobs: [{ jobId: "bg_2", type: "task", status: "failed", label: "Index check", durationMs: 211815 }] }, timestamp: 1767225606000 } },
-          { type: "message", id: "00000009", parentId: "00000008", timestamp, message: { role: "assistant", content: [{ type: "toolCall", id: "hub-seed", name: "hub", arguments: { op: "send", to: "SearchReview", message: "# Search review\n\nPlease check **error handling** and the `src/index.ts` path.\n\n- Check empty queries.\n- Report any failures." } }], timestamp: 1767225607000 } },
-          { type: "message", id: "0000000a", parentId: "00000009", timestamp, message: { role: "toolResult", toolCallId: "hub-seed", toolName: "hub", content: [{ type: "text", text: "Delivered to SearchReview" }], details: { op: "send", receipts: [{ to: "SearchReview", outcome: "injected" }] }, timestamp: 1767225608000 } },
-          { type: "message", id: "0000000b", parentId: "0000000a", timestamp, message: { role: "custom", customType: "irc:incoming", display: true, content: "<irc>\nIncoming IRC message from agent `SearchReview`:\n# Search review findings\n\n**Error handling** needs a closer look in `src/index.ts`.\n\n- Empty queries return no results.\n- Failed lookups should show an error.\n\nSee [the project readme](README.md) for context.", timestamp: 1767225609000 } },
-          { type: "message", id: "0000000c", parentId: "0000000b", timestamp, message: { role: "assistant", content: [{ type: "toolCall", id: "agent-seed", name: "write", arguments: { i: "Coordinate search review", path: "agent://SearchReview", content: "Please review the search error handling and report any failures. Check empty queries and long paths on narrow screens." } }], timestamp: 1767225610000 } },
-          { type: "message", id: "0000000d", parentId: "0000000c", timestamp, message: { role: "toolResult", toolCallId: "agent-seed", toolName: "write", content: [{ type: "text", text: "Delivered to SearchReview." }], timestamp: 1767225611000 } },
+          {
+            type: "message",
+            id: "00000004",
+            parentId: "00000003",
+            timestamp,
+            message: {
+              role: "custom",
+              customType: "advisor",
+              display: true,
+              content: session.advisor,
+              details: {
+                notes: [{ note: session.advisor, severity: "concern" }],
+              },
+              timestamp: 1767225602000,
+            },
+          },
+        ]
+      : []),
+    ...("advisor" in session && session.advisor
+      ? [
+          {
+            type: "message",
+            id: "00000005",
+            parentId: "00000004",
+            timestamp,
+            message: {
+              role: "custom",
+              customType: "lsp-late-diagnostic",
+              display: true,
+              content: `<system-notice>\nLate LSP diagnostics arrived after the edit returned:\n${repo}/src/index.ts — 1 error(s), 1 warning(s)\n${repo}/src/index.ts:12:8 [error] [ts] Type 'string' is not assignable to type 'number'.\n  The expected type comes from the return value.\n${repo}/src/index.ts:15:3 [warning] [eslint] Unused variable 'result'.\n</system-notice>`,
+              timestamp: 1767225603000,
+            },
+          },
+        ]
+      : []),
+    ...("advisor" in session && session.advisor
+      ? [
+          {
+            type: "message",
+            id: "00000006",
+            parentId: "00000005",
+            timestamp,
+            message: {
+              role: "custom",
+              customType: "async-result",
+              display: true,
+              content: `<system-notice>\nBackground job bg_1 completed.\n${repo}/src/index.ts\nA long result with preserved line breaks and a path that wraps on narrow screens.\n  Indented output remains intact.\n</system-notice>`,
+              details: {
+                jobs: [
+                  {
+                    jobId: "bg_1",
+                    type: "task",
+                    status: "completed",
+                    label: "Search review",
+                    durationMs: 194633,
+                  },
+                ],
+              },
+              timestamp: 1767225604000,
+            },
+          },
+          {
+            type: "message",
+            id: "00000007",
+            parentId: "00000006",
+            timestamp,
+            message: {
+              role: "custom",
+              customType: "developer",
+              display: true,
+              content:
+                '<system-reminder reason="rule_violation" rule="example">\nReview **error handling** before continuing.\n</system-reminder>',
+              details: { rule: "example" },
+              timestamp: 1767225605000,
+            },
+          },
+          {
+            type: "message",
+            id: "00000008",
+            parentId: "00000007",
+            timestamp,
+            message: {
+              role: "custom",
+              customType: "job-result",
+              display: true,
+              content: "Search review finished.",
+              details: {
+                jobs: [
+                  {
+                    jobId: "bg_2",
+                    type: "task",
+                    status: "failed",
+                    label: "Index check",
+                    durationMs: 211815,
+                  },
+                ],
+              },
+              timestamp: 1767225606000,
+            },
+          },
+          {
+            type: "message",
+            id: "00000009",
+            parentId: "00000008",
+            timestamp,
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "toolCall",
+                  id: "hub-seed",
+                  name: "hub",
+                  arguments: {
+                    op: "send",
+                    to: "SearchReview",
+                    message:
+                      "# Search review\n\nPlease check **error handling** and the `src/index.ts` path.\n\n- Check empty queries.\n- Report any failures.",
+                  },
+                },
+              ],
+              timestamp: 1767225607000,
+            },
+          },
+          {
+            type: "message",
+            id: "0000000a",
+            parentId: "00000009",
+            timestamp,
+            message: {
+              role: "toolResult",
+              toolCallId: "hub-seed",
+              toolName: "hub",
+              content: [{ type: "text", text: "Delivered to SearchReview" }],
+              details: {
+                op: "send",
+                receipts: [{ to: "SearchReview", outcome: "injected" }],
+              },
+              timestamp: 1767225608000,
+            },
+          },
+          {
+            type: "message",
+            id: "0000000b",
+            parentId: "0000000a",
+            timestamp,
+            message: {
+              role: "custom",
+              customType: "irc:incoming",
+              display: true,
+              content:
+                "<irc>\nIncoming IRC message from agent `SearchReview`:\n# Search review findings\n\n**Error handling** needs a closer look in `src/index.ts`.\n\n- Empty queries return no results.\n- Failed lookups should show an error.\n\nSee [the project readme](README.md) for context.",
+              timestamp: 1767225609000,
+            },
+          },
+          {
+            type: "message",
+            id: "0000000c",
+            parentId: "0000000b",
+            timestamp,
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "toolCall",
+                  id: "agent-seed",
+                  name: "write",
+                  arguments: {
+                    i: "Coordinate search review",
+                    path: "agent://SearchReview",
+                    content:
+                      "Please review the search error handling and report any failures. Check empty queries and long paths on narrow screens.",
+                  },
+                },
+              ],
+              timestamp: 1767225610000,
+            },
+          },
+          {
+            type: "message",
+            id: "0000000d",
+            parentId: "0000000c",
+            timestamp,
+            message: {
+              role: "toolResult",
+              toolCallId: "agent-seed",
+              toolName: "write",
+              content: [{ type: "text", text: "Delivered to SearchReview." }],
+              timestamp: 1767225611000,
+            },
+          },
         ]
       : []),
     ...("longHistory" in session && session.longHistory
@@ -225,9 +455,10 @@ for (const session of sessions) {
           timestamp,
           message: {
             role: i % 2 === 0 ? "user" : "assistant",
-            content: i % 2 === 0
-              ? `Paging fixture message ${i + 1}`
-              : [{ type: "text", text: `Paging fixture reply ${i + 1}` }],
+            content:
+              i % 2 === 0
+                ? `Paging fixture message ${i + 1}`
+                : [{ type: "text", text: `Paging fixture reply ${i + 1}` }],
             timestamp: 1767225602000 + i * 1000,
           },
         }))
@@ -263,7 +494,60 @@ for (const session of sessions) {
     sessionIds: [session.id],
   });
 }
+const runtime: SystemsRuntime = {
+  terminals: new TerminalManager(() => {}),
+  processes: {
+    fence: () => () => {},
+    inspect: async () => [],
+    stop: async () => {},
+  },
+  sessionsChanged() {},
+};
+const systems = await systemsOperation(
+  {
+    action: "saveSystem",
+    definition: {
+      name: "Atlas platform",
+      repoPaths: [repo],
+      services: [],
+      instructions: "",
+    },
+  },
+  runtime,
+);
+const system = systems.systems.find((item) => item.name === "Atlas platform");
+if (!system) throw new Error("Atlas System registration failed");
+for (const owner of [
+  { kind: "repo", id: project.id },
+  { kind: "system", id: system.id },
+] as const) {
+  const listSystems = () => systemsOperation({ action: "list" }, runtime);
+  await planningOperation(
+    {
+      owner,
+      input: {
+        action: "saveNotes",
+        notes: "## Later\n\n- Make the release status easier to find.\n",
+        revision: 0,
+      },
+    },
+    listSystems,
+  );
+  await planningOperation(
+    {
+      owner,
+      input: {
+        action: "saveTask",
+        brief: "Show release status",
+        prompt:
+          "Describe how you would show release status. Do not change any files.",
+        status: "ready",
+      },
+    },
+    listSystems,
+  );
+}
 saveWebServerSettings({ uploadRetentionDays: 14, agentToolsEnabled: true });
 console.log(
-  "[dev] UI fixtures seeded: atlas, atlas-feature, field-notes (4 saved conversations)",
+  "[dev] UI fixtures seeded: Atlas Repo and System, planning boards, field-notes (4 saved conversations)",
 );

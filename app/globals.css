@@ -3,6 +3,7 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "../components/WorkspaceSwitcher.css";
 @import "../components/SystemsForms.css";
+@import "../components/PlanningDialog.css";
 
 .workspace-terminal-tabs {
   display: flex;
@@ -1151,7 +1152,9 @@ body {
     "Symbols Nerd Font Mono", var(--font-noto-mono), 'JetBrains Mono',
     'Fira Code', 'Consolas', ui-monospace, 'PingFang SC', 'Microsoft YaHei',
     monospace;
-  --font-display: "Symbols Nerd Font Mono", var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display:
+    "Symbols Nerd Font Mono", var(--font-geist), ui-sans-serif, system-ui,
+    sans-serif;
 }
 
 pre,
@@ -3494,8 +3497,10 @@ span.token.table {
   background: transparent;
   font-size: inherit;
 }
-.composer-startup-strip[data-workspace-selector] .workspace-source-trigger:hover,
-.composer-startup-strip[data-workspace-selector] .workspace-source-trigger[data-popup-open] {
+.composer-startup-strip[data-workspace-selector]
+  .workspace-source-trigger:hover,
+.composer-startup-strip[data-workspace-selector]
+  .workspace-source-trigger[data-popup-open] {
   background: var(--bg-hover);
 }
 
@@ -4237,15 +4242,45 @@ html[data-touch-targets="accessible"] .chat-scroll-bottom {
   font-size: 11px;
   font-weight: 600;
 }
-.late-diagnostics { font-size: 13px; color: var(--text); }
-.late-diagnostic + .late-diagnostic { margin-top: 12px; }
-.late-diagnostic-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; color: var(--text-muted); font-size: 11px; }
-.late-diagnostic-severity { font-weight: 600; text-transform: capitalize; }
-.late-diagnostic-severity-error { color: var(--status-error); }
-.late-diagnostic-severity-warning { color: var(--status-warning); }
-.late-diagnostic-path { font-family: var(--font-mono); overflow-wrap: anywhere; }
-.late-diagnostic-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.activity-result-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); }
+.late-diagnostics {
+  font-size: 13px;
+  color: var(--text);
+}
+.late-diagnostic + .late-diagnostic {
+  margin-top: 12px;
+}
+.late-diagnostic-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.late-diagnostic-severity {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.late-diagnostic-severity-error {
+  color: var(--status-error);
+}
+.late-diagnostic-severity-warning {
+  color: var(--status-warning);
+}
+.late-diagnostic-path {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.late-diagnostic-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.activity-result-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+}
 
 .advisor-finding + .advisor-finding {
   margin-top: 12px;
@@ -4257,8 +4292,12 @@ html[data-touch-targets="accessible"] .chat-scroll-bottom {
   text-transform: capitalize;
   margin-bottom: 4px;
 }
-.advisor-severity-concern { color: var(--status-warning); }
-.advisor-severity-blocker { color: var(--status-error); }
+.advisor-severity-concern {
+  color: var(--status-warning);
+}
+.advisor-severity-blocker {
+  color: var(--status-error);
+}
 .advisor-message-actions {
   display: flex;
   align-items: flex-start;

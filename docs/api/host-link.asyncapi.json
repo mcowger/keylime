@@ -223,6 +223,9 @@
         "HostReply_openFile": {
           "$ref": "#/components/messages/HostReply_openFile"
         },
+        "HostReply_planning": {
+          "$ref": "#/components/messages/HostReply_planning"
+        },
         "HostReply_ptySessions": {
           "$ref": "#/components/messages/HostReply_ptySessions"
         },
@@ -459,6 +462,9 @@
         },
         "HostRequest_openFile": {
           "$ref": "#/components/messages/HostRequest_openFile"
+        },
+        "HostRequest_planning": {
+          "$ref": "#/components/messages/HostRequest_planning"
         },
         "HostRequest_ptySessions": {
           "$ref": "#/components/messages/HostRequest_ptySessions"
@@ -1341,6 +1347,18 @@
         },
         "title": "HostReply_openFile"
       },
+      "HostReply_planning": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "name": "HostReply_planning",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_planning"
+        },
+        "title": "HostReply_planning"
+      },
       "HostReply_ptySessions": {
         "contentType": "application/json",
         "correlationId": {
@@ -1682,7 +1700,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to systems; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
+        "description": "Reply to systems; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Planned admission requires the daemon's current launch version and plan. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
         "name": "HostReply_systems",
         "payload": {
           "$ref": "#/components/schemas/HostReply_systems"
@@ -2289,6 +2307,18 @@
         },
         "title": "HostRequest_openFile"
       },
+      "HostRequest_planning": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "name": "HostRequest_planning",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_planning"
+        },
+        "title": "HostRequest_planning"
+      },
       "HostRequest_ptySessions": {
         "contentType": "application/json",
         "correlationId": {
@@ -2630,7 +2660,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
+        "description": "Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Planned admission requires the daemon's current launch version and plan. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
         "name": "HostRequest_systems",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_systems"
@@ -4756,6 +4786,57 @@
                   },
                   "required": ["t", "id", "op", "args"],
                   "title": "RunnerRequest_prompt",
+                  "type": "object"
+                },
+                {
+                  "description": "Usage: Record text as the first user message of a new task chat.\nInputs: Provide the exact nonblank Brief and optional inline images. Preserve whitespace, slash prefixes and image order.\nInvariants: Only an idle chat without user messages or queued input can accept it. Input hooks, slash commands and template expansion do not run. Success confirms the first user message was saved, not that the model completed a turn.\nEffects: Submits literal user text through OMP's native input queue and waits for transcript persistence.\nRecovery: For literal_delivery_unknown, a timeout or a lost reply, check the linked chat and never resend automatically.",
+                  "properties": {
+                    "args": {
+                      "properties": {
+                        "images": {
+                          "description": "Optional inline image content accompanying the input.",
+                          "items": {
+                            "properties": {
+                              "data": {
+                                "description": "Base64-encoded image data.",
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "description": "Image media type.",
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "image",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["type", "data", "mimeType"],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "description": "User input text submitted to the session.",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["message"],
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "number"
+                    },
+                    "op": {
+                      "const": "prompt_literal",
+                      "type": "string"
+                    },
+                    "t": {
+                      "const": "cmd",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t", "id", "op", "args"],
+                  "title": "RunnerRequest_prompt_literal",
                   "type": "object"
                 },
                 {
@@ -45394,11 +45475,17 @@
                       "value": {
                         "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
                         "properties": {
+                          "baseCommit": {
+                            "type": "string"
+                          },
                           "error": {
                             "type": "string"
                           },
                           "id": {
                             "type": "string"
+                          },
+                          "includesDone": {
+                            "type": "boolean"
                           },
                           "input": {
                             "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -45407,6 +45494,10 @@
                                 "type": "string"
                               },
                               "branch": {
+                                "type": "string"
+                              },
+                              "creationId": {
+                                "format": "uuid",
                                 "type": "string"
                               },
                               "mode": {
@@ -45431,6 +45522,10 @@
                               },
                               "projectPath": {
                                 "type": "string"
+                              },
+                              "retryAttempt": {
+                                "minimum": 0,
+                                "type": "integer"
                               }
                             },
                             "required": [
@@ -45445,6 +45540,10 @@
                           "logs": {
                             "description": "Captured command output for this creation job.",
                             "type": "string"
+                          },
+                          "nextCommand": {
+                            "minimum": 0,
+                            "type": "integer"
                           },
                           "paseo": {
                             "properties": {
@@ -45493,6 +45592,10 @@
                               "postNonBlocking"
                             ],
                             "type": "object"
+                          },
+                          "retryAttempt": {
+                            "minimum": 0,
+                            "type": "integer"
                           },
                           "source": {
                             "anyOf": [
@@ -45647,11 +45750,17 @@
                     "value": {
                       "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
                       "properties": {
+                        "baseCommit": {
+                          "type": "string"
+                        },
                         "error": {
                           "type": "string"
                         },
                         "id": {
                           "type": "string"
+                        },
+                        "includesDone": {
+                          "type": "boolean"
                         },
                         "input": {
                           "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -45660,6 +45769,10 @@
                               "type": "string"
                             },
                             "branch": {
+                              "type": "string"
+                            },
+                            "creationId": {
+                              "format": "uuid",
                               "type": "string"
                             },
                             "mode": {
@@ -45684,6 +45797,10 @@
                             },
                             "projectPath": {
                               "type": "string"
+                            },
+                            "retryAttempt": {
+                              "minimum": 0,
+                              "type": "integer"
                             }
                           },
                           "required": [
@@ -45698,6 +45815,10 @@
                         "logs": {
                           "description": "Captured command output for this creation job.",
                           "type": "string"
+                        },
+                        "nextCommand": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "paseo": {
                           "properties": {
@@ -45746,6 +45867,10 @@
                             "postNonBlocking"
                           ],
                           "type": "object"
+                        },
+                        "retryAttempt": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "source": {
                           "anyOf": [
@@ -52288,6 +52413,972 @@
         ],
         "description": "Reply to openFile; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Open a workspace file for chunked reading.\nInputs: File request identifies the host file and optional owner.\nInvariants: The target must be a file; changes can invalidate the reader.\nEffects: Allocates a host reader handle and returns its metadata.\nRecovery: On file_changed, close and reopen instead of combining chunks from different versions.",
         "title": "HostReply_openFile"
+      },
+      "HostReply_planning": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "description": "Host-owned Markdown notebook and task board. Revisions detect concurrent edits.",
+                "properties": {
+                  "canLaunch": {
+                    "type": "boolean"
+                  },
+                  "imagePayloads": {
+                    "description": "Returned only when reading specific attached images; never included in board listings.",
+                    "items": {
+                      "properties": {
+                        "data": {
+                          "description": "Base64 image bytes, without a data URL prefix.",
+                          "maxLength": 6990508,
+                          "minLength": 4,
+                          "type": "string"
+                        },
+                        "mimeType": {
+                          "anyOf": [
+                            {
+                              "const": "image/png",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/jpeg",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/gif",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/webp",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "type": {
+                          "const": "image",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type", "mimeType", "data"],
+                      "type": "object"
+                    },
+                    "maxItems": 10,
+                    "type": "array"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "notes": {
+                    "description": "Free-form Markdown saved verbatim outside the checkout.",
+                    "maxLength": 131072,
+                    "type": "string"
+                  },
+                  "notesImages": {
+                    "items": {
+                      "properties": {
+                        "bytes": {
+                          "maximum": 5242880,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "id": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "mimeType": {
+                          "anyOf": [
+                            {
+                              "const": "image/png",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/jpeg",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/gif",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/webp",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "name": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "name", "mimeType", "bytes"],
+                      "type": "object"
+                    },
+                    "maxItems": 10,
+                    "type": "array"
+                  },
+                  "notesRevision": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "tasks": {
+                    "items": {
+                      "description": "A planned task. Done is a manual board status, independent of launch and chat status.",
+                      "properties": {
+                        "brief": {
+                          "description": "One-line task description.",
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "pattern": "^[^\\r\\n]+$",
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "images": {
+                          "items": {
+                            "properties": {
+                              "bytes": {
+                                "maximum": 5242880,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "id": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "anyOf": [
+                                  {
+                                    "const": "image/png",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/jpeg",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/gif",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/webp",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "name", "mimeType", "bytes"],
+                            "type": "object"
+                          },
+                          "maxItems": 10,
+                          "type": "array"
+                        },
+                        "launch": {
+                          "additionalProperties": false,
+                          "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                          "properties": {
+                            "effortId": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "images": {
+                              "items": {
+                                "properties": {
+                                  "bytes": {
+                                    "maximum": 5242880,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "id": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "mimeType": {
+                                    "anyOf": [
+                                      {
+                                        "const": "image/png",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "image/jpeg",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "image/gif",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "image/webp",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["id", "name", "mimeType", "bytes"],
+                                "type": "object"
+                              },
+                              "maxItems": 10,
+                              "type": "array"
+                            },
+                            "jobId": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "description": "One-line task description.",
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "pattern": "^[^\\r\\n]+$",
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "phase": {
+                              "anyOf": [
+                                {
+                                  "const": "creating",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "setup_failed",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "review_required",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "ready",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "sending",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "sent",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "delivery_failed",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "delivery_unknown",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "prompt": {
+                              "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                              "maxLength": 32768,
+                              "type": "string"
+                            },
+                            "retrySetup": {
+                              "description": "An explicit setup retry is pending acknowledgement from the owning daemon.",
+                              "type": "boolean"
+                            },
+                            "sendingSince": {
+                              "description": "First-message claim time in epoch milliseconds.",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "sessionId": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "setup": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "baseRef": {
+                                      "type": "string"
+                                    },
+                                    "branch": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "repo",
+                                      "type": "string"
+                                    },
+                                    "projectPath": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "projectPath",
+                                    "baseRef",
+                                    "branch"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "bases": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "ref": {
+                                            "type": "string"
+                                          },
+                                          "repoPath": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["repoPath", "ref"],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 200,
+                                      "type": "array"
+                                    },
+                                    "confirmation": {
+                                      "maxLength": 128,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "system",
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "name",
+                                    "confirmation",
+                                    "bases"
+                                  ],
+                                  "type": "object"
+                                }
+                              ],
+                              "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                            },
+                            "version": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "phase",
+                            "prompt",
+                            "name"
+                          ],
+                          "type": "object"
+                        },
+                        "prompt": {
+                          "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                          "maxLength": 32768,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "backlog",
+                              "type": "string"
+                            },
+                            {
+                              "const": "ready",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "done",
+                              "type": "string"
+                            }
+                          ],
+                          "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "brief",
+                        "prompt",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "name",
+                  "canLaunch",
+                  "notes",
+                  "notesRevision",
+                  "tasks"
+                ],
+                "type": "object"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "description": "Host-owned Markdown notebook and task board. Revisions detect concurrent edits.",
+              "properties": {
+                "canLaunch": {
+                  "type": "boolean"
+                },
+                "imagePayloads": {
+                  "description": "Returned only when reading specific attached images; never included in board listings.",
+                  "items": {
+                    "properties": {
+                      "data": {
+                        "description": "Base64 image bytes, without a data URL prefix.",
+                        "maxLength": 6990508,
+                        "minLength": 4,
+                        "type": "string"
+                      },
+                      "mimeType": {
+                        "anyOf": [
+                          {
+                            "const": "image/png",
+                            "type": "string"
+                          },
+                          {
+                            "const": "image/jpeg",
+                            "type": "string"
+                          },
+                          {
+                            "const": "image/gif",
+                            "type": "string"
+                          },
+                          {
+                            "const": "image/webp",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "const": "image",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type", "mimeType", "data"],
+                    "type": "object"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "notes": {
+                  "description": "Free-form Markdown saved verbatim outside the checkout.",
+                  "maxLength": 131072,
+                  "type": "string"
+                },
+                "notesImages": {
+                  "items": {
+                    "properties": {
+                      "bytes": {
+                        "maximum": 5242880,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "id": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "mimeType": {
+                        "anyOf": [
+                          {
+                            "const": "image/png",
+                            "type": "string"
+                          },
+                          {
+                            "const": "image/jpeg",
+                            "type": "string"
+                          },
+                          {
+                            "const": "image/gif",
+                            "type": "string"
+                          },
+                          {
+                            "const": "image/webp",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "name", "mimeType", "bytes"],
+                    "type": "object"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "notesRevision": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "tasks": {
+                  "items": {
+                    "description": "A planned task. Done is a manual board status, independent of launch and chat status.",
+                    "properties": {
+                      "brief": {
+                        "description": "One-line task description.",
+                        "maxLength": 240,
+                        "minLength": 1,
+                        "pattern": "^[^\\r\\n]+$",
+                        "type": "string"
+                      },
+                      "id": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "images": {
+                        "items": {
+                          "properties": {
+                            "bytes": {
+                              "maximum": 5242880,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "id": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "mimeType": {
+                              "anyOf": [
+                                {
+                                  "const": "image/png",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "image/jpeg",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "image/gif",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "image/webp",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": ["id", "name", "mimeType", "bytes"],
+                          "type": "object"
+                        },
+                        "maxItems": 10,
+                        "type": "array"
+                      },
+                      "launch": {
+                        "additionalProperties": false,
+                        "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                        "properties": {
+                          "effortId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "images": {
+                            "items": {
+                              "properties": {
+                                "bytes": {
+                                  "maximum": 5242880,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "id": {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "mimeType": {
+                                  "anyOf": [
+                                    {
+                                      "const": "image/png",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "image/jpeg",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "image/gif",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "image/webp",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "name": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "name", "mimeType", "bytes"],
+                              "type": "object"
+                            },
+                            "maxItems": 10,
+                            "type": "array"
+                          },
+                          "jobId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "description": "One-line task description.",
+                            "maxLength": 240,
+                            "minLength": 1,
+                            "pattern": "^[^\\r\\n]+$",
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "phase": {
+                            "anyOf": [
+                              {
+                                "const": "creating",
+                                "type": "string"
+                              },
+                              {
+                                "const": "setup_failed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "review_required",
+                                "type": "string"
+                              },
+                              {
+                                "const": "ready",
+                                "type": "string"
+                              },
+                              {
+                                "const": "sending",
+                                "type": "string"
+                              },
+                              {
+                                "const": "sent",
+                                "type": "string"
+                              },
+                              {
+                                "const": "delivery_failed",
+                                "type": "string"
+                              },
+                              {
+                                "const": "delivery_unknown",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "prompt": {
+                            "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                            "maxLength": 32768,
+                            "type": "string"
+                          },
+                          "retrySetup": {
+                            "description": "An explicit setup retry is pending acknowledgement from the owning daemon.",
+                            "type": "boolean"
+                          },
+                          "sendingSince": {
+                            "description": "First-message claim time in epoch milliseconds.",
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "sessionId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "setup": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "baseRef": {
+                                    "type": "string"
+                                  },
+                                  "branch": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "repo",
+                                    "type": "string"
+                                  },
+                                  "projectPath": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "projectPath",
+                                  "baseRef",
+                                  "branch"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "bases": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "ref": {
+                                          "type": "string"
+                                        },
+                                        "repoPath": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["repoPath", "ref"],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 200,
+                                    "type": "array"
+                                  },
+                                  "confirmation": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "system",
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "name",
+                                  "confirmation",
+                                  "bases"
+                                ],
+                                "type": "object"
+                              }
+                            ],
+                            "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                          },
+                          "version": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version",
+                          "phase",
+                          "prompt",
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "prompt": {
+                        "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                        "maxLength": 32768,
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "backlog",
+                            "type": "string"
+                          },
+                          {
+                            "const": "ready",
+                            "type": "string"
+                          },
+                          {
+                            "const": "in_progress",
+                            "type": "string"
+                          },
+                          {
+                            "const": "done",
+                            "type": "string"
+                          }
+                        ],
+                        "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                      }
+                    },
+                    "required": ["id", "revision", "brief", "prompt", "status"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "name",
+                "canLaunch",
+                "notes",
+                "notesRevision",
+                "tasks"
+              ],
+              "type": "object"
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to planning; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "title": "HostReply_planning"
       },
       "HostReply_ptySessions": {
         "anyOf": [
@@ -74255,7 +75346,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to systems; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
+        "description": "Reply to systems; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Planned admission requires the daemon's current launch version and plan. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
         "title": "HostReply_systems"
       },
       "HostReply_terminals": {
@@ -76827,11 +77918,17 @@
                       "value": {
                         "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
                         "properties": {
+                          "baseCommit": {
+                            "type": "string"
+                          },
                           "error": {
                             "type": "string"
                           },
                           "id": {
                             "type": "string"
+                          },
+                          "includesDone": {
+                            "type": "boolean"
                           },
                           "input": {
                             "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -76840,6 +77937,10 @@
                                 "type": "string"
                               },
                               "branch": {
+                                "type": "string"
+                              },
+                              "creationId": {
+                                "format": "uuid",
                                 "type": "string"
                               },
                               "mode": {
@@ -76864,6 +77965,10 @@
                               },
                               "projectPath": {
                                 "type": "string"
+                              },
+                              "retryAttempt": {
+                                "minimum": 0,
+                                "type": "integer"
                               }
                             },
                             "required": [
@@ -76878,6 +77983,10 @@
                           "logs": {
                             "description": "Captured command output for this creation job.",
                             "type": "string"
+                          },
+                          "nextCommand": {
+                            "minimum": 0,
+                            "type": "integer"
                           },
                           "paseo": {
                             "properties": {
@@ -76926,6 +78035,10 @@
                               "postNonBlocking"
                             ],
                             "type": "object"
+                          },
+                          "retryAttempt": {
+                            "minimum": 0,
+                            "type": "integer"
                           },
                           "source": {
                             "anyOf": [
@@ -77080,11 +78193,17 @@
                     "value": {
                       "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
                       "properties": {
+                        "baseCommit": {
+                          "type": "string"
+                        },
                         "error": {
                           "type": "string"
                         },
                         "id": {
                           "type": "string"
+                        },
+                        "includesDone": {
+                          "type": "boolean"
                         },
                         "input": {
                           "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -77093,6 +78212,10 @@
                               "type": "string"
                             },
                             "branch": {
+                              "type": "string"
+                            },
+                            "creationId": {
+                              "format": "uuid",
                               "type": "string"
                             },
                             "mode": {
@@ -77117,6 +78240,10 @@
                             },
                             "projectPath": {
                               "type": "string"
+                            },
+                            "retryAttempt": {
+                              "minimum": 0,
+                              "type": "integer"
                             }
                           },
                           "required": [
@@ -77131,6 +78258,10 @@
                         "logs": {
                           "description": "Captured command output for this creation job.",
                           "type": "string"
+                        },
+                        "nextCommand": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "paseo": {
                           "properties": {
@@ -77179,6 +78310,10 @@
                             "postNonBlocking"
                           ],
                           "type": "object"
+                        },
+                        "retryAttempt": {
+                          "minimum": 0,
+                          "type": "integer"
                         },
                         "source": {
                           "anyOf": [
@@ -78196,6 +79331,10 @@
                   "branch": {
                     "type": "string"
                   },
+                  "creationId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
                   "mode": {
                     "anyOf": [
                       {
@@ -78218,6 +79357,10 @@
                   },
                   "projectPath": {
                     "type": "string"
+                  },
+                  "retryAttempt": {
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 },
                 "required": [
@@ -79678,6 +80821,871 @@
         "title": "HostRequest_openFile",
         "type": "object"
       },
+      "HostRequest_planning": {
+        "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+        "properties": {
+          "args": {
+            "properties": {
+              "operation": {
+                "additionalProperties": false,
+                "description": "Daemon planning operation. Launch lifecycle mutations are internal to the web server.",
+                "properties": {
+                  "input": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "read",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "saveNotes",
+                            "type": "string"
+                          },
+                          "images": {
+                            "description": "Replacement attachment list. Use IDs to keep existing images, or include new image bytes. Omit to keep the list unchanged.",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "data": {
+                                      "description": "Base64 image bytes, without a data URL prefix.",
+                                      "maxLength": 6990508,
+                                      "minLength": 4,
+                                      "type": "string"
+                                    },
+                                    "mimeType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "image/png",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/jpeg",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/gif",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/webp",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["name", "mimeType", "data"],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxItems": 10,
+                            "type": "array"
+                          },
+                          "notes": {
+                            "description": "Free-form Markdown saved verbatim outside the checkout.",
+                            "maxLength": 131072,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["action", "notes", "revision"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "saveTask",
+                            "type": "string"
+                          },
+                          "brief": {
+                            "description": "One-line task description.",
+                            "maxLength": 240,
+                            "minLength": 1,
+                            "pattern": "^[^\\r\\n]+$",
+                            "type": "string"
+                          },
+                          "images": {
+                            "description": "Replacement attachment list. Use IDs to keep existing images, or include new image bytes. Omit to keep the list unchanged.",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "data": {
+                                      "description": "Base64 image bytes, without a data URL prefix.",
+                                      "maxLength": 6990508,
+                                      "minLength": 4,
+                                      "type": "string"
+                                    },
+                                    "mimeType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "image/png",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/jpeg",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/gif",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/webp",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["name", "mimeType", "data"],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxItems": 10,
+                            "type": "array"
+                          },
+                          "prompt": {
+                            "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                            "maxLength": 32768,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "backlog",
+                                "type": "string"
+                              },
+                              {
+                                "const": "ready",
+                                "type": "string"
+                              },
+                              {
+                                "const": "in_progress",
+                                "type": "string"
+                              },
+                              {
+                                "const": "done",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "brief", "prompt", "status"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "deleteTask",
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "taskId", "revision"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "readImages",
+                            "type": "string"
+                          },
+                          "ids": {
+                            "items": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 10,
+                            "minItems": 1,
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "required": ["action", "ids"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "begin",
+                            "type": "string"
+                          },
+                          "id": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "setup": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "baseRef": {
+                                    "type": "string"
+                                  },
+                                  "branch": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "repo",
+                                    "type": "string"
+                                  },
+                                  "projectPath": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "projectPath",
+                                  "baseRef",
+                                  "branch"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "bases": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "ref": {
+                                          "type": "string"
+                                        },
+                                        "repoPath": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["repoPath", "ref"],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 200,
+                                    "type": "array"
+                                  },
+                                  "confirmation": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "system",
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "name",
+                                  "confirmation",
+                                  "bases"
+                                ],
+                                "type": "object"
+                              }
+                            ],
+                            "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "taskId",
+                          "revision",
+                          "id",
+                          "setup"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "updateLaunch",
+                            "type": "string"
+                          },
+                          "expected": {
+                            "additionalProperties": false,
+                            "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                            "properties": {
+                              "effortId": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "error": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "images": {
+                                "items": {
+                                  "properties": {
+                                    "bytes": {
+                                      "maximum": 5242880,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "id": {
+                                      "maxLength": 128,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "mimeType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "image/png",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/jpeg",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/gif",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/webp",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name",
+                                    "mimeType",
+                                    "bytes"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 10,
+                                "type": "array"
+                              },
+                              "jobId": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "description": "One-line task description.",
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "pattern": "^[^\\r\\n]+$",
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "phase": {
+                                "anyOf": [
+                                  {
+                                    "const": "creating",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "setup_failed",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "review_required",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "ready",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "sending",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "sent",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "delivery_failed",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "delivery_unknown",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "prompt": {
+                                "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                                "maxLength": 32768,
+                                "type": "string"
+                              },
+                              "retrySetup": {
+                                "description": "An explicit setup retry is pending acknowledgement from the owning daemon.",
+                                "type": "boolean"
+                              },
+                              "sendingSince": {
+                                "description": "First-message claim time in epoch milliseconds.",
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "sessionId": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "setup": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "baseRef": {
+                                        "type": "string"
+                                      },
+                                      "branch": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "repo",
+                                        "type": "string"
+                                      },
+                                      "projectPath": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "projectPath",
+                                      "baseRef",
+                                      "branch"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "bases": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "ref": {
+                                              "type": "string"
+                                            },
+                                            "repoPath": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["repoPath", "ref"],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 200,
+                                        "type": "array"
+                                      },
+                                      "confirmation": {
+                                        "maxLength": 128,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "system",
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "name",
+                                      "confirmation",
+                                      "bases"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ],
+                                "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                              },
+                              "version": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version",
+                              "phase",
+                              "prompt",
+                              "name"
+                            ],
+                            "type": "object"
+                          },
+                          "next": {
+                            "additionalProperties": false,
+                            "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                            "properties": {
+                              "effortId": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "error": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "images": {
+                                "items": {
+                                  "properties": {
+                                    "bytes": {
+                                      "maximum": 5242880,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "id": {
+                                      "maxLength": 128,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "mimeType": {
+                                      "anyOf": [
+                                        {
+                                          "const": "image/png",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/jpeg",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/gif",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "image/webp",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name",
+                                    "mimeType",
+                                    "bytes"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 10,
+                                "type": "array"
+                              },
+                              "jobId": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "description": "One-line task description.",
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "pattern": "^[^\\r\\n]+$",
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "phase": {
+                                "anyOf": [
+                                  {
+                                    "const": "creating",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "setup_failed",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "review_required",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "ready",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "sending",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "sent",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "delivery_failed",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "delivery_unknown",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "prompt": {
+                                "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                                "maxLength": 32768,
+                                "type": "string"
+                              },
+                              "retrySetup": {
+                                "description": "An explicit setup retry is pending acknowledgement from the owning daemon.",
+                                "type": "boolean"
+                              },
+                              "sendingSince": {
+                                "description": "First-message claim time in epoch milliseconds.",
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "sessionId": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "setup": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "baseRef": {
+                                        "type": "string"
+                                      },
+                                      "branch": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "repo",
+                                        "type": "string"
+                                      },
+                                      "projectPath": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "projectPath",
+                                      "baseRef",
+                                      "branch"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "bases": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "ref": {
+                                              "type": "string"
+                                            },
+                                            "repoPath": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["repoPath", "ref"],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 200,
+                                        "type": "array"
+                                      },
+                                      "confirmation": {
+                                        "maxLength": 128,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "system",
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "name",
+                                      "confirmation",
+                                      "bases"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ],
+                                "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                              },
+                              "version": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version",
+                              "phase",
+                              "prompt",
+                              "name"
+                            ],
+                            "type": "object"
+                          },
+                          "taskId": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["action", "taskId", "expected", "next"],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "owner": {
+                    "additionalProperties": false,
+                    "description": "Stable Repo or System registration ID on the selected daemon, never a path.",
+                    "properties": {
+                      "id": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "const": "repo",
+                            "type": "string"
+                          },
+                          {
+                            "const": "system",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["kind", "id"],
+                    "type": "object"
+                  }
+                },
+                "required": ["owner", "input"],
+                "type": "object"
+              }
+            },
+            "required": ["operation"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "planning",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_planning",
+        "type": "object"
+      },
       "HostRequest_ptySessions": {
         "description": "Usage: List live session terminals on this host.\nInputs: No arguments.\nInvariants: Includes idle PTYs, not just active turns.\nEffects: None.\nRecovery: Retry after the host reconnects.",
         "properties": {
@@ -81040,7 +83048,7 @@
         "type": "object"
       },
       "HostRequest_systems": {
-        "description": "Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
+        "description": "Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Planned admission requires the daemon's current launch version and plan. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
         "properties": {
           "args": {
             "properties": {
@@ -81148,6 +83156,9 @@
                         "const": "preview",
                         "type": "string"
                       },
+                      "allowUnresolved": {
+                        "type": "boolean"
+                      },
                       "bases": {
                         "items": {
                           "properties": {
@@ -81162,6 +83173,10 @@
                           "type": "object"
                         },
                         "type": "array"
+                      },
+                      "branchKey": {
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$",
+                        "type": "string"
                       },
                       "name": {
                         "type": "string"
@@ -81194,11 +83209,26 @@
                         },
                         "type": "array"
                       },
+                      "branchKey": {
+                        "pattern": "^[a-zA-Z0-9_-]{1,128}$",
+                        "type": "string"
+                      },
                       "confirmation": {
+                        "type": "string"
+                      },
+                      "creationId": {
+                        "description": "Stable launch identity for idempotent Effort admission.",
+                        "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
                         "type": "string"
                       },
                       "name": {
                         "type": "string"
+                      },
+                      "planningVersion": {
+                        "description": "Current planning launch version; required with a planned creation ID.",
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
                       },
                       "systemId": {
                         "type": "string"
@@ -81212,6 +83242,10 @@
                       "action": {
                         "const": "retry",
                         "type": "string"
+                      },
+                      "attempt": {
+                        "minimum": 0,
+                        "type": "integer"
                       },
                       "effortId": {
                         "type": "string"
@@ -82138,7 +84172,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 79 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. Current protocol is 13, minimum 13; incompatible peers close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 80 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "13"
   },
@@ -83040,6 +85074,29 @@
       },
       "summary": "openFile"
     },
+    "operation_planning": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read or edit the Notes & Tasks board on its owning daemon.\nInputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.\nInvariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.\nEffects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.\nRecovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_planning"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_planning"
+          }
+        ]
+      },
+      "summary": "planning"
+    },
     "operation_ptySessions": {
       "action": "send",
       "channel": {
@@ -83689,7 +85746,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
+      "description": "Usage: Manage Systems and Efforts on one host daemon.\nInputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.\nInvariants: Creation captures resolved commits and the System definition. Planned admission requires the daemon's current launch version and plan. Paths and branches remain stable on rename. A running service is not a readiness check.\nEffects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.\nRecovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_systems"

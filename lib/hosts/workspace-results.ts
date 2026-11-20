@@ -1,4 +1,5 @@
 import { Value } from "@sinclair/typebox/value";
+import { PlanningBoardSchema } from "../api-contracts/planning";
 import { SystemsResultSchema } from "../api-contracts/systems";
 import { ShipMonitorStatusResultSchema } from "../api-contracts/workspace-models";
 import { isRecord } from "../type-guards";
@@ -73,6 +74,7 @@ export function validWorkspaceResult(
   result: unknown,
 ): boolean {
   if (!isRecord(result)) return false;
+  if (op === "planning") return Value.Check(PlanningBoardSchema, result);
   if (result.ok === false)
     return (
       typeof result.status === "number" &&

@@ -143,6 +143,7 @@ export class ChannelLifecycle {
         args = isRecord(frame.args) ? frame.args : {};
       if (
         op === "prompt" ||
+        op === "prompt_literal" ||
         op === "abort_and_prompt" ||
         op === "steer" ||
         op === "follow_up" ||

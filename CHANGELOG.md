@@ -8,6 +8,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Added
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
+- Open **Notes & Tasks** from a Repo or System to save Markdown notes and plan work outside Git. Enter a Brief, optionally expand it in place with **Improve**, then launch a Workspace or Effort with the current text. If an Effort plan changes before creation, **Resume** lets you review the new starting commits without starting a second launch.
+- Task launch saves slash-prefixed Briefs as the first chat message instead of running them as commands.
+- Improve uses the task’s attached images with a vision-capable planning model. Shared Notes images are included only at launch.
 - Ship can monitor a PR for new comments and reviews. The server checks that the shipping chat opted in and sends only feedback links. Stop monitoring from the sidebar PR pill.
 - Subagent previews show the model and effort as `model-slug:effort` when effort is reported.
 - **Systems** group repos, service commands, and shared instructions on one host. Create an **Effort** to get a branch and worktree for each repo, a root chat, and one terminal per service. Preview cleanup before removing worktrees; branches and PRs stay put.
@@ -140,6 +143,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - New workspace drafts show the project name and base branch in a thin row attached to the composer
 - Documented that Keylime is a single-user tool and clarified its security boundaries
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE
+- Open Notes & Tasks from a Repo or System to save Markdown notes and plan work outside Git. Enter a Brief, optionally expand it in place with Improve, then launch a Workspace or Effort with the current text. If an Effort plan changes before creation, Resume lets you review the new starting commits without starting a second launch
+- Task launch saves slash-prefixed Briefs as the first chat message instead of running them as commands
+- Improve uses the task’s attached images with a vision-capable planning model. Shared Notes images are included only at launch
 
 ### Changed
 - The sidebar and Settings call projects repos, including in add, remove, and settings controls.

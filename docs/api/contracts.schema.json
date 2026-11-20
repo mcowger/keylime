@@ -30840,6 +30840,10 @@
             "branch": {
               "type": "string"
             },
+            "creationId": {
+              "format": "uuid",
+              "type": "string"
+            },
             "mode": {
               "anyOf": [
                 {
@@ -30862,6 +30866,10 @@
             },
             "projectPath": {
               "type": "string"
+            },
+            "retryAttempt": {
+              "minimum": 0,
+              "type": "integer"
             }
           },
           "required": ["projectPath", "branch", "mode", "baseRef", "name"],
@@ -30882,11 +30890,17 @@
             "value": {
               "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
               "properties": {
+                "baseCommit": {
+                  "type": "string"
+                },
                 "error": {
                   "type": "string"
                 },
                 "id": {
                   "type": "string"
+                },
+                "includesDone": {
+                  "type": "boolean"
                 },
                 "input": {
                   "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -30895,6 +30909,10 @@
                       "type": "string"
                     },
                     "branch": {
+                      "type": "string"
+                    },
+                    "creationId": {
+                      "format": "uuid",
                       "type": "string"
                     },
                     "mode": {
@@ -30919,6 +30937,10 @@
                     },
                     "projectPath": {
                       "type": "string"
+                    },
+                    "retryAttempt": {
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   },
                   "required": [
@@ -30933,6 +30955,10 @@
                 "logs": {
                   "description": "Captured command output for this creation job.",
                   "type": "string"
+                },
+                "nextCommand": {
+                  "minimum": 0,
+                  "type": "integer"
                 },
                 "paseo": {
                   "properties": {
@@ -30981,6 +31007,10 @@
                     "postNonBlocking"
                   ],
                   "type": "object"
+                },
+                "retryAttempt": {
+                  "minimum": 0,
+                  "type": "integer"
                 },
                 "source": {
                   "anyOf": [
@@ -34328,6 +34358,1228 @@
       },
       "required": ["type", "seq", "at", "end", "data"],
       "title": "HostLinkPart",
+      "type": "object"
+    },
+    "host_planning_args": {
+      "properties": {
+        "operation": {
+          "additionalProperties": false,
+          "description": "Daemon planning operation. Launch lifecycle mutations are internal to the web server.",
+          "properties": {
+            "input": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "read",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["action"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "saveNotes",
+                      "type": "string"
+                    },
+                    "images": {
+                      "description": "Replacement attachment list. Use IDs to keep existing images, or include new image bytes. Omit to keep the list unchanged.",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {
+                                "description": "Base64 image bytes, without a data URL prefix.",
+                                "maxLength": 6990508,
+                                "minLength": 4,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "anyOf": [
+                                  {
+                                    "const": "image/png",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/jpeg",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/gif",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/webp",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["name", "mimeType", "data"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 10,
+                      "type": "array"
+                    },
+                    "notes": {
+                      "description": "Free-form Markdown saved verbatim outside the checkout.",
+                      "maxLength": 131072,
+                      "type": "string"
+                    },
+                    "revision": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["action", "notes", "revision"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "saveTask",
+                      "type": "string"
+                    },
+                    "brief": {
+                      "description": "One-line task description.",
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "pattern": "^[^\\r\\n]+$",
+                      "type": "string"
+                    },
+                    "images": {
+                      "description": "Replacement attachment list. Use IDs to keep existing images, or include new image bytes. Omit to keep the list unchanged.",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {
+                                "description": "Base64 image bytes, without a data URL prefix.",
+                                "maxLength": 6990508,
+                                "minLength": 4,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "anyOf": [
+                                  {
+                                    "const": "image/png",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/jpeg",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/gif",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/webp",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["name", "mimeType", "data"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 10,
+                      "type": "array"
+                    },
+                    "prompt": {
+                      "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                      "maxLength": 32768,
+                      "type": "string"
+                    },
+                    "revision": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "backlog",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ready",
+                          "type": "string"
+                        },
+                        {
+                          "const": "in_progress",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                    },
+                    "taskId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["action", "brief", "prompt", "status"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "deleteTask",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "taskId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["action", "taskId", "revision"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "readImages",
+                      "type": "string"
+                    },
+                    "ids": {
+                      "items": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 10,
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": ["action", "ids"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "begin",
+                      "type": "string"
+                    },
+                    "id": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "revision": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "setup": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "baseRef": {
+                              "type": "string"
+                            },
+                            "branch": {
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "repo",
+                              "type": "string"
+                            },
+                            "projectPath": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "projectPath",
+                            "baseRef",
+                            "branch"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bases": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "ref": {
+                                    "type": "string"
+                                  },
+                                  "repoPath": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["repoPath", "ref"],
+                                "type": "object"
+                              },
+                              "maxItems": 200,
+                              "type": "array"
+                            },
+                            "confirmation": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "system",
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "name", "confirmation", "bases"],
+                          "type": "object"
+                        }
+                      ],
+                      "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                    },
+                    "taskId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["action", "taskId", "revision", "id", "setup"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "const": "updateLaunch",
+                      "type": "string"
+                    },
+                    "expected": {
+                      "additionalProperties": false,
+                      "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                      "properties": {
+                        "effortId": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "images": {
+                          "items": {
+                            "properties": {
+                              "bytes": {
+                                "maximum": 5242880,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "id": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "anyOf": [
+                                  {
+                                    "const": "image/png",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/jpeg",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/gif",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/webp",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "name", "mimeType", "bytes"],
+                            "type": "object"
+                          },
+                          "maxItems": 10,
+                          "type": "array"
+                        },
+                        "jobId": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "description": "One-line task description.",
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "pattern": "^[^\\r\\n]+$",
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "phase": {
+                          "anyOf": [
+                            {
+                              "const": "creating",
+                              "type": "string"
+                            },
+                            {
+                              "const": "setup_failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "review_required",
+                              "type": "string"
+                            },
+                            {
+                              "const": "ready",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sending",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sent",
+                              "type": "string"
+                            },
+                            {
+                              "const": "delivery_failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "delivery_unknown",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "prompt": {
+                          "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                          "maxLength": 32768,
+                          "type": "string"
+                        },
+                        "retrySetup": {
+                          "description": "An explicit setup retry is pending acknowledgement from the owning daemon.",
+                          "type": "boolean"
+                        },
+                        "sendingSince": {
+                          "description": "First-message claim time in epoch milliseconds.",
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "sessionId": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "setup": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "baseRef": {
+                                  "type": "string"
+                                },
+                                "branch": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "repo",
+                                  "type": "string"
+                                },
+                                "projectPath": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "projectPath",
+                                "baseRef",
+                                "branch"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "bases": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "ref": {
+                                        "type": "string"
+                                      },
+                                      "repoPath": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["repoPath", "ref"],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 200,
+                                  "type": "array"
+                                },
+                                "confirmation": {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "system",
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "name",
+                                "confirmation",
+                                "bases"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                        },
+                        "version": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["id", "version", "phase", "prompt", "name"],
+                      "type": "object"
+                    },
+                    "next": {
+                      "additionalProperties": false,
+                      "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                      "properties": {
+                        "effortId": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "images": {
+                          "items": {
+                            "properties": {
+                              "bytes": {
+                                "maximum": 5242880,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "id": {
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "mimeType": {
+                                "anyOf": [
+                                  {
+                                    "const": "image/png",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/jpeg",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/gif",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "image/webp",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "name", "mimeType", "bytes"],
+                            "type": "object"
+                          },
+                          "maxItems": 10,
+                          "type": "array"
+                        },
+                        "jobId": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "description": "One-line task description.",
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "pattern": "^[^\\r\\n]+$",
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "phase": {
+                          "anyOf": [
+                            {
+                              "const": "creating",
+                              "type": "string"
+                            },
+                            {
+                              "const": "setup_failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "review_required",
+                              "type": "string"
+                            },
+                            {
+                              "const": "ready",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sending",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sent",
+                              "type": "string"
+                            },
+                            {
+                              "const": "delivery_failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "delivery_unknown",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "prompt": {
+                          "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                          "maxLength": 32768,
+                          "type": "string"
+                        },
+                        "retrySetup": {
+                          "description": "An explicit setup retry is pending acknowledgement from the owning daemon.",
+                          "type": "boolean"
+                        },
+                        "sendingSince": {
+                          "description": "First-message claim time in epoch milliseconds.",
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "sessionId": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "setup": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "baseRef": {
+                                  "type": "string"
+                                },
+                                "branch": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "repo",
+                                  "type": "string"
+                                },
+                                "projectPath": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "projectPath",
+                                "baseRef",
+                                "branch"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "bases": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "ref": {
+                                        "type": "string"
+                                      },
+                                      "repoPath": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["repoPath", "ref"],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 200,
+                                  "type": "array"
+                                },
+                                "confirmation": {
+                                  "maxLength": 128,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "system",
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "name",
+                                "confirmation",
+                                "bases"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                        },
+                        "version": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["id", "version", "phase", "prompt", "name"],
+                      "type": "object"
+                    },
+                    "taskId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["action", "taskId", "expected", "next"],
+                  "type": "object"
+                }
+              ]
+            },
+            "owner": {
+              "additionalProperties": false,
+              "description": "Stable Repo or System registration ID on the selected daemon, never a path.",
+              "properties": {
+                "id": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "repo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "system",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "required": ["kind", "id"],
+              "type": "object"
+            }
+          },
+          "required": ["owner", "input"],
+          "type": "object"
+        }
+      },
+      "required": ["operation"],
+      "type": "object"
+    },
+    "host_planning_result": {
+      "description": "Host-owned Markdown notebook and task board. Revisions detect concurrent edits.",
+      "properties": {
+        "canLaunch": {
+          "type": "boolean"
+        },
+        "imagePayloads": {
+          "description": "Returned only when reading specific attached images; never included in board listings.",
+          "items": {
+            "properties": {
+              "data": {
+                "description": "Base64 image bytes, without a data URL prefix.",
+                "maxLength": 6990508,
+                "minLength": 4,
+                "type": "string"
+              },
+              "mimeType": {
+                "anyOf": [
+                  {
+                    "const": "image/png",
+                    "type": "string"
+                  },
+                  {
+                    "const": "image/jpeg",
+                    "type": "string"
+                  },
+                  {
+                    "const": "image/gif",
+                    "type": "string"
+                  },
+                  {
+                    "const": "image/webp",
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": {
+                "const": "image",
+                "type": "string"
+              }
+            },
+            "required": ["type", "mimeType", "data"],
+            "type": "object"
+          },
+          "maxItems": 10,
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "notes": {
+          "description": "Free-form Markdown saved verbatim outside the checkout.",
+          "maxLength": 131072,
+          "type": "string"
+        },
+        "notesImages": {
+          "items": {
+            "properties": {
+              "bytes": {
+                "maximum": 5242880,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "mimeType": {
+                "anyOf": [
+                  {
+                    "const": "image/png",
+                    "type": "string"
+                  },
+                  {
+                    "const": "image/jpeg",
+                    "type": "string"
+                  },
+                  {
+                    "const": "image/gif",
+                    "type": "string"
+                  },
+                  {
+                    "const": "image/webp",
+                    "type": "string"
+                  }
+                ]
+              },
+              "name": {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["id", "name", "mimeType", "bytes"],
+            "type": "object"
+          },
+          "maxItems": 10,
+          "type": "array"
+        },
+        "notesRevision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tasks": {
+          "items": {
+            "description": "A planned task. Done is a manual board status, independent of launch and chat status.",
+            "properties": {
+              "brief": {
+                "description": "One-line task description.",
+                "maxLength": 240,
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]+$",
+                "type": "string"
+              },
+              "id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "images": {
+                "items": {
+                  "properties": {
+                    "bytes": {
+                      "maximum": 5242880,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "id": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "mimeType": {
+                      "anyOf": [
+                        {
+                          "const": "image/png",
+                          "type": "string"
+                        },
+                        {
+                          "const": "image/jpeg",
+                          "type": "string"
+                        },
+                        {
+                          "const": "image/gif",
+                          "type": "string"
+                        },
+                        {
+                          "const": "image/webp",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "name", "mimeType", "bytes"],
+                  "type": "object"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              "launch": {
+                "additionalProperties": false,
+                "description": "Durable launch and immutable prompt snapshot. Unknown delivery is never retried.",
+                "properties": {
+                  "effortId": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "images": {
+                    "items": {
+                      "properties": {
+                        "bytes": {
+                          "maximum": 5242880,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "id": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "mimeType": {
+                          "anyOf": [
+                            {
+                              "const": "image/png",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/jpeg",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/gif",
+                              "type": "string"
+                            },
+                            {
+                              "const": "image/webp",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "name": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "name", "mimeType", "bytes"],
+                      "type": "object"
+                    },
+                    "maxItems": 10,
+                    "type": "array"
+                  },
+                  "jobId": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "One-line task description.",
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "pattern": "^[^\\r\\n]+$",
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "phase": {
+                    "anyOf": [
+                      {
+                        "const": "creating",
+                        "type": "string"
+                      },
+                      {
+                        "const": "setup_failed",
+                        "type": "string"
+                      },
+                      {
+                        "const": "review_required",
+                        "type": "string"
+                      },
+                      {
+                        "const": "ready",
+                        "type": "string"
+                      },
+                      {
+                        "const": "sending",
+                        "type": "string"
+                      },
+                      {
+                        "const": "sent",
+                        "type": "string"
+                      },
+                      {
+                        "const": "delivery_failed",
+                        "type": "string"
+                      },
+                      {
+                        "const": "delivery_unknown",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "prompt": {
+                    "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                    "maxLength": 32768,
+                    "type": "string"
+                  },
+                  "retrySetup": {
+                    "description": "An explicit setup retry is pending acknowledgement from the owning daemon.",
+                    "type": "boolean"
+                  },
+                  "sendingSince": {
+                    "description": "First-message claim time in epoch milliseconds.",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "sessionId": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "setup": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "baseRef": {
+                            "type": "string"
+                          },
+                          "branch": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "repo",
+                            "type": "string"
+                          },
+                          "projectPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "projectPath",
+                          "baseRef",
+                          "branch"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "bases": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "ref": {
+                                  "type": "string"
+                                },
+                                "repoPath": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["repoPath", "ref"],
+                              "type": "object"
+                            },
+                            "maxItems": 200,
+                            "type": "array"
+                          },
+                          "confirmation": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "system",
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["kind", "name", "confirmation", "bases"],
+                        "type": "object"
+                      }
+                    ],
+                    "description": "Host-derived setup choices captured at admission for recovery of the same launch."
+                  },
+                  "version": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["id", "version", "phase", "prompt", "name"],
+                "type": "object"
+              },
+              "prompt": {
+                "description": "Full task brief, including line breaks, sent verbatim. If empty, the one-line task description is sent instead.",
+                "maxLength": 32768,
+                "type": "string"
+              },
+              "revision": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "backlog",
+                    "type": "string"
+                  },
+                  {
+                    "const": "ready",
+                    "type": "string"
+                  },
+                  {
+                    "const": "in_progress",
+                    "type": "string"
+                  },
+                  {
+                    "const": "done",
+                    "type": "string"
+                  }
+                ],
+                "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+              }
+            },
+            "required": ["id", "revision", "brief", "prompt", "status"],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["name", "canLaunch", "notes", "notesRevision", "tasks"],
       "type": "object"
     },
     "host_ptySessions_args": {
@@ -44097,6 +45349,9 @@
                   "const": "preview",
                   "type": "string"
                 },
+                "allowUnresolved": {
+                  "type": "boolean"
+                },
                 "bases": {
                   "items": {
                     "properties": {
@@ -44111,6 +45366,10 @@
                     "type": "object"
                   },
                   "type": "array"
+                },
+                "branchKey": {
+                  "pattern": "^[a-zA-Z0-9_-]{1,128}$",
+                  "type": "string"
                 },
                 "name": {
                   "type": "string"
@@ -44143,11 +45402,26 @@
                   },
                   "type": "array"
                 },
+                "branchKey": {
+                  "pattern": "^[a-zA-Z0-9_-]{1,128}$",
+                  "type": "string"
+                },
                 "confirmation": {
+                  "type": "string"
+                },
+                "creationId": {
+                  "description": "Stable launch identity for idempotent Effort admission.",
+                  "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
                   "type": "string"
                 },
                 "name": {
                   "type": "string"
+                },
+                "planningVersion": {
+                  "description": "Current planning launch version; required with a planned creation ID.",
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
                 },
                 "systemId": {
                   "type": "string"
@@ -44161,6 +45435,10 @@
                 "action": {
                   "const": "retry",
                   "type": "string"
+                },
+                "attempt": {
+                  "minimum": 0,
+                  "type": "integer"
                 },
                 "effortId": {
                   "type": "string"
@@ -47209,11 +48487,17 @@
             "value": {
               "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
               "properties": {
+                "baseCommit": {
+                  "type": "string"
+                },
                 "error": {
                   "type": "string"
                 },
                 "id": {
                   "type": "string"
+                },
+                "includesDone": {
+                  "type": "boolean"
                 },
                 "input": {
                   "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -47222,6 +48506,10 @@
                       "type": "string"
                     },
                     "branch": {
+                      "type": "string"
+                    },
+                    "creationId": {
+                      "format": "uuid",
                       "type": "string"
                     },
                     "mode": {
@@ -47246,6 +48534,10 @@
                     },
                     "projectPath": {
                       "type": "string"
+                    },
+                    "retryAttempt": {
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   },
                   "required": [
@@ -47260,6 +48552,10 @@
                 "logs": {
                   "description": "Captured command output for this creation job.",
                   "type": "string"
+                },
+                "nextCommand": {
+                  "minimum": 0,
+                  "type": "integer"
                 },
                 "paseo": {
                   "properties": {
@@ -47308,6 +48604,10 @@
                     "postNonBlocking"
                   ],
                   "type": "object"
+                },
+                "retryAttempt": {
+                  "minimum": 0,
+                  "type": "integer"
                 },
                 "source": {
                   "anyOf": [
@@ -128063,6 +129363,49 @@
       "required": ["message"],
       "type": "object"
     },
+    "runner_prompt_literal_args": {
+      "properties": {
+        "images": {
+          "description": "Optional inline image content accompanying the input.",
+          "items": {
+            "properties": {
+              "data": {
+                "description": "Base64-encoded image data.",
+                "type": "string"
+              },
+              "mimeType": {
+                "description": "Image media type.",
+                "type": "string"
+              },
+              "type": {
+                "const": "image",
+                "type": "string"
+              }
+            },
+            "required": ["type", "data", "mimeType"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "message": {
+          "description": "User input text submitted to the session.",
+          "type": "string"
+        }
+      },
+      "required": ["message"],
+      "type": "object"
+    },
+    "runner_prompt_literal_result": {
+      "description": "The runner verified that the exact Brief is the first saved user message.",
+      "properties": {
+        "recorded": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": ["recorded"],
+      "type": "object"
+    },
     "runner_prompt_result": {
       "anyOf": [
         {
@@ -193386,6 +194729,10 @@
         "branch": {
           "type": "string"
         },
+        "creationId": {
+          "format": "uuid",
+          "type": "string"
+        },
         "mode": {
           "anyOf": [
             {
@@ -193408,6 +194755,10 @@
         },
         "projectPath": {
           "type": "string"
+        },
+        "retryAttempt": {
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": ["projectPath", "branch", "mode", "baseRef", "name"],
@@ -193416,11 +194767,17 @@
     "workspace_WorkspaceCreationJob": {
       "description": "Recorded asynchronous creation job, including its captured pipeline, current stage, logs, outcome and eventual workspace identity.",
       "properties": {
+        "baseCommit": {
+          "type": "string"
+        },
         "error": {
           "type": "string"
         },
         "id": {
           "type": "string"
+        },
+        "includesDone": {
+          "type": "boolean"
         },
         "input": {
           "description": "Request to create a workspace under a host project using a branch mode, branch, base ref and name.",
@@ -193429,6 +194786,10 @@
               "type": "string"
             },
             "branch": {
+              "type": "string"
+            },
+            "creationId": {
+              "format": "uuid",
               "type": "string"
             },
             "mode": {
@@ -193453,6 +194814,10 @@
             },
             "projectPath": {
               "type": "string"
+            },
+            "retryAttempt": {
+              "minimum": 0,
+              "type": "integer"
             }
           },
           "required": ["projectPath", "branch", "mode", "baseRef", "name"],
@@ -193461,6 +194826,10 @@
         "logs": {
           "description": "Captured command output for this creation job.",
           "type": "string"
+        },
+        "nextCommand": {
+          "minimum": 0,
+          "type": "integer"
         },
         "paseo": {
           "properties": {
@@ -193504,6 +194873,10 @@
           },
           "required": ["pre", "create", "postBlocking", "postNonBlocking"],
           "type": "object"
+        },
+        "retryAttempt": {
+          "minimum": 0,
+          "type": "integer"
         },
         "source": {
           "anyOf": [

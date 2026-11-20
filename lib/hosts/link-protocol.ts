@@ -93,6 +93,7 @@ export const LINK_CLOSE = {
 export const HISTORY_MUTATING_COMMANDS = new Set([
   "edit_message",
   "prompt",
+  "prompt_literal",
   "steer",
   "follow_up",
   "followUp",
@@ -126,6 +127,7 @@ export const HISTORY_MUTATING_COMMANDS = new Set([
 /** Commands whose user message a peer's identical echo could be mistaken for. */
 export const MESSAGE_COMMANDS = new Set([
   "prompt",
+  "prompt_literal",
   "steer",
   "follow_up",
   "followUp",

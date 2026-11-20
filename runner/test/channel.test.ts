@@ -149,12 +149,25 @@ describe("keylime channel", () => {
     await host.connected;
     await host.command("prompt", { message: "ask me" });
     const request = await host.waitFor((frame) => frame.t === "ui_request");
-    const refresh = spyOn(test.session.modelRegistry, "refresh").mockResolvedValue(undefined);
+    const refresh = spyOn(
+      test.session.modelRegistry,
+      "refresh",
+    ).mockResolvedValue(undefined);
     try {
-      expect(await host.command("refresh_available_models")).toMatchObject({ ok: true });
-      expect(refresh).toHaveBeenCalledWith("online", { refreshCommandCredentials: true });
-      expect(host.frames.some((frame) => eventType(frame) === "agent_end")).toBe(false);
-      host.send({ t: "ui_response", id: request.id, value: { data: { q: "answered" } } });
+      expect(await host.command("refresh_available_models")).toMatchObject({
+        ok: true,
+      });
+      expect(refresh).toHaveBeenCalledWith("online", {
+        refreshCommandCredentials: true,
+      });
+      expect(
+        host.frames.some((frame) => eventType(frame) === "agent_end"),
+      ).toBe(false);
+      host.send({
+        t: "ui_response",
+        id: request.id,
+        value: { data: { q: "answered" } },
+      });
       await host.waitFor((frame) => eventType(frame) === "agent_end");
     } finally {
       refresh.mockRestore();
@@ -283,6 +296,36 @@ describe("keylime channel", () => {
     );
     expect(notice).toBeGreaterThanOrEqual(0);
     expect(notice).toBeLessThan(host.frames.indexOf(identity));
+  });
+
+  it("saves a builtin-shaped task brief as the first user message", async () => {
+    host = await startHost();
+    test = await createTestSession({
+      persist: true,
+      responses: [{ content: ["done"] }],
+    });
+    await host.connected;
+
+    const message = "/rename This is a brief for ^mock/mock-model  ";
+    expect(await host.command("prompt_literal", { message })).toMatchObject({
+      ok: true,
+      data: { recorded: true },
+    });
+    const file = test.session.sessionManager.getSessionFile();
+    if (!file) throw new Error("No saved task chat");
+    const first = fs
+      .readFileSync(file, "utf8")
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .find(
+        (entry) => entry.type === "message" && entry.message.role === "user",
+      );
+    expect(first?.message.content).toEqual([{ type: "text", text: message }]);
+    expect(test.session.sessionManager.getSessionName()).not.toBe(
+      message.slice(8).trim(),
+    );
+    await host.waitFor((frame) => eventType(frame) === "agent_end");
   });
 
   it("does not dial a socket in a directory others can write", async () => {

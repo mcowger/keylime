@@ -5,8 +5,16 @@ import { ChevronRight, Plus, Settings2 } from "lucide-react";
 import type { EffortRecord, SystemRecord } from "@/lib/api-contracts/systems";
 import { comparableProjectPath } from "@/lib/comparable-path";
 import { effortStatusLabels } from "./EffortDetails";
-import { SidebarIconButton, SidebarSectionHeader } from "./SessionSidebar-chrome";
-import type { SystemsHost, SystemsAction } from "./SystemsHost";
+import {
+  SidebarIconButton,
+  SidebarSectionHeader,
+} from "./SessionSidebar-chrome";
+import {
+  systemsRequest,
+  type SystemsHost,
+  type SystemsAction,
+} from "./SystemsHost";
+import { PlanningDialog } from "./PlanningDialog";
 import {
   EffortCreator,
   EffortRootEditor,
@@ -22,7 +30,7 @@ import {
 
 type Editor =
   | { kind: "root" | "new" }
-  | { kind: "edit" | "archive" | "effort"; system: SystemRecord };
+  | { kind: "edit" | "archive" | "effort" | "planning"; system: SystemRecord };
 
 function ArchiveSystem({
   system,
@@ -85,6 +93,7 @@ export function SystemsSidebar({
   matchedIds,
   unavailable,
   onOpenEffort,
+  onOpenLinkedSession,
   onChanged,
 }: {
   host: string;
@@ -98,6 +107,7 @@ export function SystemsSidebar({
   matchedIds: ReadonlySet<string> | null;
   unavailable?: string | null;
   onOpenEffort: (effort: EffortRecord, navigate: boolean) => void;
+  onOpenLinkedSession?: (sessionId: string) => void;
   onChanged: () => void;
 }) {
   const [editor, setEditor] = useState<Editor | null>(null);
@@ -191,6 +201,16 @@ export function SystemsSidebar({
               Actions
             </summary>
             <div style={{ ...systemsStack, padding: 4 }}>
+              <SystemsButton
+                onClick={(event) => {
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open");
+                  setEditor({ kind: "planning", system });
+                }}
+              >
+                System Notes &amp; Tasks
+              </SystemsButton>
               {!system.archived && (
                 <SystemsButton
                   disabled={disabled}
@@ -349,6 +369,27 @@ export function SystemsSidebar({
       )}
       {editor?.kind === "archive" && currentSystem && (
         <ArchiveSystem system={currentSystem} action={action} onClose={close} />
+      )}
+      {editor?.kind === "planning" && currentSystem && (
+        <PlanningDialog
+          key={`${host}:${currentSystem.id}`}
+          host={host}
+          owner={{ kind: "system", id: currentSystem.id }}
+          launchDisabled={disabled || currentSystem.archived}
+          onClose={close}
+          onChanged={onChanged}
+          onOpenTarget={async ({ effortId, path }) => {
+            const effort =
+              data?.efforts.find(({ id }) => id === effortId) ??
+              (await systemsRequest(host)).efforts.find(
+                ({ id }) => id === effortId,
+              );
+            if (!effort) throw new Error("Effort not found.");
+            setExpanded((previous) => new Set(previous).add(effort.systemId));
+            onOpenEffort(effort, !!path && effort.status === "ready");
+          }}
+          onOpenChat={onOpenLinkedSession}
+        />
       )}
       {editor?.kind === "effort" && currentSystem && (
         <EffortCreator

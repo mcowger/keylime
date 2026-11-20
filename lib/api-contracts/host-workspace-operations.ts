@@ -2,6 +2,7 @@ import { Type, type TSchema } from "@sinclair/typebox";
 import type { OperationContract } from "./operations";
 import * as M from "./workspace-models";
 import { SystemsRequestSchema, SystemsResultSchema } from "./systems";
+import { PlanningBoardSchema, PlanningOperationSchema } from "./planning";
 
 const str = Type.String(),
   num = Type.Number(),
@@ -502,10 +503,20 @@ Recovery: Re-query after remote or worktree changes.`,
     "systems",
     `Usage: Manage Systems and Efforts on one host daemon.
 Inputs: Select an action with its host paths, IDs, settings, or preview confirmation. Service controls identify a saved service and never take a command or environment override.
-Invariants: Creation captures resolved commits and the System definition. Paths and branches remain stable on rename. A running service is not a readiness check.
+Invariants: Creation captures resolved commits and the System definition. Planned admission requires the daemon's current launch version and plan. Paths and branches remain stable on rename. A running service is not a readiness check.
 Effects: Actions can change definitions, admit durable setup, control daemon-owned service PTYs, or clean up Efforts. Cleanup does not remove branches, push commits, or close PRs.
 Recovery: List host state after uncertain delivery. Retry incomplete setup explicitly and refresh a cleanup preview before resuming removal. A daemon restart does not restart services.`,
     obj({ input: SystemsRequestSchema }),
     SystemsResultSchema,
   ),
+  {
+    name: "planning",
+    description: `Usage: Read or edit the Notes & Tasks board on its owning daemon.
+Inputs: Identify a registered Repo or System by kind and ID, then select an action. Image reads accept only IDs referenced by this board. Begin and launch updates are internal.
+Invariants: Edits check the saved revision. Begin snapshots the saved Brief and the Notes and task image IDs in that order. Launch updates compare the full previous record. Only an unadmitted Effort that needs review can replace its setup plan.
+Effects: Persists board changes outside the checkout. Does not write to Git or run workspace setup or chat delivery.
+Recovery: Read the board after a conflict or uncertain result. Never assume an unconfirmed launch transition was claimed.`,
+    args: obj({ operation: PlanningOperationSchema }),
+    result: PlanningBoardSchema,
+  },
 ];

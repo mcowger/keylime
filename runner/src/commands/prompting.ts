@@ -4,7 +4,7 @@
  *
  * Unsolicited frames (omp → host):
  *   {t:"prompt_result", id, agentInvoked, status, error?, sessionSettled}
- *       once per accepted `prompt`/`abort_and_prompt` (`id` = its cmd id), after its work yields
+ *       once per accepted `prompt`/`prompt_literal`/`abort_and_prompt` (`id` = its cmd id), after its work yields
  *   {t:"prompt_error", id, command, error}      a prompt failed after its cmd was answered
  *   {t:"bash_output", id, chunk}                output of the running `bash` cmd `id`
  *   {t:"command_output", text}                  a builtin slash command's output
@@ -28,6 +28,7 @@ import {
 import { executeAcpBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/acp-builtins";
 import { buildAvailableSlashCommands } from "@oh-my-pi/pi-coding-agent/slash-commands/available-commands";
 import { logger } from "@oh-my-pi/pi-utils";
+import { validateAgentImages } from "../../../lib/image-attachments";
 import {
   type ClientMessageClaim,
   claimClientMessage,
@@ -40,7 +41,12 @@ import {
   type PromptTicket,
   reportPromptResult,
 } from "../prompt-results";
-import type { CommandContext, CommandTable, FrameTable } from "./types";
+import {
+  CommandError,
+  type CommandContext,
+  type CommandTable,
+  type FrameTable,
+} from "./types";
 
 type ImageContent = NonNullable<Parameters<AgentSession["steer"]>[1]>[number];
 type TodoPhase = Parameters<AgentSession["commitTodoPhases"]>[0][number];
@@ -453,6 +459,92 @@ export const promptingCommands: CommandTable = {
       results.discard(ticket);
       throw error;
     }
+  },
+  /** @apiCommand prompt_literal */
+  async prompt_literal(ctx, args) {
+    const { session } = ctx;
+    const message = args.message;
+    if (typeof message !== "string" || !message.trim())
+      throw new Error("prompt_literal: message must be nonblank text");
+    const images = args.images;
+    const imageError = validateAgentImages(images);
+    if (imageError) throw new CommandError(imageError, "invalid_images");
+    if (
+      images !== undefined &&
+      !(Array.isArray(images) && images.every(isImage))
+    )
+      throw new CommandError("Invalid literal prompt images", "invalid_images");
+    const input = images?.length
+      ? [{ type: "text" as const, text: message }, ...images]
+      : message;
+    const state = prompting(ctx);
+    const sequence = state.accept();
+    const sessionId = session.sessionId;
+    const recorded = await state.enqueue(async () => {
+      if (
+        !state.isCurrent(sequence) ||
+        session.sessionId !== sessionId ||
+        session.isStreaming ||
+        session.queuedMessageCount > 0 ||
+        session.messages.some(({ role }) => role === "user")
+      )
+        throw new CommandError(
+          "The launch chat is no longer empty and idle",
+          "session_busy",
+        );
+      const ticket = state.results.begin(ctx.id);
+      const { promise, resolve } = Promise.withResolvers<boolean>();
+      const unsubscribe = session.subscribe((event) => {
+        if (event.type === "message_end" && event.message.role === "user")
+          resolve(true);
+      });
+      const timer = setTimeout(() => resolve(false), 20_000);
+      let confirmed = false;
+      try {
+        // An explicit steer admits raw user text and wakes even an empty transcript.
+        await session.sendUserMessage(input, {
+          deliverAs: "steer",
+          expandPromptTemplates: false,
+        });
+        if (!(await promise) || session.sessionId !== sessionId) return false;
+        await session.settleInFlightMessagePersistence();
+        const first = session.sessionManager
+          .getBranch()
+          .find(
+            (entry) =>
+              entry.type === "message" && entry.message.role === "user",
+          );
+        if (first?.type !== "message" || first.message.role !== "user")
+          return false;
+        const content = first.message.content;
+        if (
+          typeof content === "string"
+            ? content !== message || !!images?.length
+            : content.length !== 1 + (images?.length ?? 0) ||
+              content[0].type !== "text" ||
+              content[0].text !== message ||
+              content.slice(1).some((part) => part.type !== "image")
+        )
+          return false;
+        await session.sessionManager.ensureOnDisk();
+        await session.sessionManager.flush();
+        confirmed = session.sessionId === sessionId;
+        if (confirmed) state.results.settle(ticket);
+        return confirmed;
+      } catch {
+        return false;
+      } finally {
+        clearTimeout(timer);
+        unsubscribe();
+        if (!confirmed) state.results.discard(ticket);
+      }
+    });
+    if (!recorded)
+      throw new CommandError(
+        "The first message could not be confirmed in the transcript",
+        "literal_delivery_unknown",
+      );
+    return { recorded: true };
   },
   /** @apiCommand steer
    * Ordered input admission makes a successful reply a fence for subsequent queue edits, not a turn result. */

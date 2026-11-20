@@ -127,6 +127,7 @@ interface Props {
   /** The active session can exist in memory before its JSONL file is flushed. */
   optimisticSession?: SessionInfo | null;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
+  onOpenLinkedSession?: (sessionId: string) => void;
   onNewSession?: (
     sessionId: string,
     cwd: string | null,
@@ -227,6 +228,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   selectedSessionId,
   optimisticSession,
   onSelectSession,
+  onOpenLinkedSession,
   onNewSession,
   onNewWorkspace,
   buildingWorkspaceProjects,
@@ -2064,6 +2066,7 @@ export const SessionSidebar = memo(function SessionSidebar({
             onWorkspaceRemoved?.(path, host);
           }}
           onSelectSession={handleSelectSessionFromList}
+          onOpenLinkedSession={onOpenLinkedSession}
           onNewWorkspace={(project) => onNewWorkspace?.(project)}
           buildingWorkspaceProjects={buildingWorkspaceProjects}
           hostUnavailableReason={hostUnavailableReason}

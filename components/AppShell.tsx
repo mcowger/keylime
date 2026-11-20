@@ -2943,6 +2943,7 @@ export function AppShell({ appName }: { appName: string }) {
       selectedSessionId={selectedSession?.id ?? null}
       optimisticSession={selectedSession?.path === "" ? selectedSession : null}
       onSelectSession={handleSelectSession}
+      onOpenLinkedSession={openLinkedSession}
       onNewSession={handleNewSession}
       systemsHosts={systemsHosts}
       onOpenEffort={(host, effort, navigate, latestSession) => {

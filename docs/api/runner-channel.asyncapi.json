@@ -223,6 +223,9 @@
         "RunnerReply_prompt": {
           "$ref": "#/components/messages/RunnerReply_prompt"
         },
+        "RunnerReply_prompt_literal": {
+          "$ref": "#/components/messages/RunnerReply_prompt_literal"
+        },
         "RunnerReply_refresh_available_models": {
           "$ref": "#/components/messages/RunnerReply_refresh_available_models"
         },
@@ -489,6 +492,9 @@
         },
         "RunnerRequest_prompt": {
           "$ref": "#/components/messages/RunnerRequest_prompt"
+        },
+        "RunnerRequest_prompt_literal": {
+          "$ref": "#/components/messages/RunnerRequest_prompt_literal"
         },
         "RunnerRequest_refresh_available_models": {
           "$ref": "#/components/messages/RunnerRequest_refresh_available_models"
@@ -1424,6 +1430,18 @@
           "$ref": "#/components/schemas/RunnerReply_prompt"
         },
         "title": "RunnerReply_prompt"
+      },
+      "RunnerReply_prompt_literal": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_prompt_literal",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_prompt_literal"
+        },
+        "title": "RunnerReply_prompt_literal"
       },
       "RunnerReply_refresh_available_models": {
         "contentType": "application/json",
@@ -2492,6 +2510,18 @@
           "$ref": "#/components/schemas/RunnerRequest_prompt"
         },
         "title": "RunnerRequest_prompt"
+      },
+      "RunnerRequest_prompt_literal": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Record text as the first user message of a new task chat.\nInputs: Provide the exact nonblank Brief and optional inline images. Preserve whitespace, slash prefixes and image order.\nInvariants: Only an idle chat without user messages or queued input can accept it. Input hooks, slash commands and template expansion do not run. Success confirms the first user message was saved, not that the model completed a turn.\nEffects: Submits literal user text through OMP's native input queue and waits for transcript persistence.\nRecovery: For literal_delivery_unknown, a timeout or a lost reply, check the linked chat and never resend automatically.",
+        "name": "RunnerRequest_prompt_literal",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_prompt_literal"
+        },
+        "title": "RunnerRequest_prompt_literal"
       },
       "RunnerRequest_refresh_available_models": {
         "contentType": "application/json",
@@ -55857,6 +55887,63 @@
         "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
         "title": "RunnerReply_prompt"
       },
+      "RunnerReply_prompt_literal": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "description": "The runner verified that the exact Brief is the first saved user message.",
+                "properties": {
+                  "recorded": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["recorded"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_prompt_literal"
+      },
       "RunnerReply_refresh_available_models": {
         "anyOf": [
           {
@@ -59742,6 +59829,57 @@
         "title": "RunnerRequest_prompt",
         "type": "object"
       },
+      "RunnerRequest_prompt_literal": {
+        "description": "Usage: Record text as the first user message of a new task chat.\nInputs: Provide the exact nonblank Brief and optional inline images. Preserve whitespace, slash prefixes and image order.\nInvariants: Only an idle chat without user messages or queued input can accept it. Input hooks, slash commands and template expansion do not run. Success confirms the first user message was saved, not that the model completed a turn.\nEffects: Submits literal user text through OMP's native input queue and waits for transcript persistence.\nRecovery: For literal_delivery_unknown, a timeout or a lost reply, check the linked chat and never resend automatically.",
+        "properties": {
+          "args": {
+            "properties": {
+              "images": {
+                "description": "Optional inline image content accompanying the input.",
+                "items": {
+                  "properties": {
+                    "data": {
+                      "description": "Base64-encoded image data.",
+                      "type": "string"
+                    },
+                    "mimeType": {
+                      "description": "Image media type.",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "image",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type", "data", "mimeType"],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "message": {
+                "description": "User input text submitted to the session.",
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "prompt_literal",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_prompt_literal",
+        "type": "object"
+      },
       "RunnerRequest_refresh_available_models": {
         "description": "Usage: Refresh and list available models from configured providers.\nInputs: No arguments.\nInvariants: Waits for background discovery and serializes explicit registry refreshes; the session and active run remain alive. Discovery and configuration failures reject the command.\nEffects: Bypasses discovery caches, refreshes command-backed credentials and updates the live registry and model scope.\nRecovery: Check provider configuration and retry after a failure.",
         "properties": {
@@ -62313,6 +62451,29 @@
         ]
       },
       "summary": "prompt"
+    },
+    "operation_prompt_literal": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Record text as the first user message of a new task chat.\nInputs: Provide the exact nonblank Brief and optional inline images. Preserve whitespace, slash prefixes and image order.\nInvariants: Only an idle chat without user messages or queued input can accept it. Input hooks, slash commands and template expansion do not run. Success confirms the first user message was saved, not that the model completed a turn.\nEffects: Submits literal user text through OMP's native input queue and waits for transcript persistence.\nRecovery: For literal_delivery_unknown, a timeout or a lost reply, check the linked chat and never resend automatically.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_prompt_literal"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_prompt_literal"
+          }
+        ]
+      },
+      "summary": "prompt_literal"
     },
     "operation_refresh_available_models": {
       "action": "send",

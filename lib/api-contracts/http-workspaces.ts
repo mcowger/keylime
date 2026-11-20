@@ -40,6 +40,7 @@ import {
   CloneProgressSchema,
 } from "./workspace-models";
 import { SystemsHttpPostSchema, SystemsResultSchema } from "./systems";
+import { PlanningHttpRequestSchema, PlanningResultSchema } from "./planning";
 
 const s = Type.String();
 const opt = Type.Optional;
@@ -440,6 +441,63 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
         413: error("The request body exceeds 384 KiB."),
         501: error("The host daemon does not support Systems."),
         504: error("The host did not answer in time; the action may have run."),
+      },
+    },
+  ),
+  ops(
+    "/api/planning",
+    "get",
+    "workspacePlanningImageGet",
+    "Read a saved planning image",
+    {
+      parameters: [
+        host,
+        queryParameter(
+          "kind",
+          Type.Union([Type.Literal("repo"), Type.Literal("system")]),
+          true,
+        ),
+        queryParameter("ownerId", s, true),
+        queryParameter("imageId", s, true),
+      ],
+      responses: {
+        ...webErrors,
+        200: {
+          description: "Saved raster image bytes",
+          content: {
+            "image/png": { schema: binary },
+            "image/jpeg": { schema: binary },
+            "image/gif": { schema: binary },
+            "image/webp": { schema: binary },
+          },
+        },
+        501: error("The host daemon does not support planning."),
+      },
+    },
+  ),
+  ops(
+    "/api/planning",
+    "post",
+    "workspacePlanningPost",
+    "Manage Repo and System notes, tasks, and launches",
+    {
+      requestBody: jsonBody(
+        PlanningHttpRequestSchema,
+        "At most 8 MiB of JSON.",
+      ),
+      responses: {
+        ...responses(PlanningResultSchema),
+        409: error(
+          "Board or launch state changed, or the target cannot launch.",
+        ),
+        413: error(
+          "The request body or the combined attachment budget exceeds its limit.",
+        ),
+        501: error("The host daemon does not support planning."),
+        502: error(
+          "The planning model was unavailable or did not return a usable draft.",
+        ),
+        504: error("The owning host or planning model did not answer in time."),
       },
     },
   ),

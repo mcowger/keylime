@@ -48,6 +48,7 @@ import {
   SidebarIconButton,
   SidebarSectionHeader,
 } from "./SessionSidebar-chrome";
+import { PlanningDialog } from "./PlanningDialog";
 import { SystemsSidebar } from "./SystemsSidebar";
 import type { SystemsHosts } from "./SystemsHost";
 
@@ -117,6 +118,7 @@ type Props = {
   collapsedHosts: Set<string>;
   onToggleHost: (host: string) => void;
   onSelectSession: (session: SessionInfo) => void;
+  onOpenLinkedSession?: (sessionId: string) => void;
   onAddProject: (host: string) => void;
   onNewWorkspace: (project: ManagedProject) => void;
   buildingWorkspaceProjects?: ReadonlySet<string>;
@@ -191,6 +193,7 @@ export function HierarchySidebar({
   onWorkspaceRemoved,
   onShip,
   onSelectSession,
+  onOpenLinkedSession,
   onAddProject,
   onNewWorkspace,
   buildingWorkspaceProjects,
@@ -264,6 +267,10 @@ export function HierarchySidebar({
   const [settingsProject, setSettingsProject] = useState<{
     host: string;
     project: HierarchyProject;
+  } | null>(null);
+  const [planningRepo, setPlanningRepo] = useState<{
+    host: string;
+    id: string;
   } | null>(null);
   const [projectSettingsPending, setProjectSettingsPending] = useState(false);
   const [openWorkspaceMenu, setOpenWorkspaceMenu] = useState<string | null>(
@@ -1052,6 +1059,18 @@ export function HierarchySidebar({
                         >
                           <Wrench size={16} aria-hidden="true" /> Repo settings
                         </button>
+                        <button
+                          style={menuButton}
+                          type="button"
+                          onClick={(event) => {
+                            event.currentTarget
+                              .closest("details")
+                              ?.removeAttribute("open");
+                            setPlanningRepo({ host: host.id, id: project.id });
+                          }}
+                        >
+                          Repo Notes &amp; Tasks
+                        </button>
                         {project.kind === "git" && (
                           <button
                             style={menuButton}
@@ -1580,11 +1599,26 @@ export function HierarchySidebar({
                   : undefined;
                 onOpenEffort(host.id, effort, navigate, latest);
               }}
+              onOpenLinkedSession={onOpenLinkedSession}
               onChanged={onChanged}
             />
           )}
         </section>
       ))}
+      {planningRepo && (
+        <PlanningDialog
+          key={`${planningRepo.host}:${planningRepo.id}`}
+          host={planningRepo.host}
+          owner={{ kind: "repo", id: planningRepo.id }}
+          launchDisabled={!!hostUnavailableReason?.(planningRepo.host)}
+          onClose={() => setPlanningRepo(null)}
+          onChanged={onChanged}
+          onOpenTarget={({ path }) => {
+            if (path) onSelectWorkspace(path, planningRepo.host);
+          }}
+          onOpenChat={onOpenLinkedSession}
+        />
+      )}
       {settingsProject && (
         <Dialog
           open
