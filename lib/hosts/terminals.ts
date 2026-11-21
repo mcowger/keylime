@@ -7,7 +7,6 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import { userInfo } from "node:os";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { Terminal } from "@xterm/headless";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -38,61 +37,50 @@ function executableShell(path: string | null | undefined): path is string {
 function loginAccount(): { shell?: string; home?: string } {
   let shell: string | null | undefined;
   let home: string | undefined;
+  // Bun's os.userInfo() can report the inherited SHELL, not the account shell.
   try {
-    const account = userInfo();
-    shell = account.shell;
-    home = account.homedir;
-  } catch {
-    // An account lookup can fail in containers without a passwd entry.
-  }
-  if (
-    !executableShell(shell) ||
-    (!globalThis.process.env.HOME && (!home || !isAbsolute(home)))
-  ) {
-    try {
-      if (globalThis.process.platform === "linux") {
-        const uid = globalThis.process.geteuid?.();
-        if (uid !== undefined) {
-          let record: string | undefined;
-          try {
-            record = execFileSync("/usr/bin/getent", ["passwd", String(uid)], {
-              encoding: "utf8",
-              timeout: 1500,
-            }).trim();
-          } catch {
-            // Minimal Linux installations may not provide getent.
-            record = readFileSync("/etc/passwd", "utf8")
-              .split("\n")
-              .find((line) => line.split(":")[2] === String(uid));
-          }
-          const fields = record?.split(":") ?? [];
-          if (fields[2] === String(uid)) {
-            home = fields[5] || home;
-            shell = fields[6];
-          }
+    if (globalThis.process.platform === "linux") {
+      const uid = globalThis.process.geteuid?.();
+      if (uid !== undefined) {
+        let record: string | undefined;
+        try {
+          record = execFileSync("/usr/bin/getent", ["passwd", String(uid)], {
+            encoding: "utf8",
+            timeout: 1500,
+          }).trim();
+        } catch {
+          // Minimal Linux installations may not provide getent.
+          record = readFileSync("/etc/passwd", "utf8")
+            .split("\n")
+            .find((line) => line.split(":")[2] === String(uid));
         }
-      } else if (globalThis.process.platform === "darwin") {
-        const options = { encoding: "utf8" as const, timeout: 1500 };
-        const name = execFileSync("/usr/bin/id", ["-un"], options).trim();
-        if (name && !name.includes("/") && !name.includes("\n")) {
-          const record = execFileSync(
-            "/usr/bin/dscl",
-            [
-              "/Search",
-              "-read",
-              `/Users/${name}`,
-              "UserShell",
-              "NFSHomeDirectory",
-            ],
-            options,
-          );
-          shell = /^UserShell: (.+)$/m.exec(record)?.[1];
-          home = /^NFSHomeDirectory: (.+)$/m.exec(record)?.[1] || home;
+        const fields = record?.split(":");
+        if (fields?.[2] === String(uid)) {
+          home = fields[5];
+          shell = fields[6];
         }
       }
-    } catch {
-      // Fall back to the service environment when the account is unavailable.
+    } else if (globalThis.process.platform === "darwin") {
+      const options = { encoding: "utf8" as const, timeout: 1500 };
+      const name = execFileSync("/usr/bin/id", ["-un"], options).trim();
+      if (name && !name.includes("/") && !name.includes("\n")) {
+        const record = execFileSync(
+          "/usr/bin/dscl",
+          [
+            "/Search",
+            "-read",
+            `/Users/${name}`,
+            "UserShell",
+            "NFSHomeDirectory",
+          ],
+          options,
+        );
+        shell = /^UserShell: (.+)$/m.exec(record)?.[1];
+        home = /^NFSHomeDirectory: (.+)$/m.exec(record)?.[1];
+      }
     }
+  } catch {
+    // Fall back to the service environment when the account is unavailable.
   }
   if (!home || !isAbsolute(home)) home = undefined;
   else {
@@ -253,7 +241,10 @@ function signalSession(
     ["-A", "-o", "pid=", "-o", "pgid=", "-o", darwin ? "tty=" : "sess="],
     { encoding: "utf8", timeout: 3000 },
   );
-  const rows = table.trim().split("\n").map((row) => row.trim().split(/\s+/));
+  const rows = table
+    .trim()
+    .split("\n")
+    .map((row) => row.trim().split(/\s+/));
   if (darwin && leaderRunning) {
     tty ??= rows.find(([child]) => Number(child) === pid)?.[2];
     // ?? means no controlling terminal; never match other non-terminal processes.
@@ -458,29 +449,37 @@ export class TerminalManager {
     };
     let process: Bun.Subprocess;
     try {
-      process = Bun.spawn(argv ?? [shell, "-i"], {
-        detached: true,
-        cwd: directory,
-        env: createChildProcessEnvironment({
-          ...serviceEnv,
-          ...(!argv
-            ? {
-                SHELL: shell,
-                ...(!globalThis.process.env.HOME && account?.home
-                  ? { HOME: account.home }
-                  : {}),
-              }
-            : {}),
-          TERM: "xterm-256color",
-          COLORTERM: "truecolor",
-        }),
-        terminal: {
-          cols,
-          rows,
-          data: (_pty, bytes) => output(decoder.decode(bytes, { stream: true })),
-          exit: () => output(decoder.decode()),
+      // csh/tcsh require -l to be the only flag; the PTY makes them interactive.
+      process = Bun.spawn(
+        argv ??
+          (/^(?:tcsh|csh)$/.test(basename(shell))
+            ? [shell, "-l"]
+            : [shell, "-i", "-l"]),
+        {
+          detached: true,
+          cwd: directory,
+          env: createChildProcessEnvironment({
+            ...serviceEnv,
+            ...(!argv
+              ? {
+                  SHELL: shell,
+                  ...(!globalThis.process.env.HOME && account?.home
+                    ? { HOME: account.home }
+                    : {}),
+                }
+              : {}),
+            TERM: "xterm-256color",
+            COLORTERM: "truecolor",
+          }),
+          terminal: {
+            cols,
+            rows,
+            data: (_pty, bytes) =>
+              output(decoder.decode(bytes, { stream: true })),
+            exit: () => output(decoder.decode()),
+          },
         },
-      });
+      );
     } catch (error) {
       screen.dispose();
       throw error;
@@ -595,7 +594,11 @@ export class TerminalManager {
     }
     const tty = signalSession(entry.process, "SIGTERM");
     await Bun.sleep(100);
-    signalSession(entry.process, "SIGKILL", pty && !pty.closed ? tty : undefined);
+    signalSession(
+      entry.process,
+      "SIGKILL",
+      pty && !pty.closed ? tty : undefined,
+    );
     pty?.close();
     const result = await Promise.race([
       entry.process.exited.then(() => true),

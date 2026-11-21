@@ -94,7 +94,7 @@ test("workspace terminals use the account shell and preserve an isolated HOME", 
   }
 });
 
-test("workspace terminals resolve the OS login shell when the service shell is missing or unknown", async (t) => {
+test("workspace terminals prefer the OS login shell over the service environment", async (t) => {
   let shell: string | undefined;
   try {
     if (process.platform === "linux") {
@@ -136,21 +136,29 @@ test("workspace terminals resolve the OS login shell when the service shell is m
   try {
     mkdirSync(cwd);
     registerEffortRoot(cwd, "Native shell fixture");
-    for (const serviceShell of [undefined, "unknown"]) {
+    for (const serviceShell of [
+      undefined,
+      "unknown",
+      shell === "/bin/sh" ? "/bin/false" : "/bin/sh",
+    ]) {
       if (serviceShell === undefined) delete process.env.SHELL;
       else process.env.SHELL = serviceShell;
       const terminal = manager.create(cwd, 500, 24);
-      manager.input(terminal.id, 'printf "ACTUAL_SHELL:%s\\n" "$SHELL"\n');
+      const fish = basename(shell) === "fish";
+      manager.input(
+        terminal.id,
+        fish
+          ? 'status is-login; and status is-interactive; and printf "LOGIN_INTERACTIVE:%s\\n" "$SHELL"\n'
+          : 'printf "ACTUAL_SHELL:%s\\n" "$SHELL"\n',
+      );
+      const expected = `${fish ? "LOGIN_INTERACTIVE" : "ACTUAL_SHELL"}:${shell}`;
       const deadline = Date.now() + 10000;
       let snapshot = "";
-      while (
-        !snapshot.includes(`ACTUAL_SHELL:${shell}`) &&
-        Date.now() < deadline
-      ) {
+      while (!snapshot.includes(expected) && Date.now() < deadline) {
         await setImmediate();
         snapshot = (await manager.snapshot(terminal.id)).snapshot;
       }
-      assert.ok(snapshot.includes(`ACTUAL_SHELL:${shell}`), snapshot);
+      assert.ok(snapshot.includes(expected), snapshot);
     }
   } finally {
     await manager.stop();

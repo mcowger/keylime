@@ -253,7 +253,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Fixed
 - Workspace terminal scrollbars stay within the visible terminal after tab switches and resizes, so you can scroll back to the latest output and prompt.
 - Workspace terminals fit their visible area without clipping the last rows or columns.
-- New workspace terminals use the host account's configured shell and its interactive startup files.
+- New workspace terminals start the host account's interactive login shell, even when the daemon inherits a different `SHELL`.
 - Host release comparisons refresh after a daemon reconnects, even when its version string hasn't changed.
 - Explicit host deployments force-drain busy hosts and restart them, interrupting active work instead of refusing the install.
 - Workspace terminals fill the available space below the toolbar instead of pushing it down.
@@ -453,6 +453,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Host release comparisons refresh after daemon reconnects, even when version strings stay unchanged
 - Explicit artifact installs force-drain busy hosts and restart them, interrupting active work instead of refusing installation
 - Workspace terminal scrollbars stay within the visible terminal after tab switches and resizes, so you can scroll back to the latest output and prompt
+- New workspace terminals start the host account's interactive login shell, even when the daemon inherits a different `SHELL`
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
