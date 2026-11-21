@@ -3,16 +3,20 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import React from "react";
 import type { AutoPrewalkMode } from "@/lib/api-contracts/runner-lifecycle";
+import { setShowPrewalkControl } from "@/hooks/useShowPrewalkControl";
 import { ChatInput } from "./ChatInput";
 import { ModelPickerPanel } from "./ChatInput-model-picker";
 
 // Testing Library binds its queries to the document installed by setup-dom.
-const { cleanup, fireEvent, render, screen, waitFor, within } =
+const { act, cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react/pure.js");
 
 window.matchMedia = globalThis.matchMedia;
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  localStorage.removeItem("keylime:show-prewalk-control");
+});
 
 test("the model picker can refresh during a run and displays the updated catalog", () => {
   let refreshes = 0;
@@ -113,6 +117,34 @@ test("auto-prewalk can be selected without changing the model and reports errors
   assert.deepEqual(selected, ["on", "off", "suggest", "off", "on"]);
   view.rerender(React.createElement(ChatInput, { ...props, isStreaming: true }));
   assert.equal(button.matches(":disabled"), true);
+});
+
+test("prewalk control can be hidden and stays hidden after remount", () => {
+  let refreshes = 0;
+  const props = {
+    onSend: async () => ({ status: "accepted" as const }),
+    onAbort() {},
+    onModelChange() {},
+    onPlanModeChange() {},
+    onRefreshAutoPrewalk() { refreshes++; },
+    onAutoPrewalkChange() {},
+    autoPrewalk: "suggest" as const,
+    isStreaming: false,
+  };
+  const view = render(React.createElement(ChatInput, props));
+  fireEvent.click(screen.getByRole("button", { name: /Change model/ }));
+  assert.ok(screen.getByRole("button", { name: "Auto Prewalk: Suggest" }));
+  assert.equal(refreshes, 1);
+  act(() => setShowPrewalkControl(false));
+  assert.equal(screen.queryByRole("button", { name: /Auto Prewalk/ }), null);
+  assert.ok(screen.getByRole("button", { name: "Build mode. Switch to Plan" }));
+  view.unmount();
+  render(React.createElement(ChatInput, props));
+  fireEvent.click(screen.getByRole("button", { name: /Change model/ }));
+  assert.equal(refreshes, 2);
+  assert.equal(screen.queryByRole("button", { name: /Auto Prewalk/ }), null);
+  act(() => setShowPrewalkControl(true));
+  assert.ok(screen.getByRole("button", { name: "Auto Prewalk: Suggest" }));
 });
 
 test("the model picker remains available when no models are returned", () => {

@@ -1577,6 +1577,8 @@
   "settingsConfig.messageDuringActiveRunDesc": "What composer does on submit while agent runs. Steer interrupts; Queue follow-up delivers after finish.",
   "settingsConfig.steerCurrentRun": "Steer current run",
   "settingsConfig.queueFollowUp": "Queue follow-up",
+  "settingsConfig.showPrewalkControl": "Show Auto Prewalk control",
+  "settingsConfig.showPrewalkControlDesc": "Show the Auto Prewalk control in the model picker. This setting applies to this browser.",
   "settingsConfig.wordCompletion": "Word completion",
   "settingsConfig.wordCompletionDesc": "Ghost text from omp's word prediction; Tab or → accepts. Auto enables it only with a mouse or trackpad (not on touch keyboards).",
   "settingsConfig.wordCompletionAuto": "Auto",

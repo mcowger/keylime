@@ -16,7 +16,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Run named Paseo scripts and start services from the **Scripts** tab in the right sidebar when the Repo follows Paseo workspace setup. Services use ports on the owning host. Stop keeps terminal output; successful worktree removal discards it.
 - Advisor review status covers turn-boundary scheduling and review delivery, and survives inconclusive reconnect snapshots.
 - The composer model picker holds the **Build** / **Plan** and Auto Prewalk controls. Approval restores the previous model and reasoning effort before implementation; requesting revisions stays in Plan. Switching back to Build also restores write access. As in OMP, shell commands and extensions are not sandboxed.
-- Auto Prewalk cycles through Off, Suggest, and On for the running session. Suggest reports the native judge's decision; On arms recommended handoffs without changing the model that starts a task.
+- Auto Prewalk cycles through Off, Suggest, and On for the running session. Suggest reports the native judge's decision; On arms recommended handoffs without changing the model that starts a task. **Settings → Interface & Behavior** can hide the control.
 - The composer model picker lists workspace chat roles and applies them with OMP's role selection behavior without changing role settings.
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
 - **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart.

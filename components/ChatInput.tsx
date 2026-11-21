@@ -55,6 +55,7 @@ import type {
 import type { ActiveGoal, ActivePlan } from "@/lib/web-mode-state";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/field";
+import { useShowPrewalkControl } from "@/hooks/useShowPrewalkControl";
 import { useDictation } from "@/hooks/useDictation";
 import { toastBtwError } from "@/hooks/useBtw";
 import type {
@@ -604,6 +605,7 @@ export const ChatInput = memo(
     ref,
   ) {
     const isMobile = useIsMobile();
+    const showPrewalkControl = useShowPrewalkControl();
     // Read per render so a Settings change applies on the next keystroke.
     const wordCompletionOn = isWordCompletionEnabled();
     const wordPrediction = useWordPrediction(
@@ -5316,8 +5318,8 @@ export const ChatInput = memo(
                           }}
                           onClose={() => setModelDropdownOpen(false)}
                         />
-                        {(onPlanModeChange || onAutoPrewalkChange || onThinkingLevelChange) && <div className="picker-effort-row">
-                          {(onPlanModeChange || onAutoPrewalkChange) && (
+                        {(onPlanModeChange || (showPrewalkControl && onAutoPrewalkChange) || onThinkingLevelChange) && <div className="picker-effort-row">
+                          {(onPlanModeChange || (showPrewalkControl && onAutoPrewalkChange)) && (
                             <div className="picker-mode-controls">
                               {onPlanModeChange && (
                                 <button
@@ -5331,7 +5333,7 @@ export const ChatInput = memo(
                                   {planEnabled ? <SquareChartGantt size={16} aria-hidden="true" /> : <Hammer size={16} aria-hidden="true" />}
                                 </button>
                               )}
-                              {onAutoPrewalkChange && (
+                              {showPrewalkControl && onAutoPrewalkChange && (
                                 <button
                                   type="button"
                                   aria-label={`${t("chatInput.autoPrewalk")}: ${autoPrewalkLabel}`}
@@ -5368,7 +5370,7 @@ export const ChatInput = memo(
                             />
                           )}
                         </div>}
-                        {onAutoPrewalkChange && autoPrewalkError && (
+                        {showPrewalkControl && onAutoPrewalkChange && autoPrewalkError && (
                           <div role="alert" style={{ color: "var(--status-error)", fontSize: "var(--text-xs)", padding: "0 12px 6px", overflowWrap: "anywhere" }}>{autoPrewalkError}</div>
                         )}
                       </div>

@@ -60,6 +60,7 @@ import {
 import { useFontSize, type FontSizePreference } from "@/hooks/useFontSize";
 import { useUiScale, type UiScalePreference } from "@/hooks/useUiScale";
 import { useChatWidth, setChatWidth } from "@/hooks/useChatWidth";
+import { setShowPrewalkControl, useShowPrewalkControl } from "@/hooks/useShowPrewalkControl";
 import {
   useTouchTargets,
   type TouchTargetsPreference,
@@ -447,6 +448,17 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     fallbackLabel: "Message during active run",
     fallbackDesc:
       "What composer does on submit while agent runs. Steer interrupts; Queue follow-up delivers after finish.",
+    scope: "UI",
+  },
+  {
+    id: "show-prewalk-control",
+    tab: "general",
+    sectionKey: "settingsConfig.interfaceBehavior",
+    labelKey: "settingsConfig.showPrewalkControl",
+    descKey: "settingsConfig.showPrewalkControlDesc",
+    fallbackSection: "Interface & Behavior",
+    fallbackLabel: "Show Auto Prewalk control",
+    fallbackDesc: "Show the Auto Prewalk control in the model picker.",
     scope: "UI",
   },
   {
@@ -1870,6 +1882,7 @@ export function SettingsConfig({
   const [wordCompletion, setWordCompletion] = useState<WordCompletionMode>(() =>
     getWordCompletionMode(),
   );
+  const showPrewalkControl = useShowPrewalkControl();
   const connectionDiagnostics = useConnectionDiagnosticsEnabled();
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -2935,6 +2948,17 @@ export function SettingsConfig({
                                 label: t("settingsConfig.wordCompletionOff"),
                               },
                             ]}
+                          />
+                        </NativeSetting>
+                        <NativeSetting
+                          searchId="show-prewalk-control"
+                          label={t("settingsConfig.showPrewalkControl")}
+                          description={t("settingsConfig.showPrewalkControlDesc")}
+                          scope="UI"
+                        >
+                          <ToggleSwitch
+                            checked={showPrewalkControl}
+                            onChange={setShowPrewalkControl}
                           />
                         </NativeSetting>
                         <BrowserTransportSetting />
