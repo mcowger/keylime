@@ -11,6 +11,8 @@
       "command": "mise exec -- bun run dev --port \"$PASEO_PORT\""
     },
     "test": { "command": "mise exec -- bun run test" },
-    "typecheck": { "command": "mise exec -- bun run typecheck" }
+    "typecheck": { "command": "mise exec -- bun run typecheck" },
+    "deploy:local": { "command": "mise exec -- bun run deploy:local" },
+    "deploy:local:fast:follow": { "command": "mise exec -- bun run deploy:local:fast:follow" }
   }
 }
