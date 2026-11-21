@@ -98,7 +98,7 @@ export const hostWorkspaceOperations: readonly OperationContract[] = [
     `Usage: Manage host-daemon terminals for a workspace.
 Inputs: The action selects cwd, terminal id, dimensions, input text, or viewer focus state.
 Invariants: IDs and snapshots belong to the daemon; cursors order output, not filesystem bytes. A service terminal can retain output after its process exits.
-Effects: Create, input, resize, focus and close change terminal state; list and snapshot observe it.
+Effects: Create starts an interactive shell using the host account's shell, falling back to the daemon's SHELL or /bin/sh when unavailable; it keeps the daemon's HOME when set. Input, resize, focus and close change terminal state; list and snapshot observe it.
 Recovery: Re-list or snapshot after disconnection; a restarted daemon does not preserve terminal processes.`,
     terminalArgs,
     terminalResult,

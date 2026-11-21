@@ -39,7 +39,7 @@ export async function GET(request: Request) {
  * @apiUsage Create a host terminal.
  * @apiInputs Send hostId, cwd and optional cols and rows.
  * @apiInvariants The terminal belongs to the selected host; dimensions are terminal cells.
- * @apiEffects Starts a terminal process, which is distinct from a client connection.
+ * @apiEffects Starts an interactive shell using the host account's shell, falling back to the daemon's SHELL or /bin/sh when unavailable. The process is distinct from a client connection and keeps the daemon's HOME when set.
  * @apiRecovery After a lost response list terminals before retrying to avoid creating another process.
  */
 export async function POST(request: Request) {

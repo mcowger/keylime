@@ -96198,7 +96198,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nCreate a host terminal.\n\n### Inputs\n\nSend hostId, cwd and optional cols and rows.\n\n### Invariants\n\nThe terminal belongs to the selected host; dimensions are terminal cells.\n\n### Effects\n\nStarts a terminal process, which is distinct from a client connection.\n\n### Recovery\n\nAfter a lost response list terminals before retrying to avoid creating another process.",
+        "description": "### Usage\n\nCreate a host terminal.\n\n### Inputs\n\nSend hostId, cwd and optional cols and rows.\n\n### Invariants\n\nThe terminal belongs to the selected host; dimensions are terminal cells.\n\n### Effects\n\nStarts an interactive shell using the host account's shell, falling back to the daemon's SHELL or /bin/sh when unavailable. The process is distinct from a client connection and keeps the daemon's HOME when set.\n\n### Recovery\n\nAfter a lost response list terminals before retrying to avoid creating another process.",
         "operationId": "workspaceTerminalsPost",
         "requestBody": {
           "content": {
@@ -96573,7 +96573,7 @@
         ],
         "summary": "Create a terminal",
         "x-client-semantics": {
-          "Effects": "Starts a terminal process, which is distinct from a client connection.",
+          "Effects": "Starts an interactive shell using the host account's shell, falling back to the daemon's SHELL or /bin/sh when unavailable. The process is distinct from a client connection and keeps the daemon's HOME when set.",
           "Inputs": "Send hostId, cwd and optional cols and rows.",
           "Invariants": "The terminal belongs to the selected host; dimensions are terminal cells.",
           "Recovery": "After a lost response list terminals before retrying to avoid creating another process.",

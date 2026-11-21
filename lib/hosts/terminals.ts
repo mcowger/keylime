@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
+import { userInfo } from "node:os";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { Terminal } from "@xterm/headless";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -17,6 +24,87 @@ const invalid = () =>
   new HostOpError(400, "invalid_request", "Invalid terminal request");
 const missing = () =>
   new HostOpError(404, "terminal_not_found", "Terminal not found");
+
+function executableShell(path: string | null | undefined): path is string {
+  if (!path || !isAbsolute(path)) return false;
+  try {
+    accessSync(path, constants.X_OK);
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function loginAccount(): { shell?: string; home?: string } {
+  let shell: string | null | undefined;
+  let home: string | undefined;
+  try {
+    const account = userInfo();
+    shell = account.shell;
+    home = account.homedir;
+  } catch {
+    // An account lookup can fail in containers without a passwd entry.
+  }
+  if (
+    !executableShell(shell) ||
+    (!globalThis.process.env.HOME && (!home || !isAbsolute(home)))
+  ) {
+    try {
+      if (globalThis.process.platform === "linux") {
+        const uid = globalThis.process.geteuid?.();
+        if (uid !== undefined) {
+          let record: string | undefined;
+          try {
+            record = execFileSync("/usr/bin/getent", ["passwd", String(uid)], {
+              encoding: "utf8",
+              timeout: 1500,
+            }).trim();
+          } catch {
+            // Minimal Linux installations may not provide getent.
+            record = readFileSync("/etc/passwd", "utf8")
+              .split("\n")
+              .find((line) => line.split(":")[2] === String(uid));
+          }
+          const fields = record?.split(":") ?? [];
+          if (fields[2] === String(uid)) {
+            home = fields[5] || home;
+            shell = fields[6];
+          }
+        }
+      } else if (globalThis.process.platform === "darwin") {
+        const options = { encoding: "utf8" as const, timeout: 1500 };
+        const name = execFileSync("/usr/bin/id", ["-un"], options).trim();
+        if (name && !name.includes("/") && !name.includes("\n")) {
+          const record = execFileSync(
+            "/usr/bin/dscl",
+            [
+              "/Search",
+              "-read",
+              `/Users/${name}`,
+              "UserShell",
+              "NFSHomeDirectory",
+            ],
+            options,
+          );
+          shell = /^UserShell: (.+)$/m.exec(record)?.[1];
+          home = /^NFSHomeDirectory: (.+)$/m.exec(record)?.[1] || home;
+        }
+      }
+    } catch {
+      // Fall back to the service environment when the account is unavailable.
+    }
+  }
+  if (!home || !isAbsolute(home)) home = undefined;
+  else {
+    try {
+      if (!statSync(home).isDirectory()) home = undefined;
+    } catch {
+      home = undefined;
+    }
+  }
+  return { shell: executableShell(shell) ? shell : undefined, home };
+}
+
 function dimensions(cols: number, rows: number): void {
   if (
     !Number.isInteger(cols) ||
@@ -227,6 +315,10 @@ export class TerminalManager {
   constructor(
     private emit: (id: string, event: TerminalEvent) => void,
     private workspaceDeleting: (cwd: string) => boolean = () => false,
+    private resolveAccount: () => {
+      shell?: string;
+      home?: string;
+    } = loginAccount,
   ) {}
   private registered(cwd: string): string {
     if (typeof cwd !== "string" || !isAbsolute(cwd)) throw invalid();
@@ -283,10 +375,7 @@ export class TerminalManager {
       .map((e) => ({ ...e.terminal }));
   }
   create(cwd: string, cols: number, rows: number): WorkspaceTerminal {
-    return this.launch(cwd, cols, rows, [
-      globalThis.process.env.SHELL || "/bin/sh",
-      "-i",
-    ]);
+    return this.launch(cwd, cols, rows);
   }
   /** Run a saved service in the foreground; keep its screen after the command exits. */
   async startService(input: {
@@ -306,7 +395,7 @@ export class TerminalManager {
     cwd: string,
     cols: number,
     rows: number,
-    argv: string[],
+    argv?: string[],
     serviceEnv?: Record<string, string>,
   ): WorkspaceTerminal {
     if (this.stopped)
@@ -328,6 +417,10 @@ export class TerminalManager {
         "terminal_limit",
         "Too many terminals on this host",
       );
+    const account = argv ? undefined : this.resolveAccount();
+    const envShell = globalThis.process.env.SHELL;
+    const shell =
+      account?.shell || (executableShell(envShell) ? envShell : "/bin/sh");
     const id = randomUUID();
     const terminal = {
       id,
@@ -365,11 +458,19 @@ export class TerminalManager {
     };
     let process: Bun.Subprocess;
     try {
-      process = Bun.spawn(argv, {
+      process = Bun.spawn(argv ?? [shell, "-i"], {
         detached: true,
         cwd: directory,
         env: createChildProcessEnvironment({
           ...serviceEnv,
+          ...(!argv
+            ? {
+                SHELL: shell,
+                ...(!globalThis.process.env.HOME && account?.home
+                  ? { HOME: account.home }
+                  : {}),
+              }
+            : {}),
           TERM: "xterm-256color",
           COLORTERM: "truecolor",
         }),

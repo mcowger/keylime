@@ -399,11 +399,13 @@ export function WorkspaceTerminal({
           {error}
         </div>
       )}
-      <div
-        className="workspace-terminal-screen"
-        ref={container}
-        onKeyDown={(event) => event.stopPropagation()}
-      />
+      <div className="workspace-terminal-screen">
+        <div
+          className="workspace-terminal-viewport"
+          ref={container}
+          onKeyDown={(event) => event.stopPropagation()}
+        />
+      </div>
       <div
         className="workspace-terminal-keys"
         role="toolbar"

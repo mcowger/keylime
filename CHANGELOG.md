@@ -250,6 +250,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Workspace terminals fit their visible area without clipping the last rows or columns.
+- New workspace terminals use the host account's configured shell and its interactive startup files.
 - Workspace terminals fill the available space below the toolbar instead of pushing it down.
 - Local deployment prunes older generated releases, keeping the three newest and active and previous selections for rollback.
 - Managed release deployment works on hosts that can't report binary digests, with an explicit warning instead of a failed build check.
@@ -442,6 +444,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Local deployment prunes older generated releases, retaining the three newest and active and previous selections for rollback
 - Managed release deployment works on hosts that can't report binary digests, with an explicit warning instead of a failed build check
 - Workspace terminals fill the available space below the toolbar instead of pushing it down
+- Workspace terminals fit their visible area without clipping the last rows or columns
+- New workspace terminals use the host account's configured shell and its interactive startup files
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

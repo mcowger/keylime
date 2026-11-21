@@ -53,6 +53,11 @@
   padding: 8px;
   overflow: hidden;
 }
+/* FitAddon measures xterm's parent, so keep padding on the outer wrapper. */
+.workspace-terminal-viewport {
+  width: 100%;
+  height: 100%;
+}
 .workspace-terminal-screen .xterm {
   height: 100%;
 }

@@ -3,6 +3,10 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { workspaceHarness } from "./workspace-test-helper.ts";
 
+function shCommand(script: string): string {
+  return `/bin/sh -c '${script.replaceAll("'", "'\\''")}'\n`;
+}
+
 test(
   "linked host owns isolated PTYs and retains screen through link reconnect",
   { timeout: 60000 },
@@ -41,7 +45,9 @@ test(
     assert.notEqual(id, second.value.terminal.id);
     await op("input", {
       id: second.value.terminal.id,
-      data: "stty raw -echo; printf '\\033[c'; reply=$(dd bs=1 count=7 2>/dev/null | od -An -tx1 | tr -d ' \\n'); stty sane; printf 'DEVICE_REPLY:%s\\n' \"$reply\"\n",
+      data: shCommand(
+        "stty raw -echo; printf '\\033[c'; reply=$(dd bs=1 count=7 2>/dev/null | od -An -tx1 | tr -d ' \\n'); stty sane; printf 'DEVICE_REPLY:%s\\n' \"$reply\"",
+      ),
     });
     const deviceDeadline = Date.now() + 5000;
     let deviceSnapshot;
@@ -59,7 +65,7 @@ test(
     );
     await op("input", {
       id,
-      data: 'printf \'PTY_ID=%s CWD=%s\\n\' "$$" "$PWD"\n',
+      data: shCommand('printf \'PTY_ID=%s CWD=%s\\n\' "$$" "$PWD"'),
     });
     let snapshot;
     const deadline = Date.now() + 10000;
@@ -98,7 +104,7 @@ test(
     const restored = await op("snapshot", { id });
     await op("input", {
       id,
-      data: "sleep 300 & printf 'CHILD_PID=%s\\n' $! \n",
+      data: shCommand("sleep 300 & printf 'CHILD_PID=%s\\n' $!"),
     });
     let child;
     const childDeadline = Date.now() + 10000;
@@ -111,7 +117,9 @@ test(
     assert.ok(child, JSON.stringify(await op("snapshot", { id })));
     await op("input", {
       id: second.value.terminal.id,
-      data: "i=0; while [ $i -lt 5000 ]; do printf 'burst-%s\\n' \"$i\"; i=$((i+1)); done; printf 'BURST_DONE\\n'\n",
+      data: shCommand(
+        "i=0; while [ $i -lt 5000 ]; do printf 'burst-%s\\n' \"$i\"; i=$((i+1)); done; printf 'BURST_DONE\\n'",
+      ),
     });
     let burst;
     const burstDeadline = Date.now() + 15000;
