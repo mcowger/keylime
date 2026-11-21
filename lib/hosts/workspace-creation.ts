@@ -33,6 +33,7 @@ import {
 } from "./project-hierarchy";
 import { HostOpError } from "./link-protocol";
 import { copyPaseoIncludes, readPaseo } from "./workspace-paseo";
+import { completePlanningWorkspace } from "./planning";
 import { isEffortPath } from "./systems";
 
 /** The daemon must fence new starts until release, including starts from other servers. */
@@ -1337,6 +1338,7 @@ export async function removeRegisteredWorktree(
       workspace.path,
       input.discardChanges,
     );
+    completePlanningWorkspace(input.projectPath, workspace.path);
     unregisterDeletedWorkspace(workspace.path);
     if (branch && (merged || input.keepBranch === false))
       await git(input.projectPath, ["branch", "-D", "--", branch]);

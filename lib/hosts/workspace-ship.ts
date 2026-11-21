@@ -23,6 +23,7 @@ import type {
   WorkspaceShipState,
 } from "../workspace-ship-types";
 import { HostOpError, type ShipPrDigest } from "./link-protocol";
+import { completePlanningWorkspace } from "./planning";
 import { readHierarchy } from "./project-hierarchy";
 import { removeRegisteredWorktree } from "./workspace-creation";
 import { sessionOps } from "./session-ops";
@@ -49,6 +50,7 @@ interface PrMonitor {
 interface RecordPr {
   projectPath: string;
   path: string;
+  workspaceId?: string;
   base: string;
   pr: ShipPr;
   /** Replaced by each Ship, not by watcher/receipt updates. Older records have no generation. */
@@ -99,6 +101,7 @@ function sameRecord(
   return (
     !!current &&
     current.generation === snapshot.generation &&
+    current.workspaceId === snapshot.workspaceId &&
     current.projectPath === snapshot.projectPath &&
     current.pr.url === snapshot.pr.url
   );
@@ -154,6 +157,33 @@ function registered(input: { projectPath: string; path: string }) {
       "Registered linked workspace not found",
     );
   return { workspace, base };
+}
+function matchesWorkspace(record: RecordPr): boolean {
+  if (!record.workspaceId) return false;
+  const project = readHierarchy().projects.find(
+    (item) =>
+      item.path === record.projectPath && item.kind === "git" && !item.hidden,
+  );
+  return (
+    project?.workspaces.some(
+      (workspace) =>
+        workspace.path === record.path &&
+        workspace.id === record.workspaceId &&
+        !workspace.isDefault,
+    ) ?? false
+  );
+}
+
+function requireWorkspace(
+  input: { projectPath: string; path: string },
+  workspaceId: string,
+): void {
+  if (registered(input).workspace.id !== workspaceId)
+    throw new HostOpError(
+      409,
+      "ship_workspace_changed",
+      "The workspace changed during Ship",
+    );
 }
 
 function inside(root: string, candidate: string) {
@@ -330,7 +360,7 @@ export async function shipPreview(input: {
   projectPath: string;
   path: string;
 }): Promise<ShipPreview> {
-  const { base } = registered(input);
+  const { base, workspace } = registered(input);
   const baseBranch = await branch(base.path);
   if (!baseBranch)
     throw new HostOpError(
@@ -476,7 +506,8 @@ export async function shipPreview(input: {
     }
   }
   const record = records()[input.path];
-  const saved = record && publicPr(record);
+  const saved =
+    record?.workspaceId === workspace.id ? publicPr(record) : undefined;
   const pr =
     detected && saved?.url === detected.url
       ? { ...saved, ...detected, cleanup: saved.cleanup }
@@ -535,7 +566,7 @@ export function workspaceShipState(
 ): WorkspaceShipState | undefined {
   recover();
   const record = records()[workspacePath];
-  const pr = record && publicPr(record);
+  const pr = record && matchesWorkspace(record) ? publicPr(record) : undefined;
   let jobs: ShipJob[] = [];
   try {
     jobs = fs
@@ -642,7 +673,8 @@ function launch(job: ShipJob, action: () => Promise<void>) {
   })();
   return job;
 }
-async function cleanup(job: ShipJob) {
+async function cleanup(job: ShipJob, workspaceId: string) {
+  requireWorkspace(job, workspaceId);
   const { workspace } = registered(job);
   const remove = job.steps.find((s) => s.name === "removeWorkspace")!;
   remove.status = "running";
@@ -657,6 +689,7 @@ async function cleanup(job: ShipJob) {
         keepBranch: false,
       },
       async () => {
+        requireWorkspace(job, workspaceId);
         await step(job, "archiveSessions", async () => {
           const sessions = await sessionOps.listSessions();
           const byId = new Map(sessions.map((s) => [s.id, s]));
@@ -683,6 +716,7 @@ async function cleanup(job: ShipJob) {
             changed();
           }
         });
+        requireWorkspace(job, workspaceId);
       },
     );
     if (result.status !== "deleted")
@@ -725,6 +759,7 @@ export async function startShip(
     (input.mode === "pr" && !input.pr)
   )
     throw new HostOpError(400, "invalid_request", "Invalid ship request");
+  const workspaceId = registered(input).workspace.id;
   const requestedAt = Date.now();
   const sessionId = input.monitorSessionId;
   const grantId = input.monitorGrantId;
@@ -739,7 +774,8 @@ export async function startShip(
       );
     const { workspace } = registered(input);
     const prior = records()[input.path];
-    if (prior?.monitor) monitoredAtStart = prior.pr.url;
+    if (prior?.workspaceId === workspaceId && prior.monitor)
+      monitoredAtStart = prior.pr.url;
     if (workspace.sessionIds.includes(sessionId))
       sessionFile = await resolveSessionPath(sessionId);
     assertLiveShipSession(input, sessionId, sessionFile);
@@ -770,6 +806,7 @@ export async function startShip(
   persist(job);
   return launch(job, async () => {
     const preview = await shipPreview(input);
+    requireWorkspace(input, workspaceId);
     if (preview.dirty) throw new Error("Workspace has uncommitted changes");
     if (!preview.branch) throw new Error("Workspace is not on a branch");
     if (input.mode === "pr" && preview.pr)
@@ -813,9 +850,11 @@ export async function startShip(
           ["merge", "--ff-only", `refs/heads/${preview.branch}`],
           job,
         );
+        requireWorkspace(input, workspaceId);
+        completePlanningWorkspace(input.projectPath, input.path);
         job.landedSha = await git(preview.baseCheckout, ["rev-parse", "HEAD"]);
       });
-      if (input.cleanup) await cleanup(job);
+      if (input.cleanup) await cleanup(job, workspaceId);
     } else {
       await step(job, "push", async () => {
         const upstream = await git(input.path, [
@@ -899,16 +938,19 @@ export async function startShip(
           }
         }
         assertShipAllowed(input.path);
+        requireWorkspace(input, workspaceId);
         const { monitor: _previewMonitor, ...detected } = existing;
         const pr: ShipPr = { ...detected, cleanup: input.cleanup };
         const all = records();
         const previous = all[input.path];
         const samePr =
           previous?.projectPath === input.projectPath &&
+          previous.workspaceId === workspaceId &&
           previous.pr.url === pr.url;
         const record: RecordPr = {
           projectPath: input.projectPath,
           path: input.path,
+          workspaceId,
           base: preview.base,
           generation: job.id,
           pr,
@@ -964,6 +1006,8 @@ export async function startShip(
             saveRecords(all);
           }
         });
+      requireWorkspace(input, workspaceId);
+      completePlanningWorkspace(input.projectPath, input.path);
     }
   });
 }
@@ -975,10 +1019,12 @@ async function refresh(record: RecordPr) {
   // A result started before a new monitor was installed must not clear it.
   if (
     !sameRecord(current, record) ||
+    !matchesWorkspace(current) ||
     active.has(record.path) ||
     current.monitor?.id !== record.monitor?.id
   )
     return;
+  const wasMerged = current.pr.state === "merged";
   const checks = data.statusCheckRollup ?? [];
   current.pr = {
     ...current.pr,
@@ -1011,6 +1057,8 @@ async function refresh(record: RecordPr) {
     checkedAt: new Date().toISOString(),
   };
   if (current.pr.state !== "open") delete current.monitor;
+  if (!wasMerged && current.pr.state === "merged" && matchesWorkspace(current))
+    completePlanningWorkspace(current.projectPath, current.path);
   delete current.retryAt;
   saveRecords(all);
   return current;
@@ -1021,7 +1069,11 @@ export async function shipFinish(input: {
 }): Promise<ShipJob> {
   registered(input);
   const snapshot = records()[input.path];
-  if (!snapshot || snapshot.projectPath !== input.projectPath)
+  if (
+    !snapshot ||
+    snapshot.projectPath !== input.projectPath ||
+    !matchesWorkspace(snapshot)
+  )
     throw new HostOpError(404, "pr_not_found", "No recorded PR for workspace");
   if (active.has(input.path))
     throw new HostOpError(
@@ -1030,7 +1082,11 @@ export async function shipFinish(input: {
       "A ship job is already running for this workspace",
     );
   const record = await refresh(snapshot);
-  if (!record || !sameRecord(records()[input.path], record))
+  if (
+    !record ||
+    !sameRecord(records()[input.path], record) ||
+    !matchesWorkspace(record)
+  )
     throw new HostOpError(
       409,
       "ship_changed",
@@ -1045,6 +1101,7 @@ export async function shipFinish(input: {
       item.status = "pending";
   persist(job);
   return launch(job, async () => {
+    requireWorkspace(input, record.workspaceId!);
     const { base } = registered(input);
     const pull = job.steps.find((s) => s.name === "pullBase")!;
     if ((await dirty(base.path)) || (await branch(base.path)) !== record.base) {
@@ -1053,10 +1110,11 @@ export async function shipFinish(input: {
       persist(job);
     } else
       await step(job, "pullBase", async () => {
+        requireWorkspace(input, record.workspaceId!);
         assertShipAllowed(input.path);
         await git(base.path, ["pull", "--ff-only"], job);
       });
-    await cleanup(job);
+    await cleanup(job, record.workspaceId!);
     const all = records();
     if (sameRecord(all[input.path], record)) {
       delete all[input.path];
@@ -1113,6 +1171,7 @@ export async function startShipMonitor(
   if (
     !snapshot ||
     snapshot.path !== path ||
+    snapshot.workspaceId !== workspace.id ||
     snapshot.projectPath !== projectPath
   )
     throw new HostOpError(404, "pr_not_found", "No recorded PR for workspace");
@@ -1138,6 +1197,7 @@ export async function startShipMonitor(
     if (
       startingMonitors.get(path) !== start ||
       !sameRecord(current, snapshot) ||
+      !matchesWorkspace(current) ||
       current.path !== path ||
       current.pr.number !== pinned.number
     )
@@ -1417,7 +1477,13 @@ export async function refreshShipPrs() {
   try {
     for (const path of Object.keys(records())) {
       const record = records()[path];
-      if (!record || active.has(path) || isEffortPath(path)) continue;
+      if (
+        !record ||
+        active.has(path) ||
+        isEffortPath(path) ||
+        !matchesWorkspace(record)
+      )
+        continue;
 
       if (record.monitor) {
         const all = records();
@@ -1447,6 +1513,7 @@ export async function refreshShipPrs() {
           if (
             !sameRecord(current, refreshed) ||
             current.autoFinished ||
+            !matchesWorkspace(current) ||
             active.has(path)
           )
             continue;

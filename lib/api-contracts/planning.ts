@@ -91,7 +91,7 @@ export const PlanningStatusSchema = Type.Union(
   ],
   {
     description:
-      "Board column. Launch moves a task to In progress; Done is always set manually.",
+      "Board column. Launch moves a task to In progress; a linked workspace's merge, deletion, or successful Ship moves it to Done. System tasks complete after all Effort member workspaces are removed.",
   },
 );
 const bases = Type.Array(
@@ -179,7 +179,7 @@ export const PlanningTaskSchema = Type.Object(
   },
   {
     description:
-      "A planned task. Done is a manual board status, independent of launch and chat status.",
+      "A planned task. Done can be set manually or by completion of its launched workspace or Effort.",
   },
 );
 export const PlanningBoardSchema = Type.Object(

@@ -147,7 +147,7 @@ Recovery: Inspect steps and repository/PR state before deciding how to proceed.`
     "shipFinish",
     `Usage: Start finishing a shipped workspace.
 Inputs: projectPath and path identify registered host checkouts.
-Invariants: Finishing checks shipping and PR state before cleanup; earlier steps may already have completed on failure.
+Invariants: Cleanup requires a merged PR bound to the current registered workspace ID. Path reuse and records without an ID are refused; earlier steps may already have completed on failure.
 Effects: May update the base checkout, archive sessions and remove the workspace.
 Recovery: Read job and checkout state before retrying an uncertain finish.`,
     obj({ input: projectPathAndPath }),
@@ -157,7 +157,7 @@ Recovery: Read job and checkout state before retrying an uncertain finish.`,
     "startShipMonitor",
     `Usage: Watch an already recorded open PR without running Ship.
 Inputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.
-Invariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.
+Invariants: The authenticated link selects the notification server. The host checks that the recorded PR belongs to the current workspace ID and checks the chat; it never replaces an existing watch.
 Effects: Starts feedback monitoring without changing the PR or merge settings.
 Recovery: Refresh the workspace hierarchy before retrying an uncertain start.`,
     obj({ input: M.ShipStartMonitorInputSchema }),

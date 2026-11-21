@@ -30,6 +30,8 @@ import {
   setWorkspaceDeletionAdapter,
   workspaceBranches,
 } from "./workspace-creation";
+import { planningOperation } from "./planning";
+import type { PlanningOperation } from "../api-contracts/planning";
 
 // Each file has its own Bun process (--parallel); environment changes never leak to other fixtures.
 test("explicit hierarchy stays selective and worktree setup preserves failed workspaces", async () => {
@@ -139,6 +141,45 @@ test("explicit hierarchy stays selective and worktree setup preserves failed wor
     );
     assert.ok(created?.setup);
     assert.equal(created.setup.status, "failed");
+    const planning = (input: PlanningOperation["input"]) =>
+      planningOperation(
+        { owner: { kind: "repo", id: owner.id }, input },
+        async () => ({ root: temporary, systems: [], efforts: [] }),
+      );
+    let board = await planning({
+      action: "saveTask",
+      brief: "Launched task",
+      prompt: "Work",
+      status: "ready",
+    });
+    const task = board.tasks[0];
+    board = await planning({
+      action: "begin",
+      taskId: task.id,
+      revision: task.revision,
+      id: job.id,
+      name: "feature",
+      setup: {
+        kind: "repo",
+        projectPath: project,
+        baseRef: "main",
+        branch: "feature",
+      },
+    });
+    const launch = board.tasks[0].launch!;
+    await planning({
+      action: "updateLaunch",
+      taskId: task.id,
+      expected: launch,
+      next: { ...launch, version: 1, phase: "setup_failed" },
+    });
+    board = await planning({
+      action: "saveTask",
+      brief: "Unrelated",
+      prompt: "",
+      status: "ready",
+    });
+    const unrelated = board.tasks[1].id;
     let fenced = false;
     let stopped = false;
     setWorkspaceDeletionAdapter({
@@ -173,6 +214,10 @@ test("explicit hierarchy stays selective and worktree setup preserves failed wor
       discardChanges: false,
     });
     assert.equal(deletion.status, "dirty");
+    assert.equal(
+      (await planning({ action: "read" })).tasks[0].status,
+      "in_progress",
+    );
     assert.equal(stopped, true);
     await removeRegisteredWorktree({
       projectPath: project,
@@ -191,6 +236,15 @@ test("explicit hierarchy stays selective and worktree setup preserves failed wor
     });
     assert.equal(deletion.status, "deleted");
     assert.equal(existsSync(job.workspacePath), false);
+    board = await planning({ action: "read" });
+    assert.equal(
+      board.tasks.find((entry) => entry.id === task.id)?.status,
+      "done",
+    );
+    assert.equal(
+      board.tasks.find((entry) => entry.id === unrelated)?.status,
+      "ready",
+    );
     assert.equal(git("branch", "--list", "feature"), "");
     const existingGit = (...args: string[]) =>
       execFileSync("git", ["-C", existing, ...args], {

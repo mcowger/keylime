@@ -4,7 +4,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import type { PlanningOperation } from "../api-contracts/planning";
 import { ChannelTable } from "./daemon-channels";
+import { planningOperation } from "./planning";
 import { readHierarchy } from "./project-hierarchy";
 import {
   isEffortPath,
@@ -41,6 +43,7 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       throw new Error("Unexpected channel spawn");
     },
   });
+  let failMemberInspection: string | undefined;
   const runtime: SystemsRuntime = {
     terminals,
     processes: {
@@ -52,10 +55,14 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
           releaseChannels();
         };
       },
-      inspect: async (cwd) => [
-        ...(await channels.inspectWorkspace(cwd)),
-        ...terminals.inspect(cwd),
-      ],
+      inspect: async (cwd) => {
+        if (cwd === failMemberInspection)
+          throw new Error("Injected member inspection failure");
+        return [
+          ...(await channels.inspectWorkspace(cwd)),
+          ...terminals.inspect(cwd),
+        ];
+      },
       stop: async (cwd) => {
         await Promise.all([
           channels.stopWorkspace(cwd),
@@ -101,6 +108,44 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       },
       runtime,
     );
+    const owner = { kind: "system", id: system.id } as const;
+    const planning = (input: PlanningOperation["input"]) =>
+      planningOperation({ owner, input }, () =>
+        systemsOperation({ action: "list" }, runtime),
+      );
+    async function trackEffort(id: string, name: string, root: string) {
+      const saved = await planning({
+        action: "saveTask",
+        brief: name,
+        prompt: name,
+        status: "in_progress",
+      });
+      const task = saved.tasks.at(-1)!;
+      const started = await planning({
+        action: "begin",
+        taskId: task.id,
+        revision: task.revision,
+        id,
+        name,
+        setup: { kind: "system", name, confirmation: "confirmed", bases: [] },
+      });
+      const expected = started.tasks.find(
+        (entry) => entry.id === task.id,
+      )!.launch!;
+      await planning({
+        action: "updateLaunch",
+        taskId: task.id,
+        expected,
+        next: {
+          ...expected,
+          version: expected.version + 1,
+          phase: "ready",
+          effortId: id,
+          path: root,
+        },
+      });
+      return task.id;
+    }
     const override = {
       pre: ["printf 'pre\\n' >> .git/effort-test"],
       create: ["exit 90"],
@@ -176,6 +221,32 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       effort.members.map(({ status }) => status),
       ["complete", "complete"],
     );
+    const taskId = await trackEffort(effortId, effort.name, effort.root);
+    await planning({
+      action: "saveTask",
+      brief: "Other task",
+      prompt: "Other task",
+      status: "in_progress",
+    });
+    const taskStatus = async () =>
+      (await planning({ action: "read" })).tasks.find(
+        (task) => task.id === taskId,
+      )!;
+    const { cleanup: stopPreview } = await systemsOperation(
+      { action: "cleanupPreview", effortId },
+      runtime,
+    );
+    assert.ok(stopPreview);
+    await systemsOperation(
+      {
+        action: "cleanup",
+        effortId,
+        mode: "stop",
+        confirmation: stopPreview.confirmation,
+      },
+      runtime,
+    );
+    assert.equal((await taskStatus()).status, "in_progress");
     assert.equal(
       readHierarchy().projects.find((project) => project.path === worker)?.hidden,
       true,
@@ -277,6 +348,7 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       ),
       { code: "effort_dirty" },
     );
+    assert.equal((await taskStatus()).status, "in_progress");
     assert.equal(fs.readFileSync(ignored, "utf8"), "LOCAL_ONLY=keep-me\n");
     assert.equal(
       fs.readFileSync(path.join(checkout, "dev-data", "db.sqlite"), "utf8"),
@@ -294,9 +366,8 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       "dev-data/",
       "unsaved.txt",
     ]);
-    const {
-      efforts: [cleaned],
-    } = await systemsOperation(
+    failMemberInspection = effort.members[1].path;
+    const { efforts: failedEfforts } = await systemsOperation(
       {
         action: "cleanup",
         effortId,
@@ -305,9 +376,63 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       },
       runtime,
     );
+    assert.equal(
+      failedEfforts.find(({ id }) => id === effortId)?.status,
+      "cleanup_failed",
+    );
+    assert.equal(fs.existsSync(effort.members[0].path), false);
+    assert.equal(fs.existsSync(effort.members[1].path), true);
+    assert.equal((await taskStatus()).status, "in_progress");
+    failMemberInspection = undefined;
+    const { cleanup: retryPreview } = await systemsOperation(
+      { action: "cleanupPreview", effortId },
+      runtime,
+    );
+    assert.ok(retryPreview);
+    const {
+      efforts: [cleaned],
+    } = await systemsOperation(
+      {
+        action: "cleanup",
+        effortId,
+        mode: "force",
+        confirmation: retryPreview.confirmation,
+      },
+      runtime,
+    );
     assert.equal(fs.existsSync(dirty), false);
     assert.equal(fs.existsSync(ignored), false);
     assert.equal(cleaned.status, "cleaned", JSON.stringify(cleaned));
+    const completed = await taskStatus();
+    assert.equal(completed.status, "done");
+    assert.equal(completed.revision, 3);
+    assert.equal(
+      (await planning({ action: "read" })).tasks.find(
+        (task) => task.brief === "Other task",
+      )?.status,
+      "in_progress",
+    );
+    await planning({
+      action: "saveTask",
+      taskId,
+      revision: completed.revision,
+      brief: completed.brief,
+      prompt: completed.prompt,
+      status: "ready",
+    });
+    const statePath = path.join(dir, "agent", "keylime", "systems.json");
+    const state = JSON.parse(fs.readFileSync(statePath, "utf8")) as {
+      efforts: { id: string; planningCompletionPending?: boolean }[];
+    };
+    state.efforts.find(({ id }) => id === effortId)!.planningCompletionPending =
+      true;
+    fs.writeFileSync(statePath, JSON.stringify(state));
+    await systemsOperation({ action: "list" }, runtime);
+    const recovered = await taskStatus();
+    assert.equal(recovered.status, "ready");
+    assert.equal(recovered.revision, completed.revision + 1);
+    await systemsOperation({ action: "list" }, runtime);
+    assert.equal((await taskStatus()).status, "ready");
     assert.deepEqual(cleaned.retainedPaths, [generated, artifact]);
     assert.equal(fs.existsSync(path.join(cleaned.root, "repomap.md")), false);
     assert.equal(fs.readFileSync(artifact, "utf8"), "data\n");
@@ -317,6 +442,54 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       preview.members[1].baseCommit,
     );
     assert.equal(isEffortRepo(worker), true);
+
+    for (const repo of repos)
+      await workspaceCreationSettings({
+        projectPath: repo,
+        override: { ...override, pre: ["exit 97"] },
+      });
+    const emptyInput = { systemId: system.id, name: "No created worktrees" };
+    const { preview: emptyPlan } = await systemsOperation(
+      { action: "preview", ...emptyInput },
+      runtime,
+    );
+    assert.ok(emptyPlan);
+    const { effortId: emptyId } = await systemsOperation(
+      { action: "create", ...emptyInput, confirmation: emptyPlan.confirmation },
+      runtime,
+    );
+    assert.ok(emptyId);
+    await waitForSystemsSetup();
+    const emptyTask = await trackEffort(
+      emptyId,
+      emptyInput.name,
+      emptyPlan.root,
+    );
+    const { cleanup: emptyPreview } = await systemsOperation(
+      { action: "cleanupPreview", effortId: emptyId },
+      runtime,
+    );
+    assert.ok(emptyPreview);
+    const emptyResult = await systemsOperation(
+      {
+        action: "cleanup",
+        effortId: emptyId,
+        mode: "remove",
+        confirmation: emptyPreview.confirmation,
+      },
+      runtime,
+    );
+    assert.equal(
+      emptyResult.efforts.find(({ id }) => id === emptyId)?.status,
+      "cleaned",
+    );
+    assert.equal(
+      (await planning({ action: "read" })).tasks.find(
+        ({ id }) => id === emptyTask,
+      )?.status,
+      "in_progress",
+    );
+    await workspaceCreationSettings({ projectPath: worker, override: null });
 
     await workspaceCreationSettings({ projectPath: app, override: null });
     // Root can read mode-000 files, so only exercise denial as a non-root user.

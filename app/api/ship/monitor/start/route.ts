@@ -21,7 +21,7 @@ import {
  * @apiContract workspaceShipMonitorStart
  * @apiUsage Start PR feedback monitoring for an already recorded open PR.
  * @apiInputs Send host, projectPath, path, the expected canonical prUrl and a sessionId for an active chat in the workspace.
- * @apiInvariants The host must support start and status. The host checks the PR and chat and never replaces an existing watch. The server pins the grant to the authenticated host, workspace, chat and exact PR URL.
+ * @apiInvariants The host must support start and status. The recorded PR must belong to the current workspace ID; the host checks the chat and never replaces an existing watch. The server pins the grant to the authenticated host, workspace, chat and exact PR URL.
  * @apiEffects Starts a watch that sends feedback links to the chat without running Ship or changing the PR or its merge settings.
  * @apiRecovery Refresh the workspace hierarchy before retrying after an uncertain response. The watch may be active even if the start response was lost.
  */

@@ -1,15 +1,22 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   PlanningOperation,
   PlanningOwner,
+  PlanningBoard,
+  PlanningLaunch,
+  PlanningTask,
 } from "../api-contracts/planning";
 import type { SystemsResult } from "../api-contracts/systems";
 import { MAX_ATTACHED_IMAGES } from "../image-attachments";
-import { planningOperation } from "./planning";
+import {
+  completePlanningEffort,
+  completePlanningWorkspace,
+  planningOperation,
+} from "./planning";
 
 let dir: string;
 let previousDir: string | undefined;
@@ -413,6 +420,336 @@ test("preparing a stored legacy launch drops Notes and ambiguous IDs without cha
     expect(
       db.query("SELECT id FROM images WHERE id = ?").get(removed.id),
     ).toBeNull();
+  } finally {
+    db.close(true);
+  }
+});
+
+type StoredBoard = Pick<
+  PlanningBoard,
+  "notes" | "notesRevision" | "notesImages" | "tasks"
+>;
+
+function completionTask(id: string, launch?: PlanningLaunch): PlanningTask {
+  return {
+    id,
+    revision: 3,
+    brief: `Brief ${id}`,
+    prompt: `Prompt ${id}`,
+    status: "in_progress",
+    ...(launch ? { launch } : {}),
+  };
+}
+
+function completionBoard(tasks: PlanningTask[]): StoredBoard {
+  return {
+    notes: "Keep notes",
+    notesRevision: 7,
+    notesImages: [
+      { id: "image", name: "image.png", mimeType: "image/png", bytes: 1 },
+    ],
+    tasks,
+  };
+}
+
+function writeCompletionBoard(
+  db: Database,
+  owner: PlanningOwner,
+  board: StoredBoard,
+): void {
+  db.run("INSERT INTO boards (kind, owner_id, data) VALUES (?, ?, ?)", [
+    owner.kind,
+    owner.id,
+    JSON.stringify(board),
+  ]);
+}
+
+function readCompletionBoard(
+  db: Database,
+  owner: PlanningOwner,
+): StoredBoard | undefined {
+  const row = db
+    .query<{ data: string }, [string, string]>(
+      "SELECT data FROM boards WHERE kind = ? AND owner_id = ?",
+    )
+    .get(owner.kind, owner.id);
+  return row ? JSON.parse(row.data) : undefined;
+}
+
+test("completion does not create a missing planning database", () => {
+  const workspacePath = join(dir, "workspace");
+  writeFileSync(
+    join(dir, "hierarchy.json"),
+    JSON.stringify({
+      projects: [
+        {
+          id: repo.id,
+          path: dir,
+          workspaces: [{ path: workspacePath, setup: { jobId: "job" } }],
+        },
+      ],
+    }),
+  );
+  completePlanningWorkspace(dir, workspacePath);
+  completePlanningEffort("missing");
+  expect(existsSync(join(dir, "keylime", "planning.sqlite"))).toBe(false);
+});
+
+test("workspace completion matches the registered creation and preserves unrelated tasks", async () => {
+  const projectPath = dir;
+  const workspacePath = join(dir, "workspace");
+  writeFileSync(
+    join(dir, "hierarchy.json"),
+    JSON.stringify({
+      projects: [
+        {
+          id: repo.id,
+          path: projectPath,
+          kind: "directory",
+          name: "Repo",
+          workspaces: [{ path: workspacePath, setup: { jobId: "job" } }],
+        },
+      ],
+    }),
+  );
+  await op(repo, { action: "read" });
+  const launch: PlanningLaunch = {
+    id: "job",
+    version: 0,
+    phase: "creating",
+    prompt: "saved prompt",
+    name: "workspace",
+    setup: { kind: "repo", projectPath, baseRef: "main", branch: "branch" },
+  };
+  const matching = completionTask("matching", launch);
+  const done = { ...completionTask("done", launch), status: "done" as const };
+  const board = completionBoard([
+    matching,
+    done,
+    completionTask("other-job", {
+      ...launch,
+      id: "other",
+      path: workspacePath,
+    }),
+    completionTask("other-path", { ...launch, path: join(dir, "other") }),
+    completionTask("other-repo", {
+      ...launch,
+      setup: {
+        kind: "repo",
+        projectPath: "/other",
+        baseRef: "main",
+        branch: "branch",
+      },
+    }),
+    completionTask("no-launch"),
+  ]);
+  const otherOwner: PlanningOwner = { kind: "repo", id: "other" };
+  const otherBoard = completionBoard([completionTask("other-owner", launch)]);
+  const systemBoard = completionBoard([completionTask("system-owner", launch)]);
+  const db = new Database(join(dir, "keylime", "planning.sqlite"));
+  try {
+    writeCompletionBoard(db, repo, board);
+    writeCompletionBoard(db, otherOwner, otherBoard);
+    writeCompletionBoard(db, system, systemBoard);
+    completePlanningWorkspace(projectPath, workspacePath);
+    const expected: StoredBoard = {
+      ...board,
+      tasks: [
+        { ...matching, status: "done", revision: 4 },
+        ...board.tasks.slice(1),
+      ],
+    };
+    expect(readCompletionBoard(db, repo)).toEqual(expected);
+    expect(readCompletionBoard(db, otherOwner)).toEqual(otherBoard);
+    expect(readCompletionBoard(db, system)).toEqual(systemBoard);
+    completePlanningWorkspace(projectPath, workspacePath);
+    completePlanningWorkspace(projectPath, join(dir, "missing"));
+    completePlanningWorkspace("/missing", workspacePath);
+    expect(readCompletionBoard(db, repo)).toEqual(expected);
+    await expect(
+      op(repo, {
+        action: "saveTask",
+        taskId: matching.id,
+        revision: matching.revision,
+        brief: matching.brief,
+        prompt: matching.prompt,
+        status: "ready",
+      }),
+    ).rejects.toMatchObject({ code: "revision_conflict" });
+    writeFileSync(
+      join(dir, "hierarchy.json"),
+      JSON.stringify({
+        projects: [
+          {
+            id: repo.id,
+            path: projectPath,
+            kind: "directory",
+            name: "Repo",
+            workspaces: [{ path: workspacePath, setup: { jobId: "other" } }],
+          },
+        ],
+      }),
+    );
+    completePlanningWorkspace(projectPath, workspacePath);
+    const reused: StoredBoard = {
+      ...expected,
+      tasks: expected.tasks.map((item) =>
+        item.id === "other-job"
+          ? { ...item, status: "done", revision: 4 }
+          : item,
+      ),
+    };
+    expect(readCompletionBoard(db, repo)).toEqual(reused);
+    const withoutTask = { ...reused, tasks: reused.tasks.slice(1) };
+    db.run("UPDATE boards SET data = ? WHERE kind = ? AND owner_id = ?", [
+      JSON.stringify(withoutTask),
+      repo.kind,
+      repo.id,
+    ]);
+    completePlanningWorkspace(projectPath, workspacePath);
+    expect(readCompletionBoard(db, repo)).toEqual(withoutTask);
+    db.run("DELETE FROM boards WHERE kind = ? AND owner_id = ?", [
+      repo.kind,
+      repo.id,
+    ]);
+    completePlanningWorkspace(projectPath, workspacePath);
+    expect(readCompletionBoard(db, repo)).toBeUndefined();
+  } finally {
+    db.close(true);
+  }
+});
+
+test("Effort completion matches saved IDs and creation IDs without changing other boards", async () => {
+  await op(system, { action: "read" });
+  const launch: PlanningLaunch = {
+    id: "launch",
+    version: 1,
+    phase: "ready",
+    prompt: "saved prompt",
+    name: "effort",
+    setup,
+    effortId: "effort",
+    path: dir,
+  };
+  const matching = completionTask("matching", launch);
+  const creating = completionTask("creating", {
+    id: "effort",
+    version: 0,
+    phase: "creating",
+    prompt: "saved prompt",
+    name: "effort",
+    setup,
+  });
+  const board = completionBoard([
+    matching,
+    creating,
+    { ...completionTask("done", launch), status: "done" },
+    completionTask("different", { ...launch, effortId: "other" }),
+    completionTask("different-saved-id", {
+      ...launch,
+      id: "effort",
+      effortId: "other",
+    }),
+    completionTask("no-launch"),
+  ]);
+  const repoBoard = completionBoard([completionTask("repo", launch)]);
+  const db = new Database(join(dir, "keylime", "planning.sqlite"));
+  try {
+    writeCompletionBoard(db, system, board);
+    writeCompletionBoard(db, repo, repoBoard);
+    completePlanningEffort("effort");
+    const expected: StoredBoard = {
+      ...board,
+      tasks: [
+        { ...matching, status: "done", revision: 4 },
+        { ...creating, status: "done", revision: 4 },
+        ...board.tasks.slice(2),
+      ],
+    };
+    expect(readCompletionBoard(db, system)).toEqual(expected);
+    expect(readCompletionBoard(db, repo)).toEqual(repoBoard);
+    completePlanningEffort("effort");
+    completePlanningEffort("missing");
+    expect(readCompletionBoard(db, system)).toEqual(expected);
+    db.run("DELETE FROM boards WHERE kind = ? AND owner_id = ?", [
+      system.kind,
+      system.id,
+    ]);
+    completePlanningEffort("effort");
+    expect(readCompletionBoard(db, system)).toBeUndefined();
+  } finally {
+    db.close(true);
+  }
+});
+
+test("Effort completion replay preserves a later manual status edit", async () => {
+  await op(system, { action: "read" });
+  const launch: PlanningLaunch = {
+    id: "launch",
+    version: 1,
+    phase: "sent",
+    prompt: "saved prompt",
+    name: "effort",
+    setup,
+    effortId: "effort",
+  };
+  const saved = completionTask("task", launch);
+  const db = new Database(join(dir, "keylime", "planning.sqlite"));
+  try {
+    // A completion observed before its task is stored must remain retryable.
+    completePlanningEffort("effort");
+    writeCompletionBoard(db, system, completionBoard([saved]));
+    completePlanningEffort("effort");
+    const completed = (await op(system, { action: "read" })).tasks[0];
+    expect(completed).toMatchObject({ status: "done", revision: 4 });
+    const edited = await op(system, {
+      action: "saveTask",
+      taskId: saved.id,
+      revision: completed.revision,
+      brief: saved.brief,
+      prompt: saved.prompt,
+      status: "ready",
+    });
+    expect(edited.tasks[0]).toMatchObject({ status: "ready", revision: 5 });
+    completePlanningEffort("effort");
+    expect((await op(system, { action: "read" })).tasks[0]).toEqual(
+      edited.tasks[0],
+    );
+  } finally {
+    db.close(true);
+  }
+});
+
+test("an already Done Effort task is still protected from completion replay", async () => {
+  await op(system, { action: "read" });
+  const launch: PlanningLaunch = {
+    id: "effort",
+    version: 0,
+    phase: "creating",
+    prompt: "saved prompt",
+    name: "effort",
+    setup,
+  };
+  const saved = {
+    ...completionTask("task", launch),
+    status: "done" as const,
+  };
+  const db = new Database(join(dir, "keylime", "planning.sqlite"));
+  try {
+    writeCompletionBoard(db, system, completionBoard([saved]));
+    completePlanningEffort("effort");
+    const edited = await op(system, {
+      action: "saveTask",
+      taskId: saved.id,
+      revision: saved.revision,
+      brief: saved.brief,
+      prompt: saved.prompt,
+      status: "ready",
+    });
+    completePlanningEffort("effort");
+    expect((await op(system, { action: "read" })).tasks[0]).toEqual(
+      edited.tasks[0],
+    );
   } finally {
     db.close(true);
   }

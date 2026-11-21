@@ -254,6 +254,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Fixed
 - Repos and Systems with only default-branch work start collapsed. Empty groups start collapsed too.
+- A merged PR can no longer complete a task or remove a replacement Workspace that reused the old path. Older PR records without workspace IDs no longer run automatic cleanup.
+- Tasks move to **Done** when their launched Workspace is merged, deleted, or shipped. Effort tasks complete after all member workspaces are removed.
 - Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
 - Opening the model picker no longer starts a saved session or blocks Send while it reads Auto-prewalk.
 - The Auto Prewalk button keeps keyboard focus while a mode change is pending.
@@ -430,6 +432,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Settings keeps one host selection across Models, Providers, Usage, Agents, Intelligence, Extensions, Repos, and System. Usage and the model catalog come from the selected daemon. Manage linked-host OMP settings and provider credentials on that host
 - Subagent detail dialogs stay stable and retain transcript expansion while live updates arrive
 - Repos and Systems with only default-branch work start collapsed. Empty groups start collapsed too
+- Merged PR tracking is bound to the original workspace, preventing cleanup or task completion from affecting a replacement workspace at the same path. Older PR records without workspace IDs no longer trigger automatic cleanup
+- Tasks complete when their launched workspace is merged, deleted, or shipped; Effort tasks complete after all member workspaces are removed
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

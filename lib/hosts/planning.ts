@@ -1,7 +1,7 @@
 import { Value } from "@sinclair/typebox/value";
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import { closeSync, mkdirSync, openSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -82,6 +82,11 @@ function database(): Database {
       CREATE TABLE IF NOT EXISTS images (
         id TEXT PRIMARY KEY,
         data TEXT NOT NULL
+      );
+    `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS completed_efforts (
+        effort_id TEXT PRIMARY KEY
       );
     `);
     return db;
@@ -283,6 +288,100 @@ function checkTransition(previous: PlanningLaunch, next: PlanningLaunch): void {
         (previous.phase !== "setup_failed" && previous.retrySetup !== true)))
   )
     invalid("Invalid launch destination or identifier");
+}
+
+function completePlanningTasks(
+  kind: PlanningOwner["kind"],
+  ownerId: string | undefined,
+  matches: (launch: PlanningLaunch) => boolean,
+  effortId?: string,
+): void {
+  if (!existsSync(join(getAgentDir(), "keylime", "planning.sqlite"))) return;
+  const db = database();
+  try {
+    const complete = db.transaction(() => {
+      if (
+        effortId !== undefined &&
+        db
+          .query("SELECT 1 FROM completed_efforts WHERE effort_id = ?")
+          .get(effortId)
+      )
+        return;
+      let matched = false;
+      const boards =
+        ownerId === undefined
+          ? db
+              .query<{ owner_id: string; data: string }, [string]>(
+                "SELECT owner_id, data FROM boards WHERE kind = ?",
+              )
+              .all(kind)
+          : db
+              .query<{ owner_id: string; data: string }, [string, string]>(
+                "SELECT owner_id, data FROM boards WHERE kind = ? AND owner_id = ?",
+              )
+              .all(kind, ownerId);
+      const update = db.query(
+        "UPDATE boards SET data = ? WHERE kind = ? AND owner_id = ?",
+      );
+      for (const { owner_id, data } of boards) {
+        const board: SavedBoard = JSON.parse(data);
+        let changed = false;
+        for (const task of board.tasks) {
+          if (!task.launch || !matches(task.launch)) continue;
+          matched = true;
+          if (task.status === "done") continue;
+          task.status = "done";
+          task.revision++;
+          changed = true;
+        }
+        if (changed) update.run(JSON.stringify(board), kind, owner_id);
+      }
+      if (matched && effortId !== undefined)
+        db.run("INSERT INTO completed_efforts (effort_id) VALUES (?)", [
+          effortId,
+        ]);
+    });
+    // Match the writer locking used by planningOperation, including across processes.
+    complete.immediate();
+  } finally {
+    db.close(true);
+  }
+}
+
+/** Match the registered creation ID, even before the launch path is saved. */
+export function completePlanningWorkspace(
+  projectPath: string,
+  workspacePath: string,
+): void {
+  const project = readHierarchy().projects.find(
+    ({ path }) => path === projectPath,
+  );
+  const workspace = project?.workspaces?.find(
+    ({ path }) => path === workspacePath,
+  );
+  const jobId = workspace?.setup?.jobId;
+  if (!project || !jobId) return;
+  completePlanningTasks(
+    "repo",
+    project.id,
+    (launch) =>
+      launch.id === jobId &&
+      launch.setup?.kind === "repo" &&
+      launch.setup.projectPath === projectPath &&
+      (launch.path === undefined || launch.path === workspacePath),
+  );
+}
+
+/** Effort creation uses the launch ID before its result is saved to the board. */
+export function completePlanningEffort(effortId: string): void {
+  completePlanningTasks(
+    "system",
+    undefined,
+    (launch) =>
+      launch.effortId === effortId ||
+      (launch.effortId === undefined && launch.id === effortId),
+    effortId,
+  );
 }
 
 /** This daemon owns every board mutation; never write notes or launch state into a checkout. */

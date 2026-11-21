@@ -10,7 +10,7 @@ import { isRecord } from "@/lib/type-guards";
  * @apiContract workspaceShipFinish
  * @apiUsage Finish the ship workflow for a workspace.
  * @apiInputs Send host, projectPath and path as daemon-machine paths.
- * @apiInvariants The host checks the workspace and workflow preconditions.
+ * @apiInvariants Cleanup requires a merged PR recorded for this exact registered workspace ID; path reuse and records without an ID are refused.
  * @apiEffects Requests the host finish operation, which can change workspace state.
  * @apiRecovery Inspect workspace and ship state after uncertainty before repeating the request.
  */

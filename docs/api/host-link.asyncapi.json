@@ -1688,7 +1688,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to shipFinish; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Finishing checks shipping and PR state before cleanup; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
+        "description": "Reply to shipFinish; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Cleanup requires a merged PR bound to the current registered workspace ID. Path reuse and records without an ID are refused; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
         "name": "HostReply_shipFinish",
         "payload": {
           "$ref": "#/components/schemas/HostReply_shipFinish"
@@ -1772,7 +1772,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to startShipMonitor; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+        "description": "Reply to startShipMonitor; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks that the recorded PR belongs to the current workspace ID and checks the chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
         "name": "HostReply_startShipMonitor",
         "payload": {
           "$ref": "#/components/schemas/HostReply_startShipMonitor"
@@ -2744,7 +2744,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Finishing checks shipping and PR state before cleanup; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
+        "description": "Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Cleanup requires a merged PR bound to the current registered workspace ID. Path reuse and records without an ID are refused; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
         "name": "HostRequest_shipFinish",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_shipFinish"
@@ -2828,7 +2828,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+        "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks that the recorded PR belongs to the current workspace ID and checks the chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
         "name": "HostRequest_startShipMonitor",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_startShipMonitor"
@@ -53982,7 +53982,7 @@
                   },
                   "tasks": {
                     "items": {
-                      "description": "A planned task. Done is a manual board status, independent of launch and chat status.",
+                      "description": "A planned task. Done can be set manually or by completion of its launched workspace or Effort.",
                       "properties": {
                         "brief": {
                           "description": "One-line task description.",
@@ -54293,7 +54293,7 @@
                               "type": "string"
                             }
                           ],
-                          "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                          "description": "Board column. Launch moves a task to In progress; a linked workspace's merge, deletion, or successful Ship moves it to Done. System tasks complete after all Effort member workspaces are removed."
                         }
                       },
                       "required": [
@@ -54469,7 +54469,7 @@
                 },
                 "tasks": {
                   "items": {
-                    "description": "A planned task. Done is a manual board status, independent of launch and chat status.",
+                    "description": "A planned task. Done can be set manually or by completion of its launched workspace or Effort.",
                     "properties": {
                       "brief": {
                         "description": "One-line task description.",
@@ -54780,7 +54780,7 @@
                             "type": "string"
                           }
                         ],
-                        "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                        "description": "Board column. Launch moves a task to In progress; a linked workspace's merge, deletion, or successful Ship moves it to Done. System tasks complete after all Effort member workspaces are removed."
                       }
                     },
                     "required": ["id", "revision", "brief", "prompt", "status"],
@@ -72908,7 +72908,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to shipFinish; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Finishing checks shipping and PR state before cleanup; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
+        "description": "Reply to shipFinish; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Cleanup requires a merged PR bound to the current registered workspace ID. Path reuse and records without an ID are refused; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
         "title": "HostReply_shipFinish"
       },
       "HostReply_shipMonitorStatus": {
@@ -75598,7 +75598,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to startShipMonitor; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+        "description": "Reply to startShipMonitor; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks that the recorded PR belongs to the current workspace ID and checks the chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
         "title": "HostReply_startShipMonitor"
       },
       "HostReply_stopShipMonitor": {
@@ -83807,7 +83807,7 @@
                                 "type": "string"
                               }
                             ],
-                            "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                            "description": "Board column. Launch moves a task to In progress; a linked workspace's merge, deletion, or successful Ship moves it to Done. System tasks complete after all Effort member workspaces are removed."
                           },
                           "taskId": {
                             "maxLength": 128,
@@ -85539,7 +85539,7 @@
         "type": "object"
       },
       "HostRequest_shipFinish": {
-        "description": "Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Finishing checks shipping and PR state before cleanup; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
+        "description": "Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Cleanup requires a merged PR bound to the current registered workspace ID. Path reuse and records without an ID are refused; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
         "properties": {
           "args": {
             "properties": {
@@ -85890,7 +85890,7 @@
         "type": "object"
       },
       "HostRequest_startShipMonitor": {
-        "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+        "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks that the recorded PR belongs to the current workspace ID and checks the chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
         "properties": {
           "args": {
             "properties": {
@@ -88742,7 +88742,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Finishing checks shipping and PR state before cleanup; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
+      "description": "Usage: Start finishing a shipped workspace.\nInputs: projectPath and path identify registered host checkouts.\nInvariants: Cleanup requires a merged PR bound to the current registered workspace ID. Path reuse and records without an ID are refused; earlier steps may already have completed on failure.\nEffects: May update the base checkout, archive sessions and remove the workspace.\nRecovery: Read job and checkout state before retrying an uncertain finish.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_shipFinish"
@@ -88903,7 +88903,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks the recorded PR and chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
+      "description": "Usage: Watch an already recorded open PR without running Ship.\nInputs: projectPath and path identify the workspace. Pass the expected canonical prUrl, a chat sessionId in this workspace, and a server-issued monitorId.\nInvariants: The authenticated link selects the notification server. The host checks that the recorded PR belongs to the current workspace ID and checks the chat; it never replaces an existing watch.\nEffects: Starts feedback monitoring without changing the PR or merge settings.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain start.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_startShipMonitor"

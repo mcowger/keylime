@@ -58755,7 +58755,7 @@
                                 "type": "string"
                               }
                             ],
-                            "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                            "description": "Board column. Launch moves a task to In progress; a linked workspace's merge, deletion, or successful Ship moves it to Done. System tasks complete after all Effort member workspaces are removed."
                           },
                           "taskId": {
                             "maxLength": 128,
@@ -59140,7 +59140,7 @@
                         },
                         "tasks": {
                           "items": {
-                            "description": "A planned task. Done is a manual board status, independent of launch and chat status.",
+                            "description": "A planned task. Done can be set manually or by completion of its launched workspace or Effort.",
                             "properties": {
                               "brief": {
                                 "description": "One-line task description.",
@@ -59461,7 +59461,7 @@
                                     "type": "string"
                                   }
                                 ],
-                                "description": "Board column. Launch moves a task to In progress; Done is always set manually."
+                                "description": "Board column. Launch moves a task to In progress; a linked workspace's merge, deletion, or successful Ship moves it to Done. System tasks complete after all Effort member workspaces are removed."
                               }
                             },
                             "required": [
@@ -87480,7 +87480,7 @@
     },
     "/api/ship/finish": {
       "post": {
-        "description": "### Usage\n\nFinish the ship workflow for a workspace.\n\n### Inputs\n\nSend host, projectPath and path as daemon-machine paths.\n\n### Invariants\n\nThe host checks the workspace and workflow preconditions.\n\n### Effects\n\nRequests the host finish operation, which can change workspace state.\n\n### Recovery\n\nInspect workspace and ship state after uncertainty before repeating the request.",
+        "description": "### Usage\n\nFinish the ship workflow for a workspace.\n\n### Inputs\n\nSend host, projectPath and path as daemon-machine paths.\n\n### Invariants\n\nCleanup requires a merged PR recorded for this exact registered workspace ID; path reuse and records without an ID are refused.\n\n### Effects\n\nRequests the host finish operation, which can change workspace state.\n\n### Recovery\n\nInspect workspace and ship state after uncertainty before repeating the request.",
         "operationId": "workspaceShipFinish",
         "requestBody": {
           "content": {
@@ -88055,7 +88055,7 @@
         "x-client-semantics": {
           "Effects": "Requests the host finish operation, which can change workspace state.",
           "Inputs": "Send host, projectPath and path as daemon-machine paths.",
-          "Invariants": "The host checks the workspace and workflow preconditions.",
+          "Invariants": "Cleanup requires a merged PR recorded for this exact registered workspace ID; path reuse and records without an ID are refused.",
           "Recovery": "Inspect workspace and ship state after uncertainty before repeating the request.",
           "Usage": "Finish the ship workflow for a workspace."
         }
@@ -88063,7 +88063,7 @@
     },
     "/api/ship/monitor/start": {
       "post": {
-        "description": "### Usage\n\nStart PR feedback monitoring for an already recorded open PR.\n\n### Inputs\n\nSend host, projectPath, path, the expected canonical prUrl and a sessionId for an active chat in the workspace.\n\n### Invariants\n\nThe host must support start and status. The host checks the PR and chat and never replaces an existing watch. The server pins the grant to the authenticated host, workspace, chat and exact PR URL.\n\n### Effects\n\nStarts a watch that sends feedback links to the chat without running Ship or changing the PR or its merge settings.\n\n### Recovery\n\nRefresh the workspace hierarchy before retrying after an uncertain response. The watch may be active even if the start response was lost.",
+        "description": "### Usage\n\nStart PR feedback monitoring for an already recorded open PR.\n\n### Inputs\n\nSend host, projectPath, path, the expected canonical prUrl and a sessionId for an active chat in the workspace.\n\n### Invariants\n\nThe host must support start and status. The recorded PR must belong to the current workspace ID; the host checks the chat and never replaces an existing watch. The server pins the grant to the authenticated host, workspace, chat and exact PR URL.\n\n### Effects\n\nStarts a watch that sends feedback links to the chat without running Ship or changing the PR or its merge settings.\n\n### Recovery\n\nRefresh the workspace hierarchy before retrying after an uncertain response. The watch may be active even if the start response was lost.",
         "operationId": "workspaceShipMonitorStart",
         "requestBody": {
           "content": {
@@ -88419,7 +88419,7 @@
         "x-client-semantics": {
           "Effects": "Starts a watch that sends feedback links to the chat without running Ship or changing the PR or its merge settings.",
           "Inputs": "Send host, projectPath, path, the expected canonical prUrl and a sessionId for an active chat in the workspace.",
-          "Invariants": "The host must support start and status. The host checks the PR and chat and never replaces an existing watch. The server pins the grant to the authenticated host, workspace, chat and exact PR URL.",
+          "Invariants": "The host must support start and status. The recorded PR must belong to the current workspace ID; the host checks the chat and never replaces an existing watch. The server pins the grant to the authenticated host, workspace, chat and exact PR URL.",
           "Recovery": "Refresh the workspace hierarchy before retrying after an uncertain response. The watch may be active even if the start response was lost.",
           "Usage": "Start PR feedback monitoring for an already recorded open PR."
         }

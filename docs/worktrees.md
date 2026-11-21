@@ -16,7 +16,7 @@ Open **Notes & Tasks** from a Repo or System's sidebar menu. The board opens in 
 
 Enter a one-liner in **Brief**. Select **Improve** to replace it with a fuller prompt, then edit the same field if needed. The planning model receives the Brief, target name, and current task attachments when it supports vision. It doesn't receive checkout contents.
 
-**Launch** saves the current Brief and sends it verbatim as the first message in the Workspace or Effort root chat. Use **Save task** if you want to keep it on the board without launching. Keylime uses the current defaults unless setup needs review. The task links to the resulting work; mark it **Done** yourself. Resume failed setup from the task. If Keylime can’t confirm whether the first message was sent, open the linked chat to check.
+**Launch** saves the current Brief and sends it verbatim as the first message in the Workspace or Effort root chat. Use **Save task** if you want to keep it on the board without launching. Keylime uses the current defaults unless setup needs review. The task links to the resulting work. Merging, deleting, or successfully shipping its Workspace moves the task to **Done**. An Effort task moves to **Done** after all its member workspaces are removed. You can also set the status yourself. Resume failed setup from the task. If Keylime can't confirm whether the first message was sent, open the linked chat to check.
 
 Launch treats the Brief as text, even if it starts with a slash command such as `/rename`. Keylime marks it sent only after the runner confirms the first user message was saved.
 
@@ -120,6 +120,8 @@ Ship is available from a linked workspace's chat. It checks for Git problems bef
 Choose **Land locally**, **Open PR**, or **PR + auto-merge**. Rebase is selected by default when the workspace is behind the base. For an existing open PR, auto-merge adopts it without changing its title or body. Auto-merge defaults to squash, with merge and rebase also available. If a preflight check or rebase finds a conflict, **Ask agent to resolve** sends the issue to the session.
 
 **Clean up when done** is selected by default. Local shipping cleans up after landing; PR shipping waits for the PR to merge. Cleanup archives registered sessions and removes the workspace and branch, subject to the workspace deletion checks above. The host watches PRs and can also offer cleanup after a merge.
+
+PR tracking and cleanup are bound to the workspace that shipped the PR, not just its path. Records created before workspace IDs were saved are not used for monitoring or automatic cleanup; review and clean up those workspaces manually.
 
 Ship opens over the workspace content, not the whole application. Use the sidebar to switch workspaces while the commit plan, PR description or Ship job runs. Returning to that workspace restores the same edits and progress, even if you open a different chat there. Each workspace and host has its own Ship flow, using the session that opened it.
 

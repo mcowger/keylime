@@ -21,6 +21,11 @@ import {
   invalidateSessionPathCache,
 } from "../session-reader";
 import type { ShipPrDigest } from "./link-protocol";
+import type {
+  PlanningBoard,
+  PlanningOperation,
+  PlanningOwner,
+} from "../api-contracts/planning";
 import type { ShipJob } from "../workspace-ship-types";
 import {
   hierarchyOperation,
@@ -30,8 +35,13 @@ import {
   registerEffortRoot,
   registerSystemRepo,
   unregisterEffortRoot,
+  updateWorkspaceSetup,
 } from "./project-hierarchy.ts";
-import { setWorkspaceDeletionAdapter } from "./workspace-creation.ts";
+import { planningOperation } from "./planning";
+import {
+  removeRegisteredWorktree,
+  setWorkspaceDeletionAdapter,
+} from "./workspace-creation.ts";
 import {
   acceptShipDigestReceipt,
   removeShipMonitorsForSession,
@@ -97,6 +107,7 @@ case "$1 $2" in
     if [ -f "$root/create-url" ]; then cat "$root/create-url"; else echo https://github.com/test/repo/pull/42; fi;;
   'pr merge') if [ -f "$root/auto-fails" ]; then echo 'Auto-merge disabled' >&2; exit 1; fi;;
   'pr view')
+    gate view
     number=\${3##*/}
     state=MERGED
     [ ! -f "$root/pr-state" ] || state=$(cat "$root/pr-state")
@@ -177,6 +188,211 @@ async function finished(job: ShipJob) {
   }
   return job;
 }
+
+interface PlanningFixture {
+  op: (input: PlanningOperation["input"]) => Promise<PlanningBoard>;
+  target: string;
+  other: string;
+}
+
+async function planningFixture(f: Fixture) {
+  const project = readHierarchy().projects.find(
+    (item) => item.path === f.project,
+  )!;
+  const owner: PlanningOwner = { kind: "repo", id: project.id };
+  const op = (input: PlanningOperation["input"]) =>
+    planningOperation({ owner, input }, async () => ({
+      root: f.root,
+      systems: [],
+      efforts: [],
+    }));
+  async function addLaunch(name: string, path: string) {
+    const saved = await op({
+      action: "saveTask",
+      brief: name,
+      prompt: name,
+      status: "ready",
+    });
+    const task = saved.tasks.at(-1)!;
+    const started = await op({
+      action: "begin",
+      taskId: task.id,
+      revision: task.revision,
+      id: `launch-${name}`,
+      name,
+      setup: {
+        kind: "repo",
+        projectPath: f.project,
+        baseRef: "HEAD",
+        branch: "feature",
+      },
+    });
+    const launch = started.tasks.find((item) => item.id === task.id)!.launch!;
+    await op({
+      action: "updateLaunch",
+      taskId: task.id,
+      expected: launch,
+      next: { ...launch, version: 1, phase: "ready", path },
+    });
+    return task.id;
+  }
+  const target = await addLaunch("target", f.workspace);
+  const other = await addLaunch("other", join(f.root, "other-workspace"));
+  const workspace = project.workspaces.find(
+    (item) => item.path === f.workspace,
+  )!;
+  updateWorkspaceSetup(workspace.id, {
+    status: "complete",
+    jobId: "launch-target",
+    stage: "postNonBlocking",
+  });
+  return { op, target, other };
+}
+
+async function assertPlanningStatus(
+  planning: PlanningFixture,
+  status: "in_progress" | "done",
+) {
+  const board = await planning.op({ action: "read" });
+  assert.equal(
+    board.tasks.find((task) => task.id === planning.target)?.status,
+    status,
+  );
+  assert.equal(
+    board.tasks.find((task) => task.id === planning.other)?.status,
+    "in_progress",
+  );
+  return board;
+}
+test("local merge completes only its task even if cleanup fails", async (t) => {
+  const f = await fixture(t);
+  const planning = await planningFixture(f);
+  writeFileSync(join(f.workspace, "feature"), "feature");
+  f.git(f.workspace, "add", ".");
+  f.git(f.workspace, "commit", "-qm", "feature");
+  setWorkspaceDeletionAdapter({
+    fence: () => () => {},
+    inspect: async () => {
+      throw new Error("cleanup unavailable");
+    },
+    stop: async () => {},
+  });
+  const job = await finished(
+    await startShip({
+      ...f.input,
+      mode: "local",
+      rebase: false,
+      cleanup: true,
+    }),
+  );
+  assert.equal(job.status, "failed");
+  assert.match(job.error!, /cleanup unavailable/);
+  assert.equal(
+    f.git(f.project, "rev-parse", "HEAD"),
+    f.git(f.workspace, "rev-parse", "HEAD"),
+  );
+  await assertPlanningStatus(planning, "done");
+});
+
+test("aborted local rebase leaves planned tasks in progress", async (t) => {
+  const f = await fixture(t);
+  const planning = await planningFixture(f);
+  writeFileSync(join(f.workspace, "file"), "feature\n");
+  f.git(f.workspace, "commit", "-am", "feature");
+  writeFileSync(join(f.project, "file"), "base change\n");
+  f.git(f.project, "commit", "-am", "base change");
+  const job = await finished(
+    await startShip({
+      ...f.input,
+      mode: "local",
+      rebase: true,
+      cleanup: false,
+    }),
+  );
+  assert.equal(job.status, "conflict");
+  await assertPlanningStatus(planning, "in_progress");
+});
+
+for (const mode of ["pr", "pr-auto"] as const) {
+  test(`successful ${mode} Ship completes only its task without cleanup`, async (t) => {
+    const f = await fixture(t);
+    const planning = await planningFixture(f);
+    const job = await finished(
+      await startShip({
+        ...f.input,
+        mode,
+        rebase: false,
+        cleanup: false,
+        pr: { title: "Feature", body: "Details" },
+      }),
+    );
+    assert.equal(job.status, "complete", job.error);
+    assert.equal(existsSync(f.workspace), true);
+    await assertPlanningStatus(planning, "done");
+  });
+}
+
+test("failed auto-merge does not complete a task", async (t) => {
+  const f = await fixture(t);
+  const planning = await planningFixture(f);
+  writeFileSync(join(f.root, "auto-fails"), "");
+  const job = await finished(
+    await startShip({
+      ...f.input,
+      mode: "pr-auto",
+      rebase: false,
+      cleanup: false,
+      pr: { title: "Feature", body: "Details" },
+    }),
+  );
+  assert.equal(job.status, "failed");
+  assert.match(job.error!, /Auto-merge disabled/);
+  await assertPlanningStatus(planning, "in_progress");
+});
+
+test("observing a merged PR completes its task without cleanup, idempotently", async (t) => {
+  const f = await fixture(t);
+  const planning = await planningFixture(f);
+  const job = await finished(
+    await startShip({
+      ...f.input,
+      mode: "pr",
+      rebase: false,
+      cleanup: false,
+      pr: { title: "Feature", body: "Details" },
+    }),
+  );
+  assert.equal(job.status, "complete", job.error);
+  const completed = await assertPlanningStatus(planning, "done");
+  const target = completed.tasks.find((task) => task.id === planning.target)!;
+  await planning.op({
+    action: "saveTask",
+    taskId: target.id,
+    revision: target.revision,
+    brief: target.brief,
+    prompt: target.prompt,
+    status: "in_progress",
+  });
+  await refreshShipPrs();
+  const board = await assertPlanningStatus(planning, "done");
+  assert.equal(existsSync(f.workspace), true);
+  const afterMerge = board.tasks.find((task) => task.id === planning.target)!;
+  await planning.op({
+    action: "saveTask",
+    taskId: afterMerge.id,
+    revision: afterMerge.revision,
+    brief: afterMerge.brief,
+    prompt: afterMerge.prompt,
+    status: "in_progress",
+  });
+  await refreshShipPrs();
+  const again = await assertPlanningStatus(planning, "in_progress");
+  assert.equal(
+    again.tasks.find((task) => task.id === planning.target)!.revision,
+    afterMerge.revision + 1,
+  );
+});
+
 test("PR lookup failure permits both PR modes and local landing", async (t) => {
   const f = await fixture(t);
   writeFileSync(join(f.root, "lookup-fails"), "");
@@ -323,6 +539,130 @@ test("merged PR watcher finishes and removes workspace", async (t) => {
   const deadline = Date.now() + 15000;
   while (existsSync(f.workspace) && Date.now() < deadline) await delay(25);
   assert.equal(existsSync(f.workspace), false);
+});
+
+for (const timing of ["before refresh", "during refresh"] as const) {
+  test(`old PR cannot complete or remove a replacement workspace ${timing}`, async (t) => {
+    const f = await fixture(t);
+    const planning = await planningFixture(f);
+    writeFileSync(join(f.workspace, "feature"), "old work");
+    f.git(f.workspace, "add", ".");
+    f.git(f.workspace, "commit", "-qm", "old work");
+    const job = await finished(
+      await startShip({
+        ...f.input,
+        mode: "pr",
+        rebase: false,
+        cleanup: true,
+        pr: { title: "Old work", body: "Details" },
+      }),
+    );
+    assert.equal(job.status, "complete", job.error);
+    let refreshing: Promise<void> | undefined;
+    if (timing === "during refresh") {
+      writeFileSync(join(f.root, "hold-view"), "");
+      refreshing = refreshShipPrs();
+      await waitForFile(join(f.root, "started-view"));
+    }
+    assert.equal(
+      (
+        await removeRegisteredWorktree({
+          ...f.input,
+          stopProcesses: true,
+          discardChanges: false,
+          keepBranch: true,
+        })
+      ).status,
+      "deleted",
+    );
+    f.git(f.project, "worktree", "add", "-q", f.workspace, "feature");
+    const newWorkspace = registerCreatedWorkspace(
+      f.project,
+      f.workspace,
+      "feature",
+    );
+    const board = await planning.op({
+      action: "saveTask",
+      brief: "Replacement",
+      prompt: "New work",
+      status: "ready",
+    });
+    const task = board.tasks.at(-1)!;
+    const begun = await planning.op({
+      action: "begin",
+      taskId: task.id,
+      revision: task.revision,
+      id: "replacement-launch",
+      name: "Replacement",
+      setup: {
+        kind: "repo",
+        projectPath: f.project,
+        baseRef: "HEAD",
+        branch: "feature",
+      },
+    });
+    const launch = begun.tasks.find((item) => item.id === task.id)!.launch!;
+    await planning.op({
+      action: "updateLaunch",
+      taskId: task.id,
+      expected: launch,
+      next: { ...launch, version: 1, phase: "ready", path: f.workspace },
+    });
+    updateWorkspaceSetup(newWorkspace.id, {
+      status: "complete",
+      jobId: launch.id,
+      stage: "postNonBlocking",
+    });
+    if (refreshing) {
+      rmSync(join(f.root, "hold-view"));
+      await refreshing;
+    } else await refreshShipPrs();
+    assert.equal(
+      (await planning.op({ action: "read" })).tasks.find(
+        (item) => item.id === task.id,
+      )?.status,
+      "in_progress",
+    );
+    assert.equal(existsSync(f.workspace), true);
+    assert.equal(workspaceShipState(f.workspace)?.pr, undefined);
+    await assert.rejects(shipFinish(f.input), { code: "pr_not_found" });
+  });
+}
+test("unbound PR records cannot complete or remove a workspace", async (t) => {
+  const f = await fixture(t);
+  const planning = await planningFixture(f);
+  const job = await finished(
+    await startShip({
+      ...f.input,
+      mode: "pr",
+      rebase: false,
+      cleanup: true,
+      pr: { title: "Feature", body: "Details" },
+    }),
+  );
+  assert.equal(job.status, "complete", job.error);
+  const board = await planning.op({ action: "read" });
+  const task = board.tasks.find((item) => item.id === planning.target)!;
+  await planning.op({
+    action: "saveTask",
+    taskId: task.id,
+    revision: task.revision,
+    brief: task.brief,
+    prompt: task.prompt,
+    status: "in_progress",
+  });
+  const file = join(f.root, "agent", "keylime", "ship", "prs.json");
+  const records = JSON.parse(readFileSync(file, "utf8")) as Record<
+    string,
+    { workspaceId?: string }
+  >;
+  delete records[f.workspace].workspaceId;
+  writeFileSync(file, JSON.stringify(records));
+  await refreshShipPrs();
+  await assertPlanningStatus(planning, "in_progress");
+  assert.equal(existsSync(f.workspace), true);
+  assert.equal(workspaceShipState(f.workspace)?.pr, undefined);
+  await assert.rejects(shipFinish(f.input), { code: "pr_not_found" });
 });
 
 test("Effort ownership hides worktrees and fences standalone Ship, including old PR records", async (t) => {

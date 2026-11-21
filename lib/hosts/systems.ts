@@ -18,6 +18,7 @@ import { getAgentDir } from "../omp/paths";
 import { createGitEnvironment } from "../project-command-env";
 import type { WorkspaceCreationJob } from "../workspace-creation-types";
 import { HostOpError } from "./link-protocol";
+import { completePlanningEffort } from "./planning";
 import {
   asyncDefaultGitBranch,
   canonicalRepoPath,
@@ -71,6 +72,8 @@ type Effort = Omit<EffortRecord, "members" | "sessionIds"> & {
   docsWritten?: boolean;
   instructions: string;
   servicesAdmitted?: boolean;
+  // Persisted after cleanup so a restart can finish the board update once.
+  planningCompletionPending?: boolean;
   retryAttempt?: number;
 };
 type State = { root?: string; systems: SystemRecord[]; efforts: Effort[] };
@@ -964,6 +967,11 @@ function launchSetup(effort: Effort, runtime: SystemsRuntime) {
 function recover(state: State) {
   let changed = false;
   for (const effort of state.efforts) {
+    if (effort.status === "cleaned" && effort.planningCompletionPending) {
+      completePlanningEffort(effort.id);
+      delete effort.planningCompletionPending;
+      changed = true;
+    }
     if (busy.has(effort.id)) continue;
     if (effort.status === "creating") {
       changed = true;
@@ -1345,7 +1353,15 @@ async function cleanup(
     }
     cleanRoot(effort);
     effort.status = "cleaned";
+    // A failed setup may have never created any Git worktree at all.
+    if (effort.members.some((member) => member.gitIdentity))
+      effort.planningCompletionPending = true;
     checkpoint(effort);
+    if (effort.planningCompletionPending) {
+      completePlanningEffort(effort.id);
+      delete effort.planningCompletionPending;
+      checkpoint(effort);
+    }
   } catch (error) {
     if (!removal || effort.status !== "cleaning") throw error;
     effort.status = "cleanup_failed";
@@ -1403,6 +1419,7 @@ async function result(runtime: SystemsRuntime): Promise<SystemsResult> {
         docsWritten: _docs,
         instructions: _instructions,
         servicesAdmitted: _admitted,
+        planningCompletionPending: _planningCompletion,
         ...effort
       }) => ({
         ...effort,
