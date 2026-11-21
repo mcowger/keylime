@@ -19,7 +19,9 @@ import {
   readHierarchy,
   registerCreatedSession,
   moveRegisteredSession,
+  asyncDefaultGitBranch,
 } from "./project-hierarchy";
+import { validWorkspaceResult } from "./workspace-results";
 import {
   createWorkspace,
   workspaceCreationStatus,
@@ -321,6 +323,131 @@ test("explicit hierarchy stays selective and worktree setup preserves failed wor
       )?.workspaces[0].name,
       "default",
     );
+  } finally {
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("hierarchy observes cached remote default branches without guessing", async () => {
+  const temporary = realpathSync(
+    mkdtempSync(path.join(tmpdir(), "keylime-hierarchy-default-")),
+  );
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = path.join(temporary, "agent");
+  const project = path.join(temporary, "repo");
+  const plain = path.join(temporary, "plain");
+  mkdirSync(project);
+  mkdirSync(plain);
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-C", project, ...args], {
+      encoding: "utf8",
+      stdio: "pipe",
+    }).trim();
+  const list = async () => {
+    const result = await hierarchyOperation({ action: "list" });
+    assert.ok(result.ok);
+    return result.value;
+  };
+  try {
+    git("init", "-b", "main");
+    git("config", "user.name", "Fixture");
+    git("config", "user.email", "fixture@example.invalid");
+    git("commit", "--allow-empty", "-m", "initial");
+    assert.ok(
+      (await hierarchyOperation({ action: "registerProject", path: project })).ok,
+    );
+    assert.ok(
+      (await hierarchyOperation({ action: "registerProject", path: plain })).ok,
+    );
+    let snapshot = await list();
+    assert.equal(
+      snapshot.projects.find((p) => p.path === project)?.defaultBranch,
+      undefined,
+    );
+    assert.equal(
+      snapshot.projects.find((p) => p.path === plain)?.defaultBranch,
+      undefined,
+    );
+    assert.equal(await asyncDefaultGitBranch(project), undefined);
+
+    git("remote", "add", "upstream", "https://example.invalid/upstream.git");
+    git("remote", "add", "origin", "https://example.invalid/origin.git");
+    git(
+      "symbolic-ref",
+      "refs/remotes/upstream/HEAD",
+      "refs/remotes/upstream/develop",
+    );
+    git(
+      "symbolic-ref",
+      "refs/remotes/origin/HEAD",
+      "refs/remotes/origin/release/stable",
+    );
+    snapshot = await list();
+    const repo = snapshot.projects.find((p) => p.path === project);
+    assert.equal(repo?.defaultBranch, "release/stable");
+    assert.equal(await asyncDefaultGitBranch(project), "release/stable");
+    assert.equal(repo?.workspaces[0].branch, "main");
+    assert.equal(
+      validWorkspaceResult("hierarchy", { ok: true, value: snapshot }),
+      true,
+    );
+    assert.ok(repo);
+    const worktree = path.join(temporary, "feature-worktree");
+    git("worktree", "add", "-b", "feature", worktree);
+    assert.ok(
+      (
+        await hierarchyOperation({
+          action: "importWorkspaces",
+          projectId: repo.id,
+          paths: [worktree],
+        })
+      ).ok,
+    );
+    git("-C", worktree, "switch", "-c", "another-branch");
+    const switched = (await list()).projects
+      .find((p) => p.path === project)
+      ?.workspaces.find((w) => w.path === worktree);
+    assert.equal(switched?.branch, "another-branch");
+    assert.equal(switched?.name, "feature-worktree");
+    git("-C", worktree, "switch", "--detach");
+    assert.equal(
+      (await list()).projects
+        .find((p) => p.path === project)
+        ?.workspaces.find((w) => w.path === worktree)?.branch,
+      undefined,
+    );
+    git("-C", worktree, "switch", "feature");
+    rmSync(worktree, { recursive: true, force: true });
+    const missing = (await list()).projects
+      .find((p) => p.path === project)
+      ?.workspaces.find((w) => w.path === worktree);
+    assert.equal(missing?.branch, undefined);
+    assert.equal(missing?.unavailable, true);
+    assert.equal(
+      validWorkspaceResult("hierarchy", {
+        ok: true,
+        value: { projects: [{ ...repo, defaultBranch: 123 }] },
+      }),
+      false,
+    );
+    git("symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+    assert.equal(
+      (await list()).projects.find((p) => p.path === project)?.defaultBranch,
+      "develop",
+    );
+    assert.equal(await asyncDefaultGitBranch(project), "develop");
+    git("symbolic-ref", "--delete", "refs/remotes/upstream/HEAD");
+    assert.equal(
+      (await list()).projects.find((p) => p.path === project)?.defaultBranch,
+      undefined,
+    );
+    assert.equal(await asyncDefaultGitBranch(project), undefined);
+    rmSync(project, { recursive: true, force: true });
+    const unavailable = (await list()).projects.find((p) => p.path === project);
+    assert.equal(unavailable?.defaultBranch, undefined);
+    assert.equal(unavailable?.workspaces[0].unavailable, true);
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previous;

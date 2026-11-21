@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import {
   closeSync,
   constants,
@@ -17,6 +17,7 @@ import {
   rmSync,
 } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { getAgentDir } from "../omp/paths";
 import { listAllSessions } from "../session-reader";
 import { applyProjectPresentation } from "../project-registry";
@@ -158,6 +159,65 @@ function git(cwd: string, ...args: string[]): string {
     timeout: 10000,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+}
+
+const gitAsync = promisify(execFile);
+
+function orderedRemotes(output: string): string[] {
+  const remotes = output.trim().split("\n").filter(Boolean);
+  return remotes.includes("origin")
+    ? ["origin", ...remotes.filter((remote) => remote !== "origin")]
+    : remotes;
+}
+
+export function defaultGitBranch(cwd: string): string | undefined {
+  try {
+    for (const remote of orderedRemotes(git(cwd, "remote"))) {
+      try {
+        const ref = git(
+          cwd,
+          "symbolic-ref",
+          "--quiet",
+          `refs/remotes/${remote}/HEAD`,
+        );
+        const prefix = `refs/remotes/${remote}/`;
+        if (ref.startsWith(prefix) && ref.length > prefix.length)
+          return ref.slice(prefix.length);
+      } catch {
+        // The remote may not have a cached symbolic HEAD.
+      }
+    }
+  } catch {
+    // Repositories can disappear or lose Git metadata between hierarchy loads.
+  }
+  return undefined;
+}
+
+export async function asyncDefaultGitBranch(
+  cwd: string,
+): Promise<string | undefined> {
+  const options = { timeout: 10000 };
+  try {
+    const { stdout } = await gitAsync("git", ["-C", cwd, "remote"], options);
+    for (const remote of orderedRemotes(stdout)) {
+      try {
+        const { stdout: ref } = await gitAsync(
+          "git",
+          ["-C", cwd, "symbolic-ref", "--quiet", `refs/remotes/${remote}/HEAD`],
+          options,
+        );
+        const prefix = `refs/remotes/${remote}/`;
+        const branch = ref.trim();
+        if (branch.startsWith(prefix) && branch.length > prefix.length)
+          return branch.slice(prefix.length);
+      } catch {
+        // The remote may not have a cached symbolic HEAD.
+      }
+    }
+  } catch {
+    // Repositories can disappear or lose Git metadata between hierarchy loads.
+  }
+  return undefined;
 }
 function worktrees(
   project: HierarchyProject,
@@ -662,6 +722,11 @@ export async function hierarchyOperation(
     }
     snapshot.projects = snapshot.projects.filter(isStandaloneProject);
     for (const project of snapshot.projects) {
+      delete project.defaultBranch;
+      if (project.kind === "git") {
+        const branch = defaultGitBranch(project.path);
+        if (branch) project.defaultBranch = branch;
+      }
       project.workspaces = project.workspaces.filter((w) => !isEffortPath(w.path));
       for (const workspace of project.workspaces) {
         if (input.action === "list") {
@@ -670,11 +735,12 @@ export async function hierarchyOperation(
         }
         if (project.kind === "directory" && workspace.isDefault)
           workspace.name = "default";
+        if (project.kind === "git") delete workspace.branch;
         try {
-          if (project.kind === "git" && workspace.isDefault) {
+          if (project.kind === "git") {
             const branch = git(workspace.path, "branch", "--show-current");
-            workspace.name = branch || "Detached HEAD";
-            workspace.branch = branch || undefined;
+            if (workspace.isDefault) workspace.name = branch || "Detached HEAD";
+            if (branch) workspace.branch = branch;
           }
           workspace.unavailable = !statSync(workspace.path).isDirectory();
         } catch {

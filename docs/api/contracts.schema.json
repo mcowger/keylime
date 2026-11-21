@@ -33271,6 +33271,10 @@
                       "alias": {
                         "type": "string"
                       },
+                      "defaultBranch": {
+                        "description": "Unqualified Git default branch, when known from local remote metadata.",
+                        "type": "string"
+                      },
                       "icon": {
                         "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
                         "type": "string"
@@ -46768,6 +46772,14 @@
                                 "pullRequests"
                               ],
                               "type": "object"
+                            },
+                            "currentBranch": {
+                              "description": "Current checked-out member branch, omitted when unavailable or detached.",
+                              "type": "string"
+                            },
+                            "defaultBranch": {
+                              "description": "Observed default branch of the member Repo, omitted when unknown.",
+                              "type": "string"
                             },
                             "error": {
                               "type": "string"
@@ -195593,6 +195605,10 @@
         "alias": {
           "type": "string"
         },
+        "defaultBranch": {
+          "description": "Unqualified Git default branch, when known from local remote metadata.",
+          "type": "string"
+        },
         "icon": {
           "description": "Project icon as a base64 image data URL, including SVG; render as an image rather than inline markup.",
           "type": "string"
@@ -196065,6 +196081,10 @@
                 "type": "string"
               },
               "alias": {
+                "type": "string"
+              },
+              "defaultBranch": {
+                "description": "Unqualified Git default branch, when known from local remote metadata.",
                 "type": "string"
               },
               "icon": {

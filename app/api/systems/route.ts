@@ -28,7 +28,7 @@ async function systems(host: string | undefined, input: SystemsRequest) {
  * @apiContract workspaceSystemsGet
  * @apiUsage List Systems and Efforts on one daemon.
  * @apiInputs Optional host selects a daemon; omit it for the local host.
- * @apiInvariants All returned paths and live terminal IDs belong to that daemon.
+ * @apiInvariants All returned paths and live terminal IDs belong to that daemon. Member branches are current local observations, omitted when unknown or detached.
  * @apiEffects Returns a no-store snapshot without changing definitions or starting jobs.
  * @apiRecovery Refresh after updates, during setup, or after reconnecting to the host.
  */
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
  * @apiContract workspaceSystemsPost
  * @apiUsage Preview, create, update, or clean up Systems and Efforts, or control a saved service.
  * @apiInputs Send optional host and action-specific input as JSON, at most 384 KiB. Creation and cleanup require preview confirmation.
- * @apiInvariants An Effort keeps its captured definitions and paths. Service controls select a saved service by ID; they do not take a command or environment override.
+ * @apiInvariants An Effort keeps its captured definitions and paths. Returned member branches are current local observations, omitted when unknown or detached. Service controls select a saved service by ID; they do not take a command or environment override.
  * @apiEffects Actions may persist definitions, admit setup jobs, start or stop service PTYs, or clean up registered worktrees. Service output uses the existing terminal channel.
  * @apiRecovery List host state after uncertain delivery rather than repeating mutations. Retry setup explicitly and refresh the cleanup preview before resuming removal.
  */

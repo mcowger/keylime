@@ -137,31 +137,40 @@ export function SystemsSidebar({
     const systemMatch = `${system.name} ${system.repoPaths.join(" ")}`
       .toLowerCase()
       .includes(query);
-    const efforts =
-      data?.efforts.filter(
-        (effort) =>
-          effort.systemId === system.id &&
-          (!runningOnly ||
-            findEffort(effort) ||
-            effort.sessionIds.some((id) =>
-              runningIds.has(sessionKey(id, host.id)),
-            ) ||
-            effort.services.some(({ status }) => status === "running") ||
-            effort.status === "creating" ||
-            effort.status === "cleaning") &&
-          (systemMatch ||
-            `${effort.name} ${effort.root} ${effort.branch}`
-              .toLowerCase()
-              .includes(query) ||
-            effort.sessionIds.some((id) =>
-              matchedIds?.has(sessionKey(id, host.id)),
-            )),
-      ) ?? [];
+    const systemEfforts =
+      data?.efforts.filter((effort) => effort.systemId === system.id) ?? [];
+    const efforts = systemEfforts.filter(
+      (effort) =>
+        (!runningOnly ||
+          findEffort(effort) ||
+          effort.sessionIds.some((id) =>
+            runningIds.has(sessionKey(id, host.id)),
+          ) ||
+          effort.services.some(({ status }) => status === "running") ||
+          effort.status === "creating" ||
+          effort.status === "cleaning") &&
+        (systemMatch ||
+          `${effort.name} ${effort.root} ${effort.branch}`
+            .toLowerCase()
+            .includes(query) ||
+          effort.sessionIds.some((id) =>
+            matchedIds?.has(sessionKey(id, host.id)),
+          )),
+    );
     if ((runningOnly || !systemMatch) && !efforts.length) return null;
     const forcedOpen = Boolean(query) || runningOnly;
+    const allDefault = systemEfforts.every((effort) =>
+      effort.members.every(
+        (member) =>
+          !!member.currentBranch &&
+          !!member.defaultBranch &&
+          member.currentBranch === member.defaultBranch,
+      ),
+    );
     const open =
       forcedOpen ||
-      (systemExpansion.get(system.id) ?? efforts.some(findEffort));
+      (systemExpansion.get(system.id) ??
+        (!allDefault && efforts.some(findEffort)));
     return (
       <div key={system.id} style={{ ...systemsStack, gap: 4 }}>
         <div

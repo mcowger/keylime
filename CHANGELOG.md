@@ -253,6 +253,10 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Repos and Systems with only default-branch work start collapsed. Empty groups start collapsed too.
+- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
+- Opening the model picker no longer starts a saved session or blocks Send while it reads Auto-prewalk.
+- The Auto Prewalk button keeps keyboard focus while a mode change is pending.
 - Subagent detail dialogs stay stable and retain transcript expansion while live updates arrive.
 - Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
 - Workspace names in the sidebar stay on one line, with PR links below. The running-agent badge sits beside the actions menu, and empty Ship and setup slots leave more room for the name.
@@ -425,6 +429,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Workspace sidebar rows align running-agent and attention badges consistently while empty Ship and setup slots give workspace names more room
 - Settings keeps one host selection across Models, Providers, Usage, Agents, Intelligence, Extensions, Repos, and System. Usage and the model catalog come from the selected daemon. Manage linked-host OMP settings and provider credentials on that host
 - Subagent detail dialogs stay stable and retain transcript expansion while live updates arrive
+- Repos and Systems with only default-branch work start collapsed. Empty groups start collapsed too
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

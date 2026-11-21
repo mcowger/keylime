@@ -120,6 +120,8 @@ export function validWorkspaceResult(
             text(project.path) &&
             text(project.name) &&
             (project.kind === "git" || project.kind === "directory") &&
+            (project.defaultBranch === undefined ||
+              text(project.defaultBranch)) &&
             Array.isArray(project.workspaces) &&
             project.workspaces.every(
               (workspace) =>

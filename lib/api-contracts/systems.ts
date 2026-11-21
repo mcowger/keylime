@@ -77,6 +77,8 @@ const effortMember = Type.Composite([
     ),
     jobId: optional(text),
     stage: optional(text),
+    currentBranch: optional(Type.String({ description: "Current checked-out member branch, omitted when unavailable or detached." })),
+    defaultBranch: optional(Type.String({ description: "Observed default branch of the member Repo, omitted when unknown." })),
     error: optional(text),
   }),
 ]);

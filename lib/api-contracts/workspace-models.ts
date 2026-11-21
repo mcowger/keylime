@@ -741,6 +741,12 @@ export const HierarchyProjectSchema = Type.Object(
     path: Type.String(),
     name: Type.String(),
     kind: literals("git", "directory"),
+    defaultBranch: Type.Optional(
+      Type.String({
+        description:
+          "Unqualified Git default branch, when known from local remote metadata.",
+      }),
+    ),
     addedAt: Type.String(),
     launchConfig: Type.Optional(ProjectLaunchConfigSchema),
     icon: Type.Optional(

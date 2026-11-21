@@ -69,7 +69,7 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
     const repos = ["app", "worker"].map((name) => {
       const repo = path.join(dir, name);
       fs.mkdirSync(repo);
-      git(repo, "init", "-b", "main");
+      git(repo, "init", "-b", name === "worker" ? "trunk" : "main");
       git(repo, "config", "user.name", "Effort Test");
       git(repo, "config", "user.email", "test@example.invalid");
       git(repo, "config", "commit.gpgsign", "false");
@@ -77,6 +77,11 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       fs.writeFileSync(path.join(repo, ".gitignore"), ".env\n/dev-data/\n");
       git(repo, "add", "--force", ".gitignore");
       git(repo, "commit", "-qm", "base");
+      if (name === "worker") {
+        git(repo, "remote", "add", "origin", repo);
+        git(repo, "update-ref", "refs/remotes/origin/trunk", "HEAD");
+        git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+      }
       return repo;
     });
     const [app, worker] = repos;
@@ -171,6 +176,56 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       effort.members.map(({ status }) => status),
       ["complete", "complete"],
     );
+    assert.equal(
+      readHierarchy().projects.find((project) => project.path === worker)?.hidden,
+      true,
+    );
+    assert.equal(effort.members[0].defaultBranch, undefined);
+    assert.equal(effort.members[1].defaultBranch, "trunk");
+    assert.equal(effort.members[1].currentBranch, effort.branch);
+    const workerCheckout = effort.members[1].path;
+    git(worker, "switch", "-c", "source-branch");
+    git(workerCheckout, "switch", "trunk");
+    let observed = (await systemsOperation({ action: "list" }, runtime)).efforts[0];
+    assert.equal(observed.members[1].currentBranch, "trunk");
+    assert.equal(observed.members[1].defaultBranch, "trunk");
+    git(workerCheckout, "switch", "--detach");
+    observed = (await systemsOperation({ action: "list" }, runtime)).efforts[0];
+    assert.equal(observed.members[1].currentBranch, undefined);
+    assert.equal(observed.members[1].defaultBranch, "trunk");
+    git(workerCheckout, "switch", effort.branch);
+
+    const statePath = path.join(process.env.PI_CODING_AGENT_DIR!, "keylime", "systems.json");
+    const stateBefore = fs.readFileSync(statePath, "utf8");
+    const stored = JSON.parse(stateBefore);
+    stored.efforts[0].members[1].currentBranch = "stale-current";
+    stored.efforts[0].members[1].defaultBranch = "stale-default";
+    const staleState = JSON.stringify(stored);
+    fs.writeFileSync(statePath, staleState);
+    observed = (await systemsOperation({ action: "list" }, runtime)).efforts[0];
+    assert.equal(observed.members[1].currentBranch, effort.branch);
+    assert.equal(observed.members[1].defaultBranch, "trunk");
+    assert.equal(fs.readFileSync(statePath, "utf8"), staleState);
+    fs.writeFileSync(statePath, stateBefore);
+
+    const checkoutGit = path.join(workerCheckout, ".git");
+    fs.renameSync(checkoutGit, `${checkoutGit}.hidden`);
+    try {
+      observed = (await systemsOperation({ action: "list" }, runtime)).efforts[0];
+      assert.equal(observed.members[1].currentBranch, undefined);
+      assert.equal(observed.members[1].defaultBranch, "trunk");
+    } finally {
+      fs.renameSync(`${checkoutGit}.hidden`, checkoutGit);
+    }
+    const repoGit = path.join(worker, ".git");
+    fs.renameSync(repoGit, `${repoGit}.hidden`);
+    try {
+      observed = (await systemsOperation({ action: "list" }, runtime)).efforts[0];
+      assert.equal(observed.members[1].currentBranch, undefined);
+      assert.equal(observed.members[1].defaultBranch, undefined);
+    } finally {
+      fs.renameSync(`${repoGit}.hidden`, repoGit);
+    }
     assert.equal(
       git(effort.members[0].path, "rev-parse", "HEAD"),
       preview.members[0].baseCommit,

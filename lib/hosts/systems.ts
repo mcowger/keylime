@@ -19,6 +19,7 @@ import { createGitEnvironment } from "../project-command-env";
 import type { WorkspaceCreationJob } from "../workspace-creation-types";
 import { HostOpError } from "./link-protocol";
 import {
+  asyncDefaultGitBranch,
   canonicalRepoPath,
   readHierarchy,
   registerCreatedWorkspace,
@@ -1354,10 +1355,44 @@ async function cleanup(
     release();
   }
 }
-function result(runtime: SystemsRuntime): SystemsResult {
+async function result(runtime: SystemsRuntime): Promise<SystemsResult> {
   const state = load();
   const workspaces = readHierarchy().projects.flatMap(
     (project) => project.workspaces,
+  );
+  const defaults = new Map<string, Promise<string | undefined>>();
+  const defaultBranch = (repoPath: string) => {
+    let observed = defaults.get(repoPath);
+    if (!observed) {
+      observed = fs.promises
+        .stat(path.join(repoPath, ".git"))
+        .then(() => asyncDefaultGitBranch(repoPath))
+        .catch(() => undefined);
+      defaults.set(repoPath, observed);
+    }
+    return observed;
+  };
+  const branches = new Map<
+    Member,
+    { currentBranch?: string; defaultBranch?: string }
+  >();
+  await Promise.all(
+    state.efforts.flatMap((effort) =>
+      effort.members.map(async (member) => {
+        const current = fs.promises
+          .stat(path.join(member.path, ".git"))
+          .then(() =>
+            git(member.path, ["symbolic-ref", "--quiet", "--short", "HEAD"], 10_000),
+          )
+          .then((value) => value.trim() || undefined)
+          .catch(() => undefined);
+        const [currentBranch, observedDefault] = await Promise.all([
+          current,
+          defaultBranch(member.repoPath),
+        ]);
+        branches.set(member, { currentBranch, defaultBranch: observedDefault });
+      }),
+    ),
   );
   return {
     root: rootOf(state),
@@ -1371,8 +1406,8 @@ function result(runtime: SystemsRuntime): SystemsResult {
         ...effort
       }) => ({
         ...effort,
-        members: effort.members.map(
-          ({
+        members: effort.members.map((entry) => {
+          const {
             setup: _setup,
             repoIdentity: _repo,
             directoryIdentity: _dir,
@@ -1384,8 +1419,9 @@ function result(runtime: SystemsRuntime): SystemsResult {
             blockingDone: _blocking,
             removing: _removing,
             ...member
-          }) => member,
-        ),
+          } = entry;
+          return { ...member, ...branches.get(entry) };
+        }),
         services: effort.services.map((service) => {
           if (!service.terminalId || !runtime.terminals.has(service.terminalId))
             return {
@@ -1435,11 +1471,10 @@ export async function systemsOperation(
       save(state);
       break;
     }
-    case "preview":
-      return {
-        ...result(runtime),
-        preview: (await prepare(state, input)).preview,
-      };
+    case "preview": {
+      const preview = (await prepare(state, input)).preview;
+      return { ...(await result(runtime)), preview };
+    }
     case "create": {
       const prior =
         input.creationId &&
@@ -1450,7 +1485,7 @@ export async function systemsOperation(
             "effort_creation_conflict",
             "Effort creation ID belongs to another System",
           );
-        return { ...result(runtime), effortId: prior.id };
+        return { ...(await result(runtime)), effortId: prior.id };
       }
       const { preview, members, system, configuredRoot } = await prepare(
         state,
@@ -1466,7 +1501,7 @@ export async function systemsOperation(
             "effort_creation_conflict",
             "Effort creation ID belongs to another System",
           );
-        return { ...result(runtime), effortId: admitted.id };
+        return { ...(await result(runtime)), effortId: admitted.id };
       }
       if (input.creationId !== undefined) {
         if (!runtime.checkPlanningAdmission)
@@ -1519,7 +1554,7 @@ export async function systemsOperation(
         })),
       };
       launchSetup(effort, runtime);
-      return { ...result(runtime), effortId: effort.id };
+      return { ...(await result(runtime)), effortId: effort.id };
     }
     case "retry": {
       const effort = effortFor(state, input.effortId);
@@ -1527,7 +1562,7 @@ export async function systemsOperation(
         input.attempt !== undefined &&
         (effort.retryAttempt ?? -1) >= input.attempt
       )
-        return { ...result(runtime), effortId: effort.id };
+        return { ...(await result(runtime)), effortId: effort.id };
       if (busy.has(effort.id))
         throw conflict("effort_busy", "An Effort operation is already running");
       if (effort.status !== "failed")
@@ -1537,14 +1572,14 @@ export async function systemsOperation(
         );
       effort.retryAttempt = input.attempt;
       launchSetup(effort, runtime);
-      return { ...result(runtime), effortId: effort.id };
+      return { ...(await result(runtime)), effortId: effort.id };
     }
     case "cleanupPreview": {
       const effort = effortFor(state, input.effortId);
       if (busy.has(effort.id))
         throw conflict("effort_busy", "An Effort operation is already running");
       const preview = await cleanupPreview(effort, runtime);
-      return { ...result(runtime), cleanup: preview };
+      return { ...(await result(runtime)), cleanup: preview };
     }
     case "renameEffort":
     case "service":

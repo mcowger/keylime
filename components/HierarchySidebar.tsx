@@ -237,8 +237,8 @@ export function HierarchySidebar({
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(
     () => new Set(),
   );
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
-    () => new Set(),
+  const [projectExpansion, setProjectExpansion] = useState<Map<string, boolean>>(
+    () => new Map(),
   );
   const sidebarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1043,8 +1043,19 @@ export function HierarchySidebar({
                     hostUnavailableReason?.(host.id) ?? null;
                   const projectKey = hostProjectKey(host.id, project.path);
                   const projectForcedOpen = searching || runningOnly;
+                  const allDefault =
+                    project.workspaces.length === 0 ||
+                    (project.kind === "directory"
+                      ? project.workspaces.length === 1 &&
+                        project.workspaces[0].isDefault
+                      : !!project.defaultBranch &&
+                        project.workspaces.every(
+                          (workspace) =>
+                            workspace.branch === project.defaultBranch,
+                        ));
                   const projectExpanded =
-                    projectForcedOpen || !collapsedProjects.has(projectKey);
+                    projectForcedOpen ||
+                    (projectExpansion.get(projectKey) ?? !allDefault);
                   const creation = managerCreations[projectKey];
                   const buildingFromManager =
                     creation === "starting" ||
@@ -1071,13 +1082,12 @@ export function HierarchySidebar({
                             projectForcedOpen
                               ? undefined
                               : () =>
-                                  setCollapsedProjects((current) => {
-                                    const next = new Set(current);
-                                    if (next.has(projectKey))
-                                      next.delete(projectKey);
-                                    else next.add(projectKey);
-                                    return next;
-                                  })
+                                  setProjectExpansion((current) =>
+                                    new Map(current).set(
+                                      projectKey,
+                                      !projectExpanded,
+                                    ),
+                                  )
                           }
                         >
                           <ChevronRight size={12} aria-hidden="true" />

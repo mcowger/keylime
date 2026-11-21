@@ -11,7 +11,7 @@ import type { HierarchyRequest } from "@/lib/project-hierarchy-types";
  * @apiContract workspaceHierarchyGet
  * @apiUsage List the selected host’s project hierarchy.
  * @apiInputs Optional host selects the daemon.
- * @apiInvariants The result describes registered hierarchy, not every discoverable directory.
+ * @apiInvariants The result describes registered hierarchy, not every discoverable directory. Git defaultBranch is the locally observed remote default, omitted when unknown.
  * @apiEffects Returns a hierarchy snapshot without changing registrations.
  * @apiRecovery Refresh after mutations or host reconnection.
  */
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
  * @apiContract workspaceHierarchyPost
  * @apiUsage Apply a hierarchy action on a host.
  * @apiInputs Send host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.
- * @apiInvariants Registration and discovery are distinct; the host validates action preconditions. listProjectIcons scans at most five directory levels and 2,000 entries, returning at most 24 icons of at most 256 KiB. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort.
+ * @apiInvariants Registration and discovery are distinct; the host validates action preconditions. Git defaultBranch is the locally observed remote default, omitted when unknown. listProjectIcons scans at most five directory levels and 2,000 entries, returning at most 24 icons of at most 256 KiB. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort.
  * @apiEffects Actions can change project or workspace registration and presentation.
  * @apiRecovery After an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.
  */

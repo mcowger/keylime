@@ -39756,7 +39756,7 @@
     },
     "/api/hierarchy": {
       "get": {
-        "description": "### Usage\n\nList the selected host’s project hierarchy.\n\n### Inputs\n\nOptional host selects the daemon.\n\n### Invariants\n\nThe result describes registered hierarchy, not every discoverable directory.\n\n### Effects\n\nReturns a hierarchy snapshot without changing registrations.\n\n### Recovery\n\nRefresh after mutations or host reconnection.",
+        "description": "### Usage\n\nList the selected host’s project hierarchy.\n\n### Inputs\n\nOptional host selects the daemon.\n\n### Invariants\n\nThe result describes registered hierarchy, not every discoverable directory. Git defaultBranch is the locally observed remote default, omitted when unknown.\n\n### Effects\n\nReturns a hierarchy snapshot without changing registrations.\n\n### Recovery\n\nRefresh after mutations or host reconnection.",
         "operationId": "workspaceHierarchyGet",
         "parameters": [
           {
@@ -39798,6 +39798,10 @@
                             "type": "string"
                           },
                           "alias": {
+                            "type": "string"
+                          },
+                          "defaultBranch": {
+                            "description": "Unqualified Git default branch, when known from local remote metadata.",
                             "type": "string"
                           },
                           "icon": {
@@ -40474,13 +40478,13 @@
         "x-client-semantics": {
           "Effects": "Returns a hierarchy snapshot without changing registrations.",
           "Inputs": "Optional host selects the daemon.",
-          "Invariants": "The result describes registered hierarchy, not every discoverable directory.",
+          "Invariants": "The result describes registered hierarchy, not every discoverable directory. Git defaultBranch is the locally observed remote default, omitted when unknown.",
           "Recovery": "Refresh after mutations or host reconnection.",
           "Usage": "List the selected host’s project hierarchy."
         }
       },
       "post": {
-        "description": "### Usage\n\nApply a hierarchy action on a host.\n\n### Inputs\n\nSend host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.\n\n### Invariants\n\nRegistration and discovery are distinct; the host validates action preconditions. listProjectIcons scans at most five directory levels and 2,000 entries, returning at most 24 icons of at most 256 KiB. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort.\n\n### Effects\n\nActions can change project or workspace registration and presentation.\n\n### Recovery\n\nAfter an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
+        "description": "### Usage\n\nApply a hierarchy action on a host.\n\n### Inputs\n\nSend host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.\n\n### Invariants\n\nRegistration and discovery are distinct; the host validates action preconditions. Git defaultBranch is the locally observed remote default, omitted when unknown. listProjectIcons scans at most five directory levels and 2,000 entries, returning at most 24 icons of at most 256 KiB. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort.\n\n### Effects\n\nActions can change project or workspace registration and presentation.\n\n### Recovery\n\nAfter an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
         "operationId": "workspaceHierarchyPost",
         "parameters": [],
         "requestBody": {
@@ -40694,6 +40698,10 @@
                             "type": "string"
                           },
                           "alias": {
+                            "type": "string"
+                          },
+                          "defaultBranch": {
+                            "description": "Unqualified Git default branch, when known from local remote metadata.",
                             "type": "string"
                           },
                           "icon": {
@@ -41370,7 +41378,7 @@
         "x-client-semantics": {
           "Effects": "Actions can change project or workspace registration and presentation.",
           "Inputs": "Send host and an input object with an action and its action-specific fields; JSON is limited to 384 KiB.",
-          "Invariants": "Registration and discovery are distinct; the host validates action preconditions. listProjectIcons scans at most five directory levels and 2,000 entries, returning at most 24 icons of at most 256 KiB. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort.",
+          "Invariants": "Registration and discovery are distinct; the host validates action preconditions. Git defaultBranch is the locally observed remote default, omitted when unknown. listProjectIcons scans at most five directory levels and 2,000 entries, returning at most 24 icons of at most 256 KiB. It skips hidden names, symlinks, node_modules, vendor, dist and release, and applies Git ignore rules when available. Results are best-effort.",
           "Recovery": "After an uncertain mutation, fetch the hierarchy before deciding whether to repeat it.",
           "Usage": "Apply a hierarchy action on a host."
         }
@@ -62490,6 +62498,10 @@
                               "type": "string"
                             },
                             "alias": {
+                              "type": "string"
+                            },
+                            "defaultBranch": {
+                              "description": "Unqualified Git default branch, when known from local remote metadata.",
                               "type": "string"
                             },
                             "icon": {
@@ -93161,7 +93173,7 @@
     },
     "/api/systems": {
       "get": {
-        "description": "### Usage\n\nList Systems and Efforts on one daemon.\n\n### Inputs\n\nOptional host selects a daemon; omit it for the local host.\n\n### Invariants\n\nAll returned paths and live terminal IDs belong to that daemon.\n\n### Effects\n\nReturns a no-store snapshot without changing definitions or starting jobs.\n\n### Recovery\n\nRefresh after updates, during setup, or after reconnecting to the host.",
+        "description": "### Usage\n\nList Systems and Efforts on one daemon.\n\n### Inputs\n\nOptional host selects a daemon; omit it for the local host.\n\n### Invariants\n\nAll returned paths and live terminal IDs belong to that daemon. Member branches are current local observations, omitted when unknown or detached.\n\n### Effects\n\nReturns a no-store snapshot without changing definitions or starting jobs.\n\n### Recovery\n\nRefresh after updates, during setup, or after reconnecting to the host.",
         "operationId": "workspaceSystemsGet",
         "parameters": [
           {
@@ -93332,6 +93344,14 @@
                                     "pullRequests"
                                   ],
                                   "type": "object"
+                                },
+                                "currentBranch": {
+                                  "description": "Current checked-out member branch, omitted when unavailable or detached.",
+                                  "type": "string"
+                                },
+                                "defaultBranch": {
+                                  "description": "Observed default branch of the member Repo, omitted when unknown.",
+                                  "type": "string"
                                 },
                                 "error": {
                                   "type": "string"
@@ -94085,13 +94105,13 @@
         "x-client-semantics": {
           "Effects": "Returns a no-store snapshot without changing definitions or starting jobs.",
           "Inputs": "Optional host selects a daemon; omit it for the local host.",
-          "Invariants": "All returned paths and live terminal IDs belong to that daemon.",
+          "Invariants": "All returned paths and live terminal IDs belong to that daemon. Member branches are current local observations, omitted when unknown or detached.",
           "Recovery": "Refresh after updates, during setup, or after reconnecting to the host.",
           "Usage": "List Systems and Efforts on one daemon."
         }
       },
       "post": {
-        "description": "### Usage\n\nPreview, create, update, or clean up Systems and Efforts, or control a saved service.\n\n### Inputs\n\nSend optional host and action-specific input as JSON, at most 384 KiB. Creation and cleanup require preview confirmation.\n\n### Invariants\n\nAn Effort keeps its captured definitions and paths. Service controls select a saved service by ID; they do not take a command or environment override.\n\n### Effects\n\nActions may persist definitions, admit setup jobs, start or stop service PTYs, or clean up registered worktrees. Service output uses the existing terminal channel.\n\n### Recovery\n\nList host state after uncertain delivery rather than repeating mutations. Retry setup explicitly and refresh the cleanup preview before resuming removal.",
+        "description": "### Usage\n\nPreview, create, update, or clean up Systems and Efforts, or control a saved service.\n\n### Inputs\n\nSend optional host and action-specific input as JSON, at most 384 KiB. Creation and cleanup require preview confirmation.\n\n### Invariants\n\nAn Effort keeps its captured definitions and paths. Returned member branches are current local observations, omitted when unknown or detached. Service controls select a saved service by ID; they do not take a command or environment override.\n\n### Effects\n\nActions may persist definitions, admit setup jobs, start or stop service PTYs, or clean up registered worktrees. Service output uses the existing terminal channel.\n\n### Recovery\n\nList host state after uncertain delivery rather than repeating mutations. Retry setup explicitly and refresh the cleanup preview before resuming removal.",
         "operationId": "workspaceSystemsPost",
         "requestBody": {
           "content": {
@@ -94583,6 +94603,14 @@
                                     "pullRequests"
                                   ],
                                   "type": "object"
+                                },
+                                "currentBranch": {
+                                  "description": "Current checked-out member branch, omitted when unavailable or detached.",
+                                  "type": "string"
+                                },
+                                "defaultBranch": {
+                                  "description": "Observed default branch of the member Repo, omitted when unknown.",
+                                  "type": "string"
                                 },
                                 "error": {
                                   "type": "string"
@@ -95374,7 +95402,7 @@
         "x-client-semantics": {
           "Effects": "Actions may persist definitions, admit setup jobs, start or stop service PTYs, or clean up registered worktrees. Service output uses the existing terminal channel.",
           "Inputs": "Send optional host and action-specific input as JSON, at most 384 KiB. Creation and cleanup require preview confirmation.",
-          "Invariants": "An Effort keeps its captured definitions and paths. Service controls select a saved service by ID; they do not take a command or environment override.",
+          "Invariants": "An Effort keeps its captured definitions and paths. Returned member branches are current local observations, omitted when unknown or detached. Service controls select a saved service by ID; they do not take a command or environment override.",
           "Recovery": "List host state after uncertain delivery rather than repeating mutations. Retry setup explicitly and refresh the cleanup preview before resuming removal.",
           "Usage": "Preview, create, update, or clean up Systems and Efforts, or control a saved service."
         }

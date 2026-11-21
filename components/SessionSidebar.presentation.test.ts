@@ -4,11 +4,14 @@ import React from "react";
 import test from "node:test";
 import { sessionKey } from "@/lib/session-identity";
 import type { SessionInfo } from "../lib/types";
+import type { EffortRecord, SystemRecord } from "../lib/api-contracts/systems";
 import { noSystemsSidebar } from "../tests/systems-sidebar-fixture";
 const { render, cleanup, fireEvent, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { SessionSidebar } = await import("./SessionSidebar.tsx");
 const { HierarchySidebar } = await import("./HierarchySidebar.tsx");
+// Components load after the DOM fixture is installed.
+const { SystemsSidebar } = await import("./SystemsSidebar.tsx");
 
 class FakeWorker {
   postMessage() {}
@@ -93,6 +96,195 @@ test("the activity filter reveals a collapsed Repo and restores it afterward", a
   }
 });
 
+test("Repos default to collapsed only when their work is confirmed default", async () => {
+  const workspace = snapshot.projects[0].workspaces[0];
+  const project = snapshot.projects[0];
+  const git = (
+    name: string,
+    branch?: string,
+    defaultBranch?: string,
+    isDefault = false,
+  ) => ({
+    ...project,
+    id: name,
+    name,
+    path: `/${name}`,
+    kind: "git",
+    defaultBranch,
+    workspaces: [{ ...workspace, branch, isDefault }],
+  });
+  let projects = [
+    { ...project, id: "directory", name: "Directory" },
+    { ...project, id: "empty", name: "Empty", path: "/empty", workspaces: [] },
+    git("Trunk", "trunk", "trunk"),
+    git("Feature", "feature", "trunk", true),
+    {
+      ...git("Mixed", "trunk", "trunk"),
+      workspaces: [
+        { ...workspace, branch: "trunk" },
+        { ...workspace, id: "feature-workspace", branch: "feature" },
+      ],
+    },
+    git("Unknown branch", undefined, "trunk"),
+    git("Unknown default", "trunk"),
+  ];
+  const restore = setup(() => Response.json({ projects }));
+  try {
+    renderSidebar();
+    for (const [name, expanded] of [
+      ["Directory", false],
+      ["Empty", false],
+      ["Trunk", false],
+      ["Feature", true],
+      ["Unknown branch", true],
+      ["Mixed", true],
+      ["Unknown default", true],
+    ] as const) {
+      const button = await screen.findByRole("button", { name });
+      assert.equal(button.getAttribute("aria-expanded"), String(expanded), name);
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Trunk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Feature" }));
+    projects = [
+      git("Trunk", "feature", "trunk"),
+      git("Feature", "trunk", "trunk"),
+      git("Refreshed", "trunk", "trunk"),
+    ];
+    fireEvent.focus(window);
+    await screen.findByRole("button", { name: "Refreshed" });
+    assert.equal(
+      screen
+        .getByRole("button", { name: "Trunk" })
+        .getAttribute("aria-expanded"),
+      "true",
+    );
+    assert.equal(
+      screen
+        .getByRole("button", { name: "Feature" })
+        .getAttribute("aria-expanded"),
+      "false",
+    );
+    assert.equal(
+      screen
+        .getByRole("button", { name: "Refreshed" })
+        .getAttribute("aria-expanded"),
+      "false",
+    );
+  } finally {
+    restore();
+  }
+});
+
+test("System expansion uses observed member branches and preserves manual choices", () => {
+  const restore = setup(() => Response.json(snapshot));
+  const system: SystemRecord = {
+    id: "system",
+    slug: "system",
+    name: "System",
+    repoPaths: ["/repo"],
+    services: [],
+    instructions: "",
+    archived: false,
+  };
+  const member = {
+    repoPath: "/repo",
+    name: "Repo",
+    path: "/efforts/alpha/repo",
+    baseRef: "trunk",
+    baseCommit: "abc",
+    skipsCustomCreate: false,
+    status: "complete" as const,
+    currentBranch: "trunk",
+    defaultBranch: "trunk",
+  };
+  const effort: EffortRecord = {
+    id: "effort",
+    systemId: "system",
+    systemName: "System",
+    name: "Alpha",
+    slug: "alpha",
+    root: "/efforts/alpha",
+    branch: "feature",
+    status: "ready",
+    members: [member],
+    services: [],
+    sessionIds: [],
+  };
+  const makeProps = (efforts: EffortRecord[], query = "") => ({
+    host: { id: "local", name: "Local" },
+    state: { data: { root: "/efforts", systems: [system], efforts } },
+    action: noSystemsSidebar.systemsHosts.run,
+    repos: [],
+    selectedPath: "/efforts/alpha",
+    query,
+    runningOnly: false,
+    runningIds: new Set<string>(),
+    matchedIds: null,
+    onOpenEffort() {},
+    onChanged() {},
+  });
+  try {
+    const view = render(React.createElement(SystemsSidebar, makeProps([])));
+    const systemButton = () => screen.getByRole("button", { name: "System" });
+    const expanded = () => systemButton().getAttribute("aria-expanded");
+    assert.equal(expanded(), "false");
+    view.rerender(React.createElement(SystemsSidebar, makeProps([effort])));
+    assert.equal(expanded(), "false");
+    view.rerender(
+      React.createElement(SystemsSidebar, makeProps([{ ...effort, members: [] }])),
+    );
+    assert.equal(expanded(), "false");
+    const switched = {
+      ...effort,
+      branch: "trunk",
+      members: [{ ...member, currentBranch: "feature" }],
+    };
+    view.rerender(React.createElement(SystemsSidebar, makeProps([switched])));
+    assert.equal(expanded(), "true");
+    view.rerender(
+      React.createElement(SystemsSidebar, {
+        ...makeProps([switched]),
+        selectedPath: null,
+      }),
+    );
+    assert.equal(expanded(), "false");
+    view.rerender(
+      React.createElement(
+        SystemsSidebar,
+        makeProps([effort, { ...switched, id: "other-effort" }]),
+      ),
+    );
+    assert.equal(expanded(), "true");
+    const unknown = {
+      ...effort,
+      members: [{ ...member, currentBranch: undefined }],
+    };
+    view.rerender(React.createElement(SystemsSidebar, makeProps([unknown])));
+    assert.equal(expanded(), "true");
+    const mixed = {
+      ...effort,
+      members: [member, { ...member, repoPath: "/other", defaultBranch: undefined }],
+    };
+    view.rerender(React.createElement(SystemsSidebar, makeProps([mixed])));
+    assert.equal(expanded(), "true");
+    fireEvent.click(systemButton());
+    view.rerender(React.createElement(SystemsSidebar, makeProps([effort])));
+    assert.equal(expanded(), "false");
+    view.rerender(
+      React.createElement(SystemsSidebar, makeProps([effort], "alpha")),
+    );
+    assert.equal(expanded(), "true");
+    view.rerender(React.createElement(SystemsSidebar, makeProps([effort])));
+    assert.equal(expanded(), "false");
+    fireEvent.click(systemButton());
+    view.rerender(React.createElement(SystemsSidebar, makeProps([switched])));
+    assert.equal(expanded(), "true");
+  } finally {
+    restore();
+  }
+});
+
 function setup(
   hierarchy: (url: URL, init: RequestInit) => Response | Promise<Response>,
 ) {
@@ -150,6 +342,11 @@ function renderSidebar(
     }),
   );
 }
+async function expandProject(name = "Project") {
+  const project = await screen.findByRole("button", { name });
+  if (project.getAttribute("aria-expanded") === "false") fireEvent.click(project);
+}
+
 
 test("registered workspaces remain selectable under the single host heading", async () => {
   const hosts: (string | null)[] = [];
@@ -159,6 +356,7 @@ test("registered workspaces remain selectable under the single host heading", as
   });
   try {
     renderSidebar();
+    await expandProject();
     const workspace = await screen.findByRole("button", { name: "Workspace" });
     assert.ok(hosts.includes("local"));
     assert.equal(workspace.getAttribute("aria-pressed"), "false");
@@ -180,6 +378,7 @@ test("Repos and Systems collapse independently", async () => {
   const restore = setup(() => Response.json(snapshot));
   try {
     renderSidebar();
+    await expandProject();
     await screen.findByRole("button", { name: "Workspace" });
     const repos = screen.getByRole("button", { name: "Repos" });
     const systems = screen.getByRole("button", { name: "Systems" });
@@ -224,6 +423,7 @@ test("sidebar search reveals collapsed Repos and Systems until cleared", async (
         },
       },
     });
+    await expandProject();
     await screen.findByRole("button", { name: "Workspace" });
     const repos = screen.getByRole("button", { name: "Repos" });
     const systems = screen.getByRole("button", { name: "Systems" });
@@ -258,6 +458,7 @@ test("pending workspace does not select its base workspace", async () => {
   try {
     const props = { selectedCwd: "/workspace", selectedHostId: "local" };
     const view = renderSidebar(props);
+    await expandProject();
     const workspace = await screen.findByRole("button", { name: "Workspace" });
     await waitFor(() =>
       assert.equal(workspace.getAttribute("aria-pressed"), "true"),
@@ -321,6 +522,7 @@ test("workspace click reconciles after its registered sessions load", async () =
   const changes: unknown[][] = [];
   try {
     renderSidebar({ onCwdChange: (...args) => changes.push(args) });
+    await expandProject();
     fireEvent.click(await screen.findByRole("button", { name: "Workspace" }));
     assert.ok(changes.some((args) => args[6] === "pending"));
     resolveSessions(
@@ -400,6 +602,7 @@ test("collapsing the connected host leaves the offline host's repos visible", as
         onChanged() {},
       }),
     );
+    await expandProject("Offline project");
     assert.ok(await screen.findByRole("button", { name: "Offline workspace" }));
     assert.equal(screen.queryByRole("button", { name: "Workspace" }), null);
     assert.equal(
@@ -431,6 +634,7 @@ test("workspace loading error clears after the host recovers", async () => {
     await screen.findByText("MacMini is offline");
     offline = false;
     fireEvent.focus(window);
+    await expandProject();
     await screen.findByRole("button", { name: "Workspace" });
     await waitFor(() =>
       assert.equal(screen.queryByText("MacMini is offline"), null),
@@ -456,6 +660,7 @@ test("a slow successful hierarchy refresh recovers despite a newer pending refre
     fireEvent.focus(window);
     await waitFor(() => assert.equal(pending.length, 2));
     pending[0](Response.json(snapshot));
+    await expandProject();
     await screen.findByRole("button", { name: "Workspace" });
     await waitFor(() =>
       assert.equal(screen.queryByText("MacMini is offline"), null),
@@ -471,6 +676,7 @@ test("selecting any workspace closes the mobile sidebar", async () => {
   let closes = 0;
   try {
     renderSidebar({ onClose: () => closes++ });
+    await expandProject();
     const workspace = await screen.findByRole("button", { name: "Workspace" });
     fireEvent.click(workspace);
     await waitFor(() =>
@@ -511,6 +717,7 @@ test("failed project unregistration reports the error and keeps the hierarchy", 
   });
   try {
     renderSidebar();
+    await expandProject();
     fireEvent.click(await screen.findByLabelText("Actions for repo Project"));
     assert.equal(
       screen.getByRole("button", { name: "Repo settings" }).textContent?.trim(),
@@ -585,6 +792,7 @@ test("registered chats appear only as search results and remain selectable", asy
   };
   try {
     const view = render(React.createElement(HierarchySidebar, props));
+    await expandProject();
     await screen.findByRole("button", { name: "Workspace" });
     assert.equal(screen.queryByRole("button", { name: "Saved chat" }), null);
     view.rerender(
