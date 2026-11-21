@@ -8,7 +8,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Breaking Changes
 - Removed host pools and shared project identities. New daemons use one controller and link protocol 14. Upgrade the controller first; it still accepts enrolled v13 daemons so you can upgrade them individually.
-- `bun run api` replaces `api:generate` and `api:check`, validating documents in parallel and verifying the generated artifacts.
+- `bun run api` replaces `api:generate` and `api:check`, validating documents in parallel and caching successful AsyncAPI validation for unchanged, self-contained documents.
+- Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.

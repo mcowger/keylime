@@ -153,7 +153,7 @@ export function socketDocument(contract: SocketContract): JsonObject {
           },
         };
   return portableDocument({
-    asyncapi: "3.0.0",
+    asyncapi: "3.1.0",
     id: `urn:keylime:${contract.id}`,
     info: {
       title: contract.title,
@@ -574,11 +574,64 @@ function schemaDocument(): JsonObject {
   });
 }
 
-async function validateDocuments(
+function hasOnlyLocalReferences(value: unknown): boolean {
+  if (!value || typeof value !== "object") return true;
+  for (const [key, item] of Object.entries(value)) {
+    if (
+      ["$ref", "$dynamicRef", "$recursiveRef", "$id"].includes(key) &&
+      typeof item === "string" &&
+      !item.startsWith("#")
+    )
+      return false;
+    if (!hasOnlyLocalReferences(item)) return false;
+  }
+  return true;
+}
+
+async function validatorFingerprint(): Promise<string | null> {
+  try {
+    const result = await Bun.build({
+      entrypoints: [path.join(root, "scripts/validate-api-document.ts")],
+      target: "bun",
+    });
+    if (!result.success || result.outputs.length !== 1) return null;
+    const hasher = new Bun.CryptoHasher("sha256");
+    hasher.update(Bun.revision);
+    hasher.update(await Bun.file(import.meta.path).text());
+    hasher.update(await Bun.file(path.join(root, "bun.lock")).text());
+    hasher.update(await Bun.file(path.join(root, "package.json")).text());
+    hasher.update(await result.outputs[0].arrayBuffer());
+    return hasher.digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+export async function validateDocuments(
   documents: Record<string, string>,
+  cacheDirectory = path.join(root, ".cache/api-validation"),
 ): Promise<void> {
+  const fingerprint = await validatorFingerprint();
   const errors = await Promise.all(
     Object.entries(documents).map(async ([name, content]) => {
+      let cacheFile: string | null = null;
+      let cacheKey: string | null = null;
+      if (fingerprint && name.endsWith(".asyncapi.json")) {
+        try {
+          if (hasOnlyLocalReferences(JSON.parse(content))) {
+            cacheKey = new Bun.CryptoHasher("sha256")
+              .update(JSON.stringify([fingerprint, name, content]))
+              .digest("hex");
+            cacheFile = path.join(cacheDirectory, cacheKey);
+            if ((await Bun.file(cacheFile).text()) === cacheKey) {
+              console.log(`[api] Validated ${name} (cached)`);
+              return null;
+            }
+          }
+        } catch {
+          // Missing or unreadable cache entries are misses, not validation failures.
+        }
+      }
       console.log(`[api] Validating ${name}`);
       const child = Bun.spawn(
         [
@@ -597,9 +650,17 @@ async function validateDocuments(
         child.exited,
         new Response(child.stderr).text(),
       ]);
-      return exitCode === 0
-        ? null
-        : `${name}: ${error.trim() || `validator exited ${exitCode}`}`;
+      if (exitCode !== 0)
+        return `${name}: ${error.trim() || `validator exited ${exitCode}`}`;
+      if (cacheFile && cacheKey) {
+        try {
+          await mkdir(cacheDirectory, { recursive: true });
+          await Bun.write(cacheFile, cacheKey);
+        } catch {
+          // A cache write failure does not invalidate a successful validation.
+        }
+      }
+      return null;
     }),
   );
   const failures = errors.filter((error) => error !== null);

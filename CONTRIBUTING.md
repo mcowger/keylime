@@ -148,6 +148,11 @@ These commands are explicit: development, builds, packaging, deployment and rele
 checks do not run them. Releases include the checked-in documents, which may be
 stale until regenerated.
 
+AsyncAPI validation caches successful results in `.cache/api-validation`, keyed by
+the generated document, validator and runtime. Documents with external references
+are always validated. Source coverage checks run every time. Delete that directory
+to force fresh validation.
+
 Maintain shapes, field descriptions, examples and constraints inline in the canonical
 TypeBox declarations. Every exported `*Schema` needs an intended-use description;
 document important property units, ownership scope, omission/null meaning and

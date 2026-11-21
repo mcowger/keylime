@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import Ajv from "ajv";
 import { Type } from "@sinclair/typebox";
-import { socketDocument } from "./generate-api-docs";
+import { socketDocument, validateDocuments } from "./generate-api-docs";
 import { hostLinkContract } from "../lib/api-contracts/host-link";
 import { browserLinkContract } from "../lib/api-contracts/browser-link";
 
@@ -145,7 +148,7 @@ test("document validators reject invalid OpenAPI, AsyncAPI and JSON Schema", asy
     [
       "invalid.asyncapi.json",
       {
-        asyncapi: "3.0.0",
+        asyncapi: "3.1.0",
         info: { title: "API", version: "1" },
         operations: { bad: { action: "fly" } },
       },
@@ -166,5 +169,60 @@ test("document validators reject invalid OpenAPI, AsyncAPI and JSON Schema", asy
     ]);
     assert.notEqual(code, 0, `${name} accepted an invalid document`);
     assert.ok(error, `${name} did not report its validation error`);
+  }
+});
+
+test("cached validation never accepts a changed or external-reference document", async () => {
+  const cache = await mkdtemp(path.join(tmpdir(), "keylime-api-cache-"));
+  try {
+    const name = "test.asyncapi.json";
+    const valid = {
+      asyncapi: "3.1.0",
+      info: { title: "Test", version: "1.0.0" },
+      channels: {},
+    };
+    await validateDocuments({ [name]: JSON.stringify(valid) }, cache);
+    const cached = await readdir(cache);
+    assert.equal(cached.length, 1);
+    await validateDocuments({ [name]: JSON.stringify(valid) }, cache);
+    await assert.rejects(
+      validateDocuments(
+        { [name]: JSON.stringify({ ...valid, asyncapi: "invalid" }) },
+        cache,
+      ),
+    );
+    assert.deepEqual(await readdir(cache), cached);
+
+    const external = {
+      ...valid,
+      "x-example": { $id: "https://example.invalid/schema" },
+    };
+    await validateDocuments({ [name]: JSON.stringify(external) }, cache);
+    assert.deepEqual(await readdir(cache), cached);
+  } finally {
+    await rm(cache, { recursive: true, force: true });
+  }
+});
+
+test("external schema changes cannot be hidden by validation cache", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "keylime-api-ref-"));
+  try {
+    const schema = path.join(directory, "payload.json");
+    await Bun.write(schema, JSON.stringify({ type: "object" }));
+    const document = JSON.stringify({
+      asyncapi: "3.1.0",
+      info: { title: "Test", version: "1.0.0" },
+      channels: {},
+      components: {
+        schemas: { Payload: { $ref: schema } },
+      },
+    });
+    const documents = { "test.asyncapi.json": document };
+    const cache = path.join(directory, "cache");
+    await validateDocuments(documents, cache);
+    await rm(schema);
+    await assert.rejects(validateDocuments(documents, cache), /invalid-ref/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
