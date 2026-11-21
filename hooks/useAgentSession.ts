@@ -12,6 +12,12 @@ import {
   useReducer,
 } from "react";
 import type {
+  AutoPrewalkMode,
+  AutoPrewalkResult,
+  AutoPrewalkSetArgs,
+} from "@/lib/api-contracts/runner-lifecycle";
+import type { BrowserAutoPrewalkResult } from "@/lib/api-contracts/browser-agent-operations";
+import type {
   AgentMessage,
   BashExecutionMessage,
   ExitedRpcSession,
@@ -724,6 +730,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsRefreshing, setModelsRefreshing] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
+  const [autoPrewalk, setAutoPrewalk] = useState<AutoPrewalkMode | null>(null);
+  const [autoPrewalkPending, setAutoPrewalkPending] = useState(false);
+  const [autoPrewalkWritePending, setAutoPrewalkWritePending] = useState(false);
+  const [autoPrewalkError, setAutoPrewalkError] = useState<string | null>(null);
+  const autoPrewalkChoiceRef = useRef<AutoPrewalkMode | null>(null);
+  const autoPrewalkRequestRef = useRef(0);
+  const autoPrewalkReadRequestRef = useRef<number | null>(null);
+  const autoPrewalkWriteBusyRef = useRef(false);
   const modelsRequestRef = useRef<{
     controller: AbortController;
     refresh: boolean;
@@ -5434,6 +5448,56 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               newSessionPlanRef.current = false;
               if (!ownerGone) void refreshLiveModelState(sid);
             }
+            // A new workspace cannot be started until its first prompt. Apply a
+            // staged session setting only after creation, but before sending it.
+            const prewalkChoice = autoPrewalkChoiceRef.current;
+            if (prewalkChoice) {
+              const request = hookAliveRef.current && sessionIdRef.current === sid
+                ? ++autoPrewalkRequestRef.current
+                : null;
+              if (request !== null) {
+                autoPrewalkWriteBusyRef.current = true;
+                setAutoPrewalkPending(true);
+                setAutoPrewalkWritePending(true);
+              }
+              try {
+                const result = await commandForHost<AutoPrewalkResult>(sid, {
+                  type: "set_auto_prewalk",
+                  mode: prewalkChoice,
+                } satisfies AutoPrewalkSetArgs & { type: "set_auto_prewalk" });
+                if (result.mode !== prewalkChoice) {
+                  if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request)
+                    setAutoPrewalk(result.mode);
+                  throw new Error(translate("chatInput.autoPrewalkOverridden", {
+                    requested: prewalkChoice,
+                    effective: result.mode,
+                  }));
+                }
+                if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request && autoPrewalkChoiceRef.current === prewalkChoice)
+                  autoPrewalkChoiceRef.current = null;
+                if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request)
+                  setAutoPrewalk(result.mode);
+              } catch (error) {
+                try {
+                  const effective = await commandForHost<BrowserAutoPrewalkResult>(sid, {
+                    type: "get_auto_prewalk",
+                  });
+                  if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request)
+                    setAutoPrewalk(effective?.mode ?? null);
+                } catch {
+                  if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request)
+                    setAutoPrewalk(null);
+                  // Preserve the original error and staged choice for retry.
+                }
+                throw new Error(`${translate("chatInput.autoPrewalkSetFailed")} ${error instanceof Error ? error.message : String(error)}`);
+              } finally {
+                if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request) {
+                  autoPrewalkWriteBusyRef.current = false;
+                  setAutoPrewalkPending(autoPrewalkReadRequestRef.current !== null);
+                  setAutoPrewalkWritePending(false);
+                }
+              }
+            }
             // No UI left to update on a dead instance — and attaching an
             // event stream now would leak it, since this instance's unmount
             // cleanup already ran.
@@ -6211,6 +6275,85 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
     [loadContext],
   );
+  const refreshAutoPrewalk = useCallback(async () => {
+    const sid = sessionIdRef.current;
+    // New chats without a runtime use their native default unless the user
+    // explicitly picks a mode. Do not create a workspace just to read it.
+    if (!sid || autoPrewalkChoiceRef.current || autoPrewalkReadRequestRef.current !== null || autoPrewalkWriteBusyRef.current) return;
+    const request = ++autoPrewalkRequestRef.current;
+    autoPrewalkReadRequestRef.current = request;
+    setAutoPrewalkPending(true);
+    setAutoPrewalkError(null);
+    try {
+      const result = await commandForHost<BrowserAutoPrewalkResult>(sid, {
+        type: "get_auto_prewalk",
+      });
+      if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request)
+        setAutoPrewalk(result?.mode ?? null);
+    } catch (error) {
+      if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request) {
+        setAutoPrewalk(null);
+        setAutoPrewalkError(`${translate("chatInput.autoPrewalkLoadFailed")} ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } finally {
+      if (hookAliveRef.current && autoPrewalkReadRequestRef.current === request) {
+        autoPrewalkReadRequestRef.current = null;
+        setAutoPrewalkPending(autoPrewalkWriteBusyRef.current);
+      }
+    }
+  }, [commandForHost]);
+
+  const handleAutoPrewalkChange = useCallback(async (mode: AutoPrewalkMode) => {
+    const sid = sessionIdRef.current;
+    if (!sid && isNew) {
+      autoPrewalkChoiceRef.current = mode;
+      setAutoPrewalk(mode);
+      setAutoPrewalkError(null);
+      return;
+    }
+    if (!sid || autoPrewalkWriteBusyRef.current) return;
+    const request = ++autoPrewalkRequestRef.current;
+    autoPrewalkWriteBusyRef.current = true;
+    if (autoPrewalkChoiceRef.current) autoPrewalkChoiceRef.current = mode;
+    setAutoPrewalkPending(true);
+    setAutoPrewalkWritePending(true);
+    setAutoPrewalkError(null);
+    try {
+      const result = await commandForHost<AutoPrewalkResult>(sid, {
+        type: "set_auto_prewalk",
+        mode,
+      } satisfies AutoPrewalkSetArgs & { type: "set_auto_prewalk" });
+      if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request) {
+        if (result.mode === mode) autoPrewalkChoiceRef.current = null;
+        setAutoPrewalk(result.mode);
+        if (result.mode !== mode)
+          setAutoPrewalkError(translate("chatInput.autoPrewalkOverridden", {
+            requested: mode,
+            effective: result.mode,
+          }));
+      }
+    } catch (error) {
+      // A lost response can leave the runtime changed. Re-read its mode.
+      let effectiveMode: AutoPrewalkMode | null = null;
+      try {
+        const result = await commandForHost<BrowserAutoPrewalkResult>(sid, { type: "get_auto_prewalk" });
+        effectiveMode = result?.mode ?? null;
+      } catch {
+        // The original error remains visible; the active mode is unknown.
+      }
+      if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request) {
+        setAutoPrewalk(effectiveMode);
+        setAutoPrewalkError(`${translate("chatInput.autoPrewalkSetFailed")} ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } finally {
+      if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request) {
+        autoPrewalkWriteBusyRef.current = false;
+        setAutoPrewalkPending(autoPrewalkReadRequestRef.current !== null);
+        setAutoPrewalkWritePending(false);
+      }
+    }
+  }, [commandForHost, isNew]);
+
 
   const handleModelChange = useCallback(
     async (provider: string, modelId: string) => {
@@ -7667,6 +7810,17 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setNewSessionDefaultModel(null);
   }, [hostId]);
 
+  useLayoutEffect(() => {
+    autoPrewalkRequestRef.current += 1;
+    autoPrewalkReadRequestRef.current = null;
+    autoPrewalkWriteBusyRef.current = false;
+    autoPrewalkChoiceRef.current = null;
+    setAutoPrewalk(null);
+    setAutoPrewalkPending(false);
+    setAutoPrewalkWritePending(false);
+    setAutoPrewalkError(null);
+  }, [hostId, session?.id]);
+
   // Load model list
   useEffect(() => {
     const controller = new AbortController();
@@ -7748,6 +7902,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     modelsLoading,
     modelsRefreshing,
     modelError,
+    autoPrewalk,
+    autoPrewalkPending,
+    autoPrewalkWritePending,
+    autoPrewalkError,
+    refreshAutoPrewalk,
+    handleAutoPrewalkChange,
     refreshModels,
     revalidateModels,
     modelThinkingLevels,

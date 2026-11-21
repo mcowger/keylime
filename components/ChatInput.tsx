@@ -13,6 +13,7 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import type { ModelActivity } from "@/lib/model-activity";
+import type { AutoPrewalkMode } from "@/lib/api-contracts/runner-lifecycle";
 import { ModelActivityIndicator } from "./ModelActivityIndicator";
 import { ComposerActivityIndicators } from "./ComposerActivityIndicators";
 import { AdvisorReviewStatus } from "./AdvisorReviewStatus";
@@ -327,6 +328,12 @@ interface Props {
   planEnabled?: boolean;
   planCommandPending?: boolean;
   onPlanModeChange?: (enabled: boolean) => void;
+  autoPrewalk?: AutoPrewalkMode | null;
+  autoPrewalkPending?: boolean;
+  autoPrewalkError?: string | null;
+  autoPrewalkIsNew?: boolean;
+  onRefreshAutoPrewalk?: () => void;
+  onAutoPrewalkChange?: (mode: AutoPrewalkMode) => void;
   fastModeEnabled?: boolean;
   fastModeActive?: boolean;
   /** omp's structured provider usage-limit state, shown as a warning chip. */
@@ -527,6 +534,12 @@ export const ChatInput = memo(
       planEnabled = false,
       planCommandPending = false,
       onPlanModeChange,
+      autoPrewalk,
+      autoPrewalkPending,
+      autoPrewalkError,
+      autoPrewalkIsNew,
+      onRefreshAutoPrewalk,
+      onAutoPrewalkChange,
       fastModeEnabled,
       fastModeActive,
       usageLimit,
@@ -3142,6 +3155,17 @@ export const ChatInput = memo(
       : null;
     const currentName = displayModelName;
     const showModelsLoading = Boolean(modelsLoading);
+    const autoPrewalkLabel = t(
+      autoPrewalk === "off"
+        ? "chatInput.autoPrewalkOff"
+        : autoPrewalk === "suggest"
+          ? "chatInput.autoPrewalkSuggest"
+          : autoPrewalk === "on"
+            ? "chatInput.autoPrewalkOn"
+            : "chatInput.autoPrewalkUnknown",
+    );
+    const nextAutoPrewalk =
+      autoPrewalk === "off" ? "suggest" : autoPrewalk === "suggest" ? "on" : "off";
 
     const compactSavedTokens = compactResult
       ? Math.max(
@@ -5092,7 +5116,10 @@ export const ChatInput = memo(
                   >
                     <button
                       ref={modelTriggerRef}
-                      onClick={() => setModelDropdownOpen((v) => !v)}
+                      onClick={() => {
+                        if (!modelDropdownOpen) onRefreshAutoPrewalk?.();
+                        setModelDropdownOpen((v) => !v);
+                      }}
                       aria-label={`${t("chatInput.changeModel")}: ${
                         currentName ??
                         (modelOptions.length > 0
@@ -5270,14 +5297,42 @@ export const ChatInput = memo(
                           }}
                           onClose={() => setModelDropdownOpen(false)}
                         />
-                        {onThinkingLevelChange && (
+                        {(onThinkingLevelChange || onAutoPrewalkChange) && (
                           <ReasoningEffortSlider
                             levels={thinkingLevelOptions}
                             value={thinkingLevel ?? "auto"}
                             labels={thinkingLevelMap}
                             disabled={isStreaming}
                             onChange={onThinkingLevelChange}
+                            leading={onAutoPrewalkChange && (
+                              <div className="effort-prewalk">
+                                <span>{t("chatInput.autoPrewalk")}</span>
+                                <button
+                                  type="button"
+                                  aria-label={`${t("chatInput.autoPrewalk")}: ${autoPrewalkLabel}`}
+                                  title={[
+                                    t("chatInput.autoPrewalkCycle"),
+                                    autoPrewalk == null ? t("chatInput.autoPrewalkUnknownDescription") : "",
+                                    t("chatInput.autoPrewalkHostScope"),
+                                    autoPrewalkIsNew ? t("chatInput.autoPrewalkBeforeFirstPrompt") : "",
+                                    t("chatInput.autoPrewalkSuggestDescription"),
+                                    t("chatInput.autoPrewalkOnDescription"),
+                                  ].filter(Boolean).join(" ")}
+                                  disabled={isStreaming}
+                                  aria-disabled={autoPrewalkPending || undefined}
+                                  onClick={() => {
+                                    if (!isStreaming && !autoPrewalkPending)
+                                      onAutoPrewalkChange(nextAutoPrewalk);
+                                  }}
+                                >
+                                  <span aria-hidden="true">{autoPrewalk == null ? "?" : autoPrewalkLabel}</span>
+                                </button>
+                              </div>
+                            )}
                           />
+                        )}
+                        {onAutoPrewalkChange && autoPrewalkError && (
+                          <div role="alert" style={{ color: "var(--status-error)", fontSize: "var(--text-xs)", padding: "0 12px 6px", overflowWrap: "anywhere" }}>{autoPrewalkError}</div>
                         )}
                       </div>
                     )}

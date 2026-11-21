@@ -26,13 +26,13 @@ import { reconcileOutboxHandoffs } from "@/lib/outbox-handoff";
 import type { Static } from "@sinclair/typebox";
 import type { ClientMessageStatusSchema } from "@/lib/api-contracts/domain";
 
-// Commands that ride whatever child is alive and never spawn or replace one:
-// keystroke predictions, and the side-question reads/cancel keylime sends in
-// the background (SSE connect, reconcile). Without a live process there is no
-// ghost text, no running side question and nothing to cancel, so the reply is
-// known without omp. Asking (`btw`) and opening the history start omp first.
+// These commands use a live child without spawning or replacing one. When no
+// child exists, background reads and cancellations have known empty replies;
+// get_auto_prewalk returns null because there is no live session setting to read.
+// Asking a side question (`btw`) and opening its history start omp first.
 export const NO_SPAWN_REPLIES: Record<string, unknown> = {
   predict_word: { suffix: null },
+  get_auto_prewalk: null,
   predict_word_feedback: null,
   get_btw_history: { records: [] },
   btw_cancel: { cancelled: false },

@@ -11,6 +11,7 @@ import { mock } from "bun:test";
 import type { RenderResult } from "@testing-library/react";
 import type { ChatInputHandle } from "@/components/ChatInput";
 import type { ChatDraftImage } from "@/lib/draft-store";
+import { clearDraft as clearPrewalkDraft } from "@/lib/draft-store";
 import type { LocalOutboxEntry } from "@/lib/event-stream";
 import type { Host } from "@/lib/hosts/host";
 import type { RpcFrame, RpcProcess } from "@/lib/omp/rpc-process";
@@ -12207,6 +12208,327 @@ test("overlapping Stops share one atomic withdrawal; an image-only entry does no
   clearDraft(sessionKey("abort-atomic-twice"));
 });
 
+test("auto-prewalk reads the live mode and reconciles a failed command", async () => {
+  resetWorld();
+  primeSession("prewalk-live", [userMsg("u0", "q")]);
+  world.holds.push(
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "suggest" } } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: async () => ({ status: 500, value: { error: "command failed" } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "on" } } }),
+    },
+  );
+  const w = await mountSession("prewalk-live");
+  await act(async () => { await w.latest.refreshAutoPrewalk(); });
+  assert.equal(w.latest.autoPrewalk, "suggest");
+  await act(async () => { await w.latest.handleAutoPrewalkChange("on"); });
+  assert.equal(w.latest.autoPrewalk, "on");
+  assert.match(w.latest.autoPrewalkError ?? "", /command failed/);
+  assert.equal(w.latest.autoPrewalkPending, false);
+  w.unmount();
+});
+test("prewalk reads may return no runner and failed writes reconcile to unknown", async () => {
+  resetWorld();
+  primeSession("prewalk-unknown", [userMsg("u0", "q")]);
+  const reconciliation = Promise.withResolvers<HeldResponse>();
+  world.holds.push(
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: null } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: async () => ({ status: 500, value: { error: "write failed" } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: () => reconciliation.promise,
+    },
+  );
+  const w = await mountSession("prewalk-unknown");
+  await act(async () => { await w.latest.refreshAutoPrewalk(); });
+  assert.equal(w.latest.autoPrewalk, null);
+  assert.equal(w.latest.autoPrewalkError, null);
+  let writing!: Promise<void>;
+  await act(async () => {
+    writing = w.latest.handleAutoPrewalkChange("on");
+  });
+  await until(() => world.calls.filter((call) => call.body?.type === "get_auto_prewalk").length === 2, "write reconciliation must start");
+  assert.equal(w.latest.autoPrewalkPending, true);
+  assert.equal(w.latest.autoPrewalkWritePending, true);
+  await act(async () => {
+    reconciliation.resolve({ value: { success: true, data: null } });
+    await writing;
+  });
+  assert.equal(w.latest.autoPrewalk, null);
+  assert.match(w.latest.autoPrewalkError ?? "", /write failed/);
+  assert.equal(w.latest.autoPrewalkPending, false);
+  assert.equal(w.latest.autoPrewalkWritePending, false);
+  w.unmount();
+});
+
+test("a later prewalk write supersedes an in-flight read without allowing concurrent writes", async () => {
+  resetWorld();
+  primeSession("prewalk-race", [userMsg("u0", "q")]);
+  const read = Promise.withResolvers<HeldResponse>();
+  const write = Promise.withResolvers<HeldResponse>();
+  world.holds.push(
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: () => read.promise,
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: () => write.promise,
+    },
+  );
+  const w = await mountSession("prewalk-race");
+  let reading!: Promise<void>;
+  let writing!: Promise<void>;
+  await act(async () => { reading = w.latest.refreshAutoPrewalk(); });
+  assert.equal(w.latest.autoPrewalkPending, true);
+  assert.equal(w.latest.autoPrewalkWritePending, false);
+  await act(async () => {
+    writing = w.latest.handleAutoPrewalkChange("on");
+    await w.latest.handleAutoPrewalkChange("off");
+  });
+  assert.equal(world.calls.filter((call) => call.body?.type === "set_auto_prewalk").length, 1);
+  assert.equal(w.latest.autoPrewalkWritePending, true);
+  await act(async () => {
+    write.resolve({ value: { success: true, data: { mode: "on" } } });
+    await writing;
+  });
+  assert.equal(w.latest.autoPrewalk, "on");
+  assert.equal(w.latest.autoPrewalkPending, true);
+  assert.equal(w.latest.autoPrewalkWritePending, false);
+  await act(async () => {
+    read.resolve({ value: { success: true, data: { mode: "off" } } });
+    await reading;
+  });
+  assert.equal(w.latest.autoPrewalk, "on");
+  assert.equal(w.latest.autoPrewalkPending, false);
+  w.unmount();
+});
+
+test("a prewalk read from a previous visit cannot overwrite the current session", async () => {
+  resetWorld();
+  primeSession("prewalk-visit-a", [userMsg("u0", "a")]);
+  primeSession("prewalk-visit-b", [userMsg("u0", "b")]);
+  const oldRead = Promise.withResolvers<HeldResponse>();
+  world.holds.push(
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: () => oldRead.promise,
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "on" } } }),
+    },
+  );
+  const view = ownRoot(renderHook(
+    ({ id }) => useAgentSession({ session: sessionInfo(id), newSessionCwd: null }),
+    { initialProps: { id: "prewalk-visit-a" }, wrapper: TestRoot },
+  ));
+  await settle();
+  let reading!: Promise<void>;
+  await act(async () => { reading = view.result.current.refreshAutoPrewalk(); });
+  await act(async () => { view.rerender({ id: "prewalk-visit-b" }); });
+  await act(async () => { view.rerender({ id: "prewalk-visit-a" }); });
+  await act(async () => { await view.result.current.refreshAutoPrewalk(); });
+  assert.equal(view.result.current.autoPrewalk, "on");
+  await act(async () => {
+    oldRead.resolve({ value: { success: true, data: { mode: "off" } } });
+    await reading;
+  });
+  assert.equal(view.result.current.autoPrewalk, "on");
+  assert.equal(view.result.current.autoPrewalkPending, false);
+  view.unmount();
+});
+
+test("the chat can send during a prewalk read but not during a write", async (t) => {
+  resetWorld();
+  const sid = "prewalk-chat-send";
+  t.after(() => clearPrewalkDraft(sessionKey(sid)));
+  primeSession(sid, [userMsg("u0", "before")]);
+  world.outboxHold = true;
+  const read = Promise.withResolvers<HeldResponse>();
+  const write = Promise.withResolvers<HeldResponse>();
+  world.holds.push(
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: () => read.promise,
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: null } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: () => write.promise,
+    },
+  );
+  const view = ownRoot(render(
+    React.createElement(ChatWindow, { session: sessionInfo(sid), newSessionCwd: null }),
+    { wrapper: TestRoot },
+  ));
+  await settle();
+  await act(async () => {
+    fireEvent.change(view.getByRole("textbox"), { target: { value: "send during read" } });
+    fireEvent.click(view.getByRole("button", { name: /Change model/ }));
+  });
+  await until(() => world.calls.some((call) => call.body?.type === "get_auto_prewalk"), "opening the picker must read prewalk");
+  assert.equal(view.getByRole("button", { name: /^Auto Prewalk:/ }).getAttribute("aria-disabled"), "true");
+  assert.equal((view.getByRole("button", { name: translate("chatInput.send") }) as HTMLButtonElement).disabled, false);
+  await act(async () => {
+    fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" });
+  });
+  await until(() => world.outbox.length === 1, "the prompt must be accepted while the read is pending");
+  assert.equal(world.outbox[0].message, "send during read");
+  await act(async () => {
+    read.resolve({ value: { success: true, data: null } });
+  });
+  await until(() => !view.queryByRole("button", { name: /^Auto Prewalk:/ }) || view.getByRole("button", { name: /^Auto Prewalk:/ }).getAttribute("aria-disabled") !== "true", "the read must finish");
+  if (!view.queryByRole("button", { name: /^Auto Prewalk:/ })) {
+    await act(async () => { fireEvent.click(view.getByRole("button", { name: /Change model/ })); });
+    await until(() => view.getByRole("button", { name: /^Auto Prewalk:/ }).getAttribute("aria-disabled") !== "true", "the reopened picker must finish reading");
+  }
+  const prewalkButton = view.getByRole("button", { name: "Auto Prewalk: Unknown" });
+  prewalkButton.focus();
+  await act(async () => {
+    fireEvent.click(prewalkButton);
+  });
+  await until(() => world.calls.some((call) => call.body?.type === "set_auto_prewalk"), "changing prewalk must start a write");
+  assert.equal(view.getByRole("button", { name: /^Auto Prewalk:/ }).getAttribute("aria-disabled"), "true");
+  assert.equal(document.activeElement, prewalkButton);
+  await act(async () => { fireEvent.click(prewalkButton); });
+  assert.equal(world.calls.filter((call) => call.body?.type === "set_auto_prewalk").length, 1);
+  await act(async () => {
+    fireEvent.change(view.getByRole("textbox"), { target: { value: "wait for write" } });
+    fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" });
+  });
+  assert.equal((view.getByRole("button", { name: translate("chatInput.send") }) as HTMLButtonElement).disabled, true);
+  assert.equal(world.outbox.length, 1);
+  await act(async () => { write.resolve({ value: { success: true, data: { mode: "off" } } }); });
+  assert.equal(document.activeElement, prewalkButton);
+  await until(() => !(view.getByRole("button", { name: translate("chatInput.send") }) as HTMLButtonElement).disabled, "the write must unblock Send");
+  await act(async () => { fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" }); });
+  await until(() => world.outbox.length === 2, "the retained prompt must send after the write");
+  assert.equal(world.outbox[1].message, "wait for write");
+  view.unmount();
+});
+
+
+test("a new remote workspace applies prewalk before its first prompt without changing the starting model", async () => {
+  resetWorld();
+  let prepared = 0;
+  world.holds.push(
+    {
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: async () => ({ value: { sessionId: "prewalk-new", hostId: "h1", cwd: "/remote/work" } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "on" } } }),
+    },
+  );
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/remote/work",
+    newSessionHostId: "h1",
+    prepareNewWorkspace: async () => {
+      prepared++;
+      return { cwd: "/remote/work", name: "work" };
+    },
+  });
+  await act(async () => {
+    await w.latest.handleModelChange("worker", "chosen");
+    await w.latest.handleAutoPrewalkChange("on");
+    await w.latest.refreshAutoPrewalk();
+  });
+  assert.equal(prepared, 0);
+  assert.equal(callsTo("POST", "/api/agent/new").length, 0);
+  let sending!: Promise<PromptSubmissionResult>;
+  await act(async () => {
+    sending = w.latest.handleSend("first task");
+    await sleep(30);
+  });
+  let receipt!: PromptSubmissionResult;
+  await act(async () => {
+    lastEs().open();
+    receipt = await sending;
+  });
+  assert.equal(receipt.status, "accepted");
+  assert.equal(prepared, 1);
+  const create = callsTo("POST", "/api/agent/new")[0];
+  assert.equal(create.body?.provider, "worker");
+  assert.equal(create.body?.modelId, "chosen");
+  const setIndex = world.calls.findIndex((call) => call.body?.type === "set_auto_prewalk");
+  const promptIndex = world.calls.findIndex((call) => call.body?.type === "prompt");
+  assert.ok(setIndex >= 0 && setIndex < promptIndex);
+  assert.match(world.calls[setIndex].url, /hostId=h1/);
+  assert.equal(world.calls[setIndex].body?.mode, "on");
+  w.unmount();
+});
+
+test("a native override stops the first prompt and retains the staged choice", async (t) => {
+  captureFailure(t, "Failed to send message:", "instead of");
+  resetWorld();
+  let prepared = 0;
+  world.holds.push(
+    {
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: async () => ({ value: { sessionId: "prewalk-override" } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "off" } } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "get_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "off" } } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "on" } } }),
+    },
+  );
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    prepareNewWorkspace: async () => {
+      prepared++;
+      return { cwd: "/workspace/prepared", name: "prepared" };
+    },
+  });
+  await act(async () => { await w.latest.handleAutoPrewalkChange("on"); });
+  let first!: PromptSubmissionResult;
+  await act(async () => { first = await w.latest.handleSend("keep draft"); });
+  assert.equal(first.status, "rejected");
+  assert.equal(first.status === "rejected" && first.recoveryKey, "new:/workspace");
+  assert.equal(world.calls.some((call) => call.body?.type === "prompt"), false);
+  assert.ok(w.latest.notices.some((notice) => notice.message.includes("instead of")));
+  let retry!: Promise<PromptSubmissionResult>;
+  await act(async () => {
+    retry = w.latest.handleSend("keep draft");
+    await sleep(30);
+  });
+  let result!: PromptSubmissionResult;
+  await act(async () => {
+    lastEs().open();
+    result = await retry;
+  });
+  assert.equal(result.status, "accepted");
+  assert.equal(callsTo("POST", "/api/agent/new").length, 1);
+  assert.equal(prepared, 1);
+  assert.equal(world.calls.filter((call) => call.body?.type === "set_auto_prewalk").length, 2);
+  w.unmount();
+});
+
 test("a fresh chat's first prompt attaches one event stream instead of an observer plus its own", async () => {
   resetWorld();
   world.holds.push({
@@ -12269,6 +12591,45 @@ test("a fresh chat applies Plan before its first prompt", async () => {
   const planIndex = calls.findIndex((call) => call.body?.type === "set_plan_mode" && call.body.enabled === true);
   const promptIndex = calls.findIndex((call) => call.body?.type === "prompt");
   assert.ok(planIndex >= 0 && promptIndex > planIndex);
+  w.unmount();
+});
+
+test("a fresh chat applies Plan and Auto Prewalk before its first prompt", async () => {
+  resetWorld();
+  world.holds.push(
+    {
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: async () => ({ value: { sessionId: "fresh-plan-prewalk" } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "on" } } }),
+    },
+  );
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated() {},
+  });
+  await act(async () => {
+    await w.latest.handlePlanModeChange(true);
+    await w.latest.handleAutoPrewalkChange("on");
+  });
+  let sent!: Promise<PromptSubmissionResult>;
+  await act(async () => {
+    sent = w.latest.handleSend("first prompt");
+    await sleep(30);
+  });
+  let receipt!: PromptSubmissionResult;
+  await act(async () => {
+    lastEs().open();
+    receipt = await sent;
+  });
+  const calls = callsTo("POST", "/api/agent/fresh-plan-prewalk");
+  const plan = calls.findIndex((call) => call.body?.type === "set_plan_mode" && call.body.enabled === true);
+  const prewalk = calls.findIndex((call) => call.body?.type === "set_auto_prewalk" && call.body.mode === "on");
+  const prompt = calls.findIndex((call) => call.body?.type === "prompt");
+  assert.equal(receipt.status, "accepted");
+  assert.ok(plan >= 0 && prewalk >= 0 && prompt > plan && prompt > prewalk);
   w.unmount();
 });
 

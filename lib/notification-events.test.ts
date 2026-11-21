@@ -219,6 +219,12 @@ test("prewalk and plan hand-offs notify as model switches; other notices do not"
     {
       type: "notice",
       level: "info",
+      source: "prewalk",
+      message: "Auto-prewalk: prewalk 0.95",
+    },
+    {
+      type: "notice",
+      level: "info",
       source: "plan-yolo",
       message: "Plan-yolo: plan approved, switched to openai/gpt-5.",
     },

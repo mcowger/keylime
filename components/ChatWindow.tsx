@@ -692,6 +692,12 @@ function HostChatWindow({
     modelsLoading,
     modelsRefreshing,
     modelError,
+    autoPrewalk,
+    autoPrewalkPending,
+    autoPrewalkWritePending,
+    autoPrewalkError,
+    refreshAutoPrewalk,
+    handleAutoPrewalkChange,
     refreshModels,
     revalidateModels,
     modelThinkingLevels,
@@ -1549,7 +1555,7 @@ function HostChatWindow({
       outbox={!isNew}
       isStreaming={sessionBusy}
       submissionBlocked={
-        editingEntryId !== null || workspaceSourceRequired || !!startupStage || !!planProposal
+        editingEntryId !== null || workspaceSourceRequired || !!startupStage || !!planProposal || autoPrewalkWritePending
       }
       model={displayModelValue}
       isAutoModelSelection={isAutoModelSelection}
@@ -1564,6 +1570,12 @@ function HostChatWindow({
       planEnabled={planEnabled}
       planCommandPending={planCommandPending}
       onPlanModeChange={session || isNew ? handlePlanModeChange : undefined}
+      autoPrewalk={autoPrewalk}
+      autoPrewalkPending={autoPrewalkPending}
+      autoPrewalkError={autoPrewalkError}
+      autoPrewalkIsNew={isNew && !sessionIdRef.current}
+      onRefreshAutoPrewalk={refreshAutoPrewalk}
+      onAutoPrewalkChange={handleAutoPrewalkChange}
       onAbortCompaction={handleAbortCompaction}
       isCompacting={isCompacting}
       compactResult={compactResult}

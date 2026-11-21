@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type CSSProperties } from "react";
+import { useId, type CSSProperties, type ReactNode } from "react";
 import { useI18n } from "@/lib/i18n";
 
 export function ReasoningEffortSlider({
@@ -8,32 +8,40 @@ export function ReasoningEffortSlider({
   value,
   labels,
   disabled,
+  leading,
   onChange,
 }: {
   levels: string[];
   value: string;
   labels?: Record<string, string | null> | null;
   disabled: boolean;
-  onChange: (value: string) => void;
+  leading?: ReactNode;
+  onChange?: (value: string) => void;
 }) {
   const { t } = useI18n();
   const id = useId();
   const manual = levels.filter((level) => level !== "auto");
   const index = manual.indexOf(value);
   return (
-    <fieldset className="effort-slider" disabled={disabled}>
-      <legend>{t("chatInput.reasoningLabel")}</legend>
-      <div className="effort-slider-layout">
-        <button
-          type="button"
-          className="effort-detent effort-auto"
-          aria-pressed={value === "auto"}
-          onClick={() => onChange("auto")}
-        >
-          <span className="effort-notch" aria-hidden="true" />
-          <span>Auto</span>
-        </button>
-        {manual.length > 0 && (
+    <fieldset className="effort-slider" disabled={disabled} aria-label={t("chatInput.reasoningLabel")}>
+      <div className="effort-slider-layout" data-leading={Boolean(leading)}>
+        {leading && <div className="effort-leading">{leading}</div>}
+        {onChange && (
+          <div className="effort-reasoning">
+            <div className="effort-heading">{t("chatInput.reasoningLabel")}</div>
+            <div className="effort-reasoning-controls">
+        {onChange && (
+          <button
+            type="button"
+            className="effort-detent effort-auto"
+            aria-pressed={value === "auto"}
+            onClick={() => onChange("auto")}
+          >
+            <span className="effort-notch" aria-hidden="true" />
+            <span>Auto</span>
+          </button>
+        )}
+        {onChange && manual.length > 0 && (
           <div
             className="effort-manual"
             data-auto={index < 0}
@@ -84,6 +92,9 @@ export function ReasoningEffortSlider({
                   </span>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
             </div>
           </div>
         )}

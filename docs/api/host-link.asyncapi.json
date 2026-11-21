@@ -5788,6 +5788,72 @@
                   "type": "object"
                 },
                 {
+                  "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.",
+                  "properties": {
+                    "args": {
+                      "properties": {},
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "number"
+                    },
+                    "op": {
+                      "const": "get_auto_prewalk",
+                      "type": "string"
+                    },
+                    "t": {
+                      "const": "cmd",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t", "id", "op", "args"],
+                  "title": "RunnerRequest_get_auto_prewalk",
+                  "type": "object"
+                },
+                {
+                  "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+                  "properties": {
+                    "args": {
+                      "description": "Requested session-local automatic prewalk mode.",
+                      "properties": {
+                        "mode": {
+                          "anyOf": [
+                            {
+                              "const": "off",
+                              "type": "string"
+                            },
+                            {
+                              "const": "suggest",
+                              "type": "string"
+                            },
+                            {
+                              "const": "on",
+                              "type": "string"
+                            }
+                          ],
+                          "description": "Native automatic prewalk mode for task classification and handoff."
+                        }
+                      },
+                      "required": ["mode"],
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "number"
+                    },
+                    "op": {
+                      "const": "set_auto_prewalk",
+                      "type": "string"
+                    },
+                    "t": {
+                      "const": "cmd",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t", "id", "op", "args"],
+                  "title": "RunnerRequest_set_auto_prewalk",
+                  "type": "object"
+                },
+                {
                   "description": "Usage: Set fast mode.\nInputs: Supply enabled.\nInvariants: Enabled and active are distinct: the current model determines whether fast mode is active.\nEffects: Changes the session fast-mode setting.\nRecovery: Read state after uncertainty before reapplying.",
                   "properties": {
                     "args": {

@@ -1194,6 +1194,68 @@
                       {
                         "properties": {
                           "type": {
+                            "const": "get_auto_prewalk",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {},
+                        "type": "object"
+                      }
+                    ],
+                    "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.\n\nBrowser: Read the live session mode without starting a runner. Null means no live wrapper is available; the native default is unknown. Where the native operation returns undefined, the browser wrapper returns null.",
+                    "title": "AgentCommand_get_auto_prewalk",
+                    "type": "object"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "set_auto_prewalk",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "description": "Requested session-local automatic prewalk mode.",
+                        "properties": {
+                          "mode": {
+                            "anyOf": [
+                              {
+                                "const": "off",
+                                "type": "string"
+                              },
+                              {
+                                "const": "suggest",
+                                "type": "string"
+                              },
+                              {
+                                "const": "on",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "Native automatic prewalk mode for task classification and handoff."
+                          }
+                        },
+                        "required": ["mode"],
+                        "type": "object"
+                      }
+                    ],
+                    "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+                    "title": "AgentCommand_set_auto_prewalk",
+                    "type": "object"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "type": {
                             "const": "set_auto_compaction",
                             "type": "string"
                           }
@@ -3852,6 +3914,62 @@
                                 }
                               },
                               "required": ["models"],
+                              "type": "object"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "description": "Resolved native automatic prewalk setting for the session.",
+                                  "properties": {
+                                    "mode": {
+                                      "anyOf": [
+                                        {
+                                          "const": "off",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "suggest",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "on",
+                                          "type": "string"
+                                        }
+                                      ],
+                                      "description": "Native automatic prewalk mode for task classification and handoff."
+                                    }
+                                  },
+                                  "required": ["mode"],
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Live session mode, or null when no live wrapper is available; null does not establish the host's native default."
+                            },
+                            {
+                              "description": "Resolved native automatic prewalk setting for the session.",
+                              "properties": {
+                                "mode": {
+                                  "anyOf": [
+                                    {
+                                      "const": "off",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "suggest",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "on",
+                                      "type": "string"
+                                    }
+                                  ],
+                                  "description": "Native automatic prewalk mode for task classification and handoff."
+                                }
+                              },
+                              "required": ["mode"],
                               "type": "object"
                             },
                             {
@@ -15392,6 +15510,68 @@
                               {
                                 "properties": {
                                   "type": {
+                                    "const": "get_auto_prewalk",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["type"],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {},
+                                "type": "object"
+                              }
+                            ],
+                            "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.\n\nBrowser: Read the live session mode without starting a runner. Null means no live wrapper is available; the native default is unknown. Where the native operation returns undefined, the browser wrapper returns null.",
+                            "title": "AgentCommand_get_auto_prewalk",
+                            "type": "object"
+                          },
+                          {
+                            "allOf": [
+                              {
+                                "properties": {
+                                  "type": {
+                                    "const": "set_auto_prewalk",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["type"],
+                                "type": "object"
+                              },
+                              {
+                                "description": "Requested session-local automatic prewalk mode.",
+                                "properties": {
+                                  "mode": {
+                                    "anyOf": [
+                                      {
+                                        "const": "off",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "suggest",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "on",
+                                        "type": "string"
+                                      }
+                                    ],
+                                    "description": "Native automatic prewalk mode for task classification and handoff."
+                                  }
+                                },
+                                "required": ["mode"],
+                                "type": "object"
+                              }
+                            ],
+                            "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+                            "title": "AgentCommand_set_auto_prewalk",
+                            "type": "object"
+                          },
+                          {
+                            "allOf": [
+                              {
+                                "properties": {
+                                  "type": {
                                     "const": "set_auto_compaction",
                                     "type": "string"
                                   }
@@ -18177,6 +18357,62 @@
                                 }
                               },
                               "required": ["models"],
+                              "type": "object"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "description": "Resolved native automatic prewalk setting for the session.",
+                                  "properties": {
+                                    "mode": {
+                                      "anyOf": [
+                                        {
+                                          "const": "off",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "suggest",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "on",
+                                          "type": "string"
+                                        }
+                                      ],
+                                      "description": "Native automatic prewalk mode for task classification and handoff."
+                                    }
+                                  },
+                                  "required": ["mode"],
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Live session mode, or null when no live wrapper is available; null does not establish the host's native default."
+                            },
+                            {
+                              "description": "Resolved native automatic prewalk setting for the session.",
+                              "properties": {
+                                "mode": {
+                                  "anyOf": [
+                                    {
+                                      "const": "off",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "suggest",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "on",
+                                      "type": "string"
+                                    }
+                                  ],
+                                  "description": "Native automatic prewalk mode for task classification and handoff."
+                                }
+                              },
+                              "required": ["mode"],
                               "type": "object"
                             },
                             {

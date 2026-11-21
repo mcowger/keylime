@@ -16,7 +16,7 @@ import {
   SetHostUriSchemesArgsSchema,
   SetSubagentSubscriptionArgsSchema,
 } from "./runner-tools";
-import { lifecycleRunnerOperations } from "./runner-lifecycle";
+import { AutoPrewalkResultSchema, lifecycleRunnerOperations } from "./runner-lifecycle";
 import type { OperationContract } from "./operations";
 
 const empty = Type.Object({});
@@ -31,6 +31,11 @@ export const OutboxScopeResultSchema = Type.Object(
   { description: "Current scope for binding outbox entries." },
 );
 const nil = Type.Null();
+export const BrowserAutoPrewalkResultSchema = Type.Union(
+  [AutoPrewalkResultSchema, nil],
+  { description: "Live session mode, or null when no live wrapper is available; null does not establish the host's native default." },
+);
+export type BrowserAutoPrewalkResult = Static<typeof BrowserAutoPrewalkResultSchema>;
 const id = Type.String({
   minLength: 1,
   maxLength: 64,
@@ -115,6 +120,8 @@ export const browserAgentCommandNames: readonly string[] = [
   "cycle_thinking_level",
   "cycle_model",
   "get_available_models",
+  "get_auto_prewalk",
+  "set_auto_prewalk",
   "set_auto_compaction",
   "set_auto_retry",
   "abort_retry",
@@ -296,6 +303,11 @@ Recovery: Inspect the outbox and delivery status after an uncertain response.`,
     "Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner.",
     WebSessionStateSchema,
     Type.Object({ hostId: Type.Optional(Type.String({ minLength: 1, description: "Host holding the session to resume." })) }),
+  ),
+  override(
+    "get_auto_prewalk",
+    "Read the live session mode without starting a runner. Null means no live wrapper is available; the native default is unknown.",
+    BrowserAutoPrewalkResultSchema,
   ),
   override(
     "set_model",

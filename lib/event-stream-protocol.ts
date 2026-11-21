@@ -95,6 +95,7 @@ export const COMMAND_DEDUPE_MS = 600_000;
 export const NO_OMP_REPLY_COMMANDS: ReadonlySet<string> = new Set([
   "predict_word",
   "predict_word_feedback",
+  "get_auto_prewalk",
   "get_btw_history",
   "btw_cancel",
   "get_jobs",

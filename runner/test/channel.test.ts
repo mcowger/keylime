@@ -4,6 +4,8 @@ import * as path from "node:path";
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import type { ExtensionUIContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
+import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { cfgPrewalkAuto } from "@oh-my-pi/pi-coding-agent/session/settings";
 import {
   SessionManager,
   type SessionPersistenceNotice,
@@ -91,6 +93,66 @@ describe("keylime channel", () => {
     expect(await host.command("set_model", { provider: 1 })).toMatchObject({
       ok: false,
     });
+  });
+
+  it("reads and changes auto-prewalk without changing the selected model", async () => {
+    host = await startHost();
+    test = await createTestSession();
+    await host.connected;
+    const model = test.session.model;
+
+    expect(await host.command("get_auto_prewalk")).toMatchObject({
+      ok: true, data: { mode: "off" },
+    });
+    for (const mode of ["suggest", "on", "off"]) {
+      expect(await host.command("set_auto_prewalk", { mode })).toMatchObject({
+        ok: true, data: { mode },
+      });
+      expect(await host.command("get_auto_prewalk")).toMatchObject({
+        ok: true, data: { mode },
+      });
+      expect(test.session.model).toBe(model);
+    }
+    expect(await host.command("set_auto_prewalk", { mode: "invalid" })).toMatchObject({
+      ok: false,
+    });
+    expect(await host.command("set_auto_prewalk", {})).toMatchObject({ ok: false });
+    expect(await host.command("get_auto_prewalk")).toMatchObject({
+      ok: true, data: { mode: "off" },
+    });
+    expect(test.session.model).toBe(model);
+  });
+
+  it("changes only the live session, leaving host native YAML unchanged", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-prewalk-host-"));
+    const config = path.join(dir, "config.yml");
+    try {
+      fs.writeFileSync(config, "prewalk:\n  auto: suggest\n  autoTarget: '@smol'\n");
+      const settings = await Settings.loadIsolated({ agentDir: dir, cwd: dir });
+      const original = fs.readFileSync(config, "utf8");
+      host = await startHost();
+      test = await createTestSession({ settings });
+      await host.connected;
+      expect(await host.command("get_auto_prewalk")).toMatchObject({
+        ok: true, data: { mode: "suggest" },
+      });
+      for (const mode of ["suggest", "off", "on"]) {
+        expect(await host.command("set_auto_prewalk", { mode })).toMatchObject({
+          ok: true, data: { mode },
+        });
+        expect(await host.command("get_auto_prewalk")).toMatchObject({
+          ok: true, data: { mode },
+        });
+        await settings.flush();
+        expect(fs.readFileSync(config, "utf8")).toBe(original);
+      }
+      const otherSessionSettings = await Settings.loadIsolated({ agentDir: dir, cwd: dir });
+      expect(cfgPrewalkAuto.get(otherSessionSettings)).toBe("suggest");
+    } finally {
+      await test?.dispose();
+      test = undefined;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("streams a prompt's run from agent_start to agent_end", async () => {

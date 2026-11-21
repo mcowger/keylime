@@ -94,6 +94,9 @@
         "BrowserReply_generate_pr_description": {
           "$ref": "#/components/messages/BrowserReply_generate_pr_description"
         },
+        "BrowserReply_get_auto_prewalk": {
+          "$ref": "#/components/messages/BrowserReply_get_auto_prewalk"
+        },
         "BrowserReply_get_available_models": {
           "$ref": "#/components/messages/BrowserReply_get_available_models"
         },
@@ -189,6 +192,9 @@
         },
         "BrowserReply_set_auto_compaction": {
           "$ref": "#/components/messages/BrowserReply_set_auto_compaction"
+        },
+        "BrowserReply_set_auto_prewalk": {
+          "$ref": "#/components/messages/BrowserReply_set_auto_prewalk"
         },
         "BrowserReply_set_auto_retry": {
           "$ref": "#/components/messages/BrowserReply_set_auto_retry"
@@ -304,6 +310,9 @@
         "BrowserRequest_generate_pr_description": {
           "$ref": "#/components/messages/BrowserRequest_generate_pr_description"
         },
+        "BrowserRequest_get_auto_prewalk": {
+          "$ref": "#/components/messages/BrowserRequest_get_auto_prewalk"
+        },
         "BrowserRequest_get_available_models": {
           "$ref": "#/components/messages/BrowserRequest_get_available_models"
         },
@@ -399,6 +408,9 @@
         },
         "BrowserRequest_set_auto_compaction": {
           "$ref": "#/components/messages/BrowserRequest_set_auto_compaction"
+        },
+        "BrowserRequest_set_auto_prewalk": {
+          "$ref": "#/components/messages/BrowserRequest_set_auto_prewalk"
         },
         "BrowserRequest_set_auto_retry": {
           "$ref": "#/components/messages/BrowserRequest_set_auto_retry"
@@ -795,6 +807,18 @@
         },
         "title": "BrowserReply_generate_pr_description"
       },
+      "BrowserReply_get_auto_prewalk": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "name": "BrowserReply_get_auto_prewalk",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserReply_get_auto_prewalk"
+        },
+        "title": "BrowserReply_get_auto_prewalk"
+      },
       "BrowserReply_get_available_models": {
         "contentType": "application/json",
         "correlationId": {
@@ -1178,6 +1202,18 @@
           "$ref": "#/components/schemas/BrowserReply_set_auto_compaction"
         },
         "title": "BrowserReply_set_auto_compaction"
+      },
+      "BrowserReply_set_auto_prewalk": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "name": "BrowserReply_set_auto_prewalk",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserReply_set_auto_prewalk"
+        },
+        "title": "BrowserReply_set_auto_prewalk"
       },
       "BrowserReply_set_auto_retry": {
         "contentType": "application/json",
@@ -1635,6 +1671,18 @@
         },
         "title": "BrowserRequest_generate_pr_description"
       },
+      "BrowserRequest_get_auto_prewalk": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.\n\nBrowser: Read the live session mode without starting a runner. Null means no live wrapper is available; the native default is unknown. Where the native operation returns undefined, the browser wrapper returns null.",
+        "name": "BrowserRequest_get_auto_prewalk",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserRequest_get_auto_prewalk"
+        },
+        "title": "BrowserRequest_get_auto_prewalk"
+      },
       "BrowserRequest_get_available_models": {
         "contentType": "application/json",
         "correlationId": {
@@ -2018,6 +2066,18 @@
           "$ref": "#/components/schemas/BrowserRequest_set_auto_compaction"
         },
         "title": "BrowserRequest_set_auto_compaction"
+      },
+      "BrowserRequest_set_auto_prewalk": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+        "name": "BrowserRequest_set_auto_prewalk",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserRequest_set_auto_prewalk"
+        },
+        "title": "BrowserRequest_set_auto_prewalk"
       },
       "BrowserRequest_set_auto_retry": {
         "contentType": "application/json",
@@ -2523,6 +2583,68 @@
                 ],
                 "description": "Usage: List currently available models.\nInputs: No arguments.\nInvariants: Waits for background discovery; results reflect the current registry.\nEffects: Reads model availability without selecting a model.\nRecovery: Refresh after discovery or provider configuration changes.",
                 "title": "AgentCommand_get_available_models",
+                "type": "object"
+              },
+              {
+                "allOf": [
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "get_auto_prewalk",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {},
+                    "type": "object"
+                  }
+                ],
+                "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.\n\nBrowser: Read the live session mode without starting a runner. Null means no live wrapper is available; the native default is unknown. Where the native operation returns undefined, the browser wrapper returns null.",
+                "title": "AgentCommand_get_auto_prewalk",
+                "type": "object"
+              },
+              {
+                "allOf": [
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "set_auto_prewalk",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  {
+                    "description": "Requested session-local automatic prewalk mode.",
+                    "properties": {
+                      "mode": {
+                        "anyOf": [
+                          {
+                            "const": "off",
+                            "type": "string"
+                          },
+                          {
+                            "const": "suggest",
+                            "type": "string"
+                          },
+                          {
+                            "const": "on",
+                            "type": "string"
+                          }
+                        ],
+                        "description": "Native automatic prewalk mode for task classification and handoff."
+                      }
+                    },
+                    "required": ["mode"],
+                    "type": "object"
+                  }
+                ],
+                "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+                "title": "AgentCommand_set_auto_prewalk",
                 "type": "object"
               },
               {
@@ -45046,6 +45168,62 @@
                         "type": "object"
                       },
                       {
+                        "anyOf": [
+                          {
+                            "description": "Resolved native automatic prewalk setting for the session.",
+                            "properties": {
+                              "mode": {
+                                "anyOf": [
+                                  {
+                                    "const": "off",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "suggest",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "on",
+                                    "type": "string"
+                                  }
+                                ],
+                                "description": "Native automatic prewalk mode for task classification and handoff."
+                              }
+                            },
+                            "required": ["mode"],
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Live session mode, or null when no live wrapper is available; null does not establish the host's native default."
+                      },
+                      {
+                        "description": "Resolved native automatic prewalk setting for the session.",
+                        "properties": {
+                          "mode": {
+                            "anyOf": [
+                              {
+                                "const": "off",
+                                "type": "string"
+                              },
+                              {
+                                "const": "suggest",
+                                "type": "string"
+                              },
+                              {
+                                "const": "on",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "Native automatic prewalk mode for task classification and handoff."
+                          }
+                        },
+                        "required": ["mode"],
+                        "type": "object"
+                      },
+                      {
                         "properties": {
                           "todoPhases": {
                             "items": {
@@ -57856,6 +58034,123 @@
         "title": "BrowserReply_generate_pr_description",
         "type": "object"
       },
+      "BrowserReply_get_auto_prewalk": {
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "properties": {
+                  "data": {
+                    "anyOf": [
+                      {
+                        "description": "Resolved native automatic prewalk setting for the session.",
+                        "properties": {
+                          "mode": {
+                            "anyOf": [
+                              {
+                                "const": "off",
+                                "type": "string"
+                              },
+                              {
+                                "const": "suggest",
+                                "type": "string"
+                              },
+                              {
+                                "const": "on",
+                                "type": "string"
+                              }
+                            ],
+                            "description": "Native automatic prewalk mode for task classification and handoff."
+                          }
+                        },
+                        "required": ["mode"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Live session mode, or null when no live wrapper is available; null does not establish the host's native default."
+                  },
+                  "success": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["success", "data"],
+                "type": "object"
+              },
+              {
+                "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "const": "refused",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unknown",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "hostOffline": {
+                    "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["error"],
+                "title": "ApiError",
+                "type": "object"
+              }
+            ]
+          },
+          "deduped": {
+            "type": "boolean"
+          },
+          "recvAt": {
+            "type": "number"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "type": "number"
+          },
+          "type": {
+            "const": "reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "rid",
+          "status",
+          "recvAt",
+          "at",
+          "deduped",
+          "data"
+        ],
+        "title": "BrowserReply_get_auto_prewalk",
+        "type": "object"
+      },
       "BrowserReply_get_available_models": {
         "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
         "properties": {
@@ -69902,6 +70197,115 @@
         "title": "BrowserReply_set_auto_compaction",
         "type": "object"
       },
+      "BrowserReply_set_auto_prewalk": {
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "properties": {
+                  "data": {
+                    "description": "Resolved native automatic prewalk setting for the session.",
+                    "properties": {
+                      "mode": {
+                        "anyOf": [
+                          {
+                            "const": "off",
+                            "type": "string"
+                          },
+                          {
+                            "const": "suggest",
+                            "type": "string"
+                          },
+                          {
+                            "const": "on",
+                            "type": "string"
+                          }
+                        ],
+                        "description": "Native automatic prewalk mode for task classification and handoff."
+                      }
+                    },
+                    "required": ["mode"],
+                    "type": "object"
+                  },
+                  "success": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["success", "data"],
+                "type": "object"
+              },
+              {
+                "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "const": "refused",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unknown",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "hostOffline": {
+                    "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["error"],
+                "title": "ApiError",
+                "type": "object"
+              }
+            ]
+          },
+          "deduped": {
+            "type": "boolean"
+          },
+          "recvAt": {
+            "type": "number"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "type": "number"
+          },
+          "type": {
+            "const": "reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "rid",
+          "status",
+          "recvAt",
+          "at",
+          "deduped",
+          "data"
+        ],
+        "title": "BrowserReply_set_auto_prewalk",
+        "type": "object"
+      },
       "BrowserReply_set_auto_retry": {
         "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
         "properties": {
@@ -72928,6 +73332,50 @@
         "title": "BrowserRequest_generate_pr_description",
         "type": "object"
       },
+      "BrowserRequest_get_auto_prewalk": {
+        "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.\n\nBrowser: Read the live session mode without starting a runner. Null means no live wrapper is available; the native default is unknown. Where the native operation returns undefined, the browser wrapper returns null.",
+        "properties": {
+          "advisor": {
+            "type": "boolean"
+          },
+          "command": {
+            "allOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "get_auto_prewalk",
+                    "type": "string"
+                  }
+                },
+                "required": ["type"],
+                "type": "object"
+              },
+              {
+                "properties": {},
+                "type": "object"
+              }
+            ],
+            "type": "object"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          },
+          "type": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "rid", "session", "command"],
+        "title": "BrowserRequest_get_auto_prewalk",
+        "type": "object"
+      },
       "BrowserRequest_get_available_models": {
         "description": "Usage: List currently available models.\nInputs: No arguments.\nInvariants: Waits for background discovery; results reflect the current registry.\nEffects: Reads model availability without selecting a model.\nRecovery: Refresh after discovery or provider configuration changes.",
         "properties": {
@@ -74688,6 +75136,70 @@
         },
         "required": ["type", "seq", "rid", "session", "command"],
         "title": "BrowserRequest_set_auto_compaction",
+        "type": "object"
+      },
+      "BrowserRequest_set_auto_prewalk": {
+        "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+        "properties": {
+          "advisor": {
+            "type": "boolean"
+          },
+          "command": {
+            "allOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "set_auto_prewalk",
+                    "type": "string"
+                  }
+                },
+                "required": ["type"],
+                "type": "object"
+              },
+              {
+                "description": "Requested session-local automatic prewalk mode.",
+                "properties": {
+                  "mode": {
+                    "anyOf": [
+                      {
+                        "const": "off",
+                        "type": "string"
+                      },
+                      {
+                        "const": "suggest",
+                        "type": "string"
+                      },
+                      {
+                        "const": "on",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Native automatic prewalk mode for task classification and handoff."
+                  }
+                },
+                "required": ["mode"],
+                "type": "object"
+              }
+            ],
+            "type": "object"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          },
+          "type": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "rid", "session", "command"],
+        "title": "BrowserRequest_set_auto_prewalk",
         "type": "object"
       },
       "BrowserRequest_set_auto_retry": {
@@ -76768,6 +77280,29 @@
       },
       "summary": "generate_pr_description"
     },
+    "operation_get_auto_prewalk": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.\n\nBrowser: Read the live session mode without starting a runner. Null means no live wrapper is available; the native default is unknown. Where the native operation returns undefined, the browser wrapper returns null.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/BrowserRequest_get_auto_prewalk"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/BrowserReply_get_auto_prewalk"
+          }
+        ]
+      },
+      "summary": "get_auto_prewalk"
+    },
     "operation_get_available_models": {
       "action": "receive",
       "channel": {
@@ -77503,6 +78038,29 @@
         ]
       },
       "summary": "set_auto_compaction"
+    },
+    "operation_set_auto_prewalk": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/BrowserRequest_set_auto_prewalk"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/BrowserReply_set_auto_prewalk"
+          }
+        ]
+      },
+      "summary": "set_auto_prewalk"
     },
     "operation_set_auto_retry": {
       "action": "receive",

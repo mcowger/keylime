@@ -188,6 +188,8 @@ const PASSTHROUGH_COMMANDS = new Set([
   "cycle_thinking_level",
   "cycle_model",
   "get_available_models",
+  "get_auto_prewalk",
+  "set_auto_prewalk",
   "set_auto_compaction",
   "set_auto_retry",
   "abort_retry",

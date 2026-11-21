@@ -3,9 +3,14 @@ import { toolWireSchema } from "@oh-my-pi/pi-ai/utils/schema";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { CACHE_WARMING_MODES } from "@oh-my-pi/pi-coding-agent/session/cache-warmer";
 import { isSessionSettled } from "@oh-my-pi/pi-coding-agent/session/session-settle";
+import { cfgPrewalkAuto } from "@oh-my-pi/pi-coding-agent/session/settings";
 import { buildAvailableSlashCommands } from "@oh-my-pi/pi-coding-agent/slash-commands/available-commands";
 import { calculateTokensPerSecond } from "@oh-my-pi/pi-coding-agent/utils/token-rate";
 import { parseConfiguredThinkingLevel } from "@oh-my-pi/pi-tui/thinking";
+import type {
+  AutoPrewalkResult,
+  AutoPrewalkSetArgs,
+} from "../../../lib/api-contracts/runner-lifecycle";
 import { activityFor } from "../activity";
 import { advisorReviewPending } from "../advisor";
 import type { CommandTable, FrameTable } from "./types";
@@ -177,6 +182,18 @@ export const modelCommands: CommandTable = {
     return {
       levels: [ThinkingLevel.Off, ...session.getAvailableThinkingLevels()],
     };
+  },
+  /** @apiCommand get_auto_prewalk */
+  async get_auto_prewalk({ session }) {
+    return { mode: cfgPrewalkAuto.get(session.settings) } satisfies AutoPrewalkResult;
+  },
+  /** @apiCommand set_auto_prewalk */
+  async set_auto_prewalk({ session }, { mode }) {
+    if (mode !== "off" && mode !== "suggest" && mode !== "on")
+      throw new Error(`set_auto_prewalk: invalid mode ${String(mode)}`);
+    const args: AutoPrewalkSetArgs = { mode };
+    cfgPrewalkAuto.override(session.settings, args.mode);
+    return { mode: cfgPrewalkAuto.get(session.settings) } satisfies AutoPrewalkResult;
   },
   /** @apiCommand set_fast_mode */
   async set_fast_mode({ session }, { enabled }) {

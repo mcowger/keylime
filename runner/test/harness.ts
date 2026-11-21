@@ -209,6 +209,7 @@ export async function createTestSession(
     toolNames?: string[];
     persist?: boolean;
     ui?: Partial<ExtensionUIContext>;
+    settings?: Settings;
   } = {},
 ): Promise<TestSession> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "keylime-runner-session-"));
@@ -226,7 +227,7 @@ export async function createTestSession(
     sessionManager: options.persist
       ? SessionManager.create(dir, path.join(dir, "sessions"))
       : SessionManager.inMemory(dir),
-    settings: Settings.isolated({
+    settings: options.settings ?? Settings.isolated({
       "compaction.enabled": false,
       "retry.enabled": false,
       "todo.enabled": false,

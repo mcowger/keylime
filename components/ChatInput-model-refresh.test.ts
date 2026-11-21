@@ -2,6 +2,7 @@ import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import React from "react";
+import type { AutoPrewalkMode } from "@/lib/api-contracts/runner-lifecycle";
 import { ChatInput } from "./ChatInput";
 import { ModelPickerPanel } from "./ChatInput-model-picker";
 
@@ -68,6 +69,50 @@ test("the model picker can refresh during a run and displays the updated catalog
   );
   assert.ok(screen.getAllByText("Refresh failed").length > 0);
   assert.ok(screen.getByRole("button", { name: "Refresh models" }));
+});
+
+test("auto-prewalk can be selected without changing the model and reports errors", () => {
+  const selected: string[] = [];
+  let refreshes = 0;
+  let modelChanges = 0;
+  const props = {
+    onSend: async () => ({ status: "accepted" as const }),
+    onAbort() {},
+    onModelChange() { modelChanges++; },
+    onRefreshAutoPrewalk() { refreshes++; },
+    onAutoPrewalkChange(mode: AutoPrewalkMode) { selected.push(mode); },
+    autoPrewalk: "suggest" as const,
+    isStreaming: false,
+    modelList: [{ id: "old", provider: "example", name: "Old" }],
+  };
+  const view = render(React.createElement(ChatInput, props));
+  fireEvent.click(screen.getByRole("button", { name: /Change model/ }));
+  assert.equal(refreshes, 1);
+  fireEvent.click(screen.getByRole("button", { name: "Auto Prewalk: Suggest" }));
+  view.rerender(React.createElement(ChatInput, { ...props, autoPrewalk: "on" }));
+  fireEvent.click(screen.getByRole("button", { name: "Auto Prewalk: On" }));
+  view.rerender(React.createElement(ChatInput, { ...props, autoPrewalk: "off" }));
+  fireEvent.click(screen.getByRole("button", { name: "Auto Prewalk: Off" }));
+  view.rerender(React.createElement(ChatInput, { ...props, autoPrewalk: null }));
+  fireEvent.click(screen.getByRole("button", { name: "Auto Prewalk: Unknown" }));
+  assert.deepEqual(selected, ["on", "off", "suggest", "off"]);
+  assert.equal(modelChanges, 0);
+  view.rerender(React.createElement(ChatInput, { ...props, autoPrewalkError: "Command failed" }));
+  assert.ok(screen.getByRole("alert").textContent?.includes("Command failed"));
+  const button = screen.getByRole("button", { name: "Auto Prewalk: Suggest" });
+  button.focus();
+  view.rerender(React.createElement(ChatInput, { ...props, autoPrewalkPending: true }));
+  assert.equal(document.activeElement, button);
+  assert.equal(button.getAttribute("aria-disabled"), "true");
+  assert.equal(button.matches(":disabled"), false);
+  fireEvent.click(button);
+  assert.deepEqual(selected, ["on", "off", "suggest", "off"]);
+  view.rerender(React.createElement(ChatInput, { ...props }));
+  assert.equal(document.activeElement, button);
+  fireEvent.click(button);
+  assert.deepEqual(selected, ["on", "off", "suggest", "off", "on"]);
+  view.rerender(React.createElement(ChatInput, { ...props, isStreaming: true }));
+  assert.equal(button.matches(":disabled"), true);
 });
 
 test("the model picker remains available when no models are returned", () => {

@@ -230,6 +230,8 @@ export function createNotificationDetector(): Detect {
         const message = str(frame.message);
         if (!source || !message || !MODEL_SWITCH_NOTICE_SOURCES.has(source))
           return [];
+        if (source === "prewalk" && message.startsWith("Auto-prewalk:"))
+          return [];
         return [{ ...base, type: "modelSwitch", detail: message }];
       }
       case "prompt_result": {

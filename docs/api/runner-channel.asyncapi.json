@@ -118,6 +118,9 @@
         "RunnerReply_generate_title": {
           "$ref": "#/components/messages/RunnerReply_generate_title"
         },
+        "RunnerReply_get_auto_prewalk": {
+          "$ref": "#/components/messages/RunnerReply_get_auto_prewalk"
+        },
         "RunnerReply_get_available_commands": {
           "$ref": "#/components/messages/RunnerReply_get_available_commands"
         },
@@ -240,6 +243,9 @@
         },
         "RunnerReply_set_auto_compaction": {
           "$ref": "#/components/messages/RunnerReply_set_auto_compaction"
+        },
+        "RunnerReply_set_auto_prewalk": {
+          "$ref": "#/components/messages/RunnerReply_set_auto_prewalk"
         },
         "RunnerReply_set_auto_retry": {
           "$ref": "#/components/messages/RunnerReply_set_auto_retry"
@@ -397,6 +403,9 @@
         "RunnerRequest_generate_title": {
           "$ref": "#/components/messages/RunnerRequest_generate_title"
         },
+        "RunnerRequest_get_auto_prewalk": {
+          "$ref": "#/components/messages/RunnerRequest_get_auto_prewalk"
+        },
         "RunnerRequest_get_available_commands": {
           "$ref": "#/components/messages/RunnerRequest_get_available_commands"
         },
@@ -519,6 +528,9 @@
         },
         "RunnerRequest_set_auto_compaction": {
           "$ref": "#/components/messages/RunnerRequest_set_auto_compaction"
+        },
+        "RunnerRequest_set_auto_prewalk": {
+          "$ref": "#/components/messages/RunnerRequest_set_auto_prewalk"
         },
         "RunnerRequest_set_auto_retry": {
           "$ref": "#/components/messages/RunnerRequest_set_auto_retry"
@@ -1029,6 +1041,18 @@
         },
         "title": "RunnerReply_generate_title"
       },
+      "RunnerReply_get_auto_prewalk": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_get_auto_prewalk",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_get_auto_prewalk"
+        },
+        "title": "RunnerReply_get_auto_prewalk"
+      },
       "RunnerReply_get_available_commands": {
         "contentType": "application/json",
         "correlationId": {
@@ -1520,6 +1544,18 @@
           "$ref": "#/components/schemas/RunnerReply_set_auto_compaction"
         },
         "title": "RunnerReply_set_auto_compaction"
+      },
+      "RunnerReply_set_auto_prewalk": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_set_auto_prewalk",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_set_auto_prewalk"
+        },
+        "title": "RunnerReply_set_auto_prewalk"
       },
       "RunnerReply_set_auto_retry": {
         "contentType": "application/json",
@@ -2145,6 +2181,18 @@
         },
         "title": "RunnerRequest_generate_title"
       },
+      "RunnerRequest_get_auto_prewalk": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.",
+        "name": "RunnerRequest_get_auto_prewalk",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_get_auto_prewalk"
+        },
+        "title": "RunnerRequest_get_auto_prewalk"
+      },
       "RunnerRequest_get_available_commands": {
         "contentType": "application/json",
         "correlationId": {
@@ -2636,6 +2684,18 @@
           "$ref": "#/components/schemas/RunnerRequest_set_auto_compaction"
         },
         "title": "RunnerRequest_set_auto_compaction"
+      },
+      "RunnerRequest_set_auto_prewalk": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+        "name": "RunnerRequest_set_auto_prewalk",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_set_auto_prewalk"
+        },
+        "title": "RunnerRequest_set_auto_prewalk"
       },
       "RunnerRequest_set_auto_retry": {
         "contentType": "application/json",
@@ -39986,6 +40046,76 @@
         "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
         "title": "RunnerReply_generate_title"
       },
+      "RunnerReply_get_auto_prewalk": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "description": "Resolved native automatic prewalk setting for the session.",
+                "properties": {
+                  "mode": {
+                    "anyOf": [
+                      {
+                        "const": "off",
+                        "type": "string"
+                      },
+                      {
+                        "const": "suggest",
+                        "type": "string"
+                      },
+                      {
+                        "const": "on",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Native automatic prewalk mode for task classification and handoff."
+                  }
+                },
+                "required": ["mode"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_get_auto_prewalk"
+      },
       "RunnerReply_get_available_commands": {
         "anyOf": [
           {
@@ -56507,6 +56637,76 @@
         "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
         "title": "RunnerReply_set_auto_compaction"
       },
+      "RunnerReply_set_auto_prewalk": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "description": "Resolved native automatic prewalk setting for the session.",
+                "properties": {
+                  "mode": {
+                    "anyOf": [
+                      {
+                        "const": "off",
+                        "type": "string"
+                      },
+                      {
+                        "const": "suggest",
+                        "type": "string"
+                      },
+                      {
+                        "const": "on",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Native automatic prewalk mode for task classification and handoff."
+                  }
+                },
+                "required": ["mode"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_set_auto_prewalk"
+      },
       "RunnerReply_set_auto_retry": {
         "anyOf": [
           {
@@ -59166,6 +59366,29 @@
         "title": "RunnerRequest_generate_title",
         "type": "object"
       },
+      "RunnerRequest_get_auto_prewalk": {
+        "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.",
+        "properties": {
+          "args": {
+            "properties": {},
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "get_auto_prewalk",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_get_auto_prewalk",
+        "type": "object"
+      },
       "RunnerRequest_get_available_commands": {
         "description": "Usage: List available slash commands.\nInputs: No arguments.\nInvariants: The list reflects current session capabilities.\nEffects: Reads the current command registry.\nRecovery: Refresh after extensions or session configuration change.",
         "properties": {
@@ -60435,6 +60658,49 @@
         },
         "required": ["t", "id", "op", "args"],
         "title": "RunnerRequest_set_auto_compaction",
+        "type": "object"
+      },
+      "RunnerRequest_set_auto_prewalk": {
+        "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+        "properties": {
+          "args": {
+            "description": "Requested session-local automatic prewalk mode.",
+            "properties": {
+              "mode": {
+                "anyOf": [
+                  {
+                    "const": "off",
+                    "type": "string"
+                  },
+                  {
+                    "const": "suggest",
+                    "type": "string"
+                  },
+                  {
+                    "const": "on",
+                    "type": "string"
+                  }
+                ],
+                "description": "Native automatic prewalk mode for task classification and handoff."
+              }
+            },
+            "required": ["mode"],
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "set_auto_prewalk",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_set_auto_prewalk",
         "type": "object"
       },
       "RunnerRequest_set_auto_retry": {
@@ -62141,6 +62407,29 @@
       },
       "summary": "generate_title"
     },
+    "operation_get_auto_prewalk": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read the automatic prewalk mode for this live session.\nInputs: No arguments.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required.\nEffects: Reads the session's effective native setting without changing the model.\nRecovery: Read again after changing settings.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_get_auto_prewalk"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_get_auto_prewalk"
+          }
+        ]
+      },
+      "summary": "get_auto_prewalk"
+    },
     "operation_get_available_commands": {
       "action": "send",
       "channel": {
@@ -63083,6 +63372,29 @@
         ]
       },
       "summary": "set_auto_compaction"
+    },
+    "operation_set_auto_prewalk": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_set_auto_prewalk"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_set_auto_prewalk"
+          }
+        ]
+      },
+      "summary": "set_auto_prewalk"
     },
     "operation_set_auto_retry": {
       "action": "send",

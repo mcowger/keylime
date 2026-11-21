@@ -45,6 +45,22 @@ const input = {
     }),
   ),
 };
+export const AutoPrewalkModeSchema = Type.Union(
+  [Type.Literal("off"), Type.Literal("suggest"), Type.Literal("on")],
+  { description: "Native automatic prewalk mode for task classification and handoff." },
+);
+export const AutoPrewalkSetArgsSchema = Type.Object(
+  { mode: AutoPrewalkModeSchema },
+  { description: "Requested session-local automatic prewalk mode." },
+);
+export const AutoPrewalkResultSchema = Type.Object(
+  { mode: AutoPrewalkModeSchema },
+  { description: "Resolved native automatic prewalk setting for the session." },
+);
+export type AutoPrewalkMode = Static<typeof AutoPrewalkModeSchema>;
+export type AutoPrewalkSetArgs = Static<typeof AutoPrewalkSetArgsSchema>;
+export type AutoPrewalkResult = Static<typeof AutoPrewalkResultSchema>;
+
 const instructions = { customInstructions: opt(s()) };
 const modelSelection = { provider: opt(s()), modelId: opt(s()) };
 const cancelled = Type.Object({ cancelled: b() });
@@ -891,6 +907,26 @@ Effects: Reads the live model configuration without changing it.
 Recovery: Refresh after changing models.`,
     empty,
     Type.Object({ levels: Type.Array(s()) }),
+  ),
+  command(
+    "get_auto_prewalk",
+    `Usage: Read the automatic prewalk mode for this live session.
+Inputs: No arguments.
+Invariants: Native session state or plan mode can suppress classification; a native judge is required.
+Effects: Reads the session's effective native setting without changing the model.
+Recovery: Read again after changing settings.`,
+    empty,
+    AutoPrewalkResultSchema,
+  ),
+  command(
+    "set_auto_prewalk",
+    `Usage: Override automatic prewalk for this live session.
+Inputs: mode is off, suggest or on.
+Invariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.
+Effects: Changes only the live session setting; never writes native configuration or selects a model.
+Recovery: Read the session mode after an uncertain response.`,
+    AutoPrewalkSetArgsSchema,
+    AutoPrewalkResultSchema,
   ),
   command(
     "set_fast_mode",

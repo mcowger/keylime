@@ -348,6 +348,7 @@ test("x-omp-received-at is stamped once the body is in, like a socket's ack afte
 // fires get_btw_history, so a regression here starts omp on each reconnect.
 const CANNED = [
   [{ type: "predict_word" }, { suffix: null }],
+  [{ type: "get_auto_prewalk" }, null],
   [{ type: "predict_word_feedback" }, null],
   [{ type: "get_btw_history" }, { records: [] }],
   [{ type: "btw_cancel" }, { cancelled: false }],
@@ -372,15 +373,17 @@ for (const [command, data] of CANNED) {
   });
 
   test(`${command.type} reaches a live wrapper even when the advisor flag differs, without replacing it`, async (t) => {
+    const liveData =
+      command.type === "get_auto_prewalk" ? { mode: "suggest" } : { live: true };
     const live = fake({
       advisorSpawned: false,
-      send: async () => ({ live: true }),
+      send: async () => liveData,
     });
     useRegistry(t, { [SAVED_ID]: live });
     const response = await post(SAVED_ID, command, undefined, "?advisor=1");
     assert.deepEqual(await response.json(), {
       success: true,
-      data: { live: true },
+      data: liveData,
     });
     assert.deepEqual(live.sent, [command]);
     assert.equal(live.destroyed, 0);
