@@ -9,6 +9,7 @@ import * as authAllProviders from "@/app/api/auth/all-providers/route";
 import * as authApiKeyProvider from "@/app/api/auth/api-key/[provider]/route";
 import * as authLoginProvider from "@/app/api/auth/login/[provider]/route";
 import * as authProviders from "@/app/api/auth/providers/route";
+import * as chatRoles from "@/app/api/chat-roles/route";
 import * as cwdBrowse from "@/app/api/cwd/browse/route";
 import * as cwdValidate from "@/app/api/cwd/validate/route";
 import * as defaultCwd from "@/app/api/default-cwd/route";
@@ -126,6 +127,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "auth/api-key/[provider]": authApiKeyProvider,
   "auth/login/[provider]": authLoginProvider,
   "auth/providers": authProviders,
+  "chat-roles": chatRoles,
   "cwd/browse": cwdBrowse,
   "cwd/validate": cwdValidate,
   "default-cwd": defaultCwd,

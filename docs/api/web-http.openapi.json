@@ -206,43 +206,35 @@
                           "type": "number"
                         },
                         "model": {
-                          "allOf": [
-                            {
-                              "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "provider": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["id", "provider"],
-                              "type": "object"
+                          "additionalProperties": false,
+                          "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                          "properties": {
+                            "id": {
+                              "type": "string"
                             },
-                            {
+                            "name": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "reasoning": {
+                              "type": "boolean"
+                            },
+                            "thinking": {
+                              "additionalProperties": false,
                               "properties": {
-                                "name": {
-                                  "type": "string"
-                                },
-                                "reasoning": {
-                                  "type": "boolean"
-                                },
-                                "thinking": {
-                                  "properties": {
-                                    "efforts": {
-                                      "items": {
-                                        "type": "string"
-                                      },
-                                      "type": "array"
-                                    }
+                                "efforts": {
+                                  "items": {
+                                    "type": "string"
                                   },
-                                  "type": "object"
+                                  "type": "array"
                                 }
                               },
                               "type": "object"
                             }
-                          ],
+                          },
+                          "required": ["id", "provider"],
                           "type": "object"
                         },
                         "modelActivity": {
@@ -1249,6 +1241,42 @@
                     ],
                     "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
                     "title": "AgentCommand_set_auto_prewalk",
+                    "type": "object"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "get_chat_roles",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "currentModelFallback": {
+                            "type": "boolean"
+                          },
+                          "currentModelId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "currentProvider": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "thinkingLevel": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      }
+                    ],
+                    "description": "Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.",
+                    "title": "AgentCommand_get_chat_roles",
                     "type": "object"
                   },
                   {
@@ -2820,7 +2848,7 @@
                         "type": "object"
                       }
                     ],
-                    "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
+                    "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
                     "title": "AgentCommand_get_state",
                     "type": "object"
                   },
@@ -2849,8 +2877,35 @@
                         "type": "object"
                       }
                     ],
-                    "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+                    "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
                     "title": "AgentCommand_set_model",
+                    "type": "object"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "set_chat_role",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "role": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["role"],
+                        "type": "object"
+                      }
+                    ],
+                    "description": "Usage: Apply a configured chat role to the live session.\nInputs: Supply a known chat role ID.\nInvariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.\nEffects: Applies OMP's session role marker, model and explicit role thinking without changing settings.\nRecovery: Read session state after an uncertain response before applying again.\n\nBrowser: Apply a native chat role; return only the browser-visible model fields and effective thinking level. Where the native operation returns undefined, the browser wrapper returns null.",
+                    "title": "AgentCommand_set_chat_role",
                     "type": "object"
                   },
                   {
@@ -3970,6 +4025,84 @@
                                 }
                               },
                               "required": ["mode"],
+                              "type": "object"
+                            },
+                            {
+                              "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+                              "properties": {
+                                "roles": {
+                                  "items": {
+                                    "properties": {
+                                      "effectiveThinkingLevel": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "modelId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "modelName": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "provider": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "thinkingLevel": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Explicit role selector to apply; null preserves the chat's current selector."
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "provider",
+                                      "modelId",
+                                      "modelName",
+                                      "thinkingLevel",
+                                      "effectiveThinkingLevel"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": ["roles"],
                               "type": "object"
                             },
                             {
@@ -13257,43 +13390,35 @@
                                   "type": "number"
                                 },
                                 "model": {
-                                  "allOf": [
-                                    {
-                                      "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string"
-                                        },
-                                        "provider": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": ["id", "provider"],
-                                      "type": "object"
+                                  "additionalProperties": false,
+                                  "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
                                     },
-                                    {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "reasoning": {
+                                      "type": "boolean"
+                                    },
+                                    "thinking": {
+                                      "additionalProperties": false,
                                       "properties": {
-                                        "name": {
-                                          "type": "string"
-                                        },
-                                        "reasoning": {
-                                          "type": "boolean"
-                                        },
-                                        "thinking": {
-                                          "properties": {
-                                            "efforts": {
-                                              "items": {
-                                                "type": "string"
-                                              },
-                                              "type": "array"
-                                            }
+                                        "efforts": {
+                                          "items": {
+                                            "type": "string"
                                           },
-                                          "type": "object"
+                                          "type": "array"
                                         }
                                       },
                                       "type": "object"
                                     }
-                                  ],
+                                  },
+                                  "required": ["id", "provider"],
                                   "type": "object"
                                 },
                                 "modelActivity": {
@@ -13592,6 +13717,56 @@
                                 }
                               },
                               "required": ["id", "provider"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "description": "Selected role model and effective thinking level; excludes provider credentials and headers.",
+                              "properties": {
+                                "model": {
+                                  "additionalProperties": false,
+                                  "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "reasoning": {
+                                      "type": "boolean"
+                                    },
+                                    "thinking": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "efforts": {
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": ["id", "provider"],
+                                  "type": "object"
+                                },
+                                "thinkingLevel": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["model", "thinkingLevel"],
                               "type": "object"
                             },
                             {
@@ -15299,7 +15474,7 @@
     },
     "/api/agent/new": {
       "post": {
-        "description": "### Usage\n\nCreate a fresh session on a registered host and optionally initialize and send its first command.\n\n### Inputs\n\nSupply cwd and command type; hostId selects the host. provider and modelId take effect together; thinkingLevel, name, toolNames and advisor configure the spawn. Images are validated; uploads are only supported on existing sessions.\n\n### Invariants\n\npoolId, creationId and ref are rejected; a supplied sessionId is discarded. ensure_session creates without forwarding a prompt, although model, thinking level and name may still be initialized.\n\n### Effects\n\nStarts an RPC process, applies initialization in order and sends the command unless it is ensure_session. The session may not yet have a persisted transcript.\n\n### Recovery\n\nAn offline error can include the new sessionId and delivery status: inspect that session before retrying an uncertain command, rather than creating another session. Other initialization failures destroy the new wrapper.\n\n### Additional protocol details\n\nA registered host and cwd select the target. Workspace preparation and uploads are separate operations. ensure_session initializes without submitting a prompt. A host-offline failure after creation includes sessionId and delivery metadata.",
+        "description": "### Usage\n\nCreate a fresh session on a registered host and optionally initialize and send its first command.\n\n### Inputs\n\nSupply cwd and command type; hostId selects the host. provider and modelId take effect together; chatRole, thinkingLevel, name, toolNames and advisor configure the spawn. Images are validated; uploads are only supported on existing sessions.\n\n### Invariants\n\npoolId, creationId and ref are rejected; a supplied sessionId is discarded. ensure_session creates without forwarding a prompt, although model, role, thinking level and name may still be initialized. A supplied thinkingLevel overrides the role's effort.\n\n### Effects\n\nStarts an RPC process, applies initialization in order and sends the command unless it is ensure_session. The session may not yet have a persisted transcript.\n\n### Recovery\n\nAn offline error can include the new sessionId and delivery status: inspect that session before retrying an uncertain command, rather than creating another session. Other initialization failures destroy the new wrapper.\n\n### Additional protocol details\n\nA registered host and cwd select the target. Workspace preparation and uploads are separate operations. ensure_session initializes without submitting a prompt. A host-offline failure after creation includes sessionId and delivery metadata.",
         "operationId": "createAgentSession",
         "requestBody": {
           "content": {
@@ -15565,6 +15740,42 @@
                             ],
                             "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
                             "title": "AgentCommand_set_auto_prewalk",
+                            "type": "object"
+                          },
+                          {
+                            "allOf": [
+                              {
+                                "properties": {
+                                  "type": {
+                                    "const": "get_chat_roles",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["type"],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "currentModelFallback": {
+                                    "type": "boolean"
+                                  },
+                                  "currentModelId": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "currentProvider": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "thinkingLevel": {
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              }
+                            ],
+                            "description": "Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.",
+                            "title": "AgentCommand_get_chat_roles",
                             "type": "object"
                           },
                           {
@@ -17161,7 +17372,7 @@
                                 "type": "object"
                               }
                             ],
-                            "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
+                            "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
                             "title": "AgentCommand_get_state",
                             "type": "object"
                           },
@@ -17190,8 +17401,35 @@
                                 "type": "object"
                               }
                             ],
-                            "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+                            "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
                             "title": "AgentCommand_set_model",
+                            "type": "object"
+                          },
+                          {
+                            "allOf": [
+                              {
+                                "properties": {
+                                  "type": {
+                                    "const": "set_chat_role",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["type"],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "role": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["role"],
+                                "type": "object"
+                              }
+                            ],
+                            "description": "Usage: Apply a configured chat role to the live session.\nInputs: Supply a known chat role ID.\nInvariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.\nEffects: Applies OMP's session role marker, model and explicit role thinking without changing settings.\nRecovery: Read session state after an uncertain response before applying again.\n\nBrowser: Apply a native chat role; return only the browser-visible model fields and effective thinking level. Where the native operation returns undefined, the browser wrapper returns null.",
+                            "title": "AgentCommand_set_chat_role",
                             "type": "object"
                           },
                           {
@@ -18100,6 +18338,10 @@
                               "advisor": {
                                 "type": "boolean"
                               },
+                              "chatRole": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
                               "cwd": {
                                 "type": "string"
                               },
@@ -18144,6 +18386,9 @@
                     "properties": {
                       "advisor": {
                         "type": "boolean"
+                      },
+                      "chatRole": {
+                        "type": "string"
                       },
                       "cwd": {
                         "type": "string"
@@ -18413,6 +18658,84 @@
                                 }
                               },
                               "required": ["mode"],
+                              "type": "object"
+                            },
+                            {
+                              "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+                              "properties": {
+                                "roles": {
+                                  "items": {
+                                    "properties": {
+                                      "effectiveThinkingLevel": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "modelId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "modelName": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "provider": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "thinkingLevel": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Explicit role selector to apply; null preserves the chat's current selector."
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "provider",
+                                      "modelId",
+                                      "modelName",
+                                      "thinkingLevel",
+                                      "effectiveThinkingLevel"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": ["roles"],
                               "type": "object"
                             },
                             {
@@ -27700,43 +28023,35 @@
                                   "type": "number"
                                 },
                                 "model": {
-                                  "allOf": [
-                                    {
-                                      "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string"
-                                        },
-                                        "provider": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": ["id", "provider"],
-                                      "type": "object"
+                                  "additionalProperties": false,
+                                  "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
                                     },
-                                    {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "reasoning": {
+                                      "type": "boolean"
+                                    },
+                                    "thinking": {
+                                      "additionalProperties": false,
                                       "properties": {
-                                        "name": {
-                                          "type": "string"
-                                        },
-                                        "reasoning": {
-                                          "type": "boolean"
-                                        },
-                                        "thinking": {
-                                          "properties": {
-                                            "efforts": {
-                                              "items": {
-                                                "type": "string"
-                                              },
-                                              "type": "array"
-                                            }
+                                        "efforts": {
+                                          "items": {
+                                            "type": "string"
                                           },
-                                          "type": "object"
+                                          "type": "array"
                                         }
                                       },
                                       "type": "object"
                                     }
-                                  ],
+                                  },
+                                  "required": ["id", "provider"],
                                   "type": "object"
                                 },
                                 "modelActivity": {
@@ -28035,6 +28350,56 @@
                                 }
                               },
                               "required": ["id", "provider"],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "description": "Selected role model and effective thinking level; excludes provider credentials and headers.",
+                              "properties": {
+                                "model": {
+                                  "additionalProperties": false,
+                                  "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "reasoning": {
+                                      "type": "boolean"
+                                    },
+                                    "thinking": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "efforts": {
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": ["id", "provider"],
+                                  "type": "object"
+                                },
+                                "thinkingLevel": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["model", "thinkingLevel"],
                               "type": "object"
                             },
                             {
@@ -29267,8 +29632,8 @@
         "summary": "Create and initialize an agent session",
         "x-client-semantics": {
           "Effects": "Starts an RPC process, applies initialization in order and sends the command unless it is ensure_session. The session may not yet have a persisted transcript.",
-          "Inputs": "Supply cwd and command type; hostId selects the host. provider and modelId take effect together; thinkingLevel, name, toolNames and advisor configure the spawn. Images are validated; uploads are only supported on existing sessions.",
-          "Invariants": "poolId, creationId and ref are rejected; a supplied sessionId is discarded. ensure_session creates without forwarding a prompt, although model, thinking level and name may still be initialized.",
+          "Inputs": "Supply cwd and command type; hostId selects the host. provider and modelId take effect together; chatRole, thinkingLevel, name, toolNames and advisor configure the spawn. Images are validated; uploads are only supported on existing sessions.",
+          "Invariants": "poolId, creationId and ref are rejected; a supplied sessionId is discarded. ensure_session creates without forwarding a prompt, although model, role, thinking level and name may still be initialized. A supplied thinkingLevel overrides the role's effort.",
           "Recovery": "An offline error can include the new sessionId and delivery status: inspect that session before retrying an uncertain command, rather than creating another session. Other initialization failures destroy the new wrapper.",
           "Usage": "Create a fresh session on a registered host and optionally initialize and send its first command."
         }
@@ -33900,6 +34265,362 @@
           "Invariants": "Unavailable providers are omitted; this is not a list of all known providers.",
           "Recovery": "Retry the read after a utility error.",
           "Usage": "List available omp login providers and authentication status."
+        }
+      }
+    },
+    "/api/chat-roles": {
+      "get": {
+        "description": "### Usage\n\nResolve chat roles for the selected workspace and daemon.\n\n### Inputs\n\nSupply an absolute cwd, optional hostId, optional existing sessionId, optional current composer thinkingLevel and optional currentProvider and currentModelId together.\n\n### Invariants\n\nThe owning daemon resolves OMP workspace settings and models; unresolved roles have null model fields. A live session supplies its own model and thinking state. For a temporary runner, the supplied current model is resolved from its available registry; inactive sessions without a composer selector have unknown inherited effort.\n\n### Effects\n\nQueries a live runner, or starts a temporary workspace runner and waits for model discovery; never starts a saved session.\n\n### Recovery\n\nCorrect the workspace or provider configuration, or upgrade and reconnect the selected daemon.",
+        "operationId": "getChatRoles",
+        "parameters": [
+          {
+            "description": "Selected daemon; defaults to local.",
+            "in": "query",
+            "name": "hostId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Absolute workspace directory on the selected daemon.",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Existing session; a live runner supplies current thinking state.",
+            "in": "query",
+            "name": "sessionId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current composer selector for a new or inactive session; ignored for a live runner.",
+            "in": "query",
+            "name": "thinkingLevel",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current model provider for a new or inactive session; supply with currentModelId. Ignored for a live runner.",
+            "in": "query",
+            "name": "currentProvider",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Current model ID for a new or inactive session; supply with currentProvider. Ignored for a live runner.",
+            "in": "query",
+            "name": "currentModelId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+                  "properties": {
+                    "roles": {
+                      "items": {
+                        "properties": {
+                          "effectiveThinkingLevel": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "modelId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "modelName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "provider": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "thinkingLevel": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Explicit role selector to apply; null preserves the chat's current selector."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "provider",
+                          "modelId",
+                          "modelName",
+                          "thinkingLevel",
+                          "effectiveThinkingLevel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["roles"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid workspace directory."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication is required when configured."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Origin, ownership or authorization policy refused this request."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unknown daemon."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "const": "refused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unknown",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "hostOffline": {
+                      "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["error"],
+                  "title": "ApiError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The operation failed."
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Daemon does not support chat role discovery."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Daemon unavailable."
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          },
+          {
+            "trustedProxy": []
+          },
+          {}
+        ],
+        "summary": "Resolve workspace chat roles",
+        "x-client-semantics": {
+          "Effects": "Queries a live runner, or starts a temporary workspace runner and waits for model discovery; never starts a saved session.",
+          "Inputs": "Supply an absolute cwd, optional hostId, optional existing sessionId, optional current composer thinkingLevel and optional currentProvider and currentModelId together.",
+          "Invariants": "The owning daemon resolves OMP workspace settings and models; unresolved roles have null model fields. A live session supplies its own model and thinking state. For a temporary runner, the supplied current model is resolved from its available registry; inactive sessions without a composer selector have unknown inherited effort.",
+          "Recovery": "Correct the workspace or provider configuration, or upgrade and reconnect the selected daemon.",
+          "Usage": "Resolve chat roles for the selected workspace and daemon."
         }
       }
     },
@@ -65233,43 +65954,35 @@
                                   "type": "number"
                                 },
                                 "model": {
-                                  "allOf": [
-                                    {
-                                      "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string"
-                                        },
-                                        "provider": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": ["id", "provider"],
-                                      "type": "object"
+                                  "additionalProperties": false,
+                                  "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
                                     },
-                                    {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "reasoning": {
+                                      "type": "boolean"
+                                    },
+                                    "thinking": {
+                                      "additionalProperties": false,
                                       "properties": {
-                                        "name": {
-                                          "type": "string"
-                                        },
-                                        "reasoning": {
-                                          "type": "boolean"
-                                        },
-                                        "thinking": {
-                                          "properties": {
-                                            "efforts": {
-                                              "items": {
-                                                "type": "string"
-                                              },
-                                              "type": "array"
-                                            }
+                                        "efforts": {
+                                          "items": {
+                                            "type": "string"
                                           },
-                                          "type": "object"
+                                          "type": "array"
                                         }
                                       },
                                       "type": "object"
                                     }
-                                  ],
+                                  },
+                                  "required": ["id", "provider"],
                                   "type": "object"
                                 },
                                 "modelActivity": {
@@ -68576,43 +69289,35 @@
                                   "type": "number"
                                 },
                                 "model": {
-                                  "allOf": [
-                                    {
-                                      "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string"
-                                        },
-                                        "provider": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": ["id", "provider"],
-                                      "type": "object"
+                                  "additionalProperties": false,
+                                  "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
                                     },
-                                    {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "reasoning": {
+                                      "type": "boolean"
+                                    },
+                                    "thinking": {
+                                      "additionalProperties": false,
                                       "properties": {
-                                        "name": {
-                                          "type": "string"
-                                        },
-                                        "reasoning": {
-                                          "type": "boolean"
-                                        },
-                                        "thinking": {
-                                          "properties": {
-                                            "efforts": {
-                                              "items": {
-                                                "type": "string"
-                                              },
-                                              "type": "array"
-                                            }
+                                        "efforts": {
+                                          "items": {
+                                            "type": "string"
                                           },
-                                          "type": "object"
+                                          "type": "array"
                                         }
                                       },
                                       "type": "object"
                                     }
-                                  ],
+                                  },
+                                  "required": ["id", "provider"],
                                   "type": "object"
                                 },
                                 "modelActivity": {
@@ -79808,43 +80513,35 @@
                           "type": "number"
                         },
                         "model": {
-                          "allOf": [
-                            {
-                              "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "provider": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["id", "provider"],
-                              "type": "object"
+                          "additionalProperties": false,
+                          "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                          "properties": {
+                            "id": {
+                              "type": "string"
                             },
-                            {
+                            "name": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "reasoning": {
+                              "type": "boolean"
+                            },
+                            "thinking": {
+                              "additionalProperties": false,
                               "properties": {
-                                "name": {
-                                  "type": "string"
-                                },
-                                "reasoning": {
-                                  "type": "boolean"
-                                },
-                                "thinking": {
-                                  "properties": {
-                                    "efforts": {
-                                      "items": {
-                                        "type": "string"
-                                      },
-                                      "type": "array"
-                                    }
+                                "efforts": {
+                                  "items": {
+                                    "type": "string"
                                   },
-                                  "type": "object"
+                                  "type": "array"
                                 }
                               },
                               "type": "object"
                             }
-                          ],
+                          },
+                          "required": ["id", "provider"],
                           "type": "object"
                         },
                         "modelActivity": {
@@ -80833,43 +81530,35 @@
                           "type": "number"
                         },
                         "model": {
-                          "allOf": [
-                            {
-                              "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "provider": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["id", "provider"],
-                              "type": "object"
+                          "additionalProperties": false,
+                          "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                          "properties": {
+                            "id": {
+                              "type": "string"
                             },
-                            {
+                            "name": {
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "reasoning": {
+                              "type": "boolean"
+                            },
+                            "thinking": {
+                              "additionalProperties": false,
                               "properties": {
-                                "name": {
-                                  "type": "string"
-                                },
-                                "reasoning": {
-                                  "type": "boolean"
-                                },
-                                "thinking": {
-                                  "properties": {
-                                    "efforts": {
-                                      "items": {
-                                        "type": "string"
-                                      },
-                                      "type": "array"
-                                    }
+                                "efforts": {
+                                  "items": {
+                                    "type": "string"
                                   },
-                                  "type": "object"
+                                  "type": "array"
                                 }
                               },
                               "type": "object"
                             }
-                          ],
+                          },
+                          "required": ["id", "provider"],
                           "type": "object"
                         },
                         "modelActivity": {

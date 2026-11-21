@@ -10,6 +10,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
 - Opening the model picker no longer starts a saved session or blocks Send while it reads Auto-prewalk.
 - The Auto Prewalk button keeps keyboard focus while a mode change is pending.
+- Chat role discovery uses the host's agent environment. Role selection, model selection and session state replies omit provider headers before leaving the host.
+- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
 
 ### Breaking Changes
 - Removed host pools and shared project identities. New daemons use one controller and link protocol 14. Upgrade the controller first; it still accepts enrolled v13 daemons so you can upgrade them individually.
@@ -19,6 +21,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Added
 - Tap the mode icon next to the model picker to switch between **Build** and **Plan**. Approval restores the previous model and reasoning effort before implementation; requesting revisions stays in Plan. Switching back to Build also restores write access. As in OMP, shell commands and extensions are not sandboxed.
 - The composer model selector offers a session-only Auto Prewalk button beside Reasoning that cycles through Off, Suggest, and On. Suggest reports the native judge's decision; On arms recommended handoffs without changing the model that starts a task.
+- The composer model picker lists workspace chat roles and applies them with OMP's role selection behavior without changing role settings.
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
 - **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart.
 - Deploying a matched release can restore a missing `keylime-omp` on a standalone host.

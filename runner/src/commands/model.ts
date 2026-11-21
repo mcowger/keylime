@@ -4,23 +4,38 @@ import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-sessi
 import { CACHE_WARMING_MODES } from "@oh-my-pi/pi-coding-agent/session/cache-warmer";
 import { isSessionSettled } from "@oh-my-pi/pi-coding-agent/session/session-settle";
 import { cfgPrewalkAuto } from "@oh-my-pi/pi-coding-agent/session/settings";
+import { getKnownRoleIds, getRoleInfo, MODEL_ROLE_IDS } from "@oh-my-pi/pi-coding-agent/config/model-roles";
+import { resolveRoleModelCycle } from "@oh-my-pi/pi-coding-agent/session/model-controls";
 import { buildAvailableSlashCommands } from "@oh-my-pi/pi-coding-agent/slash-commands/available-commands";
 import { calculateTokensPerSecond } from "@oh-my-pi/pi-coding-agent/utils/token-rate";
-import { parseConfiguredThinkingLevel } from "@oh-my-pi/pi-tui/thinking";
+import { clampThinkingLevelToCeiling, parseConfiguredThinkingLevel, resolveThinkingLevelForModel } from "@oh-my-pi/pi-tui/thinking";
 import type {
   AutoPrewalkResult,
   AutoPrewalkSetArgs,
 } from "../../../lib/api-contracts/runner-lifecycle";
 import { activityFor } from "../activity";
 import { advisorReviewPending } from "../advisor";
+import { sessionThinkingCeiling } from "../thinking-ceiling";
 import type { CommandTable, FrameTable } from "./types";
+import type { SetChatRoleResult } from "../../../lib/api-contracts/runner-lifecycle";
+
+function wireModel(model: NonNullable<AgentSession["model"]>): SetChatRoleResult["model"] {
+  return {
+    id: model.id,
+    provider: model.provider,
+    name: model.name,
+    reasoning: model.reasoning,
+    thinking: model.thinking ? { efforts: [...model.thinking.efforts] } : undefined,
+  };
+}
 
 /** A live in-process snapshot, not a durable completion receipt. The settled flag includes pending
  * asynchronous work; clients should refresh it as the session changes. */
 export function sessionState(session: AgentSession) {
   const queued = session.getQueuedMessages();
+  const model = session.model;
   return {
-    model: session.model,
+    model: model ? wireModel(model) : undefined,
     thinkingLevel: session.thinkingLevel,
     modelActivity: activityFor(session),
     isStreaming: session.isStreaming,
@@ -117,6 +132,13 @@ function bool(op: string, value: unknown): boolean {
     throw new Error(`${op}: enabled must be a boolean`);
   return value;
 }
+function chatRoleIds(session: AgentSession): string[] {
+  const settings = session.settings;
+  return ["default", "smol", "slow", ...getKnownRoleIds(settings).filter((role) =>
+    !MODEL_ROLE_IDS.some((builtin) => builtin === role) && getRoleInfo(role, settings).section === "chat",
+  )];
+}
+
 
 export const modelCommands: CommandTable = {
   /** @apiCommand get_state */
@@ -130,11 +152,62 @@ export const modelCommands: CommandTable = {
     const model = await findModel(session, provider, modelId);
     if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
     await session.setModel(model);
-    return model;
+    return wireModel(model);
+  },
+  /** @apiCommand set_chat_role */
+  async set_chat_role({ session }, { role }) {
+    if (typeof role !== "string" || !role.trim() || !chatRoleIds(session).includes(role))
+      throw new Error("set_chat_role: invalid chat role");
+    await session.modelRegistry.awaitBackgroundRefresh();
+    const entry = session.getRoleModelCycle([role])?.models[0];
+    if (!entry) throw new Error(`set_chat_role: role is not available: ${role}`);
+    await session.applyRoleModel(entry);
+    const model = session.model;
+    if (!model) throw new Error("set_chat_role: selected model is unavailable");
+    return {
+      model: wireModel(model),
+      thinkingLevel: session.thinkingLevel ?? null,
+    } satisfies SetChatRoleResult;
   },
   /** @apiCommand cycle_model */
   async cycle_model({ session }) {
     return (await session.cycleModel()) ?? null;
+  },
+  /** @apiCommand get_chat_roles */
+  async get_chat_roles({ session }, { thinkingLevel, currentModelFallback, currentProvider, currentModelId }) {
+    const override = thinkingLevel === undefined ? undefined :
+      typeof thinkingLevel === "string" ? parseConfiguredThinkingLevel(thinkingLevel) : undefined;
+    if (thinkingLevel !== undefined && override === undefined)
+      throw new Error("get_chat_roles: invalid thinking level");
+    if (currentModelFallback !== undefined && typeof currentModelFallback !== "boolean")
+      throw new Error("get_chat_roles: currentModelFallback must be a boolean");
+    if ((currentProvider !== undefined || currentModelId !== undefined) &&
+        (typeof currentProvider !== "string" || !currentProvider.trim() || typeof currentModelId !== "string" || !currentModelId.trim()))
+      throw new Error("get_chat_roles: currentProvider and currentModelId must be non-empty strings together");
+    await session.modelRegistry.awaitBackgroundRefresh();
+    const settings = session.settings;
+    const roles = chatRoleIds(session);
+    const available = session.modelRegistry.getAvailable();
+    const current = currentModelFallback === false
+      ? available.find((model) => model.provider === currentProvider && model.id === currentModelId)
+      : session.model;
+    // A temporary runner's model is useful to resolve configured roles, but is
+    // not the current chat model and must not become the default fallback.
+    const cycle = resolveRoleModelCycle(settings, available, current ?? session.model, undefined, roles);
+    return { roles: roles.map((id) => {
+      const resolved = id === "default" && currentModelFallback === false && !current && !settings.getModelRole("default")
+        ? undefined : cycle?.models.find((entry) => entry.role === id);
+      const inherited = override ?? session.configuredThinkingLevel();
+      const selector = resolved?.explicitThinkingLevel ? resolved.thinkingLevel : inherited;
+      const ceiling = sessionThinkingCeiling(session);
+      const requested = selector ?? resolved?.model.thinking?.defaultLevel;
+      const effective = !resolved?.model ? undefined : requested === "auto" ? "auto" :
+        !ceiling && requested !== undefined && requested !== ThinkingLevel.Off && requested !== ThinkingLevel.Inherit ? undefined :
+        resolveThinkingLevelForModel(resolved.model, clampThinkingLevelToCeiling(resolved.model, requested, ceiling?.ceiling?.(resolved.model)));
+      return { id, provider: resolved?.model.provider ?? null, modelId: resolved?.model.id ?? null,
+        modelName: resolved?.model.name ?? null, thinkingLevel: resolved?.explicitThinkingLevel ? resolved.thinkingLevel ?? null : null,
+        effectiveThinkingLevel: effective ?? null };
+    }) };
   },
   /** @apiCommand get_available_models */
   async get_available_models({ session }) {

@@ -7,6 +7,9 @@ import type { TestContext } from "node:test";
 import type { DownMessage, OpenChannelRequest } from "./hosts/link-protocol.ts";
 import type { LinkDriver } from "./hosts/link-driver.test-helper.ts";
 import { sessionKey } from "./session-identity.ts";
+import * as chatRolesRoute from "../app/api/chat-roles/route.ts";
+import { Value } from "@sinclair/typebox/value";
+import { SetChatRoleResultSchema } from "./api-contracts/runner-lifecycle";
 
 type Launch = OpenChannelRequest["launch"];
 type Command = Record<string, unknown> & { type: string };
@@ -73,6 +76,10 @@ async function respond(message: DownMessage, link: LinkDriver = daemon) {
     reply = child.setModelFails
       ? { ok: false, error: "Model not found" }
       : { ok: true, data: { id: command.modelId, provider: command.provider } };
+  } else if (command.type === "set_chat_role") {
+    reply = { ok: true, data: { model: { id: "review-model", provider: "example", name: "Review model", reasoning: true, headers: { Authorization: "secret-header-sentinel" }, thinking: { efforts: ["high"], headers: { Authorization: "secret-header-sentinel" } } }, thinkingLevel: "high" } };
+  } else if (command.type === "get_chat_roles") {
+    reply = { ok: true, data: { roles: [{ id: "review", provider: "example", modelId: "review-model", modelName: "Review model", thinkingLevel: "high", effectiveThinkingLevel: "high" }] } };
   }
   await link.post({
     type: "stdout",
@@ -766,4 +773,45 @@ test("upload continuity: fresh-session route rejects upload authority instead of
     stdin.some((command) => JSON.stringify(command).includes(proof)),
     false,
   );
+});
+
+test("fresh sessions apply a role before an explicit thinking override and prompt", async (t) => {
+  useRegistry(t);
+  const response = await newRoute.POST(new Request("http://omp.test/api/agent/new", {
+    method: "POST",
+    body: JSON.stringify({ cwd: agentDir, type: "prompt", message: "hello", chatRole: "smol", thinkingLevel: "low" }),
+  }));
+  await jsonOf(response);
+  const selected = stdin.filter((command) => ["set_chat_role", "set_thinking_level", "prompt"].includes(command.type));
+  assert.deepEqual(selected.map(({ type }) => type), ["set_chat_role", "set_thinking_level", "prompt"]);
+  assert.equal(selected[0].role, "smol");
+  assert.equal(selected[1].level, "low");
+  assert.equal(Object.hasOwn(selected[2], "chatRole"), false);
+});
+
+test("fresh sessions reject invalid role initialization before spawning", async (t) => {
+  useRegistry(t);
+  const response = await newRoute.POST(new Request("http://omp.test/api/agent/new", {
+    method: "POST",
+    body: JSON.stringify({ cwd: agentDir, type: "ensure_session", chatRole: 123 }),
+  }));
+  assert.equal(response.status, 400);
+  assert.equal(launches(), 0);
+});
+
+test("reopening chat roles after a live role selection uses the live wrapper", async (t) => {
+  useRegistry(t);
+  const selected = await jsonOf(await post(SAVED_ID, { type: "set_chat_role", role: "review" }));
+  assert.ok(Value.Check(SetChatRoleResultSchema, selected.data));
+  assert.deepEqual(selected.data, { model: { id: "review-model", provider: "example", name: "Review model", reasoning: true, thinking: { efforts: ["high"] } }, thinkingLevel: "high" });
+  assert.equal(JSON.stringify(selected).includes("secret-header-sentinel"), false);
+  const session = getRpcSession(SAVED_ID, "local");
+  assert.ok(session);
+  assert.ok(session.isAlive());
+  const query = new URLSearchParams({ cwd: session.cwd, sessionId: SAVED_ID, currentProvider: "stale", currentModelId: "stale" });
+  const reopened = await jsonOf(await chatRolesRoute.GET(new Request(`http://omp.test/api/chat-roles?${query}`)));
+  assert.equal(reopened.roles[0].modelId, "review-model");
+  assert.deepEqual(stdin.filter((command) => command.type === "set_chat_role" || command.type === "get_chat_roles").map(({ type }) => type), ["set_chat_role", "get_chat_roles"]);
+  const discovery = stdin.find((command) => command.type === "get_chat_roles");
+  assert.equal(Object.hasOwn(discovery!, "currentProvider"), false);
 });

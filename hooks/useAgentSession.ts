@@ -44,6 +44,7 @@ import {
 } from "@/lib/model-activity";
 import { hasVisibleAssistantContent } from "@/lib/assistant-response";
 import type { ThinkingModelMeta } from "@/lib/thinking-levels";
+import type { SetChatRoleResult } from "@/lib/api-contracts/runner-lifecycle";
 import {
   HostOfflineError,
   TransportLostError,
@@ -766,12 +767,27 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, []);
   const [thinkingLevel, setThinkingLevel] =
     useState<ThinkingLevelOption>("auto");
+  const pendingRoleRef = useRef<{ id: string; previousModel: SelectedModel | null; previousThinkingLevel: ThinkingLevelOption; effortOverride?: string } | null>(null);
+  const roleSelectionSeqRef = useRef(0);
+  const roleSelectionInFlightRef = useRef<Promise<boolean> | null>(null);
+  const startupSelectionCommandRef = useRef<Promise<unknown> | null>(null);
+  const pendingSelectionCommandsRef = useRef(new Set<Promise<unknown>>());
+  const trackSelectionCommand = useCallback(<T,>(operation: Promise<T>): Promise<T> => {
+    pendingSelectionCommandsRef.current.add(operation);
+    void operation.then(
+      () => pendingSelectionCommandsRef.current.delete(operation),
+      () => pendingSelectionCommandsRef.current.delete(operation),
+    );
+    return operation;
+  }, []);
+  const [roleChangePending, setRoleChangePending] = useState(false);
   const [fastModeEnabled, setFastModeEnabled] = useState(false);
   const [planEnabled, setPlanEnabled] = useState(false);
   const [planProposal, setPlanProposal] = useState<Static<typeof PlanStateSchema>["proposal"]>(undefined);
   const [planCommandPending, setPlanCommandPending] = useState(false);
   const planRevisionRef = useRef(0);
   const newSessionPlanRef = useRef(false);
+  const startupPlanCommandRef = useRef<Promise<unknown> | null>(null);
   const [fastModeActive, setFastModeActive] = useState<boolean | undefined>(
     undefined,
   );
@@ -1734,6 +1750,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       authoritativeModelSeqRef.current += 1;
       setLiveModelMeta(model);
       if (!model) return true;
+      if (isNew && sessionIdRef.current && !pendingRoleRef.current)
+        setNewSessionModel({ provider: model.provider, modelId: model.modelId });
       setCurrentModelOverride((prev) =>
         prev &&
         (prev.provider !== model.provider || prev.modelId !== model.modelId)
@@ -1742,7 +1760,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       );
       return true;
     },
-    [],
+    [isNew],
   );
 
   // Lightweight live-state sync after composer commands. A command against an
@@ -2248,7 +2266,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           : undefined;
         if (firstPrompt) onStartupStage?.("startingOmp");
         const targetCwd = workspace?.cwd ?? newSessionCwd;
-        const selectedModel = initialModel;
+        const pendingRole = pendingRoleRef.current;
+        const selectedModel = pendingRole ? null : initialModel;
         if (selectedModel) setPendingModel(selectedModel);
         const toolNames = getToolNamesForPreset(toolPreset);
         const request = {
@@ -2263,7 +2282,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 modelId: selectedModel.modelId,
               }
             : {}),
-          ...(thinkingLevel !== "auto" ? { thinkingLevel } : {}),
+          ...(pendingRole ? { chatRole: pendingRole.id } : {}),
+          ...(pendingRole
+            ? pendingRole.effortOverride !== undefined
+              ? { thinkingLevel: pendingRole.effortOverride }
+              : {}
+            : thinkingLevel !== "auto" ? { thinkingLevel } : {}),
           ...(advisorEnabled ? { advisor: true } : {}),
         };
         const res = await fetch("/api/agent/new", {
@@ -2338,6 +2362,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             body.delivery === "unknown",
           );
         }
+        if (pendingRoleRef.current === pendingRole) pendingRoleRef.current = null;
         return realId;
       })();
 
@@ -5413,6 +5438,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         let queuedBehindShell = false;
         if (isNew) {
           const selectedModel = newSessionModel;
+          const selectedRole = pendingRoleRef.current;
+          const selectionSeq = roleSelectionSeqRef.current;
           if (!sessionIdRef.current) {
             onStartupStage?.(
               prepareNewWorkspace ? "buildingWorkspace" : "startingOmp",
@@ -5433,19 +5460,70 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             promoteNewSession(1, message);
             if (ownerGone ? onBackgroundSessionCreated : onSessionCreated)
               recoveryKey = sessionKey(sid, hostId);
-            if (selectedModel) {
+            const waitForSelections = async () => {
+              do {
+                if (roleSelectionInFlightRef.current) {
+                  const pendingSelection = roleSelectionSeqRef.current;
+                  const roleApplied = await roleSelectionInFlightRef.current;
+                  if (!roleApplied && roleSelectionSeqRef.current === pendingSelection)
+                    throw new Error("Failed to apply chat role");
+                }
+                if (pendingSelectionCommandsRef.current.size) {
+                  const selections = await Promise.all([...pendingSelectionCommandsRef.current]);
+                  if (selections.some((result) => result === false))
+                    throw new Error("Failed to apply session selection");
+                }
+              } while (roleSelectionInFlightRef.current || pendingSelectionCommandsRef.current.size);
+            };
+            await waitForSelections();
+            if (selectedModel && !selectedRole && selectionSeq === roleSelectionSeqRef.current) {
               setPendingModel(selectedModel);
               if (existingSid) {
-                await commandForHost(sid, {
+                const modelCommand = commandForHost(sid, {
                   type: "set_model",
                   provider: selectedModel.provider,
                   modelId: selectedModel.modelId,
                 });
+                startupSelectionCommandRef.current = modelCommand;
+                try {
+                  await modelCommand;
+                } finally {
+                  if (startupSelectionCommandRef.current === modelCommand)
+                    startupSelectionCommandRef.current = null;
+                }
               }
             }
+            await waitForSelections();
+            // A failed spawn may have retained an offline session whose role
+            // initialization was not acknowledged. Apply it before prompting.
+            const pendingRole = pendingRoleRef.current;
+            if (pendingRole) {
+              const roleCommand = (async () => {
+                await commandForHost(sid, { type: "set_chat_role", role: pendingRole.id });
+                if (pendingRole.effortOverride !== undefined)
+                  await commandForHost(sid, { type: "set_thinking_level", level: pendingRole.effortOverride });
+              })();
+              startupSelectionCommandRef.current = roleCommand;
+              try {
+                await roleCommand;
+                if (pendingRoleRef.current === pendingRole) pendingRoleRef.current = null;
+              } finally {
+                if (startupSelectionCommandRef.current === roleCommand)
+                  startupSelectionCommandRef.current = null;
+              }
+            }
+            // A selection can arrive while role initialization is in flight.
+            await waitForSelections();
             if (newSessionPlanRef.current) {
-              await commandForHost(sid, { type: "set_plan_mode", enabled: true });
-              newSessionPlanRef.current = false;
+              const planCommand = commandForHost(sid, { type: "set_plan_mode", enabled: true });
+              startupPlanCommandRef.current = planCommand;
+              try {
+                await planCommand;
+                newSessionPlanRef.current = false;
+              } finally {
+                if (startupPlanCommandRef.current === planCommand)
+                  startupPlanCommandRef.current = null;
+              }
               if (!ownerGone) void refreshLiveModelState(sid);
             }
             // A new workspace cannot be started until its first prompt. Apply a
@@ -5498,6 +5576,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 }
               }
             }
+            await waitForSelections();
             // No UI left to update on a dead instance — and attaching an
             // event stream now would leak it, since this instance's unmount
             // cleanup already ran.
@@ -5510,6 +5589,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
               if (promptRunIdRef.current === promptRunId)
                 runPreviousEntryIdsRef.current = previousEntryIds;
             }
+            // Selections can change while connecting or snapshotting the new session.
+            await waitForSelections();
             promptIssued = true;
             queuedBehindShell = isQueuedWhileShellRunning(
               await commandForHost(sid, {
@@ -6303,15 +6384,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, [commandForHost]);
 
-  const handleAutoPrewalkChange = useCallback(async (mode: AutoPrewalkMode) => {
+  const runAutoPrewalkChange = useCallback(async (mode: AutoPrewalkMode) => {
     const sid = sessionIdRef.current;
     if (!sid && isNew) {
       autoPrewalkChoiceRef.current = mode;
       setAutoPrewalk(mode);
       setAutoPrewalkError(null);
-      return;
+      return true;
     }
-    if (!sid || autoPrewalkWriteBusyRef.current) return;
+    if (!sid || autoPrewalkWriteBusyRef.current) return true;
     const request = ++autoPrewalkRequestRef.current;
     autoPrewalkWriteBusyRef.current = true;
     if (autoPrewalkChoiceRef.current) autoPrewalkChoiceRef.current = mode;
@@ -6332,6 +6413,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             effective: result.mode,
           }));
       }
+      return result.mode === mode;
     } catch (error) {
       // A lost response can leave the runtime changed. Re-read its mode.
       let effectiveMode: AutoPrewalkMode | null = null;
@@ -6345,6 +6427,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         setAutoPrewalk(effectiveMode);
         setAutoPrewalkError(`${translate("chatInput.autoPrewalkSetFailed")} ${error instanceof Error ? error.message : String(error)}`);
       }
+      return false;
     } finally {
       if (hookAliveRef.current && sessionIdRef.current === sid && autoPrewalkRequestRef.current === request) {
         autoPrewalkWriteBusyRef.current = false;
@@ -6353,11 +6436,22 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       }
     }
   }, [commandForHost, isNew]);
+  const handleAutoPrewalkChange = useCallback(
+    async (mode: AutoPrewalkMode) => { await trackSelectionCommand(runAutoPrewalkChange(mode)); },
+    [runAutoPrewalkChange, trackSelectionCommand],
+  );
 
 
-  const handleModelChange = useCallback(
+  const runModelChange = useCallback(
     async (provider: string, modelId: string) => {
       authoritativeModelSeqRef.current += 1;
+      const pendingRole = pendingRoleRef.current;
+      const roleInFlight = roleSelectionInFlightRef.current;
+      if (pendingRole)
+        setThinkingLevel(normalizeThinkingLevel(pendingRole.effortOverride ?? pendingRole.previousThinkingLevel));
+      pendingRoleRef.current = null;
+      roleSelectionSeqRef.current += 1;
+      setRoleChangePending(false);
       modelCommandPendingRef.current += 1;
       const choice = { provider, modelId };
       const pick = ++modelPickSeqRef.current;
@@ -6368,23 +6462,36 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           setPendingModel({ provider, modelId });
           const sid =
             sessionIdRef.current ?? (await ensuringNewSessionRef.current);
-          if (!sid) return;
+          if (!sid) return true;
+          if (roleInFlight) await roleInFlight;
+          if (startupSelectionCommandRef.current) await startupSelectionCommandRef.current;
+          if (startupPlanCommandRef.current) await startupPlanCommandRef.current;
+          if (!hookAliveRef.current || sessionIdRef.current !== sid) return false;
           await commandForHost(sid, { type: "set_model", provider, modelId });
           // A spawned new session reports /slow support per model.
           await refreshLiveModelState(sid);
-          return;
+          return true;
         }
         const sid = sessionIdRef.current;
-        if (!sid) return;
+        if (!sid) return false;
         // Show the pick at once: set_model may wait for omp to start.
         setCurrentModelOverride(choice);
+        if (roleInFlight) await roleInFlight;
+        if (startupSelectionCommandRef.current) await startupSelectionCommandRef.current;
+        if (startupPlanCommandRef.current) await startupPlanCommandRef.current;
+        if (!hookAliveRef.current || sessionIdRef.current !== sid) return false;
         await commandForHost(sid, { type: "set_model", provider, modelId });
         await refreshLiveModelState(sid);
+        return true;
       } catch (e) {
         // A cold-start failure (e.g. an unrestorable saved model, #277) must not
         // keep claiming the new model: drop the optimistic pick unless a newer
         // one replaced it, and explain why in a notice.
         setCurrentModelOverride((cur) => (cur === choice ? null : cur));
+        if (isNew && pick === modelPickSeqRef.current) {
+          setNewSessionModel(null);
+          setPendingModel(null);
+        }
         console.error("Failed to set model:", e);
         addNotice({
           type: "error",
@@ -6396,6 +6503,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         const sid = sessionIdRef.current;
         if (!isNew && sid && pick === modelPickSeqRef.current)
           await refreshLiveModelState(sid);
+        return false;
       } finally {
         setModelSwitchesPending((count) => count - 1);
         modelCommandPendingRef.current -= 1;
@@ -6403,7 +6511,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
     [isNew, setNewSessionModel, refreshLiveModelState, addNotice],
   );
-  const handlePlanModeChange = useCallback(async (enabled: boolean) => {
+  const handleModelChange = useCallback(
+    (provider: string, modelId: string) => trackSelectionCommand(runModelChange(provider, modelId)),
+    [runModelChange, trackSelectionCommand],
+  );
+  const runPlanModeChange = useCallback(async (enabled: boolean) => {
     if (!sessionIdRef.current && isNew) {
       newSessionPlanRef.current = enabled;
       setPlanEnabled(enabled);
@@ -6414,6 +6526,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setPlanCommandPending(true);
     planRevisionRef.current += 1;
     try {
+      if (startupSelectionCommandRef.current) await startupSelectionCommandRef.current;
+      if (startupPlanCommandRef.current) await startupPlanCommandRef.current;
+      if (roleSelectionInFlightRef.current) await roleSelectionInFlightRef.current;
+      if (!hookAliveRef.current || sessionIdRef.current !== sid) return;
       await commandForHost(sid, { type: "set_plan_mode", enabled });
       newSessionPlanRef.current = false;
       await ensureEventsConnected(sid);
@@ -6427,6 +6543,10 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setPlanCommandPending(false);
     }
   }, [isNew, planCommandPending, commandForHost, addNotice, ensureEventsConnected, refreshAgentSnapshots, refreshLiveModelState]);
+  const handlePlanModeChange = useCallback(
+    (enabled: boolean) => trackSelectionCommand(runPlanModeChange(enabled)),
+    [runPlanModeChange, trackSelectionCommand],
+  );
 
   const respondToPlanProposal = useCallback(async (id: string, approved: boolean, feedback?: string) => {
     const sid = sessionIdRef.current;
@@ -7250,16 +7370,25 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     }
   }, []);
 
-  const handleThinkingLevelChange = useCallback(
+  const runThinkingLevelChange = useCallback(
     async (level: ThinkingLevelOption) => {
       authoritativeModelSeqRef.current += 1;
+      const roleInFlight = roleSelectionInFlightRef.current;
+      if (pendingRoleRef.current)
+        pendingRoleRef.current = { ...pendingRoleRef.current, effortOverride: level };
+      roleSelectionSeqRef.current += 1;
+      setRoleChangePending(false);
       setThinkingLevel(level);
-      if (level === "auto") return; // "auto" leaves pi's current setting untouched
+      if (level === "auto" && !roleInFlight && !startupSelectionCommandRef.current && !startupPlanCommandRef.current) return; // ordinarily auto leaves pi's current setting untouched
       modelCommandPendingRef.current += 1;
       try {
         const sid =
           sessionIdRef.current ?? (await ensuringNewSessionRef.current);
         if (!sid) return;
+        if (roleInFlight) await roleInFlight;
+        if (startupSelectionCommandRef.current) await startupSelectionCommandRef.current;
+        if (startupPlanCommandRef.current) await startupPlanCommandRef.current;
+        if (!hookAliveRef.current || sessionIdRef.current !== sid) return;
         await commandForHost(sid, { type: "set_thinking_level", level });
         await refreshLiveModelState(sid);
       } catch (e) {
@@ -7270,7 +7399,79 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
     [refreshLiveModelState],
   );
+  const handleThinkingLevelChange = useCallback(
+    (level: ThinkingLevelOption) => trackSelectionCommand(runThinkingLevelChange(level)),
+    [runThinkingLevelChange, trackSelectionCommand],
+  );
 
+  const handleRoleChange = useCallback(
+    (role: string, preview: { provider: string | null; modelId: string | null; effectiveThinkingLevel: string | null }) => {
+      authoritativeModelSeqRef.current += 1;
+      const selection = ++roleSelectionSeqRef.current;
+      modelCommandPendingRef.current += 1;
+      setRoleChangePending(true);
+      const operation = (async () => {
+        let sid = sessionIdRef.current;
+        try {
+          if (!sid && !ensuringNewSessionRef.current && isNew) {
+            pendingRoleRef.current = {
+              id: role,
+              previousModel: pendingRoleRef.current ? pendingRoleRef.current.previousModel : newSessionModel,
+              previousThinkingLevel: pendingRoleRef.current?.effortOverride
+                ? normalizeThinkingLevel(pendingRoleRef.current.effortOverride)
+                : pendingRoleRef.current?.previousThinkingLevel ?? thinkingLevel,
+            };
+            if (preview.provider && preview.modelId) {
+              setNewSessionModel({ provider: preview.provider, modelId: preview.modelId });
+              setPendingModel({ provider: preview.provider, modelId: preview.modelId });
+            } else {
+              setNewSessionModel(pendingRoleRef.current.previousModel);
+              setPendingModel(pendingRoleRef.current.previousModel);
+            }
+            if (preview.effectiveThinkingLevel !== null)
+              setThinkingLevel(normalizeThinkingLevel(preview.effectiveThinkingLevel));
+            else setThinkingLevel(pendingRoleRef.current.previousThinkingLevel);
+            return true;
+          }
+          sid ??= await ensuringNewSessionRef.current;
+          if (startupSelectionCommandRef.current) await startupSelectionCommandRef.current;
+          if (startupPlanCommandRef.current) await startupPlanCommandRef.current;
+          if (!sid || !hookAliveRef.current || sessionIdRef.current !== sid || selection !== roleSelectionSeqRef.current)
+            return false;
+          const result = await commandForHost<SetChatRoleResult>(sid, {
+            type: "set_chat_role",
+            role,
+          });
+          if (!hookAliveRef.current || sessionIdRef.current !== sid || selection !== roleSelectionSeqRef.current)
+            return false;
+          pendingRoleRef.current = null;
+          const model = toThinkingModelMeta(result.model);
+          setCurrentModelOverride(null);
+          applyAuthoritativeModel(model);
+          setThinkingLevel(normalizeThinkingLevel(result.thinkingLevel ?? undefined));
+          await refreshLiveModelState(sid);
+          return hookAliveRef.current && sessionIdRef.current === sid && selection === roleSelectionSeqRef.current;
+        } catch (error) {
+          if (hookAliveRef.current && (!sid || sessionIdRef.current === sid) && selection === roleSelectionSeqRef.current)
+            addNotice({
+              type: "error",
+              message: error instanceof Error ? error.message : String(error),
+            });
+          return false;
+        } finally {
+          if (hookAliveRef.current && selection === roleSelectionSeqRef.current)
+            setRoleChangePending(false);
+          modelCommandPendingRef.current -= 1;
+        }
+      })();
+      roleSelectionInFlightRef.current = operation;
+      void operation.then(() => {
+        if (roleSelectionInFlightRef.current === operation) roleSelectionInFlightRef.current = null;
+      });
+      return operation;
+    },
+    [isNew, newSessionModel, thinkingLevel, applyAuthoritativeModel, refreshLiveModelState, addNotice, commandForHost],
+  );
   const handleToolPresetChange = useCallback(
     async (preset: ToolPreset) => {
       setToolPresetState(preset);
@@ -7915,6 +8116,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     newSessionModel,
     toolPreset,
     thinkingLevel,
+    pendingRoleAutoThinking: pendingRoleRef.current !== null && thinkingLevel === "auto",
     fastModeEnabled,
     planEnabled,
     planProposal,
@@ -7982,6 +8184,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleModelChange,
     handlePlanModeChange,
     respondToPlanProposal,
+    handleRoleChange,
+    roleChangePending,
     handleFastModeChange,
     handleSlowModeChange,
     handleAutoRetryChange,

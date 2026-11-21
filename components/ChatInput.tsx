@@ -334,6 +334,11 @@ interface Props {
   autoPrewalkIsNew?: boolean;
   onRefreshAutoPrewalk?: () => void;
   onAutoPrewalkChange?: (mode: AutoPrewalkMode) => void;
+  onRoleChange?: (
+    role: string,
+    preview: { provider: string | null; modelId: string | null; effectiveThinkingLevel: string | null },
+  ) => Promise<boolean>;
+  roleChangePending?: boolean;
   fastModeEnabled?: boolean;
   fastModeActive?: boolean;
   /** omp's structured provider usage-limit state, shown as a warning chip. */
@@ -344,6 +349,7 @@ interface Props {
   isCompacting?: boolean;
   compactResult?: CompactResultInfo | null;
   thinkingLevel?: string;
+  roleThinkingLevel?: string;
   onThinkingLevelChange?: (level: string) => void;
   availableThinkingLevels?: string[] | null;
   thinkingLevelMap?: Record<string, string | null> | null;
@@ -397,6 +403,7 @@ interface Props {
   draftKey?: string;
   /** Owning host for file uploads and the @ file index (this machine when absent). */
   uploadHostId?: string;
+  roleSessionId?: string | null;
   /** Backend-confirmed ownership relocation, distinct from navigating to a draft. */
   draftIdentityMove?: { from: string; to: string; sourceDraft?: ChatDraft };
   /** Session working directory — enables the @ file autocomplete menu */
@@ -540,6 +547,8 @@ export const ChatInput = memo(
       autoPrewalkIsNew,
       onRefreshAutoPrewalk,
       onAutoPrewalkChange,
+      onRoleChange,
+      roleChangePending = false,
       fastModeEnabled,
       fastModeActive,
       usageLimit,
@@ -548,6 +557,7 @@ export const ChatInput = memo(
       onAbortCompaction,
       isCompacting,
       compactResult,
+      roleThinkingLevel,
       thinkingLevel,
       onThinkingLevelChange,
       availableThinkingLevels,
@@ -578,6 +588,7 @@ export const ChatInput = memo(
       modelCapacity,
       generationSpeed,
       onRemoveQueuedMessage,
+      roleSessionId,
       onPromoteQueuedToSteer,
       draftKey = "new:unassigned",
       uploadHostId = LOCAL_HOST_ID,
@@ -5283,8 +5294,13 @@ export const ChatInput = memo(
                           modelsRefreshing={modelsRefreshing}
                           modelError={modelError}
                           onRefreshModels={onRefreshModels}
-                          selectionDisabled={isStreaming}
+                          selectionDisabled={isStreaming || roleChangePending}
                           isMobile={isMobile}
+                          roleHostId={uploadHostId}
+                          roleCwd={cwd}
+                          roleSessionId={roleSessionId}
+                          roleThinkingLevel={roleThinkingLevel}
+                          onSelectRole={onRoleChange}
                           onSelectModel={(provider, modelId) => {
                             setModelDropdownOpen(false);
                             if (
@@ -5302,7 +5318,7 @@ export const ChatInput = memo(
                             levels={thinkingLevelOptions}
                             value={thinkingLevel ?? "auto"}
                             labels={thinkingLevelMap}
-                            disabled={isStreaming}
+                            disabled={isStreaming || roleChangePending}
                             onChange={onThinkingLevelChange}
                             leading={onAutoPrewalkChange && (
                               <div className="effort-prewalk">

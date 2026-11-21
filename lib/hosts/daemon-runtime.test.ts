@@ -11,6 +11,8 @@ import {
 import { join } from "node:path";
 import * as os from "node:os";
 import { fakeRunnerSocket } from "../../tests/fake-runner-socket.ts";
+import { Value } from "@sinclair/typebox/value";
+import { ChatRolesSchema } from "../api-contracts/configuration-models";
 import {
   encodeBlobFrame,
   encodeLine,
@@ -38,16 +40,28 @@ fs.appendFileSync(${JSON.stringify(spawns)}, process.pid + "\\n");
 fs.appendFileSync(${JSON.stringify(envs)}, JSON.stringify({ localBroker: process.env.OMP_AUTH_BROKER_URL === "https://host-local.example" && process.env.OMP_AUTH_BROKER_TOKEN === "host-local-test-token",
   localAuth: process.env.OPENAI_API_KEY === "host-local-test-key",
   leaked: JSON.stringify([process.env, process.argv]).includes(${JSON.stringify(LINK_TOKEN)}) }) + "\\n");
-const file = process.argv[process.argv.indexOf("--resume") + 1];
-const id = JSON.parse(fs.readFileSync(file, "utf8").split("\\n")[0]).id;
-${fakeRunnerSocket}
-const emit = frame => rpcSocket.write(JSON.stringify(frame) + "\\n");
-require("node:readline").createInterface({input:rpcSocket}).on("line", line => {
-  const command = JSON.parse(line);
-  if (command.t === "cmd") emit({t:"res",id:command.id,ok:true,data:{}});
-  if (command.t === "cmd" && command.op === "prompt") emit({t:"event",event:{type:"agent_start"}});
-});
-setImmediate(() => emit({t:"hello",proto:1,pid:process.pid,sessionId:id,sessionFile:file,cwd:process.cwd()}));
+if (!process.argv.includes("--resume")) {
+  const emit = frame => console.log(JSON.stringify(frame));
+  require("node:readline").createInterface({input:process.stdin}).on("line", line => {
+    const command = JSON.parse(line);
+    if (command.t === "cmd" && command.op === "get_chat_roles") {
+      const available = process.env.OPENAI_API_KEY === "host-local-test-key";
+      emit({t:"res",id:command.id,ok:true,data:{roles:[{id:"default",provider:available ? "host-provider" : null,modelId:available ? "host-model" : null,modelName:available ? "Host model" : null,thinkingLevel:null,effectiveThinkingLevel:null}]}});
+    }
+  });
+  setImmediate(() => emit({t:"hello",proto:1,pid:process.pid,cwd:process.cwd()}));
+} else {
+  const file = process.argv[process.argv.indexOf("--resume") + 1];
+  const id = JSON.parse(fs.readFileSync(file, "utf8").split("\\n")[0]).id;
+  ${fakeRunnerSocket}
+  const emit = frame => rpcSocket.write(JSON.stringify(frame) + "\\n");
+  require("node:readline").createInterface({input:rpcSocket}).on("line", line => {
+    const command = JSON.parse(line);
+    if (command.t === "cmd") emit({t:"res",id:command.id,ok:true,data:{}});
+    if (command.t === "cmd" && command.op === "prompt") emit({t:"event",event:{type:"agent_start"}});
+  });
+  setImmediate(() => emit({t:"hello",proto:1,pid:process.pid,sessionId:id,sessionFile:file,cwd:process.cwd()}));
+}
 `;
 // Rewriting the binary changes its fingerprint, so the daemon probes the new version.
 function writeFakeOmp(version: string) {
@@ -230,6 +244,29 @@ function configureHostAuth(t: TestContext): void {
 }
 
 const hostAuth = { localBroker: true, localAuth: true, leaked: false };
+
+test("workspace role discovery uses the daemon's agent environment", async (t) => {
+  configureHostAuth(t);
+  const previous = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "inherited-key";
+  t.after(() => {
+    if (previous === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous;
+  });
+  const a = hub(t);
+  const daemon = runHostDaemon({ allowHttp: false, url: a.url, token: LINK_TOKEN });
+  t.after(() => daemon.stop());
+  await until(() => a.hellos.length === 1);
+  a.send({ type: "req", id: "roles", op: "chatRolesList", args: { cwd: scratch } });
+  await until(() => a.result("roles"));
+  const result = a.result("roles");
+  assert.equal(result.ok, true);
+  assert.ok(Value.Check(ChatRolesSchema, result.result));
+  assert.deepEqual(result.result.roles, [{
+    id: "default", provider: "host-provider", modelId: "host-model", modelName: "Host model",
+    thinkingLevel: null, effectiveThinkingLevel: null,
+  }]);
+});
 
 test("legacy credential fields on an open do not override host-local auth or gate the runner version", async (t) => {
   writeFakeOmp("15.13.0");

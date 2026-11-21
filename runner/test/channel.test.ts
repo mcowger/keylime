@@ -10,6 +10,8 @@ import {
   SessionManager,
   type SessionPersistenceNotice,
 } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { Value } from "@sinclair/typebox/value";
+import { WebSessionModelSchema } from "../../lib/api-contracts/domain";
 import { HostChannel } from "../src/channel";
 import {
   createTestSession,
@@ -73,6 +75,30 @@ describe("keylime channel", () => {
         isStreaming: false,
       },
     });
+  });
+
+  it("keeps provider headers out of state and model selection replies", async () => {
+    host = await startHost();
+    test = await createTestSession();
+    await host.connected;
+    Object.assign(test.mock, {
+      headers: { Authorization: "state-secret-sentinel" },
+      thinking: { efforts: ["high"], headers: { Authorization: "nested-secret-sentinel" } },
+    });
+    spyOn(test.session, "getAvailableModels").mockReturnValue([test.mock]);
+
+    const state = await host.command("get_state");
+    expect(state.ok).toBe(true);
+    expect(state.data).toMatchObject({ sessionId: test.session.sessionId, model: { provider: "mock", id: "mock-model", thinking: { efforts: ["high"] } } });
+    expect(JSON.stringify(state)).not.toContain("secret-sentinel");
+    if (!state.data || typeof state.data !== "object" || !("model" in state.data)) throw new Error("Missing state model");
+    expect(Value.Check(WebSessionModelSchema, state.data.model)).toBe(true);
+
+    const selected = await host.command("set_model", { provider: "mock", modelId: "mock-model" });
+    expect(selected.ok).toBe(true);
+    expect(selected.data).toMatchObject({ provider: "mock", id: "mock-model", thinking: { efforts: ["high"] } });
+    expect(JSON.stringify(selected)).not.toContain("secret-sentinel");
+    expect(Value.Check(WebSessionModelSchema, selected.data)).toBe(true);
   });
 
   it("rejects unknown commands and unknown models", async () => {

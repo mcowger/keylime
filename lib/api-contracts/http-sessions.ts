@@ -622,6 +622,7 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
             projectId: Type.Optional(str()),
             provider: Type.Optional(str()),
             modelId: Type.Optional(str()),
+            chatRole: Type.Optional(str()),
             toolNames: Type.Optional(Type.Array(str())),
             thinkingLevel: Type.Optional(str()),
             advisor: Type.Optional(Type.Boolean()),

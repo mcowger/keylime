@@ -106,6 +106,9 @@
         "BrowserReply_get_btw_history": {
           "$ref": "#/components/messages/BrowserReply_get_btw_history"
         },
+        "BrowserReply_get_chat_roles": {
+          "$ref": "#/components/messages/BrowserReply_get_chat_roles"
+        },
         "BrowserReply_get_client_message_status": {
           "$ref": "#/components/messages/BrowserReply_get_client_message_status"
         },
@@ -198,6 +201,9 @@
         },
         "BrowserReply_set_auto_retry": {
           "$ref": "#/components/messages/BrowserReply_set_auto_retry"
+        },
+        "BrowserReply_set_chat_role": {
+          "$ref": "#/components/messages/BrowserReply_set_chat_role"
         },
         "BrowserReply_set_fast_mode": {
           "$ref": "#/components/messages/BrowserReply_set_fast_mode"
@@ -322,6 +328,9 @@
         "BrowserRequest_get_btw_history": {
           "$ref": "#/components/messages/BrowserRequest_get_btw_history"
         },
+        "BrowserRequest_get_chat_roles": {
+          "$ref": "#/components/messages/BrowserRequest_get_chat_roles"
+        },
         "BrowserRequest_get_client_message_status": {
           "$ref": "#/components/messages/BrowserRequest_get_client_message_status"
         },
@@ -414,6 +423,9 @@
         },
         "BrowserRequest_set_auto_retry": {
           "$ref": "#/components/messages/BrowserRequest_set_auto_retry"
+        },
+        "BrowserRequest_set_chat_role": {
+          "$ref": "#/components/messages/BrowserRequest_set_chat_role"
         },
         "BrowserRequest_set_fast_mode": {
           "$ref": "#/components/messages/BrowserRequest_set_fast_mode"
@@ -855,6 +867,18 @@
         },
         "title": "BrowserReply_get_btw_history"
       },
+      "BrowserReply_get_chat_roles": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "name": "BrowserReply_get_chat_roles",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserReply_get_chat_roles"
+        },
+        "title": "BrowserReply_get_chat_roles"
+      },
       "BrowserReply_get_client_message_status": {
         "contentType": "application/json",
         "correlationId": {
@@ -1226,6 +1250,18 @@
           "$ref": "#/components/schemas/BrowserReply_set_auto_retry"
         },
         "title": "BrowserReply_set_auto_retry"
+      },
+      "BrowserReply_set_chat_role": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "name": "BrowserReply_set_chat_role",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserReply_set_chat_role"
+        },
+        "title": "BrowserReply_set_chat_role"
       },
       "BrowserReply_set_fast_mode": {
         "contentType": "application/json",
@@ -1719,6 +1755,18 @@
         },
         "title": "BrowserRequest_get_btw_history"
       },
+      "BrowserRequest_get_chat_roles": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.",
+        "name": "BrowserRequest_get_chat_roles",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserRequest_get_chat_roles"
+        },
+        "title": "BrowserRequest_get_chat_roles"
+      },
       "BrowserRequest_get_client_message_status": {
         "contentType": "application/json",
         "correlationId": {
@@ -1844,7 +1892,7 @@
         "correlationId": {
           "location": "$message.payload#/rid"
         },
-        "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
+        "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
         "name": "BrowserRequest_get_state",
         "payload": {
           "$ref": "#/components/schemas/BrowserRequest_get_state"
@@ -2091,6 +2139,18 @@
         },
         "title": "BrowserRequest_set_auto_retry"
       },
+      "BrowserRequest_set_chat_role": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "Usage: Apply a configured chat role to the live session.\nInputs: Supply a known chat role ID.\nInvariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.\nEffects: Applies OMP's session role marker, model and explicit role thinking without changing settings.\nRecovery: Read session state after an uncertain response before applying again.\n\nBrowser: Apply a native chat role; return only the browser-visible model fields and effective thinking level. Where the native operation returns undefined, the browser wrapper returns null.",
+        "name": "BrowserRequest_set_chat_role",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserRequest_set_chat_role"
+        },
+        "title": "BrowserRequest_set_chat_role"
+      },
       "BrowserRequest_set_fast_mode": {
         "contentType": "application/json",
         "correlationId": {
@@ -2156,7 +2216,7 @@
         "correlationId": {
           "location": "$message.payload#/rid"
         },
-        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
         "name": "BrowserRequest_set_model",
         "payload": {
           "$ref": "#/components/schemas/BrowserRequest_set_model"
@@ -2645,6 +2705,42 @@
                 ],
                 "description": "Usage: Override automatic prewalk for this live session.\nInputs: mode is off, suggest or on.\nInvariants: Native session state or plan mode can suppress classification; a native judge is required. The override is lost when the runner exits.\nEffects: Changes only the live session setting; never writes native configuration or selects a model.\nRecovery: Read the session mode after an uncertain response.",
                 "title": "AgentCommand_set_auto_prewalk",
+                "type": "object"
+              },
+              {
+                "allOf": [
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "get_chat_roles",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "currentModelFallback": {
+                        "type": "boolean"
+                      },
+                      "currentModelId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "currentProvider": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "thinkingLevel": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ],
+                "description": "Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.",
+                "title": "AgentCommand_get_chat_roles",
                 "type": "object"
               },
               {
@@ -4207,7 +4303,7 @@
                     "type": "object"
                   }
                 ],
-                "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
+                "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
                 "title": "AgentCommand_get_state",
                 "type": "object"
               },
@@ -4236,8 +4332,35 @@
                     "type": "object"
                   }
                 ],
-                "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+                "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
                 "title": "AgentCommand_set_model",
+                "type": "object"
+              },
+              {
+                "allOf": [
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "set_chat_role",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "role": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": ["role"],
+                    "type": "object"
+                  }
+                ],
+                "description": "Usage: Apply a configured chat role to the live session.\nInputs: Supply a known chat role ID.\nInvariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.\nEffects: Applies OMP's session role marker, model and explicit role thinking without changing settings.\nRecovery: Read session state after an uncertain response before applying again.\n\nBrowser: Apply a native chat role; return only the browser-visible model fields and effective thinking level. Where the native operation returns undefined, the browser wrapper returns null.",
+                "title": "AgentCommand_set_chat_role",
                 "type": "object"
               },
               {
@@ -45224,6 +45347,84 @@
                         "type": "object"
                       },
                       {
+                        "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+                        "properties": {
+                          "roles": {
+                            "items": {
+                              "properties": {
+                                "effectiveThinkingLevel": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+                                },
+                                "id": {
+                                  "type": "string"
+                                },
+                                "modelId": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "modelName": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "provider": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "thinkingLevel": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "description": "Explicit role selector to apply; null preserves the chat's current selector."
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "provider",
+                                "modelId",
+                                "modelName",
+                                "thinkingLevel",
+                                "effectiveThinkingLevel"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": ["roles"],
+                        "type": "object"
+                      },
+                      {
                         "properties": {
                           "todoPhases": {
                             "items": {
@@ -54363,43 +54564,35 @@
                             "type": "number"
                           },
                           "model": {
-                            "allOf": [
-                              {
-                                "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                                "properties": {
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "provider": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": ["id", "provider"],
-                                "type": "object"
+                            "additionalProperties": false,
+                            "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                            "properties": {
+                              "id": {
+                                "type": "string"
                               },
-                              {
+                              "name": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              },
+                              "reasoning": {
+                                "type": "boolean"
+                              },
+                              "thinking": {
+                                "additionalProperties": false,
                                 "properties": {
-                                  "name": {
-                                    "type": "string"
-                                  },
-                                  "reasoning": {
-                                    "type": "boolean"
-                                  },
-                                  "thinking": {
-                                    "properties": {
-                                      "efforts": {
-                                        "items": {
-                                          "type": "string"
-                                        },
-                                        "type": "array"
-                                      }
+                                  "efforts": {
+                                    "items": {
+                                      "type": "string"
                                     },
-                                    "type": "object"
+                                    "type": "array"
                                   }
                                 },
                                 "type": "object"
                               }
-                            ],
+                            },
+                            "required": ["id", "provider"],
                             "type": "object"
                           },
                           "modelActivity": {
@@ -54698,6 +54891,56 @@
                           }
                         },
                         "required": ["id", "provider"],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "description": "Selected role model and effective thinking level; excludes provider credentials and headers.",
+                        "properties": {
+                          "model": {
+                            "additionalProperties": false,
+                            "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              },
+                              "reasoning": {
+                                "type": "boolean"
+                              },
+                              "thinking": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "efforts": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  }
+                                },
+                                "type": "object"
+                              }
+                            },
+                            "required": ["id", "provider"],
+                            "type": "object"
+                          },
+                          "thinkingLevel": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["model", "thinkingLevel"],
                         "type": "object"
                       },
                       {
@@ -58722,6 +58965,169 @@
           "data"
         ],
         "title": "BrowserReply_get_btw_history",
+        "type": "object"
+      },
+      "BrowserReply_get_chat_roles": {
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "properties": {
+                  "data": {
+                    "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+                    "properties": {
+                      "roles": {
+                        "items": {
+                          "properties": {
+                            "effectiveThinkingLevel": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "modelId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "modelName": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "provider": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "thinkingLevel": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Explicit role selector to apply; null preserves the chat's current selector."
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "provider",
+                            "modelId",
+                            "modelName",
+                            "thinkingLevel",
+                            "effectiveThinkingLevel"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": ["roles"],
+                    "type": "object"
+                  },
+                  "success": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["success", "data"],
+                "type": "object"
+              },
+              {
+                "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "const": "refused",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unknown",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "hostOffline": {
+                    "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["error"],
+                "title": "ApiError",
+                "type": "object"
+              }
+            ]
+          },
+          "deduped": {
+            "type": "boolean"
+          },
+          "recvAt": {
+            "type": "number"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "type": "number"
+          },
+          "type": {
+            "const": "reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "rid",
+          "status",
+          "recvAt",
+          "at",
+          "deduped",
+          "data"
+        ],
+        "title": "BrowserReply_get_chat_roles",
         "type": "object"
       },
       "BrowserReply_get_client_message_status": {
@@ -63762,43 +64168,35 @@
                         "type": "number"
                       },
                       "model": {
-                        "allOf": [
-                          {
-                            "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "provider": {
-                                "type": "string"
-                              }
-                            },
-                            "required": ["id", "provider"],
-                            "type": "object"
+                        "additionalProperties": false,
+                        "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                        "properties": {
+                          "id": {
+                            "type": "string"
                           },
-                          {
+                          "name": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "reasoning": {
+                            "type": "boolean"
+                          },
+                          "thinking": {
+                            "additionalProperties": false,
                             "properties": {
-                              "name": {
-                                "type": "string"
-                              },
-                              "reasoning": {
-                                "type": "boolean"
-                              },
-                              "thinking": {
-                                "properties": {
-                                  "efforts": {
-                                    "items": {
-                                      "type": "string"
-                                    },
-                                    "type": "array"
-                                  }
+                              "efforts": {
+                                "items": {
+                                  "type": "string"
                                 },
-                                "type": "object"
+                                "type": "array"
                               }
                             },
                             "type": "object"
                           }
-                        ],
+                        },
+                        "required": ["id", "provider"],
                         "type": "object"
                       },
                       "modelActivity": {
@@ -70391,6 +70789,141 @@
         "title": "BrowserReply_set_auto_retry",
         "type": "object"
       },
+      "BrowserReply_set_chat_role": {
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "properties": {
+                  "data": {
+                    "additionalProperties": false,
+                    "description": "Selected role model and effective thinking level; excludes provider credentials and headers.",
+                    "properties": {
+                      "model": {
+                        "additionalProperties": false,
+                        "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "reasoning": {
+                            "type": "boolean"
+                          },
+                          "thinking": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "efforts": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "required": ["id", "provider"],
+                        "type": "object"
+                      },
+                      "thinkingLevel": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["model", "thinkingLevel"],
+                    "type": "object"
+                  },
+                  "success": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["success", "data"],
+                "type": "object"
+              },
+              {
+                "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "const": "refused",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unknown",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "hostOffline": {
+                    "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["error"],
+                "title": "ApiError",
+                "type": "object"
+              }
+            ]
+          },
+          "deduped": {
+            "type": "boolean"
+          },
+          "recvAt": {
+            "type": "number"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "type": "number"
+          },
+          "type": {
+            "const": "reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "rid",
+          "status",
+          "recvAt",
+          "at",
+          "deduped",
+          "data"
+        ],
+        "title": "BrowserReply_set_chat_role",
+        "type": "object"
+      },
       "BrowserReply_set_fast_mode": {
         "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
         "properties": {
@@ -73508,6 +74041,65 @@
         "title": "BrowserRequest_get_btw_history",
         "type": "object"
       },
+      "BrowserRequest_get_chat_roles": {
+        "description": "Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.",
+        "properties": {
+          "advisor": {
+            "type": "boolean"
+          },
+          "command": {
+            "allOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "get_chat_roles",
+                    "type": "string"
+                  }
+                },
+                "required": ["type"],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "currentModelFallback": {
+                    "type": "boolean"
+                  },
+                  "currentModelId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "currentProvider": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "thinkingLevel": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            ],
+            "type": "object"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          },
+          "type": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "rid", "session", "command"],
+        "title": "BrowserRequest_get_chat_roles",
+        "type": "object"
+      },
       "BrowserRequest_get_client_message_status": {
         "description": "Usage: Recover correlation for one to 32 unique client message IDs.\nInputs: Supply unique nonempty IDs up to 128 characters each.\nInvariants: Status reflects this session's in-flight and journaled input; bounded responses can omit oversized native messages.\nEffects: Reads correlation state without submitting input.\nRecovery: Use session history when messages are omitted; do not treat an uncertain transport as proof of non-admission.\n\nBrowser: Reconciliation does not start a child; a missing child or uncertain host fails instead of guessing acceptance.",
         "properties": {
@@ -74013,7 +74605,7 @@
         "type": "object"
       },
       "BrowserRequest_get_state": {
-        "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
+        "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
         "properties": {
           "advisor": {
             "type": "boolean"
@@ -75251,6 +75843,56 @@
         "title": "BrowserRequest_set_auto_retry",
         "type": "object"
       },
+      "BrowserRequest_set_chat_role": {
+        "description": "Usage: Apply a configured chat role to the live session.\nInputs: Supply a known chat role ID.\nInvariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.\nEffects: Applies OMP's session role marker, model and explicit role thinking without changing settings.\nRecovery: Read session state after an uncertain response before applying again.\n\nBrowser: Apply a native chat role; return only the browser-visible model fields and effective thinking level. Where the native operation returns undefined, the browser wrapper returns null.",
+        "properties": {
+          "advisor": {
+            "type": "boolean"
+          },
+          "command": {
+            "allOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "set_chat_role",
+                    "type": "string"
+                  }
+                },
+                "required": ["type"],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "role": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": ["role"],
+                "type": "object"
+              }
+            ],
+            "type": "object"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          },
+          "type": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "rid", "session", "command"],
+        "title": "BrowserRequest_set_chat_role",
+        "type": "object"
+      },
       "BrowserRequest_set_fast_mode": {
         "description": "Usage: Set fast mode.\nInputs: Supply enabled.\nInvariants: Enabled and active are distinct: the current model determines whether fast mode is active.\nEffects: Changes the session fast-mode setting.\nRecovery: Read state after uncertainty before reapplying.\n\nBrowser: Enable or disable fast mode; the wrapper reports effective and active state. Where the native operation returns undefined, the browser wrapper returns null.",
         "properties": {
@@ -75579,7 +76221,7 @@
         "type": "object"
       },
       "BrowserRequest_set_model": {
-        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+        "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
         "properties": {
           "advisor": {
             "type": "boolean"
@@ -77372,6 +78014,29 @@
       },
       "summary": "get_btw_history"
     },
+    "operation_get_chat_roles": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/BrowserRequest_get_chat_roles"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/BrowserReply_get_chat_roles"
+          }
+        ]
+      },
+      "summary": "get_chat_roles"
+    },
     "operation_get_client_message_status": {
       "action": "receive",
       "channel": {
@@ -77607,7 +78272,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
+      "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/BrowserRequest_get_state"
@@ -78085,6 +78750,29 @@
       },
       "summary": "set_auto_retry"
     },
+    "operation_set_chat_role": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Apply a configured chat role to the live session.\nInputs: Supply a known chat role ID.\nInvariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.\nEffects: Applies OMP's session role marker, model and explicit role thinking without changing settings.\nRecovery: Read session state after an uncertain response before applying again.\n\nBrowser: Apply a native chat role; return only the browser-visible model fields and effective thinking level. Where the native operation returns undefined, the browser wrapper returns null.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/BrowserRequest_set_chat_role"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/BrowserReply_set_chat_role"
+          }
+        ]
+      },
+      "summary": "set_chat_role"
+    },
     "operation_set_fast_mode": {
       "action": "receive",
       "channel": {
@@ -78205,7 +78893,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+      "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/BrowserRequest_set_model"

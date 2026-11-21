@@ -2,6 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { OperationContract } from "./operations";
 import {
   HostModelsSchema,
+  ChatRolesSchema,
   HostSettingsPatchSchema,
   HostSettingsSchema,
 } from "./configuration-models";
@@ -216,6 +217,12 @@ export const hostControlOperations: readonly OperationContract[] = [
       "Usage: Load the target daemon's model choices.\nInputs: Set refresh to rediscover models.\nInvariants: Uses the daemon's OMP settings and credentials; returns no credential values.\nEffects: Reads the host cache or queries the host's OMP runner.\nRecovery: Retry on the same host, or inspect that host's OMP configuration.",
     args: Type.Object({ refresh: Type.Optional(Type.Boolean()) }),
     result: HostModelsSchema,
+  },
+  {
+    name: "chatRolesList",
+    description: "Usage: Resolve chat roles for a workspace on the selected daemon.\nInputs: Supply an absolute workspace cwd and optionally the current composer thinking selector and current provider/model ID pair.\nInvariants: Uses the workspace's native OMP settings and registry without returning secrets; the model pair supplies the temporary runner's default-role fallback.\nEffects: Starts a temporary runner on the daemon.\nRecovery: Correct the path or configuration and retry on the same host.",
+    args: Type.Object({ cwd: Type.String(), thinkingLevel: Type.Optional(Type.String()), currentProvider: Type.Optional(Type.String({ minLength: 1 })), currentModelId: Type.Optional(Type.String({ minLength: 1 })) }),
+    result: ChatRolesSchema,
   },
   {
     name: "usageReport",

@@ -11581,6 +11581,101 @@ test("a held file snapshot cannot roll back a newer RPC model choice", async () 
   assert.equal(w.latest.thinkingLevel, "high");
 });
 
+test("role selection sends the native role and displays its resolved state", async () => {
+  resetWorld();
+  primeSession("s1", [userMsg("u0", "q")]);
+  world.agents.set("s1", {
+    running: true,
+    state: { model: { provider: "test", id: "chosen" }, thinkingLevel: "high" },
+  });
+  const w = await mountSession("s1");
+  const held = Promise.withResolvers<HeldResponse>();
+  world.holds.push({
+    match: (method, _url, body) => method === "POST" && body?.type === "set_chat_role",
+    produce: () => held.promise,
+  });
+  let selection!: Promise<boolean>;
+  await act(async () => {
+    selection = w.latest.handleRoleChange("smol", { provider: "preview", modelId: "old", effectiveThinkingLevel: "low" });
+    await sleep(20);
+  });
+  assert.equal(w.latest.roleChangePending, true);
+  await act(async () => {
+    held.resolve({ value: { success: true, data: { model: { provider: "test", id: "chosen" }, thinkingLevel: "high" } } });
+    assert.equal(await selection, true);
+  });
+  const commands = world.calls.filter((call) => ["set_chat_role", "set_model", "set_thinking_level"].includes(String(call.body?.type)));
+  assert.deepEqual(commands.map((call) => call.body), [{ type: "set_chat_role", role: "smol" }]);
+  assert.equal(w.latest.displayModel?.modelId, "chosen");
+  assert.equal(w.latest.thinkingLevel, "high");
+  assert.equal(w.latest.roleChangePending, false);
+});
+
+test("a failed native role command retains the previous selection and reports the error", async () => {
+  resetWorld();
+  primeSession("s1", [userMsg("u0", "q")]);
+  Object.assign(world.sessions.get("s1"), { model: { provider: "test", modelId: "old" }, thinkingLevel: "low" });
+  const w = await mountSession("s1");
+  world.holds.push({
+    match: (method, _url, body) => method === "POST" && body?.type === "set_chat_role",
+    produce: async () => ({ status: 500, value: { error: "refused" } }),
+  });
+  await act(async () => {
+    assert.equal(await w.latest.handleRoleChange("smol", { provider: "test", modelId: "chosen", effectiveThinkingLevel: "high" }), false);
+  });
+  assert.equal(w.latest.displayModel?.modelId, "old");
+  assert.equal(w.latest.thinkingLevel, "low");
+  assert.equal(w.latest.notices.at(-1)?.message, "refused");
+  assert.equal(world.calls.some((call) => call.body?.type === "set_thinking_level"), false);
+});
+
+test("a late role reply cannot overwrite a newer model choice", async () => {
+  resetWorld();
+  primeSession("s1", [userMsg("u0", "q")]);
+  const w = await mountSession("s1");
+  const held = Promise.withResolvers<HeldResponse>();
+  world.holds.push({
+    match: (method, _url, body) => method === "POST" && body?.type === "set_chat_role",
+    produce: () => held.promise,
+  });
+  let role!: Promise<boolean>;
+  await act(async () => {
+    role = w.latest.handleRoleChange("smol", { provider: "test", modelId: "role-model", effectiveThinkingLevel: "high" });
+    await sleep(20);
+  });
+  let model!: Promise<boolean>;
+  await act(async () => { model = w.latest.handleModelChange("test", "new-model"); });
+  assert.equal(world.calls.some((call) => call.body?.type === "set_model"), false);
+  await act(async () => {
+    held.resolve({ value: { success: true, data: { model: { provider: "test", id: "role-model" }, thinkingLevel: "high" } } });
+    assert.equal(await role, false);
+    assert.equal(await model, true);
+  });
+  assert.equal(w.latest.displayModel?.modelId, "new-model");
+  assert.equal(w.latest.roleChangePending, false);
+});
+
+test("a role reply after leaving the chat is ignored", async () => {
+  resetWorld();
+  primeSession("s1", [userMsg("u0", "q")]);
+  const w = await mountSession("s1");
+  const held = Promise.withResolvers<HeldResponse>();
+  world.holds.push({
+    match: (method, _url, body) => method === "POST" && body?.type === "set_chat_role",
+    produce: () => held.promise,
+  });
+  let selection!: Promise<boolean>;
+  await act(async () => {
+    selection = w.latest.handleRoleChange("smol", { provider: "test", modelId: "chosen", effectiveThinkingLevel: "high" });
+    await sleep(20);
+  });
+  w.unmount();
+  await act(async () => {
+    held.resolve({ value: { success: true, data: { model: { provider: "test", id: "chosen" }, thinkingLevel: "high" } } });
+    assert.equal(await selection, false);
+  });
+});
+
 test("a model switch shows at once and rolls back with a notice when it fails (#277)", async (t) => {
   captureFailure(
     t,
@@ -11611,7 +11706,7 @@ test("a model switch shows at once and rolls back with a notice when it fails (#
           });
       }),
   });
-  let command!: Promise<void>;
+  let command!: Promise<boolean>;
   await act(async () => {
     command = w.latest.handleModelChange("test", "chosen-model");
     await sleep(20);
@@ -11659,8 +11754,8 @@ test("an earlier model pick that fails does not undo a newer pick", async (t) =>
     });
   }
   const failure = { status: 500, value: { error: "set_model failed" } };
-  let first!: Promise<void>;
-  let second!: Promise<void>;
+  let first!: Promise<boolean>;
+  let second!: Promise<boolean>;
   await act(async () => {
     first = w.latest.handleModelChange("test", "model-a");
     await sleep(20);
@@ -11731,8 +11826,8 @@ test("a refused pick after a successful one shows the model omp now runs", async
       }),
   });
   world.agents.get("s1").state = { model: { provider: "test", id: "model-a" } };
-  let first!: Promise<void>;
-  let second!: Promise<void>;
+  let first!: Promise<boolean>;
+  let second!: Promise<boolean>;
   await act(async () => {
     first = w.latest.handleModelChange("test", "model-a");
     await sleep(20);
@@ -11790,7 +11885,7 @@ test("a delayed pick response preserves a newer runtime model when refresh fails
         finishPick = resolve;
       }),
   });
-  let command!: Promise<void>;
+  let command!: Promise<boolean>;
   await act(async () => {
     command = w.latest.handleModelChange("test", "picked");
     await sleep(20);
@@ -11834,7 +11929,7 @@ test("a failed pick cannot invalidate a newer cycle refresh", async (t) => {
         failPick = resolve;
       }),
   });
-  let pick!: Promise<void>;
+  let pick!: Promise<boolean>;
   await act(async () => {
     pick = w.latest.handleModelChange("test", "picked");
     await sleep(20);
@@ -12593,6 +12688,36 @@ test("a fresh chat applies Plan before its first prompt", async () => {
   assert.ok(planIndex >= 0 && promptIndex > planIndex);
   w.unmount();
 });
+test("a fresh chat applies its role and Plan before the first prompt", async () => {
+  resetWorld();
+  world.holds.push({
+    match: (method, url) => method === "POST" && url === "/api/agent/new",
+    produce: async () => ({ value: { sessionId: "fresh-role-plan" } }),
+  });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated() {},
+  });
+  await act(async () => {
+    assert.equal(await w.latest.handleRoleChange("smol", {
+      provider: "test", modelId: "fast", effectiveThinkingLevel: "high",
+    }), true);
+    await w.latest.handlePlanModeChange(true);
+  });
+  let sent!: Promise<PromptSubmissionResult>;
+  await act(async () => {
+    sent = w.latest.handleSend("first prompt");
+    await sleep(30);
+  });
+  await act(async () => { lastEs().open(); await sent; });
+  assert.equal(callsTo("POST", "/api/agent/new")[0]?.body?.chatRole, "smol");
+  const calls = callsTo("POST", "/api/agent/fresh-role-plan");
+  const planIndex = calls.findIndex((call) => call.body?.type === "set_plan_mode" && call.body.enabled === true);
+  const promptIndex = calls.findIndex((call) => call.body?.type === "prompt");
+  assert.ok(planIndex >= 0 && promptIndex > planIndex);
+  w.unmount();
+});
+
 
 test("a fresh chat applies Plan and Auto Prewalk before its first prompt", async () => {
   resetWorld();
@@ -12629,6 +12754,40 @@ test("a fresh chat applies Plan and Auto Prewalk before its first prompt", async
   const prewalk = calls.findIndex((call) => call.body?.type === "set_auto_prewalk" && call.body.mode === "on");
   const prompt = calls.findIndex((call) => call.body?.type === "prompt");
   assert.equal(receipt.status, "accepted");
+  assert.ok(plan >= 0 && prewalk >= 0 && prompt > plan && prompt > prewalk);
+  w.unmount();
+});
+
+test("a fresh chat applies its role, Plan, and Auto Prewalk before the first prompt", async () => {
+  resetWorld();
+  world.holds.push(
+    {
+      match: (method, url) => method === "POST" && url === "/api/agent/new",
+      produce: async () => ({ value: { sessionId: "fresh-role-plan-prewalk" } }),
+    },
+    {
+      match: (method, _url, body) => method === "POST" && body?.type === "set_auto_prewalk",
+      produce: async () => ({ value: { success: true, data: { mode: "on" } } }),
+    },
+  );
+  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated() {} });
+  await act(async () => {
+    assert.equal(await w.latest.handleRoleChange("smol", {
+      provider: "test", modelId: "fast", effectiveThinkingLevel: "high",
+    }), true);
+    await w.latest.handlePlanModeChange(true);
+    await w.latest.handleAutoPrewalkChange("on");
+  });
+  let sent!: Promise<PromptSubmissionResult>;
+  await act(async () => { sent = w.latest.handleSend("first prompt"); await sleep(30); });
+  let receipt!: PromptSubmissionResult;
+  await act(async () => { lastEs().open(); receipt = await sent; });
+  assert.equal(receipt.status, "accepted");
+  assert.equal(callsTo("POST", "/api/agent/new")[0]?.body?.chatRole, "smol");
+  const calls = callsTo("POST", "/api/agent/fresh-role-plan-prewalk");
+  const plan = calls.findIndex((call) => call.body?.type === "set_plan_mode" && call.body.enabled === true);
+  const prewalk = calls.findIndex((call) => call.body?.type === "set_auto_prewalk" && call.body.mode === "on");
+  const prompt = calls.findIndex((call) => call.body?.type === "prompt");
   assert.ok(plan >= 0 && prewalk >= 0 && prompt > plan && prompt > prewalk);
   w.unmount();
 });
@@ -13027,6 +13186,119 @@ for (const modelId of [undefined, "worker-model"] as const) {
     assert.equal(w.latest.sessionIdRef.current, "remote-model-session");
   });
 }
+
+for (const choice of ["role", "effort", "model", "default"] as const) {
+  test(`a fresh remote chat initializes its ${choice} selection before the first prompt`, async () => {
+    resetWorld();
+    world.respond = (method, url, body) => {
+      if (method !== "POST" || url !== "/api/agent/new") return null;
+      if (choice === "model") {
+        assert.equal(body?.chatRole, undefined);
+        assert.equal(body?.provider, "worker");
+        assert.equal(body?.modelId, "explicit");
+      } else {
+        assert.equal(body?.chatRole, choice === "default" ? "default" : "smol");
+        assert.equal(body?.provider, undefined);
+        assert.equal(body?.modelId, undefined);
+        assert.equal(body?.thinkingLevel, choice === "effort" ? "low" : undefined);
+      }
+      return jsonResponse(200, {
+        success: true, sessionId: "role-session", hostId: "h1", cwd: "/remote/work",
+      });
+    };
+    const w = await mountSession(null, undefined, {
+      newSessionCwd: "/remote/work", newSessionHostId: "h1", onSessionCreated: () => {},
+    });
+    await act(async () => {
+      assert.equal(await w.latest.handleRoleChange(choice === "default" ? "default" : "smol", {
+        provider: choice === "default" ? null : "worker",
+        modelId: choice === "default" ? null : "chosen",
+        effectiveThinkingLevel: choice === "default" ? null : "high",
+      }), true);
+    });
+    if (choice !== "default") {
+      assert.equal(w.latest.displayModel?.modelId, "chosen");
+      assert.equal(w.latest.thinkingLevel, "high");
+    }
+    if (choice === "effort") {
+      await act(() => w.latest.handleThinkingLevelChange("low"));
+      assert.equal(w.latest.thinkingLevel, "low");
+    }
+    if (choice === "model") {
+      await act(() => w.latest.handleModelChange("worker", "explicit"));
+      assert.equal(w.latest.thinkingLevel, "auto");
+    }
+    let sending!: Promise<PromptSubmissionResult>;
+    await act(async () => {
+      sending = w.latest.handleSend("first");
+      await sleep(30);
+    });
+    await act(async () => {
+      lastEs()?.open();
+      await sending;
+    });
+    const commands = world.calls.filter((call) => ["set_chat_role", "set_thinking_level", "prompt"].includes(String(call.body?.type)));
+    assert.deepEqual(commands.map((call) => call.body?.type), ["prompt"]);
+    assert.match(commands[0]?.url ?? "", /hostId=h1/);
+  });
+}
+
+test("a role selected during startup finishes before the first prompt", async () => {
+  resetWorld();
+  const spawn = Promise.withResolvers<HeldResponse>();
+  const roleReply = Promise.withResolvers<HeldResponse>();
+  world.holds.push(
+    { match: (method, url) => method === "POST" && url === "/api/agent/new", produce: () => spawn.promise },
+    { match: (method, _url, body) => method === "POST" && body?.type === "set_chat_role", produce: () => roleReply.promise },
+  );
+  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated: () => {} });
+  let sending!: Promise<PromptSubmissionResult>;
+  await act(async () => { sending = w.latest.handleSend("first"); await sleep(20); });
+  let role!: Promise<boolean>;
+  await act(async () => {
+    role = w.latest.handleRoleChange("smol", { provider: "test", modelId: "preview", effectiveThinkingLevel: "high" });
+    spawn.resolve({ value: { success: true, sessionId: "during-spawn", cwd: "/workspace" } });
+    await sleep(20);
+  });
+  assert.equal(world.calls.some((call) => call.body?.type === "prompt"), false);
+  await act(async () => {
+    roleReply.resolve({ value: { success: true, data: { model: { provider: "test", id: "chosen" }, thinkingLevel: "high" } } });
+    assert.equal(await role, true);
+    await sleep(20);
+  });
+  await act(async () => { lastEs()?.open(); await sending; });
+  assert.deepEqual(world.calls.filter((call) => call.body?.type === "set_chat_role" || call.body?.type === "prompt").map((call) => call.body?.type), ["set_chat_role", "prompt"]);
+});
+
+test("a model chosen during role startup is applied before the prompt", async () => {
+  resetWorld();
+  const spawn = Promise.withResolvers<HeldResponse>();
+  const modelReply = Promise.withResolvers<HeldResponse>();
+  world.holds.push(
+    { match: (method, url) => method === "POST" && url === "/api/agent/new", produce: () => spawn.promise },
+    { match: (method, _url, body) => method === "POST" && body?.type === "set_model", produce: () => modelReply.promise },
+  );
+  const w = await mountSession(null, undefined, { newSessionCwd: "/workspace", onSessionCreated: () => {} });
+  await act(async () => {
+    await w.latest.handleRoleChange("smol", { provider: "test", modelId: "role-model", effectiveThinkingLevel: "high" });
+  });
+  let sending!: Promise<PromptSubmissionResult>;
+  await act(async () => { sending = w.latest.handleSend("first"); await sleep(20); });
+  let model!: Promise<boolean>;
+  await act(async () => {
+    model = w.latest.handleModelChange("test", "explicit");
+    spawn.resolve({ value: { success: true, sessionId: "during-model-spawn", cwd: "/workspace" } });
+    await sleep(20);
+  });
+  assert.equal(world.calls.some((call) => call.body?.type === "prompt"), false);
+  await act(async () => {
+    modelReply.resolve({ value: { success: true, data: {} } });
+    assert.equal(await model, true);
+    await sleep(20);
+  });
+  await act(async () => { lastEs()?.open(); await sending; });
+  assert.deepEqual(world.calls.filter((call) => call.body?.type === "set_model" || call.body?.type === "prompt").map((call) => call.body?.type), ["set_model", "prompt"]);
+});
 
 test("a fresh chat whose host drops after the spawn adopts the kept session, so a retry starts no second one", async (t) => {
   captureFailure(t, "Failed to send message:", "Build box is offline");

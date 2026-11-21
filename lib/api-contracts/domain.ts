@@ -1731,9 +1731,22 @@ export const OutboxUpdateFrameSchema = {
     "Session-channel outbox snapshot in submission order, with recent settled IDs for retiring stale browser copies.",
 };
 
+/** Model metadata safe to send outside the owning host. */
+export const WebSessionModelSchema = Type.Object(
+  {
+    ...ModelLikeSchema.properties,
+    name: Type.Optional(Type.String()),
+    reasoning: Type.Optional(Type.Boolean()),
+    thinking: Type.Optional(
+      Type.Object({ efforts: Type.Optional(Type.Array(Type.String())) }, { additionalProperties: false }),
+    ),
+  },
+  { additionalProperties: false, description: "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials." },
+);
+
 export const RpcSessionStateSchema = {
   ...Type.Object({
-    model: Type.Optional(OmpModelSchema),
+    model: Type.Optional(WebSessionModelSchema),
     thinkingLevel: Type.Union([Type.String(), Type.Undefined()]),
     isStreaming: Type.Boolean(),
     isCompacting: Type.Boolean(),
@@ -1815,7 +1828,7 @@ export const RpcSessionStateSchema = {
     },
     modelActivity: Type.Optional(ModelActivitySchema),
   }),
-  description: "Mirror of omp's RpcSessionState (the raw `get_state` payload).",
+  description: "Runner session state; model metadata excludes host-local provider headers and credentials.",
 };
 
 export const WebSessionStateSchema = {
@@ -1845,20 +1858,7 @@ export const WebSessionStateSchema = {
       Type.Literal("all"),
       Type.Literal("one-at-a-time"),
     ]),
-    model: Type.Optional(
-      Type.Intersect([
-        ModelLikeSchema,
-        Type.Object({
-          name: Type.Optional(Type.String()),
-          reasoning: Type.Optional(Type.Boolean()),
-          thinking: Type.Optional(
-            Type.Object({
-              efforts: Type.Optional(Type.Array(Type.String())),
-            }),
-          ),
-        }),
-      ]),
-    ),
+    model: Type.Optional(WebSessionModelSchema),
     messageCount: Type.Number(),
     queuedMessageCount: Type.Number(),
     queuedMessages: QueuedMessagesSchema,

@@ -1105,6 +1105,10 @@
         "advisor": {
           "type": "boolean"
         },
+        "chatRole": {
+          "minLength": 1,
+          "type": "string"
+        },
         "cwd": {
           "type": "string"
         },
@@ -1660,6 +1664,103 @@
         }
       },
       "required": ["records"],
+      "type": "object"
+    },
+    "agent_get_chat_roles_args": {
+      "properties": {
+        "currentModelFallback": {
+          "type": "boolean"
+        },
+        "currentModelId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "currentProvider": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "thinkingLevel": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "agent_get_chat_roles_result": {
+      "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+      "properties": {
+        "roles": {
+          "items": {
+            "properties": {
+              "effectiveThinkingLevel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+              },
+              "id": {
+                "type": "string"
+              },
+              "modelId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "modelName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "thinkingLevel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Explicit role selector to apply; null preserves the chat's current selector."
+              }
+            },
+            "required": [
+              "id",
+              "provider",
+              "modelId",
+              "modelName",
+              "thinkingLevel",
+              "effectiveThinkingLevel"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["roles"],
       "type": "object"
     },
     "agent_get_client_message_status_args": {
@@ -5850,43 +5951,35 @@
           "type": "number"
         },
         "model": {
-          "allOf": [
-            {
-              "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "provider": {
-                  "type": "string"
-                }
-              },
-              "required": ["id", "provider"],
-              "type": "object"
+          "additionalProperties": false,
+          "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+          "properties": {
+            "id": {
+              "type": "string"
             },
-            {
+            "name": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "reasoning": {
+              "type": "boolean"
+            },
+            "thinking": {
+              "additionalProperties": false,
               "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "reasoning": {
-                  "type": "boolean"
-                },
-                "thinking": {
-                  "properties": {
-                    "efforts": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    }
+                "efforts": {
+                  "items": {
+                    "type": "string"
                   },
-                  "type": "object"
+                  "type": "array"
                 }
               },
               "type": "object"
             }
-          ],
+          },
+          "required": ["id", "provider"],
           "type": "object"
         },
         "modelActivity": {
@@ -10957,6 +11050,66 @@
       "type": "object"
     },
     "agent_set_auto_retry_result": false,
+    "agent_set_chat_role_args": {
+      "properties": {
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["role"],
+      "type": "object"
+    },
+    "agent_set_chat_role_result": {
+      "additionalProperties": false,
+      "description": "Selected role model and effective thinking level; excludes provider credentials and headers.",
+      "properties": {
+        "model": {
+          "additionalProperties": false,
+          "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "reasoning": {
+              "type": "boolean"
+            },
+            "thinking": {
+              "additionalProperties": false,
+              "properties": {
+                "efforts": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": ["id", "provider"],
+          "type": "object"
+        },
+        "thinkingLevel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["model", "thinkingLevel"],
+      "type": "object"
+    },
     "agent_set_fast_mode_args": {
       "properties": {
         "enabled": {
@@ -12733,6 +12886,84 @@
         }
       },
       "required": ["browserTransport"],
+      "type": "object"
+    },
+    "configuration_ChatRoles": {
+      "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+      "properties": {
+        "roles": {
+          "items": {
+            "properties": {
+              "effectiveThinkingLevel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+              },
+              "id": {
+                "type": "string"
+              },
+              "modelId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "modelName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "thinkingLevel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Explicit role selector to apply; null preserves the chat's current selector."
+              }
+            },
+            "required": [
+              "id",
+              "provider",
+              "modelId",
+              "modelName",
+              "thinkingLevel",
+              "effectiveThinkingLevel"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["roles"],
       "type": "object"
     },
     "configuration_CompleteModelCatalogCost": {
@@ -21343,7 +21574,7 @@
       "type": "object"
     },
     "domain_RpcSessionState": {
-      "description": "Mirror of omp's RpcSessionState (the raw `get_state` payload).",
+      "description": "Runner session state; model metadata excludes host-local provider headers and credentials.",
       "properties": {
         "advisorReviewPending": {
           "description": "An active, unpaused advisor has output in its review backlog; mirrored by advisor_review.",
@@ -21420,28 +21651,11 @@
           "type": "number"
         },
         "model": {
-          "additionalProperties": {
-            "description": "Extensible JSON data supplied by the provider, tool, or extension."
-          },
-          "description": "Subset of omp's Model (pi-ai) that the web UI reads; extra fields pass through.",
+          "additionalProperties": false,
+          "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
           "properties": {
-            "api": {
-              "type": "string"
-            },
-            "contextWindow": {
-              "type": "number"
-            },
             "id": {
               "type": "string"
-            },
-            "input": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "maxTokens": {
-              "type": "number"
             },
             "name": {
               "type": "string"
@@ -21453,21 +21667,13 @@
               "type": "boolean"
             },
             "thinking": {
+              "additionalProperties": false,
               "properties": {
-                "defaultLevel": {
-                  "type": "string"
-                },
                 "efforts": {
                   "items": {
                     "type": "string"
                   },
                   "type": "array"
-                },
-                "mode": {
-                  "type": "string"
-                },
-                "requiresEffort": {
-                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -29428,6 +29634,38 @@
       "required": ["role", "content"],
       "type": "object"
     },
+    "domain_WebSessionModel": {
+      "additionalProperties": false,
+      "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "reasoning": {
+          "type": "boolean"
+        },
+        "thinking": {
+          "additionalProperties": false,
+          "properties": {
+            "efforts": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": ["id", "provider"],
+      "type": "object"
+    },
     "domain_WebSessionState": {
       "description": "The state shape keylime's own API returns to the browser\n(AgentSessionWrapper adapts RpcSessionState and adds process-side flags).",
       "properties": {
@@ -29569,43 +29807,35 @@
           "type": "number"
         },
         "model": {
-          "allOf": [
-            {
-              "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "provider": {
-                  "type": "string"
-                }
-              },
-              "required": ["id", "provider"],
-              "type": "object"
+          "additionalProperties": false,
+          "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+          "properties": {
+            "id": {
+              "type": "string"
             },
-            {
+            "name": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "reasoning": {
+              "type": "boolean"
+            },
+            "thinking": {
+              "additionalProperties": false,
               "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "reasoning": {
-                  "type": "boolean"
-                },
-                "thinking": {
-                  "properties": {
-                    "efforts": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    }
+                "efforts": {
+                  "items": {
+                    "type": "string"
                   },
-                  "type": "object"
+                  "type": "array"
                 }
               },
               "type": "object"
             }
-          ],
+          },
+          "required": ["id", "provider"],
           "type": "object"
         },
         "modelActivity": {
@@ -31048,6 +31278,104 @@
           "type": "object"
         }
       ]
+    },
+    "host_chatRolesList_args": {
+      "properties": {
+        "currentModelId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "currentProvider": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "thinkingLevel": {
+          "type": "string"
+        }
+      },
+      "required": ["cwd"],
+      "type": "object"
+    },
+    "host_chatRolesList_result": {
+      "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+      "properties": {
+        "roles": {
+          "items": {
+            "properties": {
+              "effectiveThinkingLevel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+              },
+              "id": {
+                "type": "string"
+              },
+              "modelId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "modelName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "thinkingLevel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Explicit role selector to apply; null preserves the chat's current selector."
+              }
+            },
+            "required": [
+              "id",
+              "provider",
+              "modelId",
+              "modelName",
+              "thinkingLevel",
+              "effectiveThinkingLevel"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["roles"],
+      "type": "object"
     },
     "host_close_args": {
       "properties": {
@@ -50973,6 +51301,42 @@
             {
               "properties": {
                 "type": {
+                  "const": "get_chat_roles",
+                  "type": "string"
+                }
+              },
+              "required": ["type"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "currentModelFallback": {
+                  "type": "boolean"
+                },
+                "currentModelId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "currentProvider": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "thinkingLevel": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          ],
+          "description": "Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.",
+          "title": "AgentCommand_get_chat_roles",
+          "type": "object"
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "type": {
                   "const": "set_auto_compaction",
                   "type": "string"
                 }
@@ -52523,7 +52887,7 @@
               "type": "object"
             }
           ],
-          "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
+          "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
           "title": "AgentCommand_get_state",
           "type": "object"
         },
@@ -52552,8 +52916,35 @@
               "type": "object"
             }
           ],
-          "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+          "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
           "title": "AgentCommand_set_model",
+          "type": "object"
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "type": {
+                  "const": "set_chat_role",
+                  "type": "string"
+                }
+              },
+              "required": ["type"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "role": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["role"],
+              "type": "object"
+            }
+          ],
+          "description": "Usage: Apply a configured chat role to the live session.\nInputs: Supply a known chat role ID.\nInvariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.\nEffects: Applies OMP's session role marker, model and explicit role thinking without changing settings.\nRecovery: Read session state after an uncertain response before applying again.\n\nBrowser: Apply a native chat role; return only the browser-visible model fields and effective thinking level. Where the native operation returns undefined, the browser wrapper returns null.",
+          "title": "AgentCommand_set_chat_role",
           "type": "object"
         },
         {
@@ -53665,6 +54056,84 @@
                     }
                   },
                   "required": ["mode"],
+                  "type": "object"
+                },
+                {
+                  "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+                  "properties": {
+                    "roles": {
+                      "items": {
+                        "properties": {
+                          "effectiveThinkingLevel": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "modelId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "modelName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "provider": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "thinkingLevel": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Explicit role selector to apply; null preserves the chat's current selector."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "provider",
+                          "modelId",
+                          "modelName",
+                          "thinkingLevel",
+                          "effectiveThinkingLevel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["roles"],
                   "type": "object"
                 },
                 {
@@ -62693,43 +63162,35 @@
                       "type": "number"
                     },
                     "model": {
-                      "allOf": [
-                        {
-                          "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "provider": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["id", "provider"],
-                          "type": "object"
+                      "additionalProperties": false,
+                      "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                      "properties": {
+                        "id": {
+                          "type": "string"
                         },
-                        {
+                        "name": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "reasoning": {
+                          "type": "boolean"
+                        },
+                        "thinking": {
+                          "additionalProperties": false,
                           "properties": {
-                            "name": {
-                              "type": "string"
-                            },
-                            "reasoning": {
-                              "type": "boolean"
-                            },
-                            "thinking": {
-                              "properties": {
-                                "efforts": {
-                                  "items": {
-                                    "type": "string"
-                                  },
-                                  "type": "array"
-                                }
+                            "efforts": {
+                              "items": {
+                                "type": "string"
                               },
-                              "type": "object"
+                              "type": "array"
                             }
                           },
                           "type": "object"
                         }
-                      ],
+                      },
+                      "required": ["id", "provider"],
                       "type": "object"
                     },
                     "modelActivity": {
@@ -63028,6 +63489,56 @@
                     }
                   },
                   "required": ["id", "provider"],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "description": "Selected role model and effective thinking level; excludes provider credentials and headers.",
+                  "properties": {
+                    "model": {
+                      "additionalProperties": false,
+                      "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "reasoning": {
+                          "type": "boolean"
+                        },
+                        "thinking": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "efforts": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "required": ["id", "provider"],
+                      "type": "object"
+                    },
+                    "thinkingLevel": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["model", "thinkingLevel"],
                   "type": "object"
                 },
                 {
@@ -64054,6 +64565,84 @@
             }
           },
           "required": ["mode"],
+          "type": "object"
+        },
+        {
+          "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+          "properties": {
+            "roles": {
+              "items": {
+                "properties": {
+                  "effectiveThinkingLevel": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "modelId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "modelName": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "provider": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "thinkingLevel": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Explicit role selector to apply; null preserves the chat's current selector."
+                  }
+                },
+                "required": [
+                  "id",
+                  "provider",
+                  "modelId",
+                  "modelName",
+                  "thinkingLevel",
+                  "effectiveThinkingLevel"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": ["roles"],
           "type": "object"
         },
         {
@@ -72948,43 +73537,35 @@
               "type": "number"
             },
             "model": {
-              "allOf": [
-                {
-                  "description": "Provider-qualified model identity; model IDs alone are not necessarily unique across providers.",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "provider": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["id", "provider"],
-                  "type": "object"
+              "additionalProperties": false,
+              "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+              "properties": {
+                "id": {
+                  "type": "string"
                 },
-                {
+                "name": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "reasoning": {
+                  "type": "boolean"
+                },
+                "thinking": {
+                  "additionalProperties": false,
                   "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "reasoning": {
-                      "type": "boolean"
-                    },
-                    "thinking": {
-                      "properties": {
-                        "efforts": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        }
+                    "efforts": {
+                      "items": {
+                        "type": "string"
                       },
-                      "type": "object"
+                      "type": "array"
                     }
                   },
                   "type": "object"
                 }
-              ],
+              },
+              "required": ["id", "provider"],
               "type": "object"
             },
             "modelActivity": {
@@ -73277,6 +73858,56 @@
             }
           },
           "required": ["id", "provider"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Selected role model and effective thinking level; excludes provider credentials and headers.",
+          "properties": {
+            "model": {
+              "additionalProperties": false,
+              "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "reasoning": {
+                  "type": "boolean"
+                },
+                "thinking": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "efforts": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": ["id", "provider"],
+              "type": "object"
+            },
+            "thinkingLevel": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": ["model", "thinkingLevel"],
           "type": "object"
         },
         {
@@ -114517,6 +115148,103 @@
       "required": ["records"],
       "type": "object"
     },
+    "runner_get_chat_roles_args": {
+      "properties": {
+        "currentModelFallback": {
+          "type": "boolean"
+        },
+        "currentModelId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "currentProvider": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "thinkingLevel": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "runner_get_chat_roles_result": {
+      "description": "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+      "properties": {
+        "roles": {
+          "items": {
+            "properties": {
+              "effectiveThinkingLevel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Selector expected after selection, including inherited effort or auto; null means unknown or unset."
+              },
+              "id": {
+                "type": "string"
+              },
+              "modelId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "modelName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "thinkingLevel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Explicit role selector to apply; null preserves the chat's current selector."
+              }
+            },
+            "required": [
+              "id",
+              "provider",
+              "modelId",
+              "modelName",
+              "thinkingLevel",
+              "effectiveThinkingLevel"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["roles"],
+      "type": "object"
+    },
     "runner_get_client_message_status_args": {
       "properties": {
         "clientMessageIds": {
@@ -121330,7 +122058,7 @@
     "runner_get_state_result": {
       "allOf": [
         {
-          "description": "Mirror of omp's RpcSessionState (the raw `get_state` payload).",
+          "description": "Runner session state; model metadata excludes host-local provider headers and credentials.",
           "properties": {
             "advisorReviewPending": {
               "description": "An active, unpaused advisor has output in its review backlog; mirrored by advisor_review.",
@@ -121407,28 +122135,11 @@
               "type": "number"
             },
             "model": {
-              "additionalProperties": {
-                "description": "Extensible JSON data supplied by the provider, tool, or extension."
-              },
-              "description": "Subset of omp's Model (pi-ai) that the web UI reads; extra fields pass through.",
+              "additionalProperties": false,
+              "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
               "properties": {
-                "api": {
-                  "type": "string"
-                },
-                "contextWindow": {
-                  "type": "number"
-                },
                 "id": {
                   "type": "string"
-                },
-                "input": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                "maxTokens": {
-                  "type": "number"
                 },
                 "name": {
                   "type": "string"
@@ -121440,21 +122151,13 @@
                   "type": "boolean"
                 },
                 "thinking": {
+                  "additionalProperties": false,
                   "properties": {
-                    "defaultLevel": {
-                      "type": "string"
-                    },
                     "efforts": {
                       "items": {
                         "type": "string"
                       },
                       "type": "array"
-                    },
-                    "mode": {
-                      "type": "string"
-                    },
-                    "requiresEffort": {
-                      "type": "boolean"
                     }
                   },
                   "type": "object"
@@ -128801,6 +129504,42 @@
                 {
                   "properties": {
                     "type": {
+                      "const": "get_chat_roles",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "currentModelFallback": {
+                      "type": "boolean"
+                    },
+                    "currentModelId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "currentProvider": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "thinkingLevel": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              ],
+              "description": "Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.",
+              "title": "AgentCommand_get_chat_roles",
+              "type": "object"
+            },
+            {
+              "allOf": [
+                {
+                  "properties": {
+                    "type": {
                       "const": "set_auto_compaction",
                       "type": "string"
                     }
@@ -130356,7 +131095,7 @@
                   "type": "object"
                 }
               ],
-              "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
+              "description": "Usage: Read live session state.\nInputs: No arguments.\nInvariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.\nEffects: Reads model, queue, goal, tools and activity state without submitting work.\nRecovery: Refresh after reconnecting or when state changes.\n\nBrowser: Read browser state, including wrapper activity and extension UI state. Optional hostId selects the host for this session; a live wrapper on another host is refused. The routing hint is not sent to the runner. Where the native operation returns undefined, the browser wrapper returns null.",
               "title": "AgentCommand_get_state",
               "type": "object"
             },
@@ -130385,8 +131124,35 @@
                   "type": "object"
                 }
               ],
-              "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
+              "description": "Usage: Select an exact provider and model for this session.\nInputs: Supply both provider and modelId.\nInvariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.\nEffects: Changes the active session model.\nRecovery: Read state or available models after an uncertain response before selecting again.\n\nBrowser: Select the model; the browser receives its id and provider. Where the native operation returns undefined, the browser wrapper returns null.",
               "title": "AgentCommand_set_model",
+              "type": "object"
+            },
+            {
+              "allOf": [
+                {
+                  "properties": {
+                    "type": {
+                      "const": "set_chat_role",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "role": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["role"],
+                  "type": "object"
+                }
+              ],
+              "description": "Usage: Apply a configured chat role to the live session.\nInputs: Supply a known chat role ID.\nInvariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.\nEffects: Applies OMP's session role marker, model and explicit role thinking without changing settings.\nRecovery: Read session state after an uncertain response before applying again.\n\nBrowser: Apply a native chat role; return only the browser-visible model fields and effective thinking level. Where the native operation returns undefined, the browser wrapper returns null.",
+              "title": "AgentCommand_set_chat_role",
               "type": "object"
             },
             {
@@ -131290,6 +132056,10 @@
               "properties": {
                 "advisor": {
                   "type": "boolean"
+                },
+                "chatRole": {
+                  "minLength": 1,
+                  "type": "string"
                 },
                 "cwd": {
                   "type": "string"
@@ -165959,6 +166729,66 @@
       "required": ["mode"],
       "type": "object"
     },
+    "runner_set_chat_role_args": {
+      "properties": {
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["role"],
+      "type": "object"
+    },
+    "runner_set_chat_role_result": {
+      "additionalProperties": false,
+      "description": "Selected role model and effective thinking level; excludes provider credentials and headers.",
+      "properties": {
+        "model": {
+          "additionalProperties": false,
+          "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "reasoning": {
+              "type": "boolean"
+            },
+            "thinking": {
+              "additionalProperties": false,
+              "properties": {
+                "efforts": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": ["id", "provider"],
+          "type": "object"
+        },
+        "thinkingLevel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["model", "thinkingLevel"],
+      "type": "object"
+    },
     "runner_set_event_filter_args": {
       "properties": {
         "events": {
@@ -166213,28 +167043,11 @@
       "type": "object"
     },
     "runner_set_model_result": {
-      "additionalProperties": {
-        "description": "Extensible JSON data supplied by the provider, tool, or extension."
-      },
-      "description": "Subset of omp's Model (pi-ai) that the web UI reads; extra fields pass through.",
+      "additionalProperties": false,
+      "description": "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
       "properties": {
-        "api": {
-          "type": "string"
-        },
-        "contextWindow": {
-          "type": "number"
-        },
         "id": {
           "type": "string"
-        },
-        "input": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "maxTokens": {
-          "type": "number"
         },
         "name": {
           "type": "string"
@@ -166246,21 +167059,13 @@
           "type": "boolean"
         },
         "thinking": {
+          "additionalProperties": false,
           "properties": {
-            "defaultLevel": {
-              "type": "string"
-            },
             "efforts": {
               "items": {
                 "type": "string"
               },
               "type": "array"
-            },
-            "mode": {
-              "type": "string"
-            },
-            "requiresEffort": {
-              "type": "boolean"
             }
           },
           "type": "object"

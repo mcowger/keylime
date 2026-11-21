@@ -28,6 +28,7 @@ import {
   HostSettingsSchema as HostSettings,
   HostSettingsPatchSchema as HostSettingsPatch,
   HostModelsSchema as HostModels,
+  ChatRolesSchema as ChatRoles,
   McpLiveServerSchema as liveServer,
 } from "./configuration-models";
 
@@ -454,6 +455,17 @@ export const configurationHttpOperations: readonly HttpOperation[] = [
       },
     },
   ),
+  op("/api/chat-roles", "get", "getChatRoles", "Resolve workspace chat roles", ChatRoles, {
+    parameters: [
+      queryParameter("hostId", S, false, "Selected daemon; defaults to local."),
+      queryParameter("cwd", S, true, "Absolute workspace directory on the selected daemon."),
+      queryParameter("sessionId", S, false, "Existing session; a live runner supplies current thinking state."),
+      queryParameter("thinkingLevel", S, false, "Current composer selector for a new or inactive session; ignored for a live runner."),
+      queryParameter("currentProvider", S, false, "Current model provider for a new or inactive session; supply with currentModelId. Ignored for a live runner."),
+      queryParameter("currentModelId", S, false, "Current model ID for a new or inactive session; supply with currentProvider. Ignored for a live runner."),
+    ],
+    responses: { 400: error("Invalid workspace directory."), 404: error("Unknown daemon."), 501: error("Daemon does not support chat role discovery."), 503: error("Daemon unavailable.") },
+  }),
   op("/api/models", "get", "getModels", "List available models", HostModels, {
     parameters: [
       queryParameter("hostId", S, false, "Selected daemon; defaults to local."),

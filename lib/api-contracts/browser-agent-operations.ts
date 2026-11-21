@@ -16,7 +16,7 @@ import {
   SetHostUriSchemesArgsSchema,
   SetSubagentSubscriptionArgsSchema,
 } from "./runner-tools";
-import { AutoPrewalkResultSchema, lifecycleRunnerOperations } from "./runner-lifecycle";
+import { AutoPrewalkResultSchema, lifecycleRunnerOperations, SetChatRoleResultSchema } from "./runner-lifecycle";
 import type { OperationContract } from "./operations";
 
 const empty = Type.Object({});
@@ -82,6 +82,7 @@ export const OutboxAddResultSchema = Type.Object(
   },
 );
 export type OutboxAddResult = Static<typeof OutboxAddResultSchema>;
+
 const native = (name: string): OperationContract => {
   const operation = lifecycleRunnerOperations.find(
     (item) => item.name === name,
@@ -122,6 +123,7 @@ export const browserAgentCommandNames: readonly string[] = [
   "get_available_models",
   "get_auto_prewalk",
   "set_auto_prewalk",
+  "get_chat_roles",
   "set_auto_compaction",
   "set_auto_retry",
   "abort_retry",
@@ -163,6 +165,7 @@ export const browserAgentCommandNames: readonly string[] = [
   "abort_and_restore_queue",
   "get_state",
   "set_model",
+  "set_chat_role",
   "set_fast_mode",
   "set_slow_mode",
   "edit_message",
@@ -201,6 +204,7 @@ Recovery: Inspect the returned session identity after an uncertain request befor
       projectId: Type.Optional(Type.String()),
       provider: Type.Optional(Type.String()),
       modelId: Type.Optional(Type.String()),
+      chatRole: Type.Optional(Type.String({ minLength: 1 })),
       toolNames: Type.Optional(Type.Array(Type.String())),
       thinkingLevel: Type.Optional(Type.String()),
       advisor: Type.Optional(Type.Boolean()),
@@ -313,6 +317,11 @@ Recovery: Inspect the outbox and delivery status after an uncertain response.`,
     "set_model",
     "Select the model; the browser receives its id and provider.",
     Type.Object({ id: Type.String(), provider: Type.String() }),
+  ),
+  override(
+    "set_chat_role",
+    "Apply a native chat role; return only the browser-visible model fields and effective thinking level.",
+    SetChatRoleResultSchema,
   ),
   override(
     "set_fast_mode",

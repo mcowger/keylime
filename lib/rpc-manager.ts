@@ -43,6 +43,7 @@ import type {
   SessionStatsInfo,
   WebSessionState,
 } from "./pi-types";
+import type { SetChatRoleResult } from "./api-contracts/runner-lifecycle";
 import type {
   AgentMessage,
   CrossSessionHostToolCall,
@@ -190,6 +191,7 @@ const PASSTHROUGH_COMMANDS = new Set([
   "get_available_models",
   "get_auto_prewalk",
   "set_auto_prewalk",
+  "get_chat_roles",
   "set_auto_compaction",
   "set_auto_retry",
   "abort_retry",
@@ -656,6 +658,17 @@ function watchReplacement(
     },
   };
 }
+
+function projectWebModel(model: OmpModel): SetChatRoleResult["model"] {
+  return {
+    id: model.id,
+    provider: model.provider,
+    name: model.name,
+    reasoning: model.reasoning,
+    thinking: model.thinking ? { efforts: model.thinking.efforts } : undefined,
+  };
+}
+
 export class AgentSessionWrapper {
   private listeners: EventListener[] = [];
   private pendingUiRequests = new Map<string, UnsequencedAgentEvent>();
@@ -2756,17 +2769,7 @@ export class AgentSessionWrapper {
       interruptMode: state.interruptMode,
       steeringMode: state.steeringMode,
       followUpMode: state.followUpMode,
-      model: state.model
-        ? {
-            id: state.model.id,
-            provider: state.model.provider,
-            name: state.model.name,
-            reasoning: state.model.reasoning,
-            thinking: state.model.thinking
-              ? { efforts: state.model.thinking.efforts }
-              : undefined,
-          }
-        : undefined,
+      model: state.model ? projectWebModel(state.model) : undefined,
       messageCount: state.messageCount,
       queuedMessageCount: state.queuedMessageCount,
       queuedMessages: state.queuedMessages ?? { steering: [], followUp: [] },
@@ -3640,6 +3643,16 @@ export class AgentSessionWrapper {
         invalidateModelsCache();
         this.invalidateSessionLists();
         return { id: model.id, provider: model.provider };
+      }
+
+      case "set_chat_role": {
+        const result = await this.proc.sendCommand<SetChatRoleResult>(
+          { type: "set_chat_role", role: command.role },
+          preserveUnknownDelivery ? PROMPT_ACK_TIMEOUT_MS : undefined,
+        );
+        invalidateModelsCache();
+        this.invalidateSessionLists();
+        return { model: projectWebModel(result.model), thinkingLevel: result.thinkingLevel } satisfies SetChatRoleResult;
       }
 
       case "set_fast_mode": {

@@ -11,6 +11,8 @@ import { randomUUID } from "node:crypto";
 import { Value } from "@sinclair/typebox/value";
 import {
   HostModelsSchema,
+  ChatRolesSchema,
+  type ChatRoles,
   HostSettingsSchema,
   type HostModels,
   type HostSettings,
@@ -2825,6 +2827,13 @@ export async function listRemoteHostModels(
       "invalid_host_result",
       "Invalid host models response",
     );
+  return result;
+}
+
+export async function listHostChatRoles(hostId: string, cwd: string, thinkingLevel?: string, currentModel?: { provider: string; modelId: string }): Promise<ChatRoles> {
+  const result = await request(hostId, "chatRolesList", { cwd, ...(thinkingLevel === undefined ? {} : { thinkingLevel }), ...(currentModel ? { currentProvider: currentModel.provider, currentModelId: currentModel.modelId } : {}) }, 180_000);
+  if (!Value.Check(ChatRolesSchema, result))
+    throw new HostOpError(502, "invalid_host_result", "Invalid chat roles response from host");
   return result;
 }
 

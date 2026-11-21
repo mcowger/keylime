@@ -676,6 +676,7 @@ function HostChatWindow({
 
   const {
     loading,
+    data,
     error,
     messages,
     entryIds,
@@ -703,6 +704,7 @@ function HostChatWindow({
     modelThinkingLevels,
     modelThinkingLevelMaps,
     thinkingLevel,
+    pendingRoleAutoThinking,
     fastModeEnabled,
     fastModeActive,
     usageLimit,
@@ -760,6 +762,8 @@ function HostChatWindow({
     handleFork,
     handleEdit,
     handleModelChange,
+    handleRoleChange,
+    roleChangePending,
     retrySession,
     handleSteer,
     handleFollowUp,
@@ -1555,7 +1559,12 @@ function HostChatWindow({
       outbox={!isNew}
       isStreaming={sessionBusy}
       submissionBlocked={
-        editingEntryId !== null || workspaceSourceRequired || !!startupStage || !!planProposal || autoPrewalkWritePending
+        editingEntryId !== null ||
+        workspaceSourceRequired ||
+        !!startupStage ||
+        !!planProposal ||
+        autoPrewalkWritePending ||
+        roleChangePending
       }
       model={displayModelValue}
       isAutoModelSelection={isAutoModelSelection}
@@ -1576,10 +1585,19 @@ function HostChatWindow({
       autoPrewalkIsNew={isNew && !sessionIdRef.current}
       onRefreshAutoPrewalk={refreshAutoPrewalk}
       onAutoPrewalkChange={handleAutoPrewalkChange}
+      onRoleChange={handleRoleChange}
       onAbortCompaction={handleAbortCompaction}
+      roleChangePending={roleChangePending}
       isCompacting={isCompacting}
       compactResult={compactResult}
       thinkingLevel={thinkingLevel}
+      roleThinkingLevel={
+        thinkingLevel !== "auto" ||
+        pendingRoleAutoThinking ||
+        (session && data?.context.thinkingLevel === "auto")
+          ? thinkingLevel
+          : undefined
+      }
       onThinkingLevelChange={
         session || isNew ? handleThinkingLevelChange : undefined
       }
@@ -1627,6 +1645,7 @@ function HostChatWindow({
       onAudioUnlock={unlockAudio}
       draftKey={draftKey}
       uploadHostId={chatHostId}
+      roleSessionId={session?.id ?? sessionIdRef.current}
       cwd={session?.cwd ?? newSessionCwd}
       /* The pill bar and chevron only render in the non-empty layout; don't
          accept Escape-to-minimize in the fresh-chat branch where there is

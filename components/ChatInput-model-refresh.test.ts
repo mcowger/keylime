@@ -7,7 +7,7 @@ import { ChatInput } from "./ChatInput";
 import { ModelPickerPanel } from "./ChatInput-model-picker";
 
 // Testing Library binds its queries to the document installed by setup-dom.
-const { cleanup, fireEvent, render, screen, within } =
+const { cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react/pure.js");
 
 window.matchMedia = globalThis.matchMedia;
@@ -197,5 +197,112 @@ test("starring a model moves its only row out of More, and unstarring moves it b
     assert.ok(screen.getByRole("menuitemradio", { name: "Sol" }));
   } finally {
     window.localStorage.removeItem("keylime:favorite-models");
+  }
+});
+
+test("workspace roles use host and cwd, filter with search, and apply resolved choices", async () => {
+  const originalFetch = globalThis.fetch;
+  let requested = "";
+  let requests = 0;
+  let selected: [string, { provider: string | null; modelId: string | null; effectiveThinkingLevel: string | null }] | null = null;
+  let closed = false;
+  globalThis.fetch = Object.assign(async (input: string | URL | Request) => {
+    requested = String(input);
+    requests += 1;
+    return Response.json({ roles: [
+      { id: "default", provider: "p", modelId: "one", modelName: "One", thinkingLevel: "high", effectiveThinkingLevel: "low" },
+      { id: "smol", provider: null, modelId: null, modelName: null, thinkingLevel: null, effectiveThinkingLevel: null },
+      { id: "custom", provider: "p", modelId: "two", modelName: "Two", thinkingLevel: null, effectiveThinkingLevel: "medium" },
+    ] });
+  }, { preconnect: originalFetch.preconnect }) as typeof fetch;
+  const props = {
+    modelOptions: [],
+    filteredModelOptions: [],
+    modelSearchQuery: "",
+    onSearchQueryChange() {},
+    onSelectModel() {},
+    roleHostId: "remote",
+    roleCwd: "/workspace/a b",
+    currentModel: { provider: "current", modelId: "selected" },
+    roleSessionId: "session1",
+    roleThinkingLevel: "low",
+    onSelectRole: async (role: string, preview: { provider: string | null; modelId: string | null; effectiveThinkingLevel: string | null }) => {
+      selected = [role, preview];
+      return true;
+    },
+    onClose: () => { closed = true; },
+    isMobile: true,
+  };
+  try {
+    const view = render(React.createElement(ModelPickerPanel, props));
+    await screen.findByRole("button", { name: /Default One · low/ });
+    assert.equal(requested, "/api/chat-roles?hostId=remote&cwd=%2Fworkspace%2Fa+b&sessionId=session1&thinkingLevel=low&currentProvider=current&currentModelId=selected");
+    assert.ok((screen.getByRole("button", { name: /Fast Unavailable/ }) as HTMLButtonElement).disabled);
+    view.rerender(React.createElement(ModelPickerPanel, { ...props, roleThinkingLevel: "high" }));
+    await waitFor(() => assert.equal(requests, 2));
+    assert.ok(requested.includes("thinkingLevel=high"));
+    await screen.findByRole("button", { name: /Default One · low/ });
+    view.rerender(React.createElement(ModelPickerPanel, { ...props, roleThinkingLevel: "high", modelSearchQuery: "two" }));
+    assert.equal(screen.queryByRole("button", { name: /Default One/ }), null);
+    assert.ok(screen.getByRole("button", { name: /custom Two/ }));
+    view.rerender(React.createElement(ModelPickerPanel, { ...props, roleThinkingLevel: "high" }));
+    fireEvent.click(screen.getByRole("button", { name: /Default One · low/ }));
+    await screen.findByRole("button", { name: /Default One · low/ });
+    assert.deepEqual(selected, ["default", { provider: "p", modelId: "one", effectiveThinkingLevel: "low" }]);
+    await Promise.resolve();
+    assert.equal(closed, true);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an unresolved default can use the native current-model fallback and reports rejection", async () => {
+  const originalFetch = globalThis.fetch;
+  let selected = "";
+  globalThis.fetch = Object.assign(async () => Response.json({ roles: [
+    { id: "default", provider: null, modelId: null, modelName: null, thinkingLevel: null, effectiveThinkingLevel: null },
+    { id: "smol", provider: null, modelId: null, modelName: null, thinkingLevel: null, effectiveThinkingLevel: null },
+  ] }), { preconnect: originalFetch.preconnect }) as typeof fetch;
+  try {
+    render(React.createElement(ModelPickerPanel, {
+      modelOptions: [], filteredModelOptions: [], modelSearchQuery: "", onSearchQueryChange() {}, onSelectModel() {},
+      roleHostId: "remote", roleCwd: "/workspace", onSelectRole: async (role: string) => { selected = role; return false; },
+    }));
+    const defaultRole = await screen.findByRole("button", { name: /Default Unavailable/ });
+    assert.equal((defaultRole as HTMLButtonElement).disabled, false);
+    assert.equal((screen.getByRole("button", { name: /Fast Unavailable/ }) as HTMLButtonElement).disabled, true);
+    fireEvent.click(defaultRole);
+    await screen.findByRole("alert");
+    assert.equal(selected, "default");
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a role reply from a previous session does not close the new picker", async () => {
+  const originalFetch = globalThis.fetch;
+  const reply = Promise.withResolvers<boolean>();
+  let closed = false;
+  globalThis.fetch = Object.assign(async () => Response.json({ roles: [
+    { id: "smol", provider: "p", modelId: "one", modelName: "One", thinkingLevel: null, effectiveThinkingLevel: null },
+  ] }), { preconnect: originalFetch.preconnect }) as typeof fetch;
+  const props = {
+    modelOptions: [], filteredModelOptions: [], modelSearchQuery: "", onSearchQueryChange() {}, onSelectModel() {},
+    roleHostId: "remote", roleCwd: "/workspace", roleSessionId: "first",
+    onSelectRole: () => reply.promise, onClose: () => { closed = true; },
+  };
+  try {
+    const view = render(React.createElement(ModelPickerPanel, props));
+    fireEvent.click(await screen.findByRole("button", { name: /Fast One/ }));
+    view.rerender(React.createElement(ModelPickerPanel, { ...props, roleSessionId: "second" }));
+    await screen.findByRole("button", { name: /Fast One/ });
+    reply.resolve(true);
+    await Promise.resolve();
+    assert.equal(closed, false);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
   }
 });

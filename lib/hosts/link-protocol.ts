@@ -98,6 +98,7 @@ export const HISTORY_MUTATING_COMMANDS = new Set([
   "set_todos",
   "set_session_name",
   "set_model",
+  "set_chat_role",
   "cycle_model",
   "set_thinking_level",
   "cycle_thinking_level",
@@ -172,6 +173,7 @@ export const HOST_OP_NAMES = [
   "hostSettingsGet",
   "hostSettingsSet",
   "modelsList",
+  "chatRolesList",
   "usageReport",
   "ptySessions",
 ] as const;

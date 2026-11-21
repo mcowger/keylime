@@ -7,8 +7,10 @@ import {
   SessionEntryBaseSchema,
   SessionEntrySchema,
   SessionStatsInfoSchema,
+  WebSessionModelSchema,
 } from "./domain";
 import { NativeAgentMessageSchema, PlanStateSchema } from "./runner-native-events";
+import { ChatRolesSchema } from "./configuration-models";
 import type { OperationContract } from "./operations";
 
 const s = () => Type.String();
@@ -19,6 +21,13 @@ const nullable = (x: TSchema) => Type.Union([x, Type.Null()]);
 const literals = (...values: string[]) =>
   Type.Union(values.map((value) => Type.Literal(value)));
 const empty = Type.Object({});
+/** Role selection reply, safe for the host link and browser. */
+export const SetChatRoleResultSchema = Type.Object(
+  { model: WebSessionModelSchema, thinkingLevel: Type.Union([Type.String(), Type.Null()]) },
+  { additionalProperties: false, description: "Selected role model and effective thinking level; excludes provider credentials and headers." },
+);
+export type SetChatRoleResult = Static<typeof SetChatRoleResultSchema>;
+
 const none = Type.Undefined({
   description: "No response data; the JSON response omits data.",
 });
@@ -804,7 +813,7 @@ Recovery: Use session history when messages are omitted; do not treat an uncerta
     "get_state",
     `Usage: Read live session state.
 Inputs: No arguments.
-Invariants: This is a current in-process snapshot, not a durable history or completion guarantee.
+Invariants: This is a current in-process snapshot, not a durable history or completion guarantee; model metadata excludes host-local provider credentials and headers.
 Effects: Reads model, queue, goal, tools and activity state without submitting work.
 Recovery: Refresh after reconnecting or when state changes.`,
     empty,
@@ -836,11 +845,21 @@ Recovery: Refresh after reconnecting or when state changes.`,
     "set_model",
     `Usage: Select an exact provider and model for this session.
 Inputs: Supply both provider and modelId.
-Invariants: A miss waits for background discovery and refreshes that provider on the session's host before failing.
+Invariants: A miss waits for background discovery and refreshes that provider on the session's host before failing; the result excludes host-local provider credentials and headers.
 Effects: Changes the active session model.
 Recovery: Read state or available models after an uncertain response before selecting again.`,
     Type.Object({ provider: s(), modelId: s() }),
-    OmpModelSchema,
+    WebSessionModelSchema,
+  ),
+  command(
+    "set_chat_role",
+    `Usage: Apply a configured chat role to the live session.
+Inputs: Supply a known chat role ID.
+Invariants: Resolves against the full available registry using OMP's role cycle, independently of enabledModels; unavailable roles fail.
+Effects: Applies OMP's session role marker, model and explicit role thinking without changing settings.
+Recovery: Read session state after an uncertain response before applying again.`,
+    Type.Object({ role: Type.String({ minLength: 1 }) }),
+    SetChatRoleResultSchema,
   ),
   command(
     "cycle_model",
@@ -857,6 +876,12 @@ Recovery: Read current state after uncertainty rather than cycling again blindly
         thinkingLevel: opt(s()),
       }),
     ),
+  ),
+  command(
+    "get_chat_roles",
+    `Usage: Resolve workspace chat roles.\nInputs: Optionally supply the current composer thinking selector, whether an unconfigured default may use the runner model, and a current provider/model ID pair for a temporary runner.\nInvariants: Uses native OMP role-cycle resolution and the full available registry; the supplied selector only affects the preview.\nEffects: Waits for model discovery.\nRecovery: Check workspace settings and provider configuration.`,
+    Type.Object({ thinkingLevel: opt(s()), currentModelFallback: opt(b()), currentProvider: opt(Type.String({ minLength: 1 })), currentModelId: opt(Type.String({ minLength: 1 })) }),
+    ChatRolesSchema,
   ),
   command(
     "get_available_models",

@@ -51,8 +51,8 @@ function newSessionErrorResponse(error: unknown) {
 /**
  * @apiContract createAgentSession
  * @apiUsage Create a fresh session on a registered host and optionally initialize and send its first command.
- * @apiInputs Supply cwd and command type; hostId selects the host. provider and modelId take effect together; thinkingLevel, name, toolNames and advisor configure the spawn. Images are validated; uploads are only supported on existing sessions.
- * @apiInvariants poolId, creationId and ref are rejected; a supplied sessionId is discarded. ensure_session creates without forwarding a prompt, although model, thinking level and name may still be initialized.
+ * @apiInputs Supply cwd and command type; hostId selects the host. provider and modelId take effect together; chatRole, thinkingLevel, name, toolNames and advisor configure the spawn. Images are validated; uploads are only supported on existing sessions.
+ * @apiInvariants poolId, creationId and ref are rejected; a supplied sessionId is discarded. ensure_session creates without forwarding a prompt, although model, role, thinking level and name may still be initialized. A supplied thinkingLevel overrides the role's effort.
  * @apiEffects Starts an RPC process, applies initialization in order and sends the command unless it is ensure_session. The session may not yet have a persisted transcript.
  * @apiRecovery An offline error can include the new sessionId and delivery status: inspect that session before retrying an uncertain command, rather than creating another session. Other initialization failures destroy the new wrapper.
  */
@@ -105,6 +105,7 @@ export async function POST(req: Request) {
     const {
       provider,
       modelId,
+      chatRole,
       toolNames,
       thinkingLevel,
       advisor,
@@ -113,6 +114,7 @@ export async function POST(req: Request) {
     } = command as {
       provider?: string;
       modelId?: string;
+      chatRole?: string;
       toolNames?: string[];
       thinkingLevel?: string;
       advisor?: boolean;
@@ -129,7 +131,7 @@ export async function POST(req: Request) {
       );
     }
     if (
-      [provider, modelId, thinkingLevel, name].some(
+      [provider, modelId, chatRole, thinkingLevel, name].some(
         (value) =>
           value !== undefined && (typeof value !== "string" || !value.trim()),
       ) ||
@@ -166,6 +168,11 @@ export async function POST(req: Request) {
           { type: "set_model", provider, modelId },
           { preserveUnknownDelivery },
         );
+      if (chatRole)
+        await session.send(
+          { type: "set_chat_role", role: chatRole },
+          { preserveUnknownDelivery },
+        );
       if (thinkingLevel)
         await session.send(
           { type: "set_thinking_level", level: thinkingLevel },
@@ -182,6 +189,7 @@ export async function POST(req: Request) {
     const preparing =
       promptCommand.type !== "ensure_session" ||
       !!(provider && modelId) ||
+      !!chatRole ||
       !!thinkingLevel ||
       !!name;
 

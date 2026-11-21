@@ -1,6 +1,7 @@
 "use client";
 
 import React, {
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -16,6 +17,7 @@ import {
   Search,
   Star,
 } from "lucide-react";
+import type { ChatRoles } from "@/lib/api-contracts/configuration-models";
 import { useI18n } from "@/lib/i18n";
 import { providerInitials } from "./ModelsConfig-types";
 import type { ModelOption } from "./ChatInput-model-options";
@@ -129,6 +131,14 @@ export interface ModelPickerPanelProps {
   selectionDisabled?: boolean;
   isMobile?: boolean;
   onSelectModel: (provider: string, modelId: string) => void;
+  roleHostId?: string;
+  roleCwd?: string | null;
+  roleSessionId?: string | null;
+  roleThinkingLevel?: string;
+  onSelectRole?: (
+    role: string,
+    preview: { provider: string | null; modelId: string | null; effectiveThinkingLevel: string | null },
+  ) => Promise<boolean>;
   onClose?: () => void;
 }
 
@@ -147,9 +157,73 @@ export function ModelPickerPanel({
   selectionDisabled,
   isMobile,
   onSelectModel,
+  roleHostId,
+  roleCwd,
+  roleSessionId,
+  roleThinkingLevel,
+  onSelectRole,
   onClose,
 }: ModelPickerPanelProps) {
   const { t } = useI18n();
+  const [roles, setRoles] = useState<ChatRoles["roles"]>([]);
+  const [rolesError, setRolesError] = useState<"load" | "select" | null>(null);
+  const [rolePending, setRolePending] = useState(false);
+  const roleOwnerRef = useRef(0);
+  useEffect(() => {
+    setRolePending(false);
+    return () => { roleOwnerRef.current += 1; };
+  }, [roleHostId, roleCwd, roleSessionId]);
+  useEffect(() => {
+    setRoles([]);
+    setRolesError(null);
+    if (!roleHostId || !roleCwd || !onSelectRole) return;
+    const controller = new AbortController();
+    const query = new URLSearchParams({ hostId: roleHostId, cwd: roleCwd });
+    if (roleSessionId) query.set("sessionId", roleSessionId);
+    if (roleThinkingLevel) query.set("thinkingLevel", roleThinkingLevel);
+    if (currentModel?.provider && currentModel.modelId) {
+      query.set("currentProvider", currentModel.provider);
+      query.set("currentModelId", currentModel.modelId);
+    }
+    void fetch(`/api/chat-roles?${query}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed to load chat roles");
+        return response.json() as Promise<ChatRoles>;
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) setRoles(data.roles);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRolesError("load");
+      });
+    return () => controller.abort();
+  }, [
+    roleHostId,
+    roleCwd,
+    roleSessionId,
+    roleThinkingLevel,
+    currentModel?.provider,
+    currentModel?.modelId,
+    onSelectRole,
+  ]);
+  const roleLabels: Record<string, string> = {
+    default: t("chatInput.roleDefault"),
+    smol: t("chatInput.roleFast"),
+    slow: t("chatInput.roleThinking"),
+  };
+  const filteredRoles = roles.filter((role) =>
+    [
+      roleLabels[role.id] ?? role.id,
+      role.id,
+      role.provider,
+      role.modelId,
+      role.modelName,
+      role.thinkingLevel,
+      role.effectiveThinkingLevel,
+    ].some((value) =>
+      value?.toLowerCase().includes(modelSearchQuery.trim().toLowerCase()),
+    ),
+  );
   const searching = modelSearchQuery.trim().length > 0;
   const [favoriteModels, setFavoriteModels] = useState(readFavoriteModels);
   const [otherModelsOpen, setOtherModelsOpen] = useState(false);
@@ -243,7 +317,7 @@ export function ModelPickerPanel({
           type="button"
           role="menuitemradio"
           aria-checked={isActive}
-          disabled={selectionDisabled}
+          disabled={selectionDisabled || rolePending}
           onClick={() => onSelectModel(opt.provider, opt.modelId)}
         >
           <span className="picker-check">
@@ -330,6 +404,59 @@ export function ModelPickerPanel({
       )}
 
       <div className="picker-model-list">
+        {rolesError && (
+          <div role="alert" className="picker-empty">
+            {t(rolesError === "load" ? "chatInput.rolesError" : "chatInput.roleSelectionError")}
+          </div>
+        )}
+        {filteredRoles.length > 0 && (
+          <div role="group" aria-label={t("chatInput.rolesLabel")}>
+            <div className="picker-group-label">{t("chatInput.rolesLabel")}</div>
+            {filteredRoles.map((role) => (
+              <button
+                key={role.id}
+                type="button"
+                className="picker-row"
+                title={
+                  role.modelId
+                    ? `${role.provider}/${role.modelId} · ${role.effectiveThinkingLevel ?? t("chatInput.roleReasoningUnspecified")}`
+                    : t("chatInput.roleUnresolved")
+                }
+                disabled={
+                  selectionDisabled || rolePending || (role.id !== "default" && (!role.provider || !role.modelId))
+                }
+                onClick={() => {
+                  if (!onSelectRole) return;
+                  setRolePending(true);
+                  const owner = roleOwnerRef.current;
+                  setRolesError(null);
+                  void onSelectRole(role.id, {
+                    provider: role.provider,
+                    modelId: role.modelId,
+                    effectiveThinkingLevel: role.effectiveThinkingLevel,
+                  })
+                    .then((success) => {
+                      if (owner !== roleOwnerRef.current) return;
+                      if (success) onClose?.();
+                      else setRolesError("select");
+                    })
+                    .catch(() => { if (owner === roleOwnerRef.current) setRolesError("select"); })
+                    .finally(() => { if (owner === roleOwnerRef.current) setRolePending(false); });
+                }}
+              >
+                <span className="picker-model-name">
+                  {roleLabels[role.id] ?? role.id}
+                </span>
+                {" "}
+                <span className="picker-row-meta">
+                  {role.modelId
+                    ? `${role.modelName || role.modelId} · ${role.effectiveThinkingLevel ?? t("chatInput.roleReasoningUnspecified")}`
+                    : t("chatInput.roleUnresolved")}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         {favorites.length > 0 && (
           <div role="group" aria-label={t("chatInput.favoriteModels")}>
             <div className="picker-group-label">
@@ -447,7 +574,7 @@ export function ModelPickerPanel({
             </CollapsiblePanel>
           </Collapsible>
         )}
-        {favorites.length === 0 && otherModels.length === 0 && (
+        {favorites.length === 0 && otherModels.length === 0 && filteredRoles.length === 0 && (
           <div className="picker-empty">
             {showModelsLoading
               ? t("chatInput.loadingModels")
