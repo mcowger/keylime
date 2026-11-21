@@ -32,6 +32,9 @@ import {
   WorkspaceDeleteResultSchema,
   WorkspaceTerminalSchema,
   TerminalSnapshotSchema,
+  WorkspaceScriptListResultSchema,
+  WorkspaceScriptsHttpPostSchema,
+  WorkspaceScriptsHttpPostResultSchema,
   ShipPreviewSchema,
   ShipRequestSchema,
   ShipJobSchema,
@@ -696,6 +699,41 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
           ]),
         ),
         499: error("Request cancelled before workspace creation starts."),
+      },
+    },
+  ),
+  ops(
+    "/api/workspace-scripts",
+    "get",
+    "workspaceScriptsGet",
+    "List workspace scripts and runs",
+    {
+      parameters: [
+        hostId,
+        queryParameter("cwd", s, true, "Workspace path on the owning host."),
+      ],
+      responses: {
+        ...responses(WorkspaceScriptListResultSchema),
+        501: error("The host daemon does not support workspace scripts."),
+        504: error("The host did not answer in time."),
+      },
+    },
+  ),
+  ops(
+    "/api/workspace-scripts",
+    "post",
+    "workspaceScriptsPost",
+    "Launch or stop a workspace script",
+    {
+      requestBody: jsonBody(
+        WorkspaceScriptsHttpPostSchema,
+        "At most 64 KiB of JSON.",
+      ),
+      responses: {
+        ...responses(WorkspaceScriptsHttpPostResultSchema),
+        413: error("The request body exceeds 64 KiB."),
+        501: error("The host daemon does not support workspace scripts."),
+        504: error("The host did not answer in time; the action may have run."),
       },
     },
   ),

@@ -1,0 +1,48 @@
+.workspace-scripts {
+  padding: 12px;
+  font-size: var(--text-sm);
+}
+
+.workspace-scripts h3 {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.workspace-scripts p {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+}
+
+.workspace-script-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.workspace-script-description {
+  flex: 1 1 120px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-script-row button {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.workspace-script-row button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.workspace-script-row button:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}

@@ -47,6 +47,7 @@
   "jobs.servicesError": "Services unavailable: {error}",
   "tabBar.activity": "Activity",
   "tabBar.activityEmpty": "No activity yet",
+  "tabBar.scripts": "Scripts",
   "modelActivity.idle": "Idle",
   "modelActivity.waitingElapsed": "Waiting for model: {seconds} seconds",
   "modelActivity.toolsElapsed": "Running tools: {seconds} seconds",

@@ -104,6 +104,16 @@ Recovery: Re-list or snapshot after disconnection; a restarted daemon does not p
     terminalResult,
   ),
   op(
+    "workspaceScripts",
+    `Usage: List or control named Paseo scripts and services for a workspace.
+Inputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.
+Invariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.
+Effects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.
+Recovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.`,
+    obj({ input: M.WorkspaceScriptsRequestSchema }),
+    M.WorkspaceScriptsResultSchema,
+  ),
+  op(
     "hierarchy",
     `Usage: Inspect or change the registered project/workspace/session hierarchy.
 Inputs: Action-specific IDs, host paths, imports or project metadata select the operation; nullable metadata clears it.
@@ -228,7 +238,7 @@ Recovery: Reopen the picker to refresh refs; a remote that couldn't be refreshed
     `Usage: Remove a registered worktree.
 Inputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.
 Invariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.
-Effects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch.
+Effects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch. Successful Git removal discards retained terminal screens.
 Recovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.`,
     obj({ input: M.WorkspaceDeleteRequestSchema }),
     M.WorkspaceDeleteResultSchema,

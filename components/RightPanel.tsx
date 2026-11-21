@@ -38,6 +38,7 @@ import type { WorkspaceFileSource } from "@/lib/workspace-types";
 export type RightPanelView =
   | "explorer"
   | "git"
+  | "scripts"
   | "notifications"
   | "connection"
   | "file"
@@ -46,6 +47,7 @@ export type RightPanelView =
 
 interface Props {
   fileTabs: Tab[];
+  onScriptsContainerChange?: (container: HTMLDivElement | null) => void;
   onActivityContainerChange: (container: HTMLDivElement | null) => void;
   activeFileTabId: string | null;
   rightView: RightPanelView;
@@ -110,6 +112,7 @@ interface Props {
 export const RightPanel = memo(function RightPanel({
   fileTabs,
   onActivityContainerChange,
+  onScriptsContainerChange,
   activeFileTabId,
   rightView,
   onSelectView,
@@ -280,6 +283,12 @@ export const RightPanel = memo(function RightPanel({
               gitSelected={rightView === "git"}
               onSelectGit={() => onSelectView("git")}
               gitBadge={gitBadge}
+              scriptsSelected={rightView === "scripts"}
+              onSelectScripts={
+                onScriptsContainerChange
+                  ? () => onSelectView("scripts")
+                  : undefined
+              }
               notificationsSelected={rightView === "notifications"}
               onSelectNotifications={
                 isMobile ? () => onSelectView("notifications") : undefined
@@ -951,6 +960,20 @@ export const RightPanel = memo(function RightPanel({
             <NotificationList />
           )}
         </div>
+        {onScriptsContainerChange && (
+          <div
+            ref={onScriptsContainerChange}
+            id="workspace-file-panel-scripts"
+            role="tabpanel"
+            aria-label={t("tabBar.scripts")}
+            style={{
+              display: rightView === "scripts" ? "block" : "none",
+              flex: 1,
+              minHeight: 0,
+              overflow: "auto",
+            }}
+          />
+        )}
         <div
           id="workspace-file-panel-activity"
           role="tabpanel"

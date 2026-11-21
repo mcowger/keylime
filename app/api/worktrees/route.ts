@@ -59,7 +59,7 @@ export async function GET(request: Request) {
  * @apiUsage Prepare, create, configure or delete a registered workspace.
  * @apiInputs Send action, action-specific input and optional hostId; prepare requires projectPath, nonblank prompt and the selected baseRef.
  * @apiInvariants Prepare requires a registered Git project; if naming fails or exceeds 10 seconds it uses a generic name and random branch. Cancellation before creation prevents it from starting.
- * @apiEffects Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists.
+ * @apiEffects Prepare and create start creation; settings can change configuration; delete removes a registered worktree and invalidates session lists. Successful Git removal discards retained terminal screens.
  * @apiRecovery After an uncertain result inspect job status and worktree state before retrying; deletion is not assumed rolled back.
  */
 export async function POST(request: Request) {

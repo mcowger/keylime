@@ -7,7 +7,15 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { Activity, Bell, Folder, GitBranch, ListTodo, X } from "lucide-react";
+import {
+  Activity,
+  Bell,
+  Folder,
+  GitBranch,
+  ListTodo,
+  SquareTerminal,
+  X,
+} from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { getFileIcon } from "./FileIcons";
 
@@ -36,6 +44,8 @@ interface Props {
   onSelectGit?: () => void;
   /** Changed-file count badge on the Git tab. */
   gitBadge?: number;
+  scriptsSelected?: boolean;
+  onSelectScripts?: () => void;
   /** Pinned Notifications tab rendered first. */
   notificationsSelected?: boolean;
   onSelectNotifications?: () => void;
@@ -172,6 +182,8 @@ export function TabBar({
   gitSelected = false,
   onSelectGit,
   gitBadge = 0,
+  scriptsSelected = false,
+  onSelectScripts,
   notificationsSelected = false,
   onSelectNotifications,
   notificationsBadge = 0,
@@ -189,6 +201,7 @@ export function TabBar({
     ...(onSelectNotifications ? ["notifications"] : []),
     ...(onSelectExplorer ? ["explorer"] : []),
     ...(onSelectGit ? ["git"] : []),
+    ...(onSelectScripts ? ["scripts"] : []),
     ...(onSelectActivity ? ["activity"] : []),
     ...(onSelectJobs ? ["jobs"] : []),
     ...(onSelectConnection ? ["connection"] : []),
@@ -198,6 +211,7 @@ export function TabBar({
   const selectTabById = (id: string) => {
     if (id === "explorer") onSelectExplorer?.();
     else if (id === "git") onSelectGit?.();
+    else if (id === "scripts") onSelectScripts?.();
     else if (id === "notifications") onSelectNotifications?.();
     else if (id === "activity") onSelectActivity?.();
     else if (id === "jobs") onSelectJobs?.();
@@ -335,6 +349,20 @@ export function TabBar({
           badge={gitBadge}
           badgeColor="var(--status-modified)"
           onSelect={onSelectGit}
+          onKeyDown={handleTabKeyDown}
+        />
+      )}
+      {onSelectScripts && (
+        <PinnedTab
+          id="scripts"
+          panelId="workspace-file-panel-scripts"
+          label={t("tabBar.scripts")}
+          title={t("tabBar.scripts")}
+          icon={<SquareTerminal size={13} strokeWidth={2} aria-hidden="true" />}
+          selected={scriptsSelected}
+          badge={0}
+          badgeColor="var(--accent)"
+          onSelect={onSelectScripts}
           onKeyDown={handleTabKeyDown}
         />
       )}

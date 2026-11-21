@@ -35,7 +35,10 @@ import { workspaceShipState } from "./workspace-ship";
 import { isEffortPath, isEffortRepo } from "./systems";
 
 // Daemon-only metadata. Public hierarchy responses never contain these rows.
-type RegistryProject = HierarchyProject & { hidden?: true; effortRoot?: true };
+export type RegistryProject = HierarchyProject & {
+  hidden?: true;
+  effortRoot?: true;
+};
 type RegistrySnapshot = Omit<HierarchySnapshot, "projects"> & {
   projects: RegistryProject[];
 };

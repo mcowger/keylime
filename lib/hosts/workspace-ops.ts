@@ -406,7 +406,10 @@ async function bashPath(sessionId: string, requested: string): Promise<string> {
 }
 
 export interface WorkspaceService {
-  ops: Omit<WorkspaceOps, "terminals" | "systems" | "planning">;
+  ops: Omit<
+    WorkspaceOps,
+    "terminals" | "systems" | "planning" | "workspaceScripts"
+  >;
   busy(): boolean;
   onDisconnect(): void;
   stop(): Promise<void>;

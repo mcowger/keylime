@@ -91,6 +91,7 @@ import * as uploads from "@/app/api/uploads/route";
 import * as usage from "@/app/api/usage/route";
 import * as webAuthSession from "@/app/api/web-auth/session/route";
 import * as webSettings from "@/app/api/web-settings/route";
+import * as workspaceScripts from "@/app/api/workspace-scripts/route";
 import * as worktrees from "@/app/api/worktrees/route";
 import type { BrowserLinkData } from "@/lib/browser-link";
 import type { LinkSocketData } from "@/lib/hosts/hub";
@@ -209,6 +210,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   usage: usage,
   "web-auth/session": webAuthSession,
   "web-settings": webSettings,
+  "workspace-scripts": workspaceScripts,
   worktrees: worktrees,
 };
 

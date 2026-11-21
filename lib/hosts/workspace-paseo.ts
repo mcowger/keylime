@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isRecord } from "../type-guards";
 import type { WorkspacePaseoPreview } from "../workspace-creation-types";
 
 const MAX_FILE = 1024 * 1024;
@@ -33,6 +34,119 @@ function readRegular(file: string, optional = false): string {
   }
 }
 
+function parseRecipe(raw: string): Record<string, unknown> {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error("paseo.json is not valid JSON");
+  }
+  if (!isRecord(data)) throw new Error("paseo.json must contain an object");
+  return data;
+}
+
+export type PaseoScript = {
+  kind: "script" | "service";
+  command: string | null;
+  port?: number;
+  error: string | null;
+};
+
+export function validPaseoScriptName(name: string): boolean {
+  return /^[^\p{Cc}]{1,256}$/u.test(name);
+}
+
+export type PaseoScripts = {
+  entries: Map<string, PaseoScript>;
+  error: string | null;
+  customAllocator: boolean;
+};
+
+export function readPaseoScripts(projectPath: string): PaseoScripts {
+  const entries = new Map<string, PaseoScript>();
+  let raw: string;
+  try {
+    raw = readRegular(path.join(projectPath, "paseo.json"));
+  } catch (error) {
+    return {
+      entries,
+      error:
+        error instanceof Error && "code" in error && error.code === "ENOENT"
+          ? "paseo.json is missing"
+          : "Cannot read paseo.json as a bounded regular file",
+      customAllocator: false,
+    };
+  }
+  let config: Record<string, unknown>;
+  try {
+    config = parseRecipe(raw);
+  } catch (error) {
+    return {
+      entries,
+      error: error instanceof Error ? error.message : "Invalid paseo.json",
+      customAllocator: false,
+    };
+  }
+  const customAllocator =
+    isRecord(config.worktree) && Object.hasOwn(config.worktree, "servicePorts");
+  const { scripts } = config;
+  if (scripts === undefined) return { entries, error: null, customAllocator };
+  if (!isRecord(scripts))
+    return {
+      entries,
+      error: "paseo.json scripts must be an object",
+      customAllocator,
+    };
+  const rows = Object.entries(scripts);
+  if (rows.length > 256)
+    return {
+      entries,
+      error: "paseo.json may define at most 256 scripts",
+      customAllocator,
+    };
+
+  let error: string | null = null;
+  for (const [name, value] of rows) {
+    if (!validPaseoScriptName(name)) {
+      error =
+        "Script names must be 1–256 characters with no control characters";
+      continue;
+    }
+    const entry = isRecord(value) ? value : null;
+    const kind = entry?.type === "service" ? "service" : "script";
+    const command = entry?.command;
+    if (
+      typeof command !== "string" ||
+      !command.trim() ||
+      command.includes("\0")
+    ) {
+      entries.set(name, {
+        kind,
+        command: null,
+        error: "A nonblank command without NUL characters is required",
+      });
+      continue;
+    }
+    const port = kind === "service" ? entry?.port : undefined;
+    if (
+      port !== undefined &&
+      (typeof port !== "number" ||
+        !Number.isInteger(port) ||
+        port < 1 ||
+        port > 65535)
+    ) {
+      entries.set(name, {
+        kind,
+        command,
+        error: "Service port must be an integer from 1 to 65535",
+      });
+      continue;
+    }
+    entries.set(name, { kind, command, port, error: null });
+  }
+  return { entries, error, customAllocator };
+}
+
 export function readPaseo(projectPath: string): WorkspacePaseoPreview {
   const recipePath = path.join(projectPath, "paseo.json");
   const includePath = path.join(projectPath, ".worktreeinclude");
@@ -54,10 +168,7 @@ export function readPaseo(projectPath: string): WorkspacePaseoPreview {
       throw error;
     }
     const include = readRegular(includePath, true);
-    const data: unknown = JSON.parse(raw);
-    if (!data || typeof data !== "object" || Array.isArray(data))
-      throw new Error("paseo.json must contain an object");
-    const config = data as Record<string, unknown>;
+    const config = parseRecipe(raw);
     const worktree = config.worktree === undefined ? {} : config.worktree;
     if (!worktree || typeof worktree !== "object" || Array.isArray(worktree))
       throw new Error("worktree must be an object");
@@ -82,11 +193,11 @@ export function readPaseo(projectPath: string): WorkspacePaseoPreview {
     preview.teardown = commands(hooks.teardown, "teardown");
     preview.includePatterns = include.split(/\r?\n/);
     if (preview.includePatterns.at(-1) === "") preview.includePatterns.pop();
-    if (config.scripts !== undefined)
-      preview.unsupportedFeatures.push("scripts and services");
     if (hooks.terminals !== undefined)
       preview.unsupportedFeatures.push("terminals");
-    preview.unsupportedFeatures.push("port allocation and service runtime");
+    if (Object.hasOwn(hooks, "servicePorts"))
+      preview.unsupportedFeatures.push("worktree.servicePorts");
+    preview.unsupportedFeatures.push("service proxy");
     preview.fingerprint = createHash("sha256")
       .update(raw)
       .update("\0")

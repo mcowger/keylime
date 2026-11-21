@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Dialog, DialogContent, DialogTitle } from "./ui/primitives";
 import { WorkspaceChatPicker } from "./WorkspaceChatPicker";
+import { WorkspaceScripts, useWorkspaceScripts } from "./WorkspaceScripts";
 import type { SessionInfo } from "@/lib/types";
 import type { EffortRecord } from "@/lib/api-contracts/systems";
 import { EffortSavedChats } from "./EffortDetails";
@@ -43,6 +44,9 @@ export function WorkspaceTerminalTabs({
   mobile,
   headerTarget,
   panelsTarget,
+  scriptsTarget,
+  scriptsVisible,
+  onViewScriptOutput,
   onSelectSaved,
   onGenerateTitle,
   canGenerateTitle,
@@ -66,6 +70,9 @@ export function WorkspaceTerminalTabs({
   mobile: boolean;
   headerTarget: HTMLElement | null;
   panelsTarget: HTMLElement | null;
+  scriptsTarget: HTMLElement | null;
+  scriptsVisible: boolean;
+  onViewScriptOutput?: () => void;
   onSelectSaved: (session: SessionInfo) => void;
   onGenerateTitle: () => void;
   canGenerateTitle: boolean;
@@ -88,6 +95,35 @@ export function WorkspaceTerminalTabs({
   const [attention, setAttention] = useState<Set<string>>(() => new Set());
   const closingChats = useRef(new Set<string>());
   const [closingChatIds, setClosingChatIds] = useState(new Set<string>());
+  const scripts = useWorkspaceScripts({
+    hostId,
+    cwd,
+    open: enabled && scriptsVisible && Boolean(scriptsTarget && cwd),
+    activeId,
+    activeChatId,
+    onInventory: (scope, terminal) => {
+      if (
+        workspace.current.hostId !== scope.hostId ||
+        workspace.current.cwd !== scope.cwd
+      )
+        return;
+      changes.current++;
+      if (terminal)
+        setEntries((previous) => [
+          ...previous.filter(
+            (entry) =>
+              entry.hostId !== scope.hostId ||
+              entry.terminal.id !== terminal.id,
+          ),
+          { hostId: scope.hostId, terminal },
+        ]);
+      setRevision((value) => value + 1);
+    },
+    onView: (id) => {
+      onSelect(id);
+      onViewScriptOutput?.();
+    },
+  });
   const browsers = useWorkspaceBrowsers(
     chatTabs.flatMap((tab) => (tab.sessionId ? [tab.sessionId] : [])),
     enabled && Boolean(cwd),
@@ -371,7 +407,7 @@ export function WorkspaceTerminalTabs({
           }}
         >
           <DialogContent
-            ariaLabel="Workspace tabs and saved chats"
+            ariaLabel={mobile ? "Workspace tabs and saved chats" : "Saved chats"}
             className="workspace-switcher-dialog"
             style={
               mobile
@@ -588,6 +624,10 @@ export function WorkspaceTerminalTabs({
           {error}
         </div>
       )}
+      {enabled &&
+        scriptsVisible &&
+        scriptsTarget &&
+        createPortal(<WorkspaceScripts scripts={scripts} />, scriptsTarget)}
       {panelsTarget &&
         createPortal(
           <>

@@ -9,6 +9,7 @@ import type { SpawnResult } from "./host";
 import { SessionPtyManager } from "./session-pty";
 import { Value } from "@sinclair/typebox/value";
 import { SystemsRequestSchema } from "../api-contracts/systems";
+import { WorkspaceScriptsRequestSchema } from "../api-contracts/workspace-models";
 import type { HostInstalledBinaryDigests } from "../api-contracts/host-control-models";
 import {
   BrowserListSchema,
@@ -47,6 +48,7 @@ import { readHostLogin, type HostLink } from "./host-login";
 import { DaemonLink, dialable, nextRedialDelay } from "./daemon-link";
 import { ChannelTable } from "./daemon-channels";
 import { TerminalManager } from "./terminals";
+import { workspaceScriptsOperation } from "./workspace-scripts";
 import { checkPlanningAdmission, planningOperation } from "./planning";
 import {
   readHierarchy,
@@ -527,6 +529,8 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         terminals.stopWorkspace(directory),
       ]);
     },
+    discardTerminalOutput: (directory) =>
+      terminals.discardWorkspaceScreens(directory),
   };
   setWorkspaceDeletionAdapter(processes);
   const hostSocket: Promise<HostSocket | undefined> = listenHostSocket(
@@ -1011,9 +1015,32 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
             { terminals, processes, sessionsChanged },
           ),
         );
-      if (op === "terminals" || op === "systems") {
+      if (op === "terminals" || op === "systems" || op === "workspaceScripts") {
         try {
           const input = args.input;
+          if (op === "workspaceScripts") {
+            if (!Value.Check(WorkspaceScriptsRequestSchema, input))
+              throw new HostOpError(
+                400,
+                "invalid_request",
+                "Invalid workspace scripts request",
+              );
+            const assertCurrentLink = () => {
+              if (!link.isUp() || controller !== link)
+                throw new HostOpError(
+                  403,
+                  "link_not_authenticated",
+                  "The server link is no longer authenticated",
+                );
+            };
+            if (input.action !== "list") assertCurrentLink();
+            const value = await workspaceScriptsOperation(
+              input,
+              terminals,
+              assertCurrentLink,
+            );
+            return { ok: true, value };
+          }
           if (op === "systems") {
             if (!Value.Check(SystemsRequestSchema, input))
               throw new HostOpError(

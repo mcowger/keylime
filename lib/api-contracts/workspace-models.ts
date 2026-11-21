@@ -1,4 +1,4 @@
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { ProjectLaunchConfigSchema, SessionInfoSchema } from "./domain";
 import { ShipPrDigestSchema } from "./host-schemas";
 export { TerminalEventSchema, WorkspaceFileEventSchema } from "./host-schemas";
@@ -740,6 +740,136 @@ export const WorkspaceTerminalSchema = Type.Object(
       "Host-daemon terminal identity, working directory, title and dimensions in columns and rows.",
   },
 );
+export const WorkspaceScriptListRequestSchema = Type.Object(
+  { action: Type.Literal("list"), cwd: Type.String() },
+  {
+    description:
+      "List recipe entries and retained runs for a workspace on its owning host.",
+  },
+);
+export const WorkspaceScriptLaunchRequestSchema = Type.Object(
+  { action: Type.Literal("launch"), cwd: Type.String(), name: Type.String() },
+  {
+    description:
+      "Launch a command by its exact Paseo recipe name, never by supplied shell text.",
+  },
+);
+export const WorkspaceScriptStopRequestSchema = Type.Object(
+  {
+    action: Type.Literal("stop"),
+    cwd: Type.String(),
+    terminalId: Type.String(),
+  },
+  {
+    description:
+      "Stop this exact run in the workspace without discarding its screen.",
+  },
+);
+export const WorkspaceScriptsRequestSchema = Type.Union(
+  [
+    WorkspaceScriptListRequestSchema,
+    WorkspaceScriptLaunchRequestSchema,
+    WorkspaceScriptStopRequestSchema,
+  ],
+  {
+    description:
+      "List, launch, or stop a named Paseo command on the workspace's owning daemon.",
+  },
+);
+export type WorkspaceScriptsRequest = Static<
+  typeof WorkspaceScriptsRequestSchema
+>;
+
+const WorkspaceScriptKindSchema = literals("script", "service");
+export const WorkspaceScriptRunSchema = Type.Object(
+  {
+    terminalId: Type.String(),
+    status: literals("running", "exited", "stopped"),
+    port: nullable(
+      Type.Integer({
+        minimum: 1,
+        maximum: 65535,
+        description: "Host-local TCP port while assigned.",
+      }),
+    ),
+    exitCode: nullable(Type.Integer()),
+    signal: nullable(Type.String()),
+  },
+  {
+    description:
+      "A daemon-owned PTY run. Running means alive, not ready. Exit details are null until available.",
+  },
+);
+export type WorkspaceScriptRun = Static<typeof WorkspaceScriptRunSchema>;
+export const WorkspaceScriptRowSchema = Type.Object(
+  {
+    name: Type.String(),
+    kind: WorkspaceScriptKindSchema,
+    configured: Type.Boolean(),
+    error: nullable(Type.String()),
+    run: nullable(WorkspaceScriptRunSchema),
+  },
+  {
+    description:
+      "An exact recipe name or a retained run no longer configured. A row error prevents launch, not inspection or stop.",
+  },
+);
+export const WorkspaceScriptListResultSchema = Type.Object(
+  {
+    enabled: Type.Boolean(),
+    error: nullable(Type.String()),
+    entries: Type.Array(WorkspaceScriptRowSchema),
+  },
+  {
+    description:
+      "Live recipe entries in declaration order, followed by run-only entries. Disabled or unreadable recipes do not hide runs.",
+  },
+);
+export const WorkspaceScriptLaunchResultSchema = Type.Object(
+  { terminal: WorkspaceTerminalSchema },
+  {
+    description:
+      "The new host terminal; a successful spawn does not imply that the command is ready or still running.",
+  },
+);
+export const WorkspaceScriptStopResultSchema = Type.Object(
+  { stopped: Type.Literal(true) },
+  {
+    description:
+      "The exact run is no longer live; its screen is retained until close or successful relaunch.",
+  },
+);
+export const WorkspaceScriptsResultSchema = Type.Union(
+  [
+    WorkspaceScriptListResultSchema,
+    WorkspaceScriptLaunchResultSchema,
+    WorkspaceScriptStopResultSchema,
+  ],
+  { description: "The result for the requested list, launch, or stop action." },
+);
+export type WorkspaceScriptsResult = Static<
+  typeof WorkspaceScriptsResultSchema
+>;
+
+const workspaceScriptHost = Type.Object({ hostId: Type.String() });
+export const WorkspaceScriptsHttpPostSchema = Type.Union(
+  [
+    Type.Composite([workspaceScriptHost, WorkspaceScriptLaunchRequestSchema]),
+    Type.Composite([workspaceScriptHost, WorkspaceScriptStopRequestSchema]),
+  ],
+  {
+    description:
+      "Host-qualified launch or stop request. The host resolves commands by exact recipe name.",
+  },
+);
+export const WorkspaceScriptsHttpPostResultSchema = Type.Union(
+  [WorkspaceScriptLaunchResultSchema, WorkspaceScriptStopResultSchema],
+  {
+    description:
+      "The new terminal on launch or confirmation that the exact run stopped.",
+  },
+);
+
 export const TerminalSnapshotSchema = Type.Object(
   {
     terminal: WorkspaceTerminalSchema,

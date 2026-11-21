@@ -364,6 +364,9 @@
         "HostReply_workspaceCreationStatus": {
           "$ref": "#/components/messages/HostReply_workspaceCreationStatus"
         },
+        "HostReply_workspaceScripts": {
+          "$ref": "#/components/messages/HostReply_workspaceScripts"
+        },
         "HostRequest_activateHostArtifact": {
           "$ref": "#/components/messages/HostRequest_activateHostArtifact"
         },
@@ -630,6 +633,9 @@
         },
         "HostRequest_workspaceCreationStatus": {
           "$ref": "#/components/messages/HostRequest_workspaceCreationStatus"
+        },
+        "HostRequest_workspaceScripts": {
+          "$ref": "#/components/messages/HostRequest_workspaceScripts"
         }
       }
     }
@@ -1622,7 +1628,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to removeRegisteredWorktree; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
+        "description": "Reply to removeRegisteredWorktree; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch. Successful Git removal discards retained terminal screens.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
         "name": "HostReply_removeRegisteredWorktree",
         "payload": {
           "$ref": "#/components/schemas/HostReply_removeRegisteredWorktree"
@@ -1964,6 +1970,18 @@
           "$ref": "#/components/schemas/HostReply_workspaceCreationStatus"
         },
         "title": "HostReply_workspaceCreationStatus"
+      },
+      "HostReply_workspaceScripts": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to workspaceScripts; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+        "name": "HostReply_workspaceScripts",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_workspaceScripts"
+        },
+        "title": "HostReply_workspaceScripts"
       },
       "HostRequest_activateHostArtifact": {
         "contentType": "application/json",
@@ -2690,7 +2708,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
+        "description": "Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch. Successful Git removal discards retained terminal screens.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
         "name": "HostRequest_removeRegisteredWorktree",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_removeRegisteredWorktree"
@@ -3032,6 +3050,18 @@
           "$ref": "#/components/schemas/HostRequest_workspaceCreationStatus"
         },
         "title": "HostRequest_workspaceCreationStatus"
+      },
+      "HostRequest_workspaceScripts": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+        "name": "HostRequest_workspaceScripts",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_workspaceScripts"
+        },
+        "title": "HostRequest_workspaceScripts"
       }
     },
     "schemas": {
@@ -71420,7 +71450,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to removeRegisteredWorktree; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
+        "description": "Reply to removeRegisteredWorktree; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch. Successful Git removal discards retained terminal screens.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
         "title": "HostReply_removeRegisteredWorktree"
       },
       "HostReply_renameSessionFile": {
@@ -81236,6 +81266,548 @@
         "description": "Reply to workspaceCreationStatus; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read an asynchronous creation job.\nInputs: id identifies the host job.\nInvariants: Stage, status and logs describe recorded progress; interrupted is distinct from failure.\nEffects: Observes job state, including recovery of interrupted work.\nRecovery: Inspect the job and workspace before restarting creation.",
         "title": "HostReply_workspaceCreationStatus"
       },
+      "HostReply_workspaceScripts": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "ok": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "description": "Live recipe entries in declaration order, followed by run-only entries. Disabled or unreadable recipes do not hide runs.",
+                            "properties": {
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "entries": {
+                                "items": {
+                                  "description": "An exact recipe name or a retained run no longer configured. A row error prevents launch, not inspection or stop.",
+                                  "properties": {
+                                    "configured": {
+                                      "type": "boolean"
+                                    },
+                                    "error": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "kind": {
+                                      "anyOf": [
+                                        {
+                                          "const": "script",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "service",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "run": {
+                                      "anyOf": [
+                                        {
+                                          "description": "A daemon-owned PTY run. Running means alive, not ready. Exit details are null until available.",
+                                          "properties": {
+                                            "exitCode": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "integer"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "port": {
+                                              "anyOf": [
+                                                {
+                                                  "description": "Host-local TCP port while assigned.",
+                                                  "maximum": 65535,
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "signal": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "status": {
+                                              "anyOf": [
+                                                {
+                                                  "const": "running",
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "const": "exited",
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "const": "stopped",
+                                                  "type": "string"
+                                                }
+                                              ]
+                                            },
+                                            "terminalId": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "terminalId",
+                                            "status",
+                                            "port",
+                                            "exitCode",
+                                            "signal"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "kind",
+                                    "configured",
+                                    "error",
+                                    "run"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "error": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["enabled", "error", "entries"],
+                            "type": "object"
+                          },
+                          {
+                            "description": "The new host terminal; a successful spawn does not imply that the command is ready or still running.",
+                            "properties": {
+                              "terminal": {
+                                "description": "Host-daemon terminal identity, working directory, title and dimensions in columns and rows.",
+                                "properties": {
+                                  "cols": {
+                                    "description": "Terminal width in character columns.",
+                                    "type": "number"
+                                  },
+                                  "cwd": {
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "rows": {
+                                    "description": "Terminal height in character rows.",
+                                    "type": "number"
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "cwd",
+                                  "title",
+                                  "cols",
+                                  "rows"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": ["terminal"],
+                            "type": "object"
+                          },
+                          {
+                            "description": "The exact run is no longer live; its screen is retained until close or successful relaunch.",
+                            "properties": {
+                              "stopped": {
+                                "const": true,
+                                "type": "boolean"
+                              }
+                            },
+                            "required": ["stopped"],
+                            "type": "object"
+                          }
+                        ],
+                        "description": "The result for the requested list, launch, or stop action."
+                      }
+                    },
+                    "required": ["ok", "value"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "ok": {
+                        "const": false,
+                        "type": "boolean"
+                      },
+                      "status": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["ok", "status", "code", "error"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "ok": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "description": "Live recipe entries in declaration order, followed by run-only entries. Disabled or unreadable recipes do not hide runs.",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "entries": {
+                              "items": {
+                                "description": "An exact recipe name or a retained run no longer configured. A row error prevents launch, not inspection or stop.",
+                                "properties": {
+                                  "configured": {
+                                    "type": "boolean"
+                                  },
+                                  "error": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "script",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "service",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "run": {
+                                    "anyOf": [
+                                      {
+                                        "description": "A daemon-owned PTY run. Running means alive, not ready. Exit details are null until available.",
+                                        "properties": {
+                                          "exitCode": {
+                                            "anyOf": [
+                                              {
+                                                "type": "integer"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "port": {
+                                            "anyOf": [
+                                              {
+                                                "description": "Host-local TCP port while assigned.",
+                                                "maximum": 65535,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "signal": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "status": {
+                                            "anyOf": [
+                                              {
+                                                "const": "running",
+                                                "type": "string"
+                                              },
+                                              {
+                                                "const": "exited",
+                                                "type": "string"
+                                              },
+                                              {
+                                                "const": "stopped",
+                                                "type": "string"
+                                              }
+                                            ]
+                                          },
+                                          "terminalId": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "terminalId",
+                                          "status",
+                                          "port",
+                                          "exitCode",
+                                          "signal"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "kind",
+                                  "configured",
+                                  "error",
+                                  "run"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "error": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["enabled", "error", "entries"],
+                          "type": "object"
+                        },
+                        {
+                          "description": "The new host terminal; a successful spawn does not imply that the command is ready or still running.",
+                          "properties": {
+                            "terminal": {
+                              "description": "Host-daemon terminal identity, working directory, title and dimensions in columns and rows.",
+                              "properties": {
+                                "cols": {
+                                  "description": "Terminal width in character columns.",
+                                  "type": "number"
+                                },
+                                "cwd": {
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "type": "string"
+                                },
+                                "rows": {
+                                  "description": "Terminal height in character rows.",
+                                  "type": "number"
+                                },
+                                "title": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "cwd",
+                                "title",
+                                "cols",
+                                "rows"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": ["terminal"],
+                          "type": "object"
+                        },
+                        {
+                          "description": "The exact run is no longer live; its screen is retained until close or successful relaunch.",
+                          "properties": {
+                            "stopped": {
+                              "const": true,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["stopped"],
+                          "type": "object"
+                        }
+                      ],
+                      "description": "The result for the requested list, launch, or stop action."
+                    }
+                  },
+                  "required": ["ok", "value"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["ok", "status", "code", "error"],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to workspaceScripts; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+        "title": "HostReply_workspaceScripts"
+      },
       "HostRequest_activateHostArtifact": {
         "description": "Usage: Install a selected staged binary or pair and restart the standalone daemon.\nInputs: Supply its staged upload ID, an operation ID, the target executable and its expected SHA-256. A paired deployment also supplies the staged runner ID and digest.\nInvariants: Valid only on a supported standalone install and the server link that staged the artifacts. Replaying an admitted operation ID cannot trigger a second activation.\nEffects: The worker verifies and preflights the resulting pair before force-draining, even when busy. Restart interrupts active sessions, terminals and host operations; pending results can be lost. It backs up existing binaries before replacing them. If the runner is absent, a paired deployment creates it without overwriting a concurrently added file. The worker restarts the unit once; acceptance is not completion.\nRecovery: Read hostArtifactActivationStatus with the same operation ID after reconnect. Never blindly retry or automatically roll back a restart.",
         "properties": {
@@ -85531,7 +86103,7 @@
         "type": "object"
       },
       "HostRequest_removeRegisteredWorktree": {
-        "description": "Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
+        "description": "Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch. Successful Git removal discards retained terminal screens.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
         "properties": {
           "args": {
             "properties": {
@@ -87490,6 +88062,89 @@
         "required": ["type", "seq", "id", "op", "args"],
         "title": "HostRequest_workspaceCreationStatus",
         "type": "object"
+      },
+      "HostRequest_workspaceScripts": {
+        "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+        "properties": {
+          "args": {
+            "properties": {
+              "input": {
+                "anyOf": [
+                  {
+                    "description": "List recipe entries and retained runs for a workspace on its owning host.",
+                    "properties": {
+                      "action": {
+                        "const": "list",
+                        "type": "string"
+                      },
+                      "cwd": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "cwd"],
+                    "type": "object"
+                  },
+                  {
+                    "description": "Launch a command by its exact Paseo recipe name, never by supplied shell text.",
+                    "properties": {
+                      "action": {
+                        "const": "launch",
+                        "type": "string"
+                      },
+                      "cwd": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "cwd", "name"],
+                    "type": "object"
+                  },
+                  {
+                    "description": "Stop this exact run in the workspace without discarding its screen.",
+                    "properties": {
+                      "action": {
+                        "const": "stop",
+                        "type": "string"
+                      },
+                      "cwd": {
+                        "type": "string"
+                      },
+                      "terminalId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "cwd", "terminalId"],
+                    "type": "object"
+                  }
+                ],
+                "description": "List, launch, or stop a named Paseo command on the workspace's owning daemon."
+              }
+            },
+            "required": ["input"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "workspaceScripts",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_workspaceScripts",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -87503,7 +88158,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 89 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 90 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "14"
   },
@@ -88893,7 +89548,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
+      "description": "Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch. Successful Git removal discards retained terminal screens.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_removeRegisteredWorktree"
@@ -89554,6 +90209,29 @@
         ]
       },
       "summary": "workspaceCreationStatus"
+    },
+    "operation_workspaceScripts": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_workspaceScripts"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_workspaceScripts"
+          }
+        ]
+      },
+      "summary": "workspaceScripts"
     },
     "receive": {
       "action": "receive",

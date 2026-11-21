@@ -83,6 +83,10 @@ export interface WorkspaceOps {
       cursor?: number;
     }>
   >;
+  /** List or control named Paseo scripts on the workspace's owning daemon. */
+  workspaceScripts(
+    input: M.WorkspaceScriptsRequest,
+  ): Promise<OpResult<M.WorkspaceScriptsResult>>;
   /** Read or mutate Systems and Efforts owned by this daemon. */
   systems(input: SystemsRequest): Promise<OpResult<SystemsResult>>;
   /** Read or mutate the board owned by the selected daemon. */
@@ -257,6 +261,7 @@ export const WORKSPACE_OP_PARAMS: {
   systems: ["input"],
   planning: ["operation"],
   gitAction: ["cwd", "action", "owner"],
+  workspaceScripts: ["input"],
 };
 
 export function isWorkspaceOp(value: string): value is keyof WorkspaceOps {

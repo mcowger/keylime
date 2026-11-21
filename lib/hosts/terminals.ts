@@ -15,7 +15,8 @@ import type {
   TerminalSnapshot,
   WorkspaceTerminal,
 } from "../terminal-types";
-import { readHierarchy } from "./project-hierarchy";
+import type { WorkspaceScriptRun } from "../api-contracts/workspace-models";
+import { readHierarchy, type RegistryProject } from "./project-hierarchy";
 import { HostOpError } from "./link-protocol";
 import { createChildProcessEnvironment } from "../project-command-env";
 
@@ -23,6 +24,65 @@ const invalid = () =>
   new HostOpError(400, "invalid_request", "Invalid terminal request");
 const missing = () =>
   new HostOpError(404, "terminal_not_found", "Terminal not found");
+
+export type TerminalWorkspaceRegistration = {
+  project: RegistryProject;
+  workspace: RegistryProject["workspaces"][number];
+};
+
+export function resolveTerminalWorkspace(
+  cwd: string,
+): TerminalWorkspaceRegistration {
+  if (typeof cwd !== "string" || !isAbsolute(cwd)) throw invalid();
+  let canonical: string;
+  try {
+    canonical = realpathSync(cwd);
+  } catch {
+    throw new HostOpError(404, "workspace_not_found", "Workspace not found");
+  }
+  for (const project of readHierarchy().projects) {
+    const workspace = project.workspaces.find((w) => w.path === canonical);
+    if (workspace) return { project, workspace };
+  }
+  throw new HostOpError(
+    403,
+    "workspace_not_registered",
+    "Workspace is not registered",
+  );
+}
+
+export function paseoServicePortVariable(name: string): string {
+  return `PASEO_SERVICE_${name.replace(/[^a-zA-Z0-9]/gu, "_").toUpperCase()}_PORT`;
+}
+
+function allocatePaseoPort(
+  fixed: number | undefined,
+  claimed: Set<number>,
+): number {
+  // An unmanaged process can still bind the port after this check and before the child does.
+  for (let i = 0; i < (fixed === undefined ? 32 : 1); i++) {
+    if (fixed !== undefined && claimed.has(fixed)) break;
+    try {
+      const probe = Bun.listen({
+        hostname: "0.0.0.0",
+        port: fixed ?? 0,
+        socket: { data() {} },
+      });
+      const { port } = probe;
+      probe.stop(true);
+      if (!claimed.has(port)) return port;
+    } catch {
+      break;
+    }
+  }
+  throw new HostOpError(
+    409,
+    "paseo_port_unavailable",
+    fixed === undefined
+      ? "No automatic service port is available"
+      : `Port ${fixed} is unavailable on this host`,
+  );
+}
 
 function executableShell(path: string | null | undefined): path is string {
   if (!path || !isAbsolute(path)) return false;
@@ -274,6 +334,17 @@ function signalSession(
   return tty;
 }
 
+type NamedScript = {
+  name: string;
+  kind: "script" | "service";
+  port?: number;
+  stopRequested?: true;
+};
+
+export type WorkspaceScriptObservation = Pick<NamedScript, "name" | "kind"> & {
+  run: WorkspaceScriptRun;
+};
+
 type Entry = {
   terminal: WorkspaceTerminal;
   screen: Terminal;
@@ -281,6 +352,7 @@ type Entry = {
   process: Bun.Subprocess;
   cursor: number;
   stopping?: Promise<void>;
+  script?: NamedScript;
   closed: boolean;
   pending: number;
   viewers: Map<string, NodeJS.Timeout>;
@@ -312,24 +384,7 @@ export class TerminalManager {
     } = loginAccount,
   ) {}
   private registered(cwd: string): string {
-    if (typeof cwd !== "string" || !isAbsolute(cwd)) throw invalid();
-    let canonical: string;
-    try {
-      canonical = realpathSync(cwd);
-    } catch {
-      throw new HostOpError(404, "workspace_not_found", "Workspace not found");
-    }
-    if (
-      !readHierarchy().projects.some((p) =>
-        p.workspaces.some((w) => w.path === canonical),
-      )
-    )
-      throw new HostOpError(
-        403,
-        "workspace_not_registered",
-        "Workspace is not registered",
-      );
-    return canonical;
+    return resolveTerminalWorkspace(cwd).workspace.path;
   }
   private get(id: string): Entry {
     if (
@@ -366,7 +421,7 @@ export class TerminalManager {
       .map((e) => ({ ...e.terminal }));
   }
   create(cwd: string, cols: number, rows: number): WorkspaceTerminal {
-    return this.launch(cwd, cols, rows);
+    return this.launch(this.registered(cwd), cols, rows);
   }
   /** Run a saved service in the foreground; keep its screen after the command exits. */
   async startService(input: {
@@ -374,25 +429,124 @@ export class TerminalManager {
     command: string;
     env: Record<string, string>;
   }): Promise<WorkspaceTerminal> {
-    return this.launch(
-      input.cwd,
-      80,
-      24,
-      ["/bin/sh", "-c", input.command],
+    return this.launchCommand(
+      this.registered(input.cwd),
+      input.command,
       input.env,
     );
   }
+  startWorkspaceScript(input: {
+    cwd: string;
+    name: string;
+    kind: "script" | "service";
+    command: string;
+    env: Record<string, string>;
+    port?: number;
+  }): WorkspaceTerminal {
+    const directory = this.registered(input.cwd);
+    const env = { ...input.env };
+    let previous: Entry | undefined;
+    let port: number | undefined;
+    const claimed = new Set<number>();
+    for (const entry of this.entries.values()) {
+      const script = entry.script;
+      if (!script) continue;
+      const live = running(entry.process);
+      const sameDirectory = directory === entry.terminal.cwd;
+      if (sameDirectory && script.name === input.name) {
+        if (live || entry.stopping)
+          throw new HostOpError(
+            409,
+            "paseo_script_running",
+            "This script is already running or stopping",
+          );
+        previous = entry;
+      }
+      if (input.kind === "service" && live && script.port !== undefined) {
+        claimed.add(script.port);
+        if (sameDirectory)
+          env[paseoServicePortVariable(script.name)] = String(script.port);
+      }
+    }
+    if (input.kind === "service") {
+      port = allocatePaseoPort(input.port, claimed);
+      env.PASEO_PORT = String(port);
+      env[paseoServicePortVariable(input.name)] = String(port);
+    }
+    return this.launchCommand(directory, input.command, env, {
+      script: { name: input.name, kind: input.kind, port },
+      previous,
+    });
+  }
+  listWorkspaceScriptRuns(cwd: string): WorkspaceScriptObservation[] {
+    const directory = this.registered(cwd);
+    const runs: WorkspaceScriptObservation[] = [];
+    for (const entry of this.entries.values()) {
+      const script = entry.script;
+      if (!script || entry.terminal.cwd !== directory) continue;
+      const { process } = entry;
+      const live = running(process);
+      runs.push({
+        name: script.name,
+        kind: script.kind,
+        run: {
+          terminalId: entry.terminal.id,
+          status: live
+            ? "running"
+            : script.stopRequested
+              ? "stopped"
+              : "exited",
+          port: live ? (script.port ?? null) : null,
+          exitCode: process.exitCode,
+          signal:
+            process.signalCode === null ? null : String(process.signalCode),
+        },
+      });
+    }
+    return runs;
+  }
+  async stopWorkspaceScript(cwd: string, terminalId: string): Promise<void> {
+    const directory = this.registered(cwd);
+    const entry = this.entries.get(terminalId);
+    if (!entry?.script || entry.terminal.cwd !== directory) throw missing();
+    await this.stopScriptEntry(entry, entry.script);
+  }
+  private stopScriptEntry(
+    entry: Entry,
+    script: NamedScript,
+  ): Promise<void> | undefined {
+    if (running(entry.process)) {
+      script.stopRequested = true;
+      return this.stopEntry(entry);
+    }
+    return entry.stopping;
+  }
+  private launchCommand(
+    directory: string,
+    command: string,
+    env: Record<string, string>,
+    named?: { script: NamedScript; previous?: Entry },
+  ): WorkspaceTerminal {
+    return this.launch(
+      directory,
+      80,
+      24,
+      ["/bin/sh", "-c", command],
+      env,
+      named,
+    );
+  }
   private launch(
-    cwd: string,
+    directory: string,
     cols: number,
     rows: number,
     argv?: string[],
     serviceEnv?: Record<string, string>,
+    named?: { script: NamedScript; previous?: Entry },
   ): WorkspaceTerminal {
     if (this.stopped)
       throw new HostOpError(503, "host_stopping", "This host is stopping");
     dimensions(cols, rows);
-    const directory = this.registered(cwd);
     if (
       this.workspaceDeleting(directory) ||
       [...this.fences].some((root) => contains(root, directory))
@@ -402,7 +556,7 @@ export class TerminalManager {
         "workspace_deleting",
         "Workspace is being deleted",
       );
-    if (this.entries.size >= 32)
+    if (this.entries.size >= 32 && !named?.previous)
       throw new HostOpError(
         409,
         "terminal_limit",
@@ -416,7 +570,7 @@ export class TerminalManager {
     const terminal = {
       id,
       cwd: directory,
-      title: basename(directory),
+      title: named?.script.name ?? basename(directory),
       cols,
       rows,
     };
@@ -447,6 +601,17 @@ export class TerminalManager {
         this.emit(id, { type: "output", data, cursor: ++target.cursor });
       });
     };
+    let baseEnv = globalThis.process.env;
+    if (named) {
+      baseEnv = { ...baseEnv };
+      for (const key of Object.keys(baseEnv)) {
+        if (
+          /^PASEO_(?:PORT|URL|SERVICE_.*_(?:PORT|URL))$/.test(key) ||
+          /^(?:OMP|PASEO)_(?:BASE_REF|BRANCH_MODE|CREATE_RESULT)$/.test(key)
+        )
+          delete baseEnv[key];
+      }
+    }
     let process: Bun.Subprocess;
     try {
       // csh/tcsh require -l to be the only flag; the PTY makes them interactive.
@@ -458,19 +623,22 @@ export class TerminalManager {
         {
           detached: true,
           cwd: directory,
-          env: createChildProcessEnvironment({
-            ...serviceEnv,
-            ...(!argv
-              ? {
-                  SHELL: shell,
-                  ...(!globalThis.process.env.HOME && account?.home
-                    ? { HOME: account.home }
-                    : {}),
-                }
-              : {}),
-            TERM: "xterm-256color",
-            COLORTERM: "truecolor",
-          }),
+          env: createChildProcessEnvironment(
+            {
+              ...serviceEnv,
+              ...(!argv
+                ? {
+                    SHELL: shell,
+                    ...(!globalThis.process.env.HOME && account?.home
+                      ? { HOME: account.home }
+                      : {}),
+                  }
+                : {}),
+              TERM: "xterm-256color",
+              COLORTERM: "truecolor",
+            },
+            baseEnv,
+          ),
           terminal: {
             cols,
             rows,
@@ -489,6 +657,7 @@ export class TerminalManager {
       screen,
       serializer,
       process,
+      script: named?.script,
       cursor: 0,
       closed: false,
       pending: 0,
@@ -505,6 +674,7 @@ export class TerminalManager {
       if (serviceEnv) this.clearViewers(created);
       else this.remove(created);
     });
+    if (named?.previous) this.remove(named.previous);
     return { ...terminal };
   }
   async snapshot(id: string): Promise<TerminalSnapshot> {
@@ -580,6 +750,10 @@ export class TerminalManager {
   async close(id: string): Promise<void> {
     const entry = this.entries.get(id);
     if (!entry) throw missing();
+    await this.stopEntry(entry);
+    this.remove(entry);
+  }
+  private stopEntry(entry: Entry): Promise<void> {
     entry.stopping ??= this.terminate(entry).finally(() => {
       delete entry.stopping;
     });
@@ -589,7 +763,6 @@ export class TerminalManager {
     const pty = entry.process.terminal;
     if (!running(entry.process)) {
       pty?.close();
-      this.remove(entry);
       return;
     }
     const tty = signalSession(entry.process, "SIGTERM");
@@ -610,7 +783,6 @@ export class TerminalManager {
         "workspace_process_stop_failed",
         "Terminal did not exit",
       );
-    this.remove(entry);
   }
   private clearViewers(entry: Entry): void {
     for (const timer of entry.viewers.values()) clearTimeout(timer);
@@ -635,11 +807,23 @@ export class TerminalManager {
       .map((e) => ({ id: e.terminal.id, cwd: e.terminal.cwd }));
   }
   async stopWorkspace(directory: string): Promise<void> {
-    await Promise.all(
-      [...this.entries.values()]
-        .filter((entry) => contains(directory, entry.terminal.cwd))
-        .map((entry) => this.close(entry.terminal.id)),
-    );
+    const stops: Promise<void>[] = [];
+    for (const entry of this.entries.values()) {
+      if (!contains(directory, entry.terminal.cwd)) continue;
+      const stop = entry.script
+        ? this.stopScriptEntry(entry, entry.script)
+        : this.close(entry.terminal.id);
+      if (stop) stops.push(stop);
+    }
+    await Promise.all(stops);
+  }
+  discardWorkspaceScreens(directory: string): void {
+    for (const entry of this.entries.values()) {
+      if (contains(directory, entry.terminal.cwd) && !running(entry.process)) {
+        entry.process.terminal?.close();
+        this.remove(entry);
+      }
+    }
   }
   async stop(): Promise<void> {
     this.stopped = true;

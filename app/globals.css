@@ -2,6 +2,7 @@
 @import "tailwindcss" source(none);
 @import "@xterm/xterm/css/xterm.css";
 @import "../components/WorkspaceSwitcher.css";
+@import "../components/WorkspaceScripts.css";
 @import "../components/SystemsForms.css";
 @import "../components/PlanningDialog.css";
 

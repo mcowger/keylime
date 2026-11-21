@@ -4,6 +4,7 @@ import { SystemsResultSchema } from "../api-contracts/systems";
 import {
   ShipMonitorStatusResultSchema,
   ShipPrMonitorSchema,
+  WorkspaceScriptsResultSchema,
 } from "../api-contracts/workspace-models";
 import { isRecord } from "../type-guards";
 import type { WorkspaceOps } from "../workspace-types";
@@ -98,6 +99,8 @@ export function validWorkspaceResult(
   switch (op) {
     case "systems":
       return Value.Check(SystemsResultSchema, value);
+    case "workspaceScripts":
+      return Value.Check(WorkspaceScriptsResultSchema, value);
     case "terminals":
       return (
         (value.terminals === undefined ||

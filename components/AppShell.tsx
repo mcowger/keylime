@@ -1151,6 +1151,8 @@ export function AppShell({ appName }: { appName: string }) {
   const [rightView, setRightView] = useState<RightPanelView>("explorer");
   const [activityContainer, setActivityContainer] =
     useState<HTMLDivElement | null>(null);
+  const [scriptsContainer, setScriptsContainer] =
+    useState<HTMLDivElement | null>(null);
   const [sidebarActivityContainer, setSidebarActivityContainer] =
     useState<HTMLDivElement | null>(null);
   const connectionDiagnosticsOn = useConnectionDiagnosticsEnabled();
@@ -3091,6 +3093,11 @@ export function AppShell({ appName }: { appName: string }) {
     !pendingWorkspace && explorerCwd
       ? effortForPath(workspaceHostId, explorerCwd)
       : undefined;
+  const scriptsAvailable =
+    !activeEffort &&
+    terminalWorkspace &&
+    "projectKind" in terminalWorkspace &&
+    terminalWorkspace.projectKind === "git";
   const detailEffort =
     effortDetails &&
     effortsByHost.find(
@@ -3757,6 +3764,17 @@ export function AppShell({ appName }: { appName: string }) {
               mobile={isMobile}
               headerTarget={workspaceSwitcherTarget}
               panelsTarget={workspacePanelsTarget}
+              scriptsTarget={scriptsContainer}
+              scriptsVisible={Boolean(
+                scriptsAvailable &&
+                rightPanelOpen &&
+                rightView === "scripts" &&
+                !planning &&
+                !shipVisible,
+              )}
+              onViewScriptOutput={
+                isCompactOverlay ? closeRightPanel : undefined
+              }
               onSelectSaved={handleSelectSession}
               onGenerateTitle={() => void handleAutoName()}
               openSessionIds={[
@@ -5239,9 +5257,16 @@ export function AppShell({ appName }: { appName: string }) {
             >
               <RightPanel
                 onActivityContainerChange={setActivityContainer}
+                onScriptsContainerChange={
+                  scriptsAvailable ? setScriptsContainer : undefined
+                }
                 fileTabs={fileTabs}
                 activeFileTabId={activeFileTabId}
-                rightView={rightView}
+                rightView={
+                  rightView === "scripts" && !scriptsAvailable
+                    ? "explorer"
+                    : rightView
+                }
                 onSelectView={handleSelectRightView}
                 rightPanelOpen={rightPanelOpen}
                 onClose={closeRightPanel}

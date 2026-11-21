@@ -41,6 +41,8 @@ export interface WorkspaceDeletionAdapter {
   fence(path: string): () => void;
   inspect(path: string): Promise<Array<{ id: string; cwd: string }>>;
   stop(path: string): Promise<void>;
+  /** Dispose retained output only after Git has removed the worktree. */
+  discardTerminalOutput?(path: string): void;
 }
 let deletionAdapter: WorkspaceDeletionAdapter | undefined;
 export function setWorkspaceDeletionAdapter(
@@ -100,6 +102,11 @@ type StoredSettings = {
 };
 function settings(): StoredSettings {
   return read(settingsFile(), { defaults: empty(), projects: {} });
+}
+export function readWorkspaceCreationSource(
+  projectPath: string,
+): "manual" | "paseo" {
+  return settings().sources?.[projectPath] === "paseo" ? "paseo" : "manual";
 }
 export async function workspaceCreationSettings(
   input: WorkspaceSettingsRequest,
@@ -1121,7 +1128,8 @@ export async function removeRegisteredWorktree(
         "Linked worktree not found",
       );
     const branch = target.branch;
-    const paseoMode = settings().sources?.[input.projectPath] === "paseo";
+    const paseoMode =
+      readWorkspaceCreationSource(input.projectPath) === "paseo";
     const identity = async (cwd: string) => ({
       head: (await git(cwd, ["rev-parse", "--verify", "HEAD"])).trim(),
       ref: (
@@ -1338,6 +1346,7 @@ export async function removeRegisteredWorktree(
       workspace.path,
       input.discardChanges,
     );
+    adapter.discardTerminalOutput?.(workspace.path);
     completePlanningWorkspace(input.projectPath, workspace.path);
     unregisterDeletedWorkspace(workspace.path);
     if (branch && (merged || input.keepBranch === false))

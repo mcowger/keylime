@@ -378,10 +378,10 @@ export function CreationPipelineEditor({
       {gitProject && settings?.source === "paseo" && (
         <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
           <p className="settings-card-desc" style={{ margin: 0 }}>
-            Paseo uses the current repo file, including uncommitted changes,
-            instead of manual commands. Recipe commands execute as your user
-            when workspaces are created or deleted; only enable this for a trusted
-            repo. Saving settings does not run the recipe.
+            Paseo uses the current Repo recipe, including uncommitted changes.
+            Setup, teardown, and scripts or services you start run as your host
+            user. Only enable this for a Repo you trust. Saving settings does
+            not run the recipe.
           </p>
           <p className="settings-card-desc" style={{ margin: 0 }}>
             Refresh after editing the recipe. Changed or moved blocking commands
@@ -391,8 +391,10 @@ export function CreationPipelineEditor({
             <summary style={{ cursor: "pointer" }}>Command environment and execution details</summary>
           <p style={descriptionStyle}>
             Paseo uses built-in Git workspace creation, .worktreeinclude copying,
-            setup and teardown. Services, scripts, terminals and port runtime are
-            not supported.
+            setup and teardown. Start named scripts and services from the
+            Scripts tab in the right sidebar. Services use a fixed or
+            automatically assigned port on the owning host. Keylime does not
+            proxy them or use custom port allocators.
           </p>
           <p style={descriptionStyle}>
             Setup and teardown commands receive PASEO_SOURCE_CHECKOUT_PATH (the

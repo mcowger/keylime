@@ -50184,6 +50184,281 @@
       "description": "File watch notification; change reports ISO modification time and size in bytes, while error reports watch failure. A replacement watch has its own epoch.",
       "title": "WorkspaceFileEvent"
     },
+    "host_workspaceScripts_args": {
+      "properties": {
+        "input": {
+          "anyOf": [
+            {
+              "description": "List recipe entries and retained runs for a workspace on its owning host.",
+              "properties": {
+                "action": {
+                  "const": "list",
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "cwd"],
+              "type": "object"
+            },
+            {
+              "description": "Launch a command by its exact Paseo recipe name, never by supplied shell text.",
+              "properties": {
+                "action": {
+                  "const": "launch",
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "cwd", "name"],
+              "type": "object"
+            },
+            {
+              "description": "Stop this exact run in the workspace without discarding its screen.",
+              "properties": {
+                "action": {
+                  "const": "stop",
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "terminalId": {
+                  "type": "string"
+                }
+              },
+              "required": ["action", "cwd", "terminalId"],
+              "type": "object"
+            }
+          ],
+          "description": "List, launch, or stop a named Paseo command on the workspace's owning daemon."
+        }
+      },
+      "required": ["input"],
+      "type": "object"
+    },
+    "host_workspaceScripts_result": {
+      "anyOf": [
+        {
+          "properties": {
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "description": "Live recipe entries in declaration order, followed by run-only entries. Disabled or unreadable recipes do not hide runs.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "entries": {
+                      "items": {
+                        "description": "An exact recipe name or a retained run no longer configured. A row error prevents launch, not inspection or stop.",
+                        "properties": {
+                          "configured": {
+                            "type": "boolean"
+                          },
+                          "error": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "script",
+                                "type": "string"
+                              },
+                              {
+                                "const": "service",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "run": {
+                            "anyOf": [
+                              {
+                                "description": "A daemon-owned PTY run. Running means alive, not ready. Exit details are null until available.",
+                                "properties": {
+                                  "exitCode": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "port": {
+                                    "anyOf": [
+                                      {
+                                        "description": "Host-local TCP port while assigned.",
+                                        "maximum": 65535,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "signal": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "status": {
+                                    "anyOf": [
+                                      {
+                                        "const": "running",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "exited",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "stopped",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "terminalId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "terminalId",
+                                  "status",
+                                  "port",
+                                  "exitCode",
+                                  "signal"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "kind",
+                          "configured",
+                          "error",
+                          "run"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["enabled", "error", "entries"],
+                  "type": "object"
+                },
+                {
+                  "description": "The new host terminal; a successful spawn does not imply that the command is ready or still running.",
+                  "properties": {
+                    "terminal": {
+                      "description": "Host-daemon terminal identity, working directory, title and dimensions in columns and rows.",
+                      "properties": {
+                        "cols": {
+                          "description": "Terminal width in character columns.",
+                          "type": "number"
+                        },
+                        "cwd": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "rows": {
+                          "description": "Terminal height in character rows.",
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "cwd", "title", "cols", "rows"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["terminal"],
+                  "type": "object"
+                },
+                {
+                  "description": "The exact run is no longer live; its screen is retained until close or successful relaunch.",
+                  "properties": {
+                    "stopped": {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["stopped"],
+                  "type": "object"
+                }
+              ],
+              "description": "The result for the requested list, launch, or stop action."
+            }
+          },
+          "required": ["ok", "value"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "number"
+            }
+          },
+          "required": ["ok", "status", "code", "error"],
+          "type": "object"
+        }
+      ]
+    },
     "hostControl_ActivateHostArtifactArgs": {
       "additionalProperties": false,
       "description": "An explicit standalone host activation request; contains no filesystem path.",
@@ -199969,6 +200244,712 @@
         }
       },
       "required": ["id", "info"],
+      "type": "object"
+    },
+    "workspace_WorkspaceScriptLaunchRequest": {
+      "description": "Launch a command by its exact Paseo recipe name, never by supplied shell text.",
+      "properties": {
+        "action": {
+          "const": "launch",
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": ["action", "cwd", "name"],
+      "type": "object"
+    },
+    "workspace_WorkspaceScriptLaunchResult": {
+      "description": "The new host terminal; a successful spawn does not imply that the command is ready or still running.",
+      "properties": {
+        "terminal": {
+          "description": "Host-daemon terminal identity, working directory, title and dimensions in columns and rows.",
+          "properties": {
+            "cols": {
+              "description": "Terminal width in character columns.",
+              "type": "number"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "rows": {
+              "description": "Terminal height in character rows.",
+              "type": "number"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": ["id", "cwd", "title", "cols", "rows"],
+          "type": "object"
+        }
+      },
+      "required": ["terminal"],
+      "type": "object"
+    },
+    "workspace_WorkspaceScriptListRequest": {
+      "description": "List recipe entries and retained runs for a workspace on its owning host.",
+      "properties": {
+        "action": {
+          "const": "list",
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": ["action", "cwd"],
+      "type": "object"
+    },
+    "workspace_WorkspaceScriptListResult": {
+      "description": "Live recipe entries in declaration order, followed by run-only entries. Disabled or unreadable recipes do not hide runs.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "entries": {
+          "items": {
+            "description": "An exact recipe name or a retained run no longer configured. A row error prevents launch, not inspection or stop.",
+            "properties": {
+              "configured": {
+                "type": "boolean"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "script",
+                    "type": "string"
+                  },
+                  {
+                    "const": "service",
+                    "type": "string"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "run": {
+                "anyOf": [
+                  {
+                    "description": "A daemon-owned PTY run. Running means alive, not ready. Exit details are null until available.",
+                    "properties": {
+                      "exitCode": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "port": {
+                        "anyOf": [
+                          {
+                            "description": "Host-local TCP port while assigned.",
+                            "maximum": 65535,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "signal": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "running",
+                            "type": "string"
+                          },
+                          {
+                            "const": "exited",
+                            "type": "string"
+                          },
+                          {
+                            "const": "stopped",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "terminalId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "terminalId",
+                      "status",
+                      "port",
+                      "exitCode",
+                      "signal"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["name", "kind", "configured", "error", "run"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["enabled", "error", "entries"],
+      "type": "object"
+    },
+    "workspace_WorkspaceScriptRow": {
+      "description": "An exact recipe name or a retained run no longer configured. A row error prevents launch, not inspection or stop.",
+      "properties": {
+        "configured": {
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "const": "script",
+              "type": "string"
+            },
+            {
+              "const": "service",
+              "type": "string"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "description": "A daemon-owned PTY run. Running means alive, not ready. Exit details are null until available.",
+              "properties": {
+                "exitCode": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "port": {
+                  "anyOf": [
+                    {
+                      "description": "Host-local TCP port while assigned.",
+                      "maximum": 65535,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "signal": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "running",
+                      "type": "string"
+                    },
+                    {
+                      "const": "exited",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stopped",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "terminalId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "terminalId",
+                "status",
+                "port",
+                "exitCode",
+                "signal"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["name", "kind", "configured", "error", "run"],
+      "type": "object"
+    },
+    "workspace_WorkspaceScriptRun": {
+      "description": "A daemon-owned PTY run. Running means alive, not ready. Exit details are null until available.",
+      "properties": {
+        "exitCode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "port": {
+          "anyOf": [
+            {
+              "description": "Host-local TCP port while assigned.",
+              "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "running",
+              "type": "string"
+            },
+            {
+              "const": "exited",
+              "type": "string"
+            },
+            {
+              "const": "stopped",
+              "type": "string"
+            }
+          ]
+        },
+        "terminalId": {
+          "type": "string"
+        }
+      },
+      "required": ["terminalId", "status", "port", "exitCode", "signal"],
+      "type": "object"
+    },
+    "workspace_WorkspaceScriptsHttpPost": {
+      "anyOf": [
+        {
+          "properties": {
+            "action": {
+              "const": "launch",
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "hostId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": ["hostId", "action", "cwd", "name"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "stop",
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "hostId": {
+              "type": "string"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": ["hostId", "action", "cwd", "terminalId"],
+          "type": "object"
+        }
+      ],
+      "description": "Host-qualified launch or stop request. The host resolves commands by exact recipe name."
+    },
+    "workspace_WorkspaceScriptsHttpPostResult": {
+      "anyOf": [
+        {
+          "description": "The new host terminal; a successful spawn does not imply that the command is ready or still running.",
+          "properties": {
+            "terminal": {
+              "description": "Host-daemon terminal identity, working directory, title and dimensions in columns and rows.",
+              "properties": {
+                "cols": {
+                  "description": "Terminal width in character columns.",
+                  "type": "number"
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "rows": {
+                  "description": "Terminal height in character rows.",
+                  "type": "number"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "cwd", "title", "cols", "rows"],
+              "type": "object"
+            }
+          },
+          "required": ["terminal"],
+          "type": "object"
+        },
+        {
+          "description": "The exact run is no longer live; its screen is retained until close or successful relaunch.",
+          "properties": {
+            "stopped": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": ["stopped"],
+          "type": "object"
+        }
+      ],
+      "description": "The new terminal on launch or confirmation that the exact run stopped."
+    },
+    "workspace_WorkspaceScriptsRequest": {
+      "anyOf": [
+        {
+          "description": "List recipe entries and retained runs for a workspace on its owning host.",
+          "properties": {
+            "action": {
+              "const": "list",
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            }
+          },
+          "required": ["action", "cwd"],
+          "type": "object"
+        },
+        {
+          "description": "Launch a command by its exact Paseo recipe name, never by supplied shell text.",
+          "properties": {
+            "action": {
+              "const": "launch",
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": ["action", "cwd", "name"],
+          "type": "object"
+        },
+        {
+          "description": "Stop this exact run in the workspace without discarding its screen.",
+          "properties": {
+            "action": {
+              "const": "stop",
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": ["action", "cwd", "terminalId"],
+          "type": "object"
+        }
+      ],
+      "description": "List, launch, or stop a named Paseo command on the workspace's owning daemon."
+    },
+    "workspace_WorkspaceScriptsResult": {
+      "anyOf": [
+        {
+          "description": "Live recipe entries in declaration order, followed by run-only entries. Disabled or unreadable recipes do not hide runs.",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "entries": {
+              "items": {
+                "description": "An exact recipe name or a retained run no longer configured. A row error prevents launch, not inspection or stop.",
+                "properties": {
+                  "configured": {
+                    "type": "boolean"
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "script",
+                        "type": "string"
+                      },
+                      {
+                        "const": "service",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "run": {
+                    "anyOf": [
+                      {
+                        "description": "A daemon-owned PTY run. Running means alive, not ready. Exit details are null until available.",
+                        "properties": {
+                          "exitCode": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "port": {
+                            "anyOf": [
+                              {
+                                "description": "Host-local TCP port while assigned.",
+                                "maximum": 65535,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "signal": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "running",
+                                "type": "string"
+                              },
+                              {
+                                "const": "exited",
+                                "type": "string"
+                              },
+                              {
+                                "const": "stopped",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "terminalId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "terminalId",
+                          "status",
+                          "port",
+                          "exitCode",
+                          "signal"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "kind", "configured", "error", "run"],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": ["enabled", "error", "entries"],
+          "type": "object"
+        },
+        {
+          "description": "The new host terminal; a successful spawn does not imply that the command is ready or still running.",
+          "properties": {
+            "terminal": {
+              "description": "Host-daemon terminal identity, working directory, title and dimensions in columns and rows.",
+              "properties": {
+                "cols": {
+                  "description": "Terminal width in character columns.",
+                  "type": "number"
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "rows": {
+                  "description": "Terminal height in character rows.",
+                  "type": "number"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "cwd", "title", "cols", "rows"],
+              "type": "object"
+            }
+          },
+          "required": ["terminal"],
+          "type": "object"
+        },
+        {
+          "description": "The exact run is no longer live; its screen is retained until close or successful relaunch.",
+          "properties": {
+            "stopped": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": ["stopped"],
+          "type": "object"
+        }
+      ],
+      "description": "The result for the requested list, launch, or stop action."
+    },
+    "workspace_WorkspaceScriptStopRequest": {
+      "description": "Stop this exact run in the workspace without discarding its screen.",
+      "properties": {
+        "action": {
+          "const": "stop",
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "terminalId": {
+          "type": "string"
+        }
+      },
+      "required": ["action", "cwd", "terminalId"],
+      "type": "object"
+    },
+    "workspace_WorkspaceScriptStopResult": {
+      "description": "The exact run is no longer live; its screen is retained until close or successful relaunch.",
+      "properties": {
+        "stopped": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": ["stopped"],
       "type": "object"
     },
     "workspace_WorkspaceSettingsRequest": {
