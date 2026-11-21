@@ -1,4 +1,4 @@
-import type { HostRow, LocalHostRow } from "@/lib/hosts/hub";
+import type { HostRow, LocalHostRow } from "@/lib/api-contracts/http-system";
 
 type Translate = (
   key: string,

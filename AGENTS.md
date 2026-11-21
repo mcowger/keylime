@@ -1600,7 +1600,7 @@ btw` → localized "requires a newer omp" toast (`toastBtwError`); background
 
 ### Software deployment
 
-- Deploy the web server and the paired local services manually (`docs/local-deployment.md`). For a standalone linked host, Settings → Hosts may install a staged `keylime` or `keylime-omp` binary and restart its service after explicit operator confirmation. Require an expected SHA-256 and refuse busy daemons. Keep the previous binary as a backup and do not automatically roll back after restart admission.
+- Deploy the web server and the paired local services manually (`docs/local-deployment.md`). For a standalone linked host, Settings → Hosts may install a staged `keylime` or `keylime-omp` binary and restart its service after explicit operator confirmation. Require an expected SHA-256 and preflight. Confirmed installation force-drains even a busy host, interrupting active sessions, terminals and host work; pending results may be lost. Warn about this impact in the confirmation. Keep the previous binary as a backup and do not automatically roll back after restart admission.
 - `/api/omp-update` retains only `restart`, an explicit server-side maintenance API for existing callers.
 
 ### Auth and model config

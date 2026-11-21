@@ -44292,6 +44292,7 @@
                     "items": {
                       "anyOf": [
                         {
+                          "description": "Status and capabilities of this controller's local host.",
                           "properties": {
                             "arch": {
                               "description": "CPU architecture for selecting a compatible host release.",
@@ -44407,6 +44408,7 @@
                           "type": "object"
                         },
                         {
+                          "description": "Status and capabilities of a linked remote host.",
                           "properties": {
                             "arch": {
                               "description": "CPU architecture for selecting a compatible host release.",
@@ -44419,6 +44421,17 @@
                             "canStageArtifact": {
                               "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
                               "type": "boolean"
+                            },
+                            "connectionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Identifier of the last accepted host link hello; changes on every reconnect or replacement, and is null before the first hello."
                             },
                             "hostVersion": {
                               "anyOf": [
@@ -44515,11 +44528,13 @@
                             "lastSeenAt",
                             "hostVersion",
                             "serverVersion",
-                            "workspaceOps"
+                            "workspaceOps",
+                            "connectionId"
                           ],
                           "type": "object"
                         }
-                      ]
+                      ],
+                      "description": "A local or linked host in a host snapshot."
                     },
                     "type": "array"
                   }

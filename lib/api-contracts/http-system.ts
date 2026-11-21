@@ -1,4 +1,4 @@
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import type { HttpOperation } from "./operations";
 import {
   jsonBody,
@@ -49,7 +49,12 @@ const noContent = { description: "No content." };
 const hostBase = {
   id: S,
   label: S,
-  status: literals("online", "offline", "needs-upgrade", "omp-missing"),
+  status: Type.Union([
+    Type.Literal("online"),
+    Type.Literal("offline"),
+    Type.Literal("needs-upgrade"),
+    Type.Literal("omp-missing"),
+  ]),
   ompVersion: ns,
   keylimeVersion: Type.Optional(ns),
   platform: ns,
@@ -75,18 +80,38 @@ const hostBase = {
     }),
   ),
 };
-const host = Type.Union([
-  obj({
+export const LocalHostRowSchema = obj(
+  {
     ...hostBase,
     id: Type.Literal("local"),
     lastSeenAt: Nil,
     serverPlatform: S,
     daemonManaged: B,
-  }),
-  obj({
+  },
+  { description: "Status and capabilities of this controller's local host." },
+);
+export const LinkedHostRowSchema = obj(
+  {
     ...hostBase,
-  }),
-]);
+    connectionId: Type.Union([S, Nil], {
+      description:
+        "Identifier of the last accepted host link hello; changes on every reconnect or replacement, and is null before the first hello.",
+    }),
+  },
+  { description: "Status and capabilities of a linked remote host." },
+);
+export const HostRowSchema = Type.Union(
+  [LocalHostRowSchema, LinkedHostRowSchema],
+  { description: "A local or linked host in a host snapshot." },
+);
+export const HostSnapshotSchema = obj(
+  { hosts: Type.Array(HostRowSchema) },
+  { description: "Host status snapshot, with this machine first." },
+);
+export type LocalHostRow = Static<typeof LocalHostRowSchema>;
+export type LinkedHostRow = Static<typeof LinkedHostRowSchema>;
+export type HostRow = Static<typeof HostRowSchema>;
+export type HostSnapshot = Static<typeof HostSnapshotSchema>;
 const history = NotificationHistoryEntrySchema;
 const prefs = NotificationPrefsSchema;
 const subscription = obj({ endpoint: S, keys: obj({ p256dh: S, auth: S }) });
@@ -251,9 +276,7 @@ add(
   "get",
   "getHosts",
   "List independent hosts",
-  obj({
-    hosts: Type.Array(host),
-  }),
+  HostSnapshotSchema,
 );
 add(
   "/api/hosts/[id]/terminal-sessions",
@@ -383,7 +406,7 @@ add(
   "post",
   "postHosts",
   "Register a host",
-  obj({ host: Type.Optional(host), token: S, command: S }),
+  obj({ host: Type.Optional(HostRowSchema), token: S, command: S }),
   { body: obj({ label: Type.String({ minLength: 1, maxLength: 100 }) }) },
 );
 add(
@@ -391,7 +414,7 @@ add(
   "patch",
   "patchHosts",
   "Rename host",
-  obj({ host: Type.Optional(host) }),
+  obj({ host: Type.Optional(HostRowSchema) }),
   { body: obj({ id: S, label: S }) },
 );
 add("/api/hosts", "delete", "deleteHosts", "Revoke host", ok, {

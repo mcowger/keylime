@@ -1,4 +1,4 @@
-import { Type, type TObject, type TSchema } from "@sinclair/typebox";
+import { Type } from "@sinclair/typebox";
 import {
   ExitedRpcSessionSchema,
   CrossSessionHostToolEventSchema,
@@ -6,7 +6,7 @@ import {
 import { NotificationEventSchema } from "./notification-models";
 import { TerminalEventSchema, WorkspaceFileEventSchema } from "./host-schemas";
 import { AgentEventSchema } from "./runner-messages";
-import { MuxControlFrameSchema, systemHttpOperations } from "./http-system";
+import { HostSnapshotSchema, MuxControlFrameSchema } from "./http-system";
 
 export const RunningRpcSessionSchema = Type.Object(
   {
@@ -37,28 +37,14 @@ export const NotificationMessageSchema = Type.Object(
   },
 );
 
-function hostsSchema(): TObject {
-  const operation = systemHttpOperations.find(
-    (item) => item.operationId === "getHosts",
-  );
-  const response = operation?.responses[200];
-  if (!response || typeof response !== "object" || !("content" in response))
-    throw new Error("Missing hosts response contract");
-  // This is authored, in-process HTTP metadata, not unvalidated remote JSON.
-  const content = response.content as Record<string, { schema: TSchema }>;
-  const schema = content["application/json"]?.schema;
-  if (!schema || schema.type !== "object")
-    throw new Error("Hosts response must be an object schema");
-  return Type.Object((schema as TObject).properties, {
-    title: "HostStreamSnapshot",
-    description: "Independent hosts, local first. Matches GET /api/hosts.",
-  });
-}
 export const StreamPayloadSchema = Type.Union(
   [
     MuxControlFrameSchema,
     AgentEventSchema,
-    hostsSchema(),
+    Type.Object(HostSnapshotSchema.properties, {
+      title: "HostStreamSnapshot",
+      description: "Independent hosts, local first. Matches GET /api/hosts.",
+    }),
     TerminalEventSchema,
     WorkspaceFileEventSchema,
     Type.Object({

@@ -73,12 +73,15 @@ review it, then choose **Deploy & restart**. If you select a build that's alread
 installed, you can't proceed to review. The progress bar tracks the bytes the host
 acknowledges for the daemon and runner together.
 Once both binaries are staged, the dialog switches to **Installing and restarting…**.
-Keylime checks both digests and runs preflight on the pair. It refuses a busy
-host. Otherwise it backs up the installed binaries and restarts the service
+Keylime checks both digests and runs preflight on the pair. It then force-drains
+the host, backs up the installed binaries and restarts the service
 once. If `keylime-omp` is missing, the paired deployment installs it without
 creating a runner backup. If restart fails, check the service before restoring
 anything. To return to the previous install, restore the daemon backup and
 remove the newly installed runner.
+
+An older host still uses its installed worker's busy check for this upgrade.
+Let that host become idle before deploying a build with force-drain support.
 
 The list comes from builds already on the web server. It includes matching
 native builds from `~/.local/share/keylime/releases/` and the unpacked
@@ -129,11 +132,13 @@ Before draining, Keylime gives the verified copy 40 seconds to pass `keylime
 preflight` with the other installed binary. This catches wrong-platform files
 and incompatible daemon/runner pairs without restarting the host.
 
-A busy daemon refuses the install. After restart, the dialog waits for the
-host to reconnect and confirm the outcome. Keep the reported backup until
-you've verified the host. If the outcome can't be confirmed, don't send
-another install until you've checked the host. The operation ID in the dialog
-identifies the receipt in `<agent dir>/keylime/host-artifact-activation/`.
+The install force-drains the host even when busy. Restart stops active agent
+sessions, terminals and host work; in-flight operations may be interrupted and
+pending results lost. After restart, the dialog waits for the host to reconnect
+and confirm the outcome. Keep the reported backup until you've verified the
+host. If the outcome can't be confirmed, don't send another install until
+you've checked the host. The operation ID in the dialog identifies the receipt
+in `<agent dir>/keylime/host-artifact-activation/`.
 The service user must own `<agent dir>/keylime`, and group and other users
 must not have write access there. If an older install left it group-writable,
 fix its permissions on the host before retrying.
@@ -155,11 +160,12 @@ Use `--target keylime-omp` for the installed runner instead. The caller picks a
 build for the host's OS and CPU. The command doesn't download artifacts or
 change enrollment, and replaces only the selected executable.
 
-The command checks the bytes, refuses a busy daemon, then saves the old binary
-at the printed `.backup-…` path, atomically replaces it, and restarts the host
-service. Close live sessions and workspace terminals before retrying a busy
-refusal. On success, check **Settings → Hosts** for the reconnected host before
-deleting the backup. To check runner compatibility, run `keylime preflight`
+The command checks the bytes and preflights the pair, then force-drains the host,
+saves the old binary at the printed `.backup-…` path, atomically replaces it,
+and restarts the service. Active sessions, terminals and host work are stopped;
+in-flight operations and pending results may be lost. On success, check
+**Settings → Hosts** for the reconnected host before deleting the backup. To
+check runner compatibility, run `keylime preflight`
 from the standalone install.
 
 If restart or startup confirmation fails, check `journalctl --user -u

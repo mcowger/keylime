@@ -20,7 +20,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart.
 - Deploying a matched release can restore a missing `keylime-omp` on a standalone host.
 - In **Settings → Hosts**, use **Stage artifact** on a linked host to transfer a binary without SSH. On supported standalone hosts you can then verify its SHA-256, choose **Install & restart**, and confirm the outcome after reconnect.
-- Run `keylime host install-artifact` on the target host to verify the SHA-256 of a staged binary, replace the installed daemon or runner with a backup, and restart the standalone host service. The command refuses a busy daemon.
+- Run `keylime host install-artifact` on the target host to verify the SHA-256 of a staged binary, replace the installed daemon or runner with a backup, and restart the standalone host service. Active work is interrupted.
 - Standalone host activation runs `keylime preflight` before drain or replacement. A matching checksum alone no longer lets a wrong-platform or incompatible binary through.
 - Open **Notes & Tasks** from a Repo or System to save Markdown notes and plan work outside Git. Enter a Brief, optionally expand it in place with **Improve**, then launch a Workspace or Effort with the current text. If an Effort plan changes before creation, **Resume** lets you review the new starting commits without starting a second launch.
 - Task launch saves slash-prefixed Briefs as the first chat message instead of running them as commands.
@@ -174,6 +174,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart
 - Deploying a matched release can restore a missing `keylime-omp` on a standalone host
 - Advisor review status covers turn-boundary scheduling and review delivery, and survives inconclusive reconnect snapshots
+- Project settings let you browse and choose repository-discovered icons, including icons found in nested directories
 
 ### Changed
 - Browser tabs show the active workspace name instead of its directory name.
@@ -252,6 +253,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ### Fixed
 - Workspace terminals fit their visible area without clipping the last rows or columns.
 - New workspace terminals use the host account's configured shell and its interactive startup files.
+- Host release comparisons refresh after a daemon reconnects, even when its version string hasn't changed.
+- Explicit host deployments force-drain busy hosts and restart them, interrupting active work instead of refusing the install.
 - Workspace terminals fill the available space below the toolbar instead of pushing it down.
 - Local deployment prunes older generated releases, keeping the three newest and active and previous selections for rollback.
 - Managed release deployment works on hosts that can't report binary digests, with an explicit warning instead of a failed build check.
@@ -446,6 +449,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Workspace terminals fill the available space below the toolbar instead of pushing it down
 - Workspace terminals fit their visible area without clipping the last rows or columns
 - New workspace terminals use the host account's configured shell and its interactive startup files
+- Host release comparisons refresh after daemon reconnects, even when version strings stay unchanged
+- Explicit artifact installs force-drain busy hosts and restart them, interrupting active work instead of refusing installation
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

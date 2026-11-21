@@ -49,7 +49,7 @@ import { toast } from "@/components/ui/toast";
 import { useI18n } from "@/lib/i18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { LOCAL_HOST_ID } from "@/lib/project-ordering";
-import type { HostRow } from "@/lib/hosts/hub";
+import type { HostRow } from "@/lib/api-contracts/http-system";
 import { hostName, hostStatusText } from "./host-status";
 import {
   SettingsTabs,

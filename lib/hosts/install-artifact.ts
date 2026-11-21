@@ -341,7 +341,7 @@ export async function installArtifact({
       throw new Error(
         "The daemon is already drained. Finish maintenance or resume it before retrying",
       );
-    const drained = await control("drain");
+    const drained = await control("drain-force");
     drainedPid = drained.drained ? drained.pid : undefined;
     if (
       drainedPid !== status.pid ||

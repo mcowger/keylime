@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
-import type { HostRow as HubHostRow } from "./hub";
+import type { HostRow as HubHostRow } from "../api-contracts/http-system";
 
 const agentDir = mkdtempSync(join(tmpdir(), "keylime-hosts-route-test-"));
 const configEnv = [

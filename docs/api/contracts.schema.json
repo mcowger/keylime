@@ -194672,6 +194672,752 @@
       ],
       "description": "Attach or detach a subscription on a multiplexed SSE connection."
     },
+    "system_HostRow": {
+      "anyOf": [
+        {
+          "description": "Status and capabilities of this controller's local host.",
+          "properties": {
+            "arch": {
+              "description": "CPU architecture for selecting a compatible host release.",
+              "type": "string"
+            },
+            "canActivateArtifact": {
+              "description": "The linked standalone daemon advertised artifact activation.",
+              "type": "boolean"
+            },
+            "canStageArtifact": {
+              "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+              "type": "boolean"
+            },
+            "daemonManaged": {
+              "type": "boolean"
+            },
+            "hostVersion": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "const": "local",
+              "type": "string"
+            },
+            "keylimeVersion": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "lastSeenAt": {
+              "type": "null"
+            },
+            "ompVersion": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "platform": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "serverPlatform": {
+              "type": "string"
+            },
+            "serverVersion": {
+              "type": "number"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "const": "online",
+                  "type": "string"
+                },
+                {
+                  "const": "offline",
+                  "type": "string"
+                },
+                {
+                  "const": "needs-upgrade",
+                  "type": "string"
+                },
+                {
+                  "const": "omp-missing",
+                  "type": "string"
+                }
+              ]
+            },
+            "workspaceOps": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "status",
+            "ompVersion",
+            "platform",
+            "lastSeenAt",
+            "hostVersion",
+            "serverVersion",
+            "workspaceOps",
+            "serverPlatform",
+            "daemonManaged"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Status and capabilities of a linked remote host.",
+          "properties": {
+            "arch": {
+              "description": "CPU architecture for selecting a compatible host release.",
+              "type": "string"
+            },
+            "canActivateArtifact": {
+              "description": "The linked standalone daemon advertised artifact activation.",
+              "type": "boolean"
+            },
+            "canStageArtifact": {
+              "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+              "type": "boolean"
+            },
+            "connectionId": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Identifier of the last accepted host link hello; changes on every reconnect or replacement, and is null before the first hello."
+            },
+            "hostVersion": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "keylimeVersion": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "lastSeenAt": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ompVersion": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "platform": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "serverVersion": {
+              "type": "number"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "const": "online",
+                  "type": "string"
+                },
+                {
+                  "const": "offline",
+                  "type": "string"
+                },
+                {
+                  "const": "needs-upgrade",
+                  "type": "string"
+                },
+                {
+                  "const": "omp-missing",
+                  "type": "string"
+                }
+              ]
+            },
+            "workspaceOps": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "status",
+            "ompVersion",
+            "platform",
+            "lastSeenAt",
+            "hostVersion",
+            "serverVersion",
+            "workspaceOps",
+            "connectionId"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "A local or linked host in a host snapshot."
+    },
+    "system_HostSnapshot": {
+      "description": "Host status snapshot, with this machine first.",
+      "properties": {
+        "hosts": {
+          "items": {
+            "anyOf": [
+              {
+                "description": "Status and capabilities of this controller's local host.",
+                "properties": {
+                  "arch": {
+                    "description": "CPU architecture for selecting a compatible host release.",
+                    "type": "string"
+                  },
+                  "canActivateArtifact": {
+                    "description": "The linked standalone daemon advertised artifact activation.",
+                    "type": "boolean"
+                  },
+                  "canStageArtifact": {
+                    "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+                    "type": "boolean"
+                  },
+                  "daemonManaged": {
+                    "type": "boolean"
+                  },
+                  "hostVersion": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "const": "local",
+                    "type": "string"
+                  },
+                  "keylimeVersion": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "lastSeenAt": {
+                    "type": "null"
+                  },
+                  "ompVersion": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "platform": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "serverPlatform": {
+                    "type": "string"
+                  },
+                  "serverVersion": {
+                    "type": "number"
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "online",
+                        "type": "string"
+                      },
+                      {
+                        "const": "offline",
+                        "type": "string"
+                      },
+                      {
+                        "const": "needs-upgrade",
+                        "type": "string"
+                      },
+                      {
+                        "const": "omp-missing",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "workspaceOps": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "status",
+                  "ompVersion",
+                  "platform",
+                  "lastSeenAt",
+                  "hostVersion",
+                  "serverVersion",
+                  "workspaceOps",
+                  "serverPlatform",
+                  "daemonManaged"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Status and capabilities of a linked remote host.",
+                "properties": {
+                  "arch": {
+                    "description": "CPU architecture for selecting a compatible host release.",
+                    "type": "string"
+                  },
+                  "canActivateArtifact": {
+                    "description": "The linked standalone daemon advertised artifact activation.",
+                    "type": "boolean"
+                  },
+                  "canStageArtifact": {
+                    "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+                    "type": "boolean"
+                  },
+                  "connectionId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Identifier of the last accepted host link hello; changes on every reconnect or replacement, and is null before the first hello."
+                  },
+                  "hostVersion": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "keylimeVersion": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "lastSeenAt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ompVersion": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "platform": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "serverVersion": {
+                    "type": "number"
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "online",
+                        "type": "string"
+                      },
+                      {
+                        "const": "offline",
+                        "type": "string"
+                      },
+                      {
+                        "const": "needs-upgrade",
+                        "type": "string"
+                      },
+                      {
+                        "const": "omp-missing",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "workspaceOps": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "status",
+                  "ompVersion",
+                  "platform",
+                  "lastSeenAt",
+                  "hostVersion",
+                  "serverVersion",
+                  "workspaceOps",
+                  "connectionId"
+                ],
+                "type": "object"
+              }
+            ],
+            "description": "A local or linked host in a host snapshot."
+          },
+          "type": "array"
+        }
+      },
+      "required": ["hosts"],
+      "type": "object"
+    },
+    "system_LinkedHostRow": {
+      "description": "Status and capabilities of a linked remote host.",
+      "properties": {
+        "arch": {
+          "description": "CPU architecture for selecting a compatible host release.",
+          "type": "string"
+        },
+        "canActivateArtifact": {
+          "description": "The linked standalone daemon advertised artifact activation.",
+          "type": "boolean"
+        },
+        "canStageArtifact": {
+          "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+          "type": "boolean"
+        },
+        "connectionId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identifier of the last accepted host link hello; changes on every reconnect or replacement, and is null before the first hello."
+        },
+        "hostVersion": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "keylimeVersion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "lastSeenAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ompVersion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "platform": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "serverVersion": {
+          "type": "number"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "online",
+              "type": "string"
+            },
+            {
+              "const": "offline",
+              "type": "string"
+            },
+            {
+              "const": "needs-upgrade",
+              "type": "string"
+            },
+            {
+              "const": "omp-missing",
+              "type": "string"
+            }
+          ]
+        },
+        "workspaceOps": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "status",
+        "ompVersion",
+        "platform",
+        "lastSeenAt",
+        "hostVersion",
+        "serverVersion",
+        "workspaceOps",
+        "connectionId"
+      ],
+      "type": "object"
+    },
+    "system_LocalHostRow": {
+      "description": "Status and capabilities of this controller's local host.",
+      "properties": {
+        "arch": {
+          "description": "CPU architecture for selecting a compatible host release.",
+          "type": "string"
+        },
+        "canActivateArtifact": {
+          "description": "The linked standalone daemon advertised artifact activation.",
+          "type": "boolean"
+        },
+        "canStageArtifact": {
+          "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
+          "type": "boolean"
+        },
+        "daemonManaged": {
+          "type": "boolean"
+        },
+        "hostVersion": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "const": "local",
+          "type": "string"
+        },
+        "keylimeVersion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "lastSeenAt": {
+          "type": "null"
+        },
+        "ompVersion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "platform": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "serverPlatform": {
+          "type": "string"
+        },
+        "serverVersion": {
+          "type": "number"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "online",
+              "type": "string"
+            },
+            {
+              "const": "offline",
+              "type": "string"
+            },
+            {
+              "const": "needs-upgrade",
+              "type": "string"
+            },
+            {
+              "const": "omp-missing",
+              "type": "string"
+            }
+          ]
+        },
+        "workspaceOps": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "status",
+        "ompVersion",
+        "platform",
+        "lastSeenAt",
+        "hostVersion",
+        "serverVersion",
+        "workspaceOps",
+        "serverPlatform",
+        "daemonManaged"
+      ],
+      "type": "object"
+    },
     "system_MuxControlFrame": {
       "anyOf": [
         {

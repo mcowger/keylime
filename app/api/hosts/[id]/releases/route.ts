@@ -34,8 +34,8 @@ export async function GET(req: Request, { params }: Context) {
  * @apiContract deployHostRelease
  * @apiUsage Deploy the selected build to a linked standalone host and stream progress as NDJSON.
  * @apiInputs Supply the selected release ID and a new operation ID.
- * @apiInvariants Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build when the daemon reports digests; a daemon without digest reporting allows an unverified deployment. Other digest failures block it. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.
- * @apiEffects Streams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.
+ * @apiInvariants Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build when the daemon reports digests; a daemon without digest reporting allows an unverified deployment. Other digest failures block it. Incompatible installs are refused and a missing runner is added without overwriting an existing file.
+ * @apiEffects Streams cumulative host-acknowledged bytes across both binaries, then requests installation after both are staged. Installation force-drains and restarts a busy host, interrupting active sessions, terminals and host operations; pending results can be lost. Acceptance does not confirm the restart.
  * @apiRecovery A pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.
  */
 export async function POST(

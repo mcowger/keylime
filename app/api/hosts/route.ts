@@ -78,7 +78,7 @@ function requestOrigin(req: Request): string {
  * @apiUsage Load the linked-host snapshot for host management.
  * @apiInputs No request parameters.
  * @apiInvariants Responses are not cached and do not contain enrollment tokens.
- * @apiEffects Reads the host snapshot.
+ * @apiEffects Reads the host snapshot. Each linked host's connectionId changes on every accepted hello, including an online replacement, and is null before its first hello.
  * @apiRecovery Refresh the snapshot if host status changes.
  */
 export function GET() {

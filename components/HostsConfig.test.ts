@@ -316,7 +316,7 @@ const hostRow = (overrides: Record<string, unknown> = {}) => ({
   platform: "linux",
   hostVersion: 3,
   serverVersion: 3,
-  lastSeenAt: null,
+  lastSeenAt: null as string | null,
   workspaceOps: [],
   ...overrides,
 });
@@ -394,6 +394,50 @@ test("staging shows the host recovery path when the confirmation body stalls", a
   assert.equal(screen.queryByRole("dialog"), null);
 });
 
+test("staged artifact install review warns about interrupted host work", async (t) => {
+  mockHostRequests(t, async (url, init) => {
+    if (String(url) === "/api/uploads") {
+      const upload = JSON.parse(String(init?.body));
+      return Response.json({ received: upload.size });
+    }
+    assert.equal(String(url), "/api/hosts/h1/artifacts");
+    return Response.json({ path: "/tmp/staged/runner" });
+  });
+  const user = userEvent.setup();
+  await showHosts([
+    hostRow({
+      id: "h1",
+      label: "Laptop",
+      canStageArtifact: true,
+      canActivateArtifact: true,
+    }),
+  ]);
+  await user.click(
+    screen.getByRole("button", { name: "Stage artifact on Laptop" }),
+  );
+  const dialog = within(screen.getByRole("dialog"));
+  await user.upload(
+    dialog.getByLabelText("Local file"),
+    new File(["bytes"], "runner"),
+  );
+  fireEvent.submit(
+    dialog.getByRole<HTMLButtonElement>("button", { name: "Stage artifact" })
+      .form!,
+  );
+  await dialog.findByText("File staged. Nothing was installed or restarted.");
+  await user.type(
+    dialog.getByLabelText("Expected SHA-256 (64 hex digits)"),
+    "a".repeat(64),
+  );
+  await user.click(dialog.getByRole("button", { name: "Review install" }));
+  assert.ok(
+    dialog.getByText(
+      "Replace Keylime on Laptop with the staged file and restart the Keylime service? The restart stops active agent sessions, terminals, and host work. Pending work and results may be interrupted or lost.",
+    ),
+  );
+  assert.ok(dialog.getByRole("button", { name: "Install & restart" }));
+});
+
 test("unverified releases require review and can be deployed", async (t) => {
   const deployments: unknown[] = [];
   mockHostRequests(t, async (url, init) => {
@@ -453,6 +497,11 @@ test("unverified releases require review and can be deployed", async (t) => {
 
   assert.equal(deployments.length, 0);
   await user.click(review);
+  assert.ok(
+    dialog.getByText(
+      "Deploy build-a to Laptop? This replaces the Keylime daemon and runner and restarts the Keylime host service. The restart stops active agent sessions, terminals, and host work. Pending work and results may be interrupted or lost.",
+    ),
+  );
   assert.ok(dialog.getByText(en["hostsConfig.releaseUnverifiedWarning"]));
   assert.equal(deployments.length, 0);
   await user.click(dialog.getByRole("button", { name: "Deploy & restart" }));
@@ -498,6 +547,63 @@ test("unknown and installed newest releases cannot be deployed", async (t) => {
     }).disabled,
     true,
   );
+});
+
+test("a same-version host replacement refreshes its build comparison", async (t) => {
+  let requests = 0;
+  mockHostRequests(t, async (url) => {
+    assert.equal(String(url), "/api/hosts/h1/releases");
+    requests++;
+    return Response.json({
+      releases: [
+        {
+          id: "build-a",
+          builtAt: "2026-11-20T00:00:00Z",
+          status: requests === 1 ? "unverified" : "installed",
+        },
+      ],
+    });
+  });
+  const host = {
+    ...hostRow({
+      id: "h1",
+      label: "Laptop",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+    connectionId: "first",
+    lastSeenAt: "2026-11-21T01:00:00Z",
+  };
+  await showHosts([host]);
+  await screen.findByText(en["hostsConfig.releaseComparisonUnverified"]);
+  const { id } = workers[0].posted.findLast(
+    (message) => message.op === "open" && message.channel.kind === "hosts",
+  )!;
+  act(() =>
+    workers[0].onmessage({
+      data: {
+        id,
+        type: "message",
+        data: JSON.stringify({
+          hosts: [{ ...host, lastSeenAt: "2026-11-21T02:00:00Z" }],
+        }),
+      },
+    }),
+  );
+  assert.equal(requests, 1);
+  act(() =>
+    workers[0].onmessage({
+      data: {
+        id,
+        type: "message",
+        data: JSON.stringify({
+          hosts: [{ ...host, connectionId: "replacement" }],
+        }),
+      },
+    }),
+  );
+  await screen.findByText(en["hostsConfig.releaseComparisonCurrent"]);
+  assert.equal(requests, 2);
 });
 
 test("release catalog requests are aborted when the card unmounts", async (t) => {

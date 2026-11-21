@@ -23,6 +23,11 @@ import {
   type UsageQueryOptions,
   type UsageReport,
 } from "../api-contracts/usage-models";
+import type {
+  HostSnapshot,
+  LinkedHostRow,
+  LocalHostRow,
+} from "../api-contracts/http-system";
 import {
   HostArtifactActivationResultSchema,
   HostInstalledBinaryDigestsSchema,
@@ -198,6 +203,7 @@ interface Link {
   canStageArtifact: boolean;
   canActivateArtifact: boolean;
   canReportBinaryDigests: boolean;
+  connectionId: string | null;
   platform: string | null;
   releaseArch?: string;
   lastSeenAt: string | null;
@@ -430,6 +436,7 @@ function linkFor(id: string): Link {
       canStageArtifact: false,
       canActivateArtifact: false,
       canReportBinaryDigests: false,
+      connectionId: null,
       platform: null,
       lastSeenAt: null,
       autoApprove: false,
@@ -998,6 +1005,7 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
   }
   // One link per host: the newest wins and the previous daemon exits.
   const previous = link.socket;
+  link.connectionId = randomUUID();
   link.socket = ws;
   previous?.close(LINK_CLOSE.replaced, "replaced by a newer link");
   if (previous) {
@@ -2419,23 +2427,6 @@ export function getHost(id: string): Host | null {
     : null;
 }
 
-export interface LinkedHostRow {
-  id: string;
-  label: string;
-  status: HostStatus;
-  ompVersion: string | null;
-  keylimeVersion?: string | null;
-  platform: string | null;
-  lastSeenAt: string | null;
-  /** Link protocol version the daemon last presented; null before it ever dialed. */
-  hostVersion: number | null;
-  serverVersion: number;
-  workspaceOps: string[];
-  canStageArtifact?: boolean;
-  canActivateArtifact?: boolean;
-  arch?: string;
-}
-
 export function listHosts(): LinkedHostRow[] {
   return loadHosts()
     .filter((record) => record.id !== LOCAL_HOST_ID)
@@ -2449,6 +2440,7 @@ export function listHosts(): LinkedHostRow[] {
         keylimeVersion: link?.keylimeVersion ?? null,
         platform: link?.platform ?? null,
         lastSeenAt: link?.lastSeenAt ?? record.lastSeenAt,
+        connectionId: link?.connectionId ?? null,
         hostVersion: link?.hostVersion ?? null,
         serverVersion: LINK_PROTOCOL_VERSION,
         workspaceOps: [...(link?.workspaceOps ?? [])],
@@ -2459,33 +2451,8 @@ export function listHosts(): LinkedHostRow[] {
     });
 }
 
-export interface LocalHostRow {
-  id: "local";
-  /** The user's name for this machine; "" while it goes by the localized default. */
-  label: string;
-  status: HostStatus;
-  ompVersion: string | null;
-  keylimeVersion?: string | null;
-  platform: string | null;
-  lastSeenAt: null;
-  hostVersion: number | null;
-  serverVersion: number;
-  workspaceOps: string[];
-  canStageArtifact?: boolean;
-  canActivateArtifact?: boolean;
-  arch?: string;
-  /** `process.platform` of this server: picks the daemon install command while no daemon has linked. */
-  serverPlatform: string;
-  /** False under the dev server (`NODE_ENV=development`), where this machine runs sessions in-process and is offline by design: no install hints. */
-  daemonManaged: boolean;
-}
-
-export type HostRow = LocalHostRow | LinkedHostRow;
-
 /** This machine first, then linked hosts; shared by GET /api/hosts and its live stream. */
-export function hostsSnapshot(): {
-  hosts: HostRow[];
-} {
+export function hostsSnapshot(): HostSnapshot {
   const link = hub().links.get(LOCAL_HOST_ID);
   const local: LocalHostRow = {
     id: "local",

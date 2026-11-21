@@ -553,12 +553,20 @@ test("hello without omp marks the host omp-missing and spawnRpc rejects", async 
 
 test("a second link with the same token closes the first socket with 4409, and frames still arriving on it are ignored", async () => {
   const a = await linkedHost("Two daemons");
+  const firstConnection = hub
+    .listHosts()
+    .find((host) => host.id === a.id)?.connectionId;
+  assert.ok(firstConnection);
   assert.deepEqual(
     linkPost(a, [{ type: "stdout", seq: 500, ch: "none", line: "x" }]),
     [500],
   );
   // Daemon B links with the same token: a fresh process (ack 0) restarts the uplink window.
   const b = { ...a, ...(await openLink(a.token, { ack: 0 })) };
+  const replacement = hub.listHosts().find((host) => host.id === a.id);
+  assert.equal(replacement?.status, "online");
+  assert.ok(replacement?.connectionId);
+  assert.notEqual(replacement.connectionId, firstConnection);
   assert.equal(await a.down.next(), null);
   assert.deepEqual(a.down.socket.closed, {
     code: 4409,

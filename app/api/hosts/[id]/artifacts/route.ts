@@ -47,8 +47,8 @@ export async function POST(req: Request, { params }: Context) {
  * @apiContract activateHostArtifact
  * @apiUsage Install a staged binary and restart its selected standalone remote daemon.
  * @apiInputs Supply the staged artifact ID, a new operation ID, the target executable and its expected SHA-256.
- * @apiInvariants The staging and activation belong to the selected host and its original server link. The daemon chooses the installed path and refuses busy hosts. Reusing an admitted operation ID does not repeat the install.
- * @apiEffects Hands installation and restart to the daemon. The worker preflights the verified copy before draining or replacing anything. Returns acceptance or known state, not a guarantee that the restart completed.
+ * @apiInvariants The staging and activation belong to the selected host and its original server link. The daemon chooses the installed path. Reusing an admitted operation ID does not repeat the install.
+ * @apiEffects Hands installation and restart to the daemon. The worker preflights the verified copy, then force-drains the host and restarts it even when busy. Active sessions, terminals and host operations can be interrupted and pending results lost. Returns acceptance or known state, not a guarantee that the restart completed.
  * @apiRecovery Read the activation status with the same operation ID after reconnect or a lost response. Do not send another install when the outcome is unknown.
  */
 export async function PATCH(req: Request, { params }: Context) {

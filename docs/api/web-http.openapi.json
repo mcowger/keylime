@@ -42096,18 +42096,20 @@
         }
       },
       "get": {
-        "description": "### Usage\n\nLoad the linked-host snapshot for host management.\n\n### Inputs\n\nNo request parameters.\n\n### Invariants\n\nResponses are not cached and do not contain enrollment tokens.\n\n### Effects\n\nReads the host snapshot.\n\n### Recovery\n\nRefresh the snapshot if host status changes.",
+        "description": "### Usage\n\nLoad the linked-host snapshot for host management.\n\n### Inputs\n\nNo request parameters.\n\n### Invariants\n\nResponses are not cached and do not contain enrollment tokens.\n\n### Effects\n\nReads the host snapshot. Each linked host's connectionId changes on every accepted hello, including an online replacement, and is null before its first hello.\n\n### Recovery\n\nRefresh the snapshot if host status changes.",
         "operationId": "getHosts",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
+                  "description": "Host status snapshot, with this machine first.",
                   "properties": {
                     "hosts": {
                       "items": {
                         "anyOf": [
                           {
+                            "description": "Status and capabilities of this controller's local host.",
                             "properties": {
                               "arch": {
                                 "description": "CPU architecture for selecting a compatible host release.",
@@ -42223,6 +42225,7 @@
                             "type": "object"
                           },
                           {
+                            "description": "Status and capabilities of a linked remote host.",
                             "properties": {
                               "arch": {
                                 "description": "CPU architecture for selecting a compatible host release.",
@@ -42235,6 +42238,17 @@
                               "canStageArtifact": {
                                 "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
                                 "type": "boolean"
+                              },
+                              "connectionId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Identifier of the last accepted host link hello; changes on every reconnect or replacement, and is null before the first hello."
                               },
                               "hostVersion": {
                                 "anyOf": [
@@ -42331,11 +42345,13 @@
                               "lastSeenAt",
                               "hostVersion",
                               "serverVersion",
-                              "workspaceOps"
+                              "workspaceOps",
+                              "connectionId"
                             ],
                             "type": "object"
                           }
-                        ]
+                        ],
+                        "description": "A local or linked host in a host snapshot."
                       },
                       "type": "array"
                     }
@@ -42701,7 +42717,7 @@
         ],
         "summary": "List independent hosts",
         "x-client-semantics": {
-          "Effects": "Reads the host snapshot.",
+          "Effects": "Reads the host snapshot. Each linked host's connectionId changes on every accepted hello, including an online replacement, and is null before its first hello.",
           "Inputs": "No request parameters.",
           "Invariants": "Responses are not cached and do not contain enrollment tokens.",
           "Recovery": "Refresh the snapshot if host status changes.",
@@ -42739,6 +42755,7 @@
                     "host": {
                       "anyOf": [
                         {
+                          "description": "Status and capabilities of this controller's local host.",
                           "properties": {
                             "arch": {
                               "description": "CPU architecture for selecting a compatible host release.",
@@ -42854,6 +42871,7 @@
                           "type": "object"
                         },
                         {
+                          "description": "Status and capabilities of a linked remote host.",
                           "properties": {
                             "arch": {
                               "description": "CPU architecture for selecting a compatible host release.",
@@ -42866,6 +42884,17 @@
                             "canStageArtifact": {
                               "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
                               "type": "boolean"
+                            },
+                            "connectionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Identifier of the last accepted host link hello; changes on every reconnect or replacement, and is null before the first hello."
                             },
                             "hostVersion": {
                               "anyOf": [
@@ -42962,11 +42991,13 @@
                             "lastSeenAt",
                             "hostVersion",
                             "serverVersion",
-                            "workspaceOps"
+                            "workspaceOps",
+                            "connectionId"
                           ],
                           "type": "object"
                         }
-                      ]
+                      ],
+                      "description": "A local or linked host in a host snapshot."
                     }
                   },
                   "type": "object"
@@ -43369,6 +43400,7 @@
                     "host": {
                       "anyOf": [
                         {
+                          "description": "Status and capabilities of this controller's local host.",
                           "properties": {
                             "arch": {
                               "description": "CPU architecture for selecting a compatible host release.",
@@ -43484,6 +43516,7 @@
                           "type": "object"
                         },
                         {
+                          "description": "Status and capabilities of a linked remote host.",
                           "properties": {
                             "arch": {
                               "description": "CPU architecture for selecting a compatible host release.",
@@ -43496,6 +43529,17 @@
                             "canStageArtifact": {
                               "description": "The daemon advertised artifact staging. Omitted if unsupported; availability also requires a live link.",
                               "type": "boolean"
+                            },
+                            "connectionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Identifier of the last accepted host link hello; changes on every reconnect or replacement, and is null before the first hello."
                             },
                             "hostVersion": {
                               "anyOf": [
@@ -43592,11 +43636,13 @@
                             "lastSeenAt",
                             "hostVersion",
                             "serverVersion",
-                            "workspaceOps"
+                            "workspaceOps",
+                            "connectionId"
                           ],
                           "type": "object"
                         }
-                      ]
+                      ],
+                      "description": "A local or linked host in a host snapshot."
                     },
                     "token": {
                       "type": "string"
@@ -44401,7 +44447,7 @@
         }
       },
       "patch": {
-        "description": "### Usage\n\nInstall a staged binary and restart its selected standalone remote daemon.\n\n### Inputs\n\nSupply the staged artifact ID, a new operation ID, the target executable and its expected SHA-256.\n\n### Invariants\n\nThe staging and activation belong to the selected host and its original server link. The daemon chooses the installed path and refuses busy hosts. Reusing an admitted operation ID does not repeat the install.\n\n### Effects\n\nHands installation and restart to the daemon. The worker preflights the verified copy before draining or replacing anything. Returns acceptance or known state, not a guarantee that the restart completed.\n\n### Recovery\n\nRead the activation status with the same operation ID after reconnect or a lost response. Do not send another install when the outcome is unknown.",
+        "description": "### Usage\n\nInstall a staged binary and restart its selected standalone remote daemon.\n\n### Inputs\n\nSupply the staged artifact ID, a new operation ID, the target executable and its expected SHA-256.\n\n### Invariants\n\nThe staging and activation belong to the selected host and its original server link. The daemon chooses the installed path. Reusing an admitted operation ID does not repeat the install.\n\n### Effects\n\nHands installation and restart to the daemon. The worker preflights the verified copy, then force-drains the host and restarts it even when busy. Active sessions, terminals and host operations can be interrupted and pending results lost. Returns acceptance or known state, not a guarantee that the restart completed.\n\n### Recovery\n\nRead the activation status with the same operation ID after reconnect or a lost response. Do not send another install when the outcome is unknown.",
         "operationId": "activateHostArtifact",
         "parameters": [
           {
@@ -44870,9 +44916,9 @@
         ],
         "summary": "Install a staged binary and restart the standalone daemon",
         "x-client-semantics": {
-          "Effects": "Hands installation and restart to the daemon. The worker preflights the verified copy before draining or replacing anything. Returns acceptance or known state, not a guarantee that the restart completed.",
+          "Effects": "Hands installation and restart to the daemon. The worker preflights the verified copy, then force-drains the host and restarts it even when busy. Active sessions, terminals and host operations can be interrupted and pending results lost. Returns acceptance or known state, not a guarantee that the restart completed.",
           "Inputs": "Supply the staged artifact ID, a new operation ID, the target executable and its expected SHA-256.",
-          "Invariants": "The staging and activation belong to the selected host and its original server link. The daemon chooses the installed path and refuses busy hosts. Reusing an admitted operation ID does not repeat the install.",
+          "Invariants": "The staging and activation belong to the selected host and its original server link. The daemon chooses the installed path. Reusing an admitted operation ID does not repeat the install.",
           "Recovery": "Read the activation status with the same operation ID after reconnect or a lost response. Do not send another install when the outcome is unknown.",
           "Usage": "Install a staged binary and restart its selected standalone remote daemon."
         }
@@ -45704,7 +45750,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nDeploy the selected build to a linked standalone host and stream progress as NDJSON.\n\n### Inputs\n\nSupply the selected release ID and a new operation ID.\n\n### Invariants\n\nBoth binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build when the daemon reports digests; a daemon without digest reporting allows an unverified deployment. Other digest failures block it. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.\n\n### Effects\n\nStreams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.\n\n### Recovery\n\nA pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
+        "description": "### Usage\n\nDeploy the selected build to a linked standalone host and stream progress as NDJSON.\n\n### Inputs\n\nSupply the selected release ID and a new operation ID.\n\n### Invariants\n\nBoth binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build when the daemon reports digests; a daemon without digest reporting allows an unverified deployment. Other digest failures block it. Incompatible installs are refused and a missing runner is added without overwriting an existing file.\n\n### Effects\n\nStreams cumulative host-acknowledged bytes across both binaries, then requests installation after both are staged. Installation force-drains and restarts a busy host, interrupting active sessions, terminals and host operations; pending results can be lost. Acceptance does not confirm the restart.\n\n### Recovery\n\nA pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
         "operationId": "deployHostRelease",
         "parameters": [
           {
@@ -46217,9 +46263,9 @@
         ],
         "summary": "Deploy a matched daemon and runner to a linked host",
         "x-client-semantics": {
-          "Effects": "Streams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.",
+          "Effects": "Streams cumulative host-acknowledged bytes across both binaries, then requests installation after both are staged. Installation force-drains and restarts a busy host, interrupting active sessions, terminals and host operations; pending results can be lost. Acceptance does not confirm the restart.",
           "Inputs": "Supply the selected release ID and a new operation ID.",
-          "Invariants": "Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build when the daemon reports digests; a daemon without digest reporting allows an unverified deployment. Other digest failures block it. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.",
+          "Invariants": "Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build when the daemon reports digests; a daemon without digest reporting allows an unverified deployment. Other digest failures block it. Incompatible installs are refused and a missing runner is added without overwriting an existing file.",
           "Recovery": "A pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
           "Usage": "Deploy the selected build to a linked standalone host and stream progress as NDJSON."
         }

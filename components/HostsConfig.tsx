@@ -29,7 +29,7 @@ import type {
   StageHostArtifactResult,
 } from "@/lib/api-contracts/host-control-models";
 import { newUploadId, uploadFile, type UploadHandle } from "@/lib/event-stream";
-import type { HostRow } from "@/lib/hosts/hub";
+import type { HostRow } from "@/lib/api-contracts/http-system";
 import { useI18n } from "@/lib/i18n";
 import { LOCAL_HOST_ID } from "@/lib/project-ordering";
 import { useHostRows } from "@/hooks/useHostRows";
@@ -1088,6 +1088,7 @@ function HostCard({
       activationInProgress,
       generation,
       releasesUrl,
+      remote?.connectionId,
       host.platform,
       host.arch,
       host.keylimeVersion,

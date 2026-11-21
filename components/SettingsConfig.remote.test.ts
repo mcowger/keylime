@@ -2,7 +2,7 @@ import "../tests/setup-dom.ts";
 import assert from "node:assert/strict";
 import test, { afterEach, type TestContext } from "node:test";
 import { createElement } from "react";
-import type { HostRow } from "@/lib/hosts/hub";
+import type { HostRow } from "@/lib/api-contracts/http-system";
 const { cleanup, render, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { default: userEvent } = await import("@testing-library/user-event");
@@ -22,6 +22,7 @@ const hosts: HostRow[] = ["laptop", "desktop"].map((id) => ({
   ompVersion: null,
   platform: null,
   lastSeenAt: null,
+  connectionId: "connection-1",
   hostVersion: 14,
   serverVersion: 14,
   workspaceOps: [],

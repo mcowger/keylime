@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { openEventStream } from "@/lib/event-stream";
-import type { HostRow } from "@/lib/hosts/hub";
+import type { HostRow, HostSnapshot } from "@/lib/api-contracts/http-system";
 
 /** Authenticated snapshot followed by live host updates. */
 export function useHostRows(): {
@@ -18,7 +18,7 @@ export function useHostRows(): {
       try {
         const response = await fetch("/api/hosts", { signal: snapshot.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = (await response.json()) as { hosts?: HostRow[] };
+        const data = (await response.json()) as Partial<HostSnapshot>;
         if (!Array.isArray(data.hosts))
           throw new Error("Invalid host snapshot");
         if (!snapshot.signal.aborted) setHosts(data.hosts);
@@ -29,7 +29,7 @@ export function useHostRows(): {
     const stream = openEventStream({ kind: "hosts" });
     stream.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as { hosts?: HostRow[] };
+        const data = JSON.parse(event.data) as Partial<HostSnapshot>;
         if (Array.isArray(data.hosts)) {
           snapshot.abort();
           setHosts(data.hosts);

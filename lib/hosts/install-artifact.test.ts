@@ -135,7 +135,7 @@ esac`;
     let drained = false;
     const control = await createHostControlServer((command) => {
       const pid = Number(readFileSync(pidFile, "utf8"));
-      if (command === "drain") {
+      if (command === "drain-force") {
         drained = true;
         if (outcome === "runner appeared")
           writeFileSync(runner, "operator's runner", { mode: 0o700 });
@@ -211,6 +211,198 @@ esac`;
           assert.notEqual(code, 0);
           assert.match(stderr, /no automatic rollback/);
           assert.match(stderr, /remove the newly installed runner/);
+        }
+      }
+    } finally {
+      await control.close();
+    }
+  });
+}
+
+for (const outcome of [
+  "busy host",
+  "force error",
+  "wrong initial executable",
+  "wrong initial pid",
+  "wrong expected pid",
+  "already drained",
+  "wrong drained pid",
+  "wrong drained executable",
+  "not drained",
+  "supervisor changed",
+] as const) {
+  test(`artifact drain admission: ${outcome}`, async (t) => {
+    if (!process.getuid?.())
+      return t.skip("Requires an unprivileged service user");
+    const home = mkdtempSync(join(realpathSync(tmpdir()), "kl-force-drain-"));
+    t.after(() => rmSync(home, { recursive: true, force: true }));
+    const install = join(home, STANDALONE_HOST_INSTALL);
+    const agent = join(home, "agent");
+    const daemon = join(install, "keylime");
+    const supervisorDir = join(home, "bin");
+    const stagedDir = join(agent, "keylime", "host-artifacts", randomUUID());
+    mkdirSync(install, { recursive: true, mode: 0o700 });
+    mkdirSync(supervisorDir, { mode: 0o700 });
+    mkdirSync(stagedDir, { recursive: true, mode: 0o700 });
+    const previous = "#!/bin/sh\nexit 44\n";
+    const replacement = "#!/bin/sh\nprintf 'preflight ok: test\\n'\n";
+    writeFileSync(daemon, previous, { mode: 0o700 });
+    const inode = statSync(daemon).ino;
+    const artifact = join(stagedDir, "keylime");
+    writeFileSync(artifact, replacement, { mode: 0o600 });
+    const pidFile = join(home, "supervised-pid");
+    const restartLog = join(home, "restart-log");
+    writeFileSync(pidFile, "100\n");
+    const supervisor = `#!/bin/sh
+case "$*" in
+  "--user show "*) cat "$HOME/supervised-pid" ;;
+  "print "*) printf 'pid = %s\n' "$(cat "$HOME/supervised-pid")" ;;
+  "--user restart "*|"kickstart -k "*)
+    echo restart >> "$HOME/restart-log"
+    printf '101\n' > "$HOME/supervised-pid" ;;
+  *) exit 99 ;;
+esac`;
+    for (const name of ["systemctl", "launchctl"])
+      writeFileSync(join(supervisorDir, name), supervisor, { mode: 0o700 });
+
+    const busy = "Wait for reliable host results to be delivered.";
+    const commands: string[] = [];
+    let drained = outcome === "already drained";
+    const control = await createHostControlServer((command) => {
+      commands.push(command);
+      if (command === "drain")
+        throw Object.assign(new Error(busy), { code: "host_busy" });
+      if (command === "drain-force") {
+        if (outcome === "force error")
+          throw Object.assign(new Error("Cannot enter maintenance"), {
+            code: "host_stopping",
+          });
+        drained = outcome !== "not drained";
+        if (outcome === "supervisor changed") writeFileSync(pidFile, "101\n");
+      } else if (command === "resume") {
+        drained = false;
+      }
+      const pid = Number(readFileSync(pidFile, "utf8"));
+      return {
+        pid:
+          command === "drain-force" && outcome === "wrong drained pid"
+            ? 102
+            : command === "drain-force" && outcome === "supervisor changed"
+              ? 100
+              : command === "status" && outcome === "wrong initial pid"
+                ? 102
+                : pid,
+        version: "test",
+        protocol: 14,
+        linked: true,
+        drained:
+          drained &&
+          (pid === 100 ||
+            (command === "drain-force" && outcome === "supervisor changed")),
+        executable:
+          (command === "status" && outcome === "wrong initial executable") ||
+          (command === "drain-force" && outcome === "wrong drained executable")
+            ? join(home, "other-keylime")
+            : daemon,
+        entrypoint: daemon,
+      };
+    }, agent);
+    try {
+      const input = {
+        stagedPath: artifact,
+        sha256: createHash("sha256").update(replacement).digest("hex"),
+        target: "keylime",
+        agentDir: agent,
+        ...(outcome === "wrong expected pid" ? { expectedPid: 999 } : {}),
+      };
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "--no-env-file",
+          "-e",
+          `import { installArtifact } from ${JSON.stringify(join(import.meta.dir, "install-artifact.ts"))};
+try { await installArtifact(${JSON.stringify(input)}); }
+catch (error) { console.error(JSON.stringify({ message: error.message, code: error.code })); process.exitCode = 1; }`,
+        ],
+        {
+          env: {
+            HOME: home,
+            PATH: `${supervisorDir}:/usr/bin:/bin`,
+            PI_CODING_AGENT_DIR: agent,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      if (outcome === "busy host") {
+        assert.equal(code, 0, stderr);
+        assert.match(stdout, /Host service restarted \(PID 101\)/);
+        assert.equal(readFileSync(daemon, "utf8"), replacement);
+        assert.equal(readFileSync(restartLog, "utf8"), "restart\n");
+        assert.ok(
+          readdirSync(install).some((name) =>
+            name.startsWith("keylime.backup-"),
+          ),
+        );
+        assert.deepEqual(commands, ["status", "drain-force", "status"]);
+      } else {
+        assert.notEqual(code, 0);
+        const error = JSON.parse(stderr.trim());
+        if (outcome === "force error") {
+          assert.deepEqual(error, {
+            message: "Cannot enter maintenance",
+            code: "host_stopping",
+          });
+        } else if (outcome === "already drained") {
+          assert.match(error.message, /already drained/);
+        } else if (
+          outcome.startsWith("wrong initial") ||
+          outcome === "wrong expected pid"
+        ) {
+          assert.match(
+            error.message,
+            /not the installed standalone host service/,
+          );
+        } else {
+          assert.match(
+            error.message,
+            /host changed while entering maintenance/,
+          );
+        }
+        assert.equal(statSync(daemon).ino, inode);
+        assert.equal(readFileSync(daemon, "utf8"), previous);
+        assert.equal(existsSync(restartLog), false);
+        assert.ok(
+          !readdirSync(install).some((name) =>
+            name.startsWith("keylime.backup-"),
+          ),
+        );
+        if (
+          outcome === "already drained" ||
+          outcome.startsWith("wrong initial") ||
+          outcome === "wrong expected pid"
+        ) {
+          assert.deepEqual(commands, ["status"]);
+        } else if (outcome === "wrong drained executable") {
+          assert.deepEqual(commands, [
+            "status",
+            "drain-force",
+            "status",
+            "resume",
+          ]);
+          assert.equal(drained, false);
+        } else if (
+          outcome === "wrong drained pid" ||
+          outcome === "supervisor changed"
+        ) {
+          assert.deepEqual(commands, ["status", "drain-force", "status"]);
+        } else {
+          assert.deepEqual(commands, ["status", "drain-force"]);
         }
       }
     } finally {
