@@ -5511,6 +5511,51 @@
       "required": ["messages"],
       "type": "object"
     },
+    "agent_get_plan_state_args": {
+      "properties": {},
+      "type": "object"
+    },
+    "agent_get_plan_state_result": {
+      "anyOf": [
+        {
+          "description": "Current plan mode and, when present, its pending approval.",
+          "properties": {
+            "enabled": {
+              "description": "Whether native plan mode is active.",
+              "type": "boolean"
+            },
+            "proposal": {
+              "description": "The pending plan artifact and decision identity presented for review.",
+              "properties": {
+                "content": {
+                  "description": "Plan artifact text presented for approval.",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "Identity of this pending review; decisions must match it.",
+                  "type": "string"
+                },
+                "planFilePath": {
+                  "description": "Session-local plan artifact URI on the owning host.",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "OMP plan title.",
+                  "type": "string"
+                }
+              },
+              "required": ["id", "title", "content", "planFilePath"],
+              "type": "object"
+            }
+          },
+          "required": ["enabled"],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "agent_get_session_stats_args": {
       "properties": {},
       "type": "object"
@@ -10759,6 +10804,55 @@
       "required": ["removed"],
       "type": "object"
     },
+    "agent_respond_plan_proposal_args": {
+      "properties": {
+        "approved": {
+          "type": "boolean"
+        },
+        "feedback": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "approved"],
+      "type": "object"
+    },
+    "agent_respond_plan_proposal_result": {
+      "description": "Current plan mode and, when present, its pending approval.",
+      "properties": {
+        "enabled": {
+          "description": "Whether native plan mode is active.",
+          "type": "boolean"
+        },
+        "proposal": {
+          "description": "The pending plan artifact and decision identity presented for review.",
+          "properties": {
+            "content": {
+              "description": "Plan artifact text presented for approval.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Identity of this pending review; decisions must match it.",
+              "type": "string"
+            },
+            "planFilePath": {
+              "description": "Session-local plan artifact URI on the owning host.",
+              "type": "string"
+            },
+            "title": {
+              "description": "OMP plan title.",
+              "type": "string"
+            }
+          },
+          "required": ["id", "title", "content", "planFilePath"],
+          "type": "object"
+        }
+      },
+      "required": ["enabled"],
+      "type": "object"
+    },
     "agent_set_auto_compaction_args": {
       "properties": {
         "enabled": {
@@ -10948,6 +11042,49 @@
         }
       },
       "required": ["id", "provider"],
+      "type": "object"
+    },
+    "agent_set_plan_mode_args": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": ["enabled"],
+      "type": "object"
+    },
+    "agent_set_plan_mode_result": {
+      "description": "Current plan mode and, when present, its pending approval.",
+      "properties": {
+        "enabled": {
+          "description": "Whether native plan mode is active.",
+          "type": "boolean"
+        },
+        "proposal": {
+          "description": "The pending plan artifact and decision identity presented for review.",
+          "properties": {
+            "content": {
+              "description": "Plan artifact text presented for approval.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Identity of this pending review; decisions must match it.",
+              "type": "string"
+            },
+            "planFilePath": {
+              "description": "Session-local plan artifact URI on the owning host.",
+              "type": "string"
+            },
+            "title": {
+              "description": "OMP plan title.",
+              "type": "string"
+            }
+          },
+          "required": ["id", "title", "content", "planFilePath"],
+          "type": "object"
+        }
+      },
+      "required": ["enabled"],
       "type": "object"
     },
     "agent_set_session_name_args": {
@@ -51769,6 +51906,85 @@
             {
               "properties": {
                 "type": {
+                  "const": "get_plan_state",
+                  "type": "string"
+                }
+              },
+              "required": ["type"],
+              "type": "object"
+            },
+            {
+              "properties": {},
+              "type": "object"
+            }
+          ],
+          "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.\n\nBrowser: Read the live runner state without spawning a session; null means no live runner, not Build mode. Where the native operation returns undefined, the browser wrapper returns null.",
+          "title": "AgentCommand_get_plan_state",
+          "type": "object"
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "type": {
+                  "const": "set_plan_mode",
+                  "type": "string"
+                }
+              },
+              "required": ["type"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["enabled"],
+              "type": "object"
+            }
+          ],
+          "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+          "title": "AgentCommand_set_plan_mode",
+          "type": "object"
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "type": {
+                  "const": "respond_plan_proposal",
+                  "type": "string"
+                }
+              },
+              "required": ["type"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "approved": {
+                  "type": "boolean"
+                },
+                "feedback": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "approved"],
+              "type": "object"
+            }
+          ],
+          "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+          "title": "AgentCommand_respond_plan_proposal",
+          "type": "object"
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "type": {
                   "const": "get_client_message_status",
                   "type": "string"
                 }
@@ -60972,6 +61188,120 @@
                     }
                   },
                   "required": ["requested"],
+                  "type": "object"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "description": "Current plan mode and, when present, its pending approval.",
+                      "properties": {
+                        "enabled": {
+                          "description": "Whether native plan mode is active.",
+                          "type": "boolean"
+                        },
+                        "proposal": {
+                          "description": "The pending plan artifact and decision identity presented for review.",
+                          "properties": {
+                            "content": {
+                              "description": "Plan artifact text presented for approval.",
+                              "type": "string"
+                            },
+                            "id": {
+                              "description": "Identity of this pending review; decisions must match it.",
+                              "type": "string"
+                            },
+                            "planFilePath": {
+                              "description": "Session-local plan artifact URI on the owning host.",
+                              "type": "string"
+                            },
+                            "title": {
+                              "description": "OMP plan title.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "title",
+                            "content",
+                            "planFilePath"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": ["enabled"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                {
+                  "description": "Current plan mode and, when present, its pending approval.",
+                  "properties": {
+                    "enabled": {
+                      "description": "Whether native plan mode is active.",
+                      "type": "boolean"
+                    },
+                    "proposal": {
+                      "description": "The pending plan artifact and decision identity presented for review.",
+                      "properties": {
+                        "content": {
+                          "description": "Plan artifact text presented for approval.",
+                          "type": "string"
+                        },
+                        "id": {
+                          "description": "Identity of this pending review; decisions must match it.",
+                          "type": "string"
+                        },
+                        "planFilePath": {
+                          "description": "Session-local plan artifact URI on the owning host.",
+                          "type": "string"
+                        },
+                        "title": {
+                          "description": "OMP plan title.",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "content", "planFilePath"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["enabled"],
+                  "type": "object"
+                },
+                {
+                  "description": "Current plan mode and, when present, its pending approval.",
+                  "properties": {
+                    "enabled": {
+                      "description": "Whether native plan mode is active.",
+                      "type": "boolean"
+                    },
+                    "proposal": {
+                      "description": "The pending plan artifact and decision identity presented for review.",
+                      "properties": {
+                        "content": {
+                          "description": "Plan artifact text presented for approval.",
+                          "type": "string"
+                        },
+                        "id": {
+                          "description": "Identity of this pending review; decisions must match it.",
+                          "type": "string"
+                        },
+                        "planFilePath": {
+                          "description": "Session-local plan artifact URI on the owning host.",
+                          "type": "string"
+                        },
+                        "title": {
+                          "description": "OMP plan title.",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "content", "planFilePath"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["enabled"],
                   "type": "object"
                 },
                 {
@@ -71067,6 +71397,115 @@
             }
           },
           "required": ["requested"],
+          "type": "object"
+        },
+        {
+          "anyOf": [
+            {
+              "description": "Current plan mode and, when present, its pending approval.",
+              "properties": {
+                "enabled": {
+                  "description": "Whether native plan mode is active.",
+                  "type": "boolean"
+                },
+                "proposal": {
+                  "description": "The pending plan artifact and decision identity presented for review.",
+                  "properties": {
+                    "content": {
+                      "description": "Plan artifact text presented for approval.",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "Identity of this pending review; decisions must match it.",
+                      "type": "string"
+                    },
+                    "planFilePath": {
+                      "description": "Session-local plan artifact URI on the owning host.",
+                      "type": "string"
+                    },
+                    "title": {
+                      "description": "OMP plan title.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "title", "content", "planFilePath"],
+                  "type": "object"
+                }
+              },
+              "required": ["enabled"],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        {
+          "description": "Current plan mode and, when present, its pending approval.",
+          "properties": {
+            "enabled": {
+              "description": "Whether native plan mode is active.",
+              "type": "boolean"
+            },
+            "proposal": {
+              "description": "The pending plan artifact and decision identity presented for review.",
+              "properties": {
+                "content": {
+                  "description": "Plan artifact text presented for approval.",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "Identity of this pending review; decisions must match it.",
+                  "type": "string"
+                },
+                "planFilePath": {
+                  "description": "Session-local plan artifact URI on the owning host.",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "OMP plan title.",
+                  "type": "string"
+                }
+              },
+              "required": ["id", "title", "content", "planFilePath"],
+              "type": "object"
+            }
+          },
+          "required": ["enabled"],
+          "type": "object"
+        },
+        {
+          "description": "Current plan mode and, when present, its pending approval.",
+          "properties": {
+            "enabled": {
+              "description": "Whether native plan mode is active.",
+              "type": "boolean"
+            },
+            "proposal": {
+              "description": "The pending plan artifact and decision identity presented for review.",
+              "properties": {
+                "content": {
+                  "description": "Plan artifact text presented for approval.",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "Identity of this pending review; decisions must match it.",
+                  "type": "string"
+                },
+                "planFilePath": {
+                  "description": "Session-local plan artifact URI on the owning host.",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "OMP plan title.",
+                  "type": "string"
+                }
+              },
+              "required": ["id", "title", "content", "planFilePath"],
+              "type": "object"
+            }
+          },
+          "required": ["enabled"],
           "type": "object"
         },
         {
@@ -90084,6 +90523,73 @@
                 }
               },
               "required": ["type", "goal"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "web": {
+                  "description": "Browser-assigned ordering cursor; a different streamId starts a distinct sequence.",
+                  "properties": {
+                    "first": {
+                      "description": "First sequence included in a merged delta; sequence is the last, and the range is inclusive. Within the same streamId, a snapshot at S where first <= S < sequence already includes only part of the delta: never replay the whole delta on it. Buffer and reconcile with a covering snapshot.",
+                      "type": "number"
+                    },
+                    "sequence": {
+                      "description": "Ordering sequence within this stream; compare only cursors with the same streamId.",
+                      "type": "number"
+                    },
+                    "streamId": {
+                      "description": "Identifies the browser event stream whose sequence is being counted.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["streamId", "sequence"],
+                  "type": "object"
+                }
+              },
+              "required": ["web"],
+              "type": "object"
+            }
+          ],
+          "type": "object"
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "enabled": {
+                  "description": "Whether native plan mode is active.",
+                  "type": "boolean"
+                },
+                "proposal": {
+                  "description": "The pending plan artifact and decision identity presented for review.",
+                  "properties": {
+                    "content": {
+                      "description": "Plan artifact text presented for approval.",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "Identity of this pending review; decisions must match it.",
+                      "type": "string"
+                    },
+                    "planFilePath": {
+                      "description": "Session-local plan artifact URI on the owning host.",
+                      "type": "string"
+                    },
+                    "title": {
+                      "description": "OMP plan title.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "title", "content", "planFilePath"],
+                  "type": "object"
+                },
+                "type": {
+                  "const": "plan_state_changed",
+                  "type": "string"
+                }
+              },
+              "required": ["type", "enabled"],
               "type": "object"
             },
             {
@@ -109263,6 +109769,48 @@
                               "type": "object"
                             },
                             {
+                              "properties": {
+                                "enabled": {
+                                  "description": "Whether native plan mode is active.",
+                                  "type": "boolean"
+                                },
+                                "proposal": {
+                                  "description": "The pending plan artifact and decision identity presented for review.",
+                                  "properties": {
+                                    "content": {
+                                      "description": "Plan artifact text presented for approval.",
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "description": "Identity of this pending review; decisions must match it.",
+                                      "type": "string"
+                                    },
+                                    "planFilePath": {
+                                      "description": "Session-local plan artifact URI on the owning host.",
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "description": "OMP plan title.",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "title",
+                                    "content",
+                                    "planFilePath"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": {
+                                  "const": "plan_state_changed",
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["type", "enabled"],
+                              "type": "object"
+                            },
+                            {
                               "allOf": [
                                 {
                                   "properties": {
@@ -120267,6 +120815,44 @@
       "required": ["messages"],
       "type": "object"
     },
+    "runner_get_plan_state_args": {
+      "properties": {},
+      "type": "object"
+    },
+    "runner_get_plan_state_result": {
+      "description": "Current plan mode and, when present, its pending approval.",
+      "properties": {
+        "enabled": {
+          "description": "Whether native plan mode is active.",
+          "type": "boolean"
+        },
+        "proposal": {
+          "description": "The pending plan artifact and decision identity presented for review.",
+          "properties": {
+            "content": {
+              "description": "Plan artifact text presented for approval.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Identity of this pending review; decisions must match it.",
+              "type": "string"
+            },
+            "planFilePath": {
+              "description": "Session-local plan artifact URI on the owning host.",
+              "type": "string"
+            },
+            "title": {
+              "description": "OMP plan title.",
+              "type": "string"
+            }
+          },
+          "required": ["id", "title", "content", "planFilePath"],
+          "type": "object"
+        }
+      },
+      "required": ["enabled"],
+      "type": "object"
+    },
     "runner_get_session_lease_args": {
       "properties": {
         "sessionIds": {
@@ -128951,6 +129537,85 @@
                 {
                   "properties": {
                     "type": {
+                      "const": "get_plan_state",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type"],
+                  "type": "object"
+                },
+                {
+                  "properties": {},
+                  "type": "object"
+                }
+              ],
+              "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.\n\nBrowser: Read the live runner state without spawning a session; null means no live runner, not Build mode. Where the native operation returns undefined, the browser wrapper returns null.",
+              "title": "AgentCommand_get_plan_state",
+              "type": "object"
+            },
+            {
+              "allOf": [
+                {
+                  "properties": {
+                    "type": {
+                      "const": "set_plan_mode",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["enabled"],
+                  "type": "object"
+                }
+              ],
+              "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+              "title": "AgentCommand_set_plan_mode",
+              "type": "object"
+            },
+            {
+              "allOf": [
+                {
+                  "properties": {
+                    "type": {
+                      "const": "respond_plan_proposal",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "approved": {
+                      "type": "boolean"
+                    },
+                    "feedback": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "approved"],
+                  "type": "object"
+                }
+              ],
+              "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+              "title": "AgentCommand_respond_plan_proposal",
+              "type": "object"
+            },
+            {
+              "allOf": [
+                {
+                  "properties": {
+                    "type": {
                       "const": "get_client_message_status",
                       "type": "string"
                     }
@@ -130643,6 +131308,55 @@
         }
       },
       "required": ["removed"],
+      "type": "object"
+    },
+    "runner_respond_plan_proposal_args": {
+      "properties": {
+        "approved": {
+          "type": "boolean"
+        },
+        "feedback": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "approved"],
+      "type": "object"
+    },
+    "runner_respond_plan_proposal_result": {
+      "description": "Current plan mode and, when present, its pending approval.",
+      "properties": {
+        "enabled": {
+          "description": "Whether native plan mode is active.",
+          "type": "boolean"
+        },
+        "proposal": {
+          "description": "The pending plan artifact and decision identity presented for review.",
+          "properties": {
+            "content": {
+              "description": "Plan artifact text presented for approval.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Identity of this pending review; decisions must match it.",
+              "type": "string"
+            },
+            "planFilePath": {
+              "description": "Session-local plan artifact URI on the owning host.",
+              "type": "string"
+            },
+            "title": {
+              "description": "OMP plan title.",
+              "type": "string"
+            }
+          },
+          "required": ["id", "title", "content", "planFilePath"],
+          "type": "object"
+        }
+      },
+      "required": ["enabled"],
       "type": "object"
     },
     "runner_RunnerEvent": {
@@ -146161,6 +146875,43 @@
                     }
                   },
                   "required": ["type", "goal"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "enabled": {
+                      "description": "Whether native plan mode is active.",
+                      "type": "boolean"
+                    },
+                    "proposal": {
+                      "description": "The pending plan artifact and decision identity presented for review.",
+                      "properties": {
+                        "content": {
+                          "description": "Plan artifact text presented for approval.",
+                          "type": "string"
+                        },
+                        "id": {
+                          "description": "Identity of this pending review; decisions must match it.",
+                          "type": "string"
+                        },
+                        "planFilePath": {
+                          "description": "Session-local plan artifact URI on the owning host.",
+                          "type": "string"
+                        },
+                        "title": {
+                          "description": "OMP plan title.",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "title", "content", "planFilePath"],
+                      "type": "object"
+                    },
+                    "type": {
+                      "const": "plan_state_changed",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["type", "enabled"],
                   "type": "object"
                 },
                 {
@@ -164385,6 +165136,48 @@
                       "type": "object"
                     },
                     {
+                      "properties": {
+                        "enabled": {
+                          "description": "Whether native plan mode is active.",
+                          "type": "boolean"
+                        },
+                        "proposal": {
+                          "description": "The pending plan artifact and decision identity presented for review.",
+                          "properties": {
+                            "content": {
+                              "description": "Plan artifact text presented for approval.",
+                              "type": "string"
+                            },
+                            "id": {
+                              "description": "Identity of this pending review; decisions must match it.",
+                              "type": "string"
+                            },
+                            "planFilePath": {
+                              "description": "Session-local plan artifact URI on the owning host.",
+                              "type": "string"
+                            },
+                            "title": {
+                              "description": "OMP plan title.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "title",
+                            "content",
+                            "planFilePath"
+                          ],
+                          "type": "object"
+                        },
+                        "type": {
+                          "const": "plan_state_changed",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type", "enabled"],
+                      "type": "object"
+                    },
+                    {
                       "allOf": [
                         {
                           "properties": {
@@ -165078,6 +165871,49 @@
         }
       },
       "required": ["id", "provider"],
+      "type": "object"
+    },
+    "runner_set_plan_mode_args": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": ["enabled"],
+      "type": "object"
+    },
+    "runner_set_plan_mode_result": {
+      "description": "Current plan mode and, when present, its pending approval.",
+      "properties": {
+        "enabled": {
+          "description": "Whether native plan mode is active.",
+          "type": "boolean"
+        },
+        "proposal": {
+          "description": "The pending plan artifact and decision identity presented for review.",
+          "properties": {
+            "content": {
+              "description": "Plan artifact text presented for approval.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Identity of this pending review; decisions must match it.",
+              "type": "string"
+            },
+            "planFilePath": {
+              "description": "Session-local plan artifact URI on the owning host.",
+              "type": "string"
+            },
+            "title": {
+              "description": "OMP plan title.",
+              "type": "string"
+            }
+          },
+          "required": ["id", "title", "content", "planFilePath"],
+          "type": "object"
+        }
+      },
+      "required": ["enabled"],
       "type": "object"
     },
     "runner_set_session_name_args": {
@@ -180533,6 +181369,63 @@
         }
       ],
       "description": "Provider-native assistant content block. Tool arguments and provider-specific blocks are dynamic JSON; native images carry inline data."
+    },
+    "runnerNativeEvents_PlanProposal": {
+      "description": "The pending plan artifact and decision identity presented for review.",
+      "properties": {
+        "content": {
+          "description": "Plan artifact text presented for approval.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identity of this pending review; decisions must match it.",
+          "type": "string"
+        },
+        "planFilePath": {
+          "description": "Session-local plan artifact URI on the owning host.",
+          "type": "string"
+        },
+        "title": {
+          "description": "OMP plan title.",
+          "type": "string"
+        }
+      },
+      "required": ["id", "title", "content", "planFilePath"],
+      "type": "object"
+    },
+    "runnerNativeEvents_PlanState": {
+      "description": "Current plan mode and, when present, its pending approval.",
+      "properties": {
+        "enabled": {
+          "description": "Whether native plan mode is active.",
+          "type": "boolean"
+        },
+        "proposal": {
+          "description": "The pending plan artifact and decision identity presented for review.",
+          "properties": {
+            "content": {
+              "description": "Plan artifact text presented for approval.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Identity of this pending review; decisions must match it.",
+              "type": "string"
+            },
+            "planFilePath": {
+              "description": "Session-local plan artifact URI on the owning host.",
+              "type": "string"
+            },
+            "title": {
+              "description": "OMP plan title.",
+              "type": "string"
+            }
+          },
+          "required": ["id", "title", "content", "planFilePath"],
+          "type": "object"
+        }
+      },
+      "required": ["enabled"],
+      "type": "object"
     },
     "runnerTools_BtwRecord": {
       "description": "Checkpointed side-question record tied to a session leaf, with its answer status and optional follow-ups.",

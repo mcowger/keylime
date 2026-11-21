@@ -1,5 +1,7 @@
 "use client";
 
+import type { Static } from "@sinclair/typebox";
+import type { PlanStateSchema } from "@/lib/api-contracts/runner-native-events";
 import {
   useState,
   useCallback,
@@ -751,6 +753,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [thinkingLevel, setThinkingLevel] =
     useState<ThinkingLevelOption>("auto");
   const [fastModeEnabled, setFastModeEnabled] = useState(false);
+  const [planEnabled, setPlanEnabled] = useState(false);
+  const [planProposal, setPlanProposal] = useState<Static<typeof PlanStateSchema>["proposal"]>(undefined);
+  const [planCommandPending, setPlanCommandPending] = useState(false);
+  const planRevisionRef = useRef(0);
+  const newSessionPlanRef = useRef(false);
   const [fastModeActive, setFastModeActive] = useState<boolean | undefined>(
     undefined,
   );
@@ -2432,19 +2439,31 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const refreshAgentSnapshots = useCallback(
     async (sid: string) => {
       const queueRevision = ++queueSeqRef.current;
+      const planRevision = planRevisionRef.current;
       try {
         const res = await fetchForHost(`/api/agent/${encodeURIComponent(sid)}`);
         if (!res.ok || !hookAliveRef.current || sessionIdRef.current !== sid)
           return;
-        const data = (await res.json()) as { state?: AgentStateResponse };
+        const data = (await res.json()) as { running?: boolean; state?: AgentStateResponse };
         if (!hookAliveRef.current || sessionIdRef.current !== sid) return;
         applyQueueStateSnapshot(queueRevision, data.state?.queuedMessages);
         applyAdvisorSnapshot(queueRevision, data.state?.advisorReviewPending);
+        if (data.running && !newSessionPlanRef.current) {
+          try {
+            const state = await commandForHost<Static<typeof PlanStateSchema> | null>(sid, { type: "get_plan_state" });
+            if (state && typeof state.enabled === "boolean" && hookAliveRef.current && sessionIdRef.current === sid && planRevisionRef.current === planRevision) {
+              setPlanEnabled(state.enabled);
+              setPlanProposal(state.proposal);
+            }
+          } catch {
+            // The next live update or reconnect refreshes plan state.
+          }
+        }
       } catch {
         // The next live update or state snapshot heals these views.
       }
     },
-    [applyQueueStateSnapshot, applyAdvisorSnapshot],
+    [applyQueueStateSnapshot, applyAdvisorSnapshot, commandForHost, fetchForHost],
   );
 
   const reconcileHandoff = useCallback(async () => {
@@ -3974,6 +3993,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     (event: AgentEvent) => {
       if (event.type === "process_exit") {
         setModelActivity(IDLE_MODEL_ACTIVITY);
+        planRevisionRef.current += 1;
+        setPlanEnabled(false);
+        setPlanProposal(undefined);
         applyAdvisorSnapshot(++queueSeqRef.current, false);
       }
       if (
@@ -3991,6 +4013,13 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           return;
       }
       switch (event.type) {
+        case "plan_state_changed":
+          if (typeof event.enabled === "boolean") {
+            planRevisionRef.current += 1;
+            setPlanEnabled(event.enabled);
+            setPlanProposal(event.proposal as Static<typeof PlanStateSchema>["proposal"]);
+          }
+          break;
         case "advisor_review":
           if (typeof event.pending === "boolean")
             applyAdvisorSnapshot(++queueSeqRef.current, event.pending);
@@ -5400,6 +5429,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 });
               }
             }
+            if (newSessionPlanRef.current) {
+              await commandForHost(sid, { type: "set_plan_mode", enabled: true });
+              newSessionPlanRef.current = false;
+              if (!ownerGone) void refreshLiveModelState(sid);
+            }
             // No UI left to update on a dead instance — and attaching an
             // event stream now would leak it, since this instance's unmount
             // cleanup already ran.
@@ -5522,6 +5556,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       waitForPromptSettlement,
       addNotice,
       refreshSubagentRoster,
+      refreshLiveModelState,
       onBackgroundSessionCreated,
       clearLiveToolResults,
       clearTerminalReconcileTimer,
@@ -6225,6 +6260,50 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     },
     [isNew, setNewSessionModel, refreshLiveModelState, addNotice],
   );
+  const handlePlanModeChange = useCallback(async (enabled: boolean) => {
+    if (!sessionIdRef.current && isNew) {
+      newSessionPlanRef.current = enabled;
+      setPlanEnabled(enabled);
+      return;
+    }
+    const sid = sessionIdRef.current;
+    if (!sid || planCommandPending) return;
+    setPlanCommandPending(true);
+    planRevisionRef.current += 1;
+    try {
+      await commandForHost(sid, { type: "set_plan_mode", enabled });
+      newSessionPlanRef.current = false;
+      await ensureEventsConnected(sid);
+      await refreshAgentSnapshots(sid);
+      await refreshLiveModelState(sid);
+    } catch (error) {
+      addNotice({ type: "error", message: error instanceof Error ? error.message : String(error) });
+      await refreshAgentSnapshots(sid);
+      await refreshLiveModelState(sid);
+    } finally {
+      setPlanCommandPending(false);
+    }
+  }, [isNew, planCommandPending, commandForHost, addNotice, ensureEventsConnected, refreshAgentSnapshots, refreshLiveModelState]);
+
+  const respondToPlanProposal = useCallback(async (id: string, approved: boolean, feedback?: string) => {
+    const sid = sessionIdRef.current;
+    if (!sid || planCommandPending) return false;
+    setPlanCommandPending(true);
+    try {
+      planRevisionRef.current += 1;
+      await commandForHost(sid, { type: "respond_plan_proposal", id, approved, ...(feedback ? { feedback } : {}) });
+      await refreshAgentSnapshots(sid);
+      await refreshLiveModelState(sid);
+      return true;
+    } catch (error) {
+      addNotice({ type: "error", message: error instanceof Error ? error.message : String(error) });
+      await refreshAgentSnapshots(sid);
+      await refreshLiveModelState(sid);
+      return false;
+    } finally {
+      setPlanCommandPending(false);
+    }
+  }, [planCommandPending, commandForHost, addNotice, refreshAgentSnapshots, refreshLiveModelState]);
 
   const handleFastModeChange = useCallback(
     async (enabled: boolean) => {
@@ -7677,6 +7756,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     toolPreset,
     thinkingLevel,
     fastModeEnabled,
+    planEnabled,
+    planProposal,
+    planCommandPending,
     fastModeActive,
     slowModeSupported,
     slowModeEnabled,
@@ -7738,6 +7820,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     handleFork,
     handleEdit,
     handleModelChange,
+    handlePlanModeChange,
+    respondToPlanProposal,
     handleFastModeChange,
     handleSlowModeChange,
     handleAutoRetryChange,

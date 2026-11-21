@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ClipboardPaste,
   CornerDownRight,
+  Hammer,
   ListChecks,
   Loader2,
   Mic,
@@ -30,6 +31,7 @@ import {
   Plus,
   Shrink,
   Sparkles,
+  SquareChartGantt,
   Terminal,
   Wrench,
   X,
@@ -322,6 +324,9 @@ interface Props {
   onRefreshModels?: () => void;
   onRevalidateModels?: () => void;
   onModelChange?: (provider: string, modelId: string) => void;
+  planEnabled?: boolean;
+  planCommandPending?: boolean;
+  onPlanModeChange?: (enabled: boolean) => void;
   fastModeEnabled?: boolean;
   fastModeActive?: boolean;
   /** omp's structured provider usage-limit state, shown as a warning chip. */
@@ -519,6 +524,9 @@ export const ChatInput = memo(
       onRefreshModels,
       onRevalidateModels,
       onModelChange,
+      planEnabled = false,
+      planCommandPending = false,
+      onPlanModeChange,
       fastModeEnabled,
       fastModeActive,
       usageLimit,
@@ -5274,6 +5282,31 @@ export const ChatInput = memo(
                       </div>
                     )}
                   </div>
+                )}
+                {onPlanModeChange && (
+                  <button
+                    type="button"
+                    aria-label={t(planEnabled ? "chatInput.modePlanSwitch" : "chatInput.modeBuildSwitch")}
+                    title={t(planEnabled ? "chatInput.modePlanSwitch" : "chatInput.modeBuildSwitch")}
+                    disabled={planCommandPending}
+                    onClick={() => onPlanModeChange(!planEnabled)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "var(--control-height-sm)",
+                      height: "var(--control-height-sm)",
+                      padding: 0,
+                      background: "none",
+                      border: "none",
+                      borderRadius: 7,
+                      color: planEnabled ? "var(--accent)" : "var(--text-muted)",
+                      cursor: planCommandPending ? "wait" : "pointer",
+                      opacity: planCommandPending ? 0.5 : 1,
+                    }}
+                  >
+                    {planEnabled ? <SquareChartGantt size={16} aria-hidden="true" /> : <Hammer size={16} aria-hidden="true" />}
+                  </button>
                 )}
 
                 {todoPhases && subagents && onSelectSubagent && (

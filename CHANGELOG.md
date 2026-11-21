@@ -12,6 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
+- Tap the mode icon next to the model picker to switch between **Build** and **Plan**. Approval restores the previous model and reasoning effort before implementation; requesting revisions stays in Plan. Switching back to Build also restores write access. As in OMP, shell commands and extensions are not sandboxed.
 - `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
 - **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart.
 - Deploying a matched release can restore a missing `keylime-omp` on a standalone host.

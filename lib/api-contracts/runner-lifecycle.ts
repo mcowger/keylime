@@ -8,7 +8,7 @@ import {
   SessionEntrySchema,
   SessionStatsInfoSchema,
 } from "./domain";
-import { NativeAgentMessageSchema } from "./runner-native-events";
+import { NativeAgentMessageSchema, PlanStateSchema } from "./runner-native-events";
 import type { OperationContract } from "./operations";
 
 const s = () => Type.String();
@@ -499,6 +499,36 @@ export const LiteralPromptReceiptSchema = Type.Object(
 
 /** Logical runner commands before command/response framing. */
 export const lifecycleRunnerOperations: readonly OperationContract[] = [
+  command(
+    "get_plan_state",
+    `Usage: Read the runner's current planning state and pending review.
+Inputs: No arguments.
+Invariants: The proposal is present only while awaiting a decision.
+Effects: None.
+Recovery: Refresh after reconnect or an uncertain decision.`,
+    empty,
+    PlanStateSchema,
+  ),
+  command(
+    "set_plan_mode",
+    `Usage: Enter Plan mode or manually return to Build mode.
+Inputs: enabled selects Plan when true, Build when false.
+Invariants: Manual exit restores write access without approving a proposal. Entering during a turn steers in plan context; a different plan model takes effect after that turn.
+Effects: Changes native planning state and may change the model and reasoning effort.
+Recovery: Read planning state after an uncertain response.`,
+    Type.Object({ enabled: b() }),
+    PlanStateSchema,
+  ),
+  command(
+    "respond_plan_proposal",
+    `Usage: Approve a pending plan or request revisions.
+Inputs: Supply the current proposal id, approval choice and optional feedback.
+Invariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.
+Effects: Approval starts an implementation turn; revision returns feedback to the planner.
+Recovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.`,
+    Type.Object({ id: s(), approved: b(), feedback: opt(s()) }),
+    PlanStateSchema,
+  ),
   command(
     "browser_list",
     `Usage: List the session's live managed Chromium tabs.

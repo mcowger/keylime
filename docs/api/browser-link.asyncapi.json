@@ -127,6 +127,9 @@
         "BrowserReply_get_messages_page": {
           "$ref": "#/components/messages/BrowserReply_get_messages_page"
         },
+        "BrowserReply_get_plan_state": {
+          "$ref": "#/components/messages/BrowserReply_get_plan_state"
+        },
         "BrowserReply_get_session_stats": {
           "$ref": "#/components/messages/BrowserReply_get_session_stats"
         },
@@ -181,6 +184,9 @@
         "BrowserReply_remove_queued_message": {
           "$ref": "#/components/messages/BrowserReply_remove_queued_message"
         },
+        "BrowserReply_respond_plan_proposal": {
+          "$ref": "#/components/messages/BrowserReply_respond_plan_proposal"
+        },
         "BrowserReply_set_auto_compaction": {
           "$ref": "#/components/messages/BrowserReply_set_auto_compaction"
         },
@@ -204,6 +210,9 @@
         },
         "BrowserReply_set_model": {
           "$ref": "#/components/messages/BrowserReply_set_model"
+        },
+        "BrowserReply_set_plan_mode": {
+          "$ref": "#/components/messages/BrowserReply_set_plan_mode"
         },
         "BrowserReply_set_session_name": {
           "$ref": "#/components/messages/BrowserReply_set_session_name"
@@ -328,6 +337,9 @@
         "BrowserRequest_get_messages_page": {
           "$ref": "#/components/messages/BrowserRequest_get_messages_page"
         },
+        "BrowserRequest_get_plan_state": {
+          "$ref": "#/components/messages/BrowserRequest_get_plan_state"
+        },
         "BrowserRequest_get_session_stats": {
           "$ref": "#/components/messages/BrowserRequest_get_session_stats"
         },
@@ -382,6 +394,9 @@
         "BrowserRequest_remove_queued_message": {
           "$ref": "#/components/messages/BrowserRequest_remove_queued_message"
         },
+        "BrowserRequest_respond_plan_proposal": {
+          "$ref": "#/components/messages/BrowserRequest_respond_plan_proposal"
+        },
         "BrowserRequest_set_auto_compaction": {
           "$ref": "#/components/messages/BrowserRequest_set_auto_compaction"
         },
@@ -405,6 +420,9 @@
         },
         "BrowserRequest_set_model": {
           "$ref": "#/components/messages/BrowserRequest_set_model"
+        },
+        "BrowserRequest_set_plan_mode": {
+          "$ref": "#/components/messages/BrowserRequest_set_plan_mode"
         },
         "BrowserRequest_set_session_name": {
           "$ref": "#/components/messages/BrowserRequest_set_session_name"
@@ -909,6 +927,18 @@
         },
         "title": "BrowserReply_get_messages_page"
       },
+      "BrowserReply_get_plan_state": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "name": "BrowserReply_get_plan_state",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserReply_get_plan_state"
+        },
+        "title": "BrowserReply_get_plan_state"
+      },
       "BrowserReply_get_session_stats": {
         "contentType": "application/json",
         "correlationId": {
@@ -1125,6 +1155,18 @@
         },
         "title": "BrowserReply_remove_queued_message"
       },
+      "BrowserReply_respond_plan_proposal": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "name": "BrowserReply_respond_plan_proposal",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserReply_respond_plan_proposal"
+        },
+        "title": "BrowserReply_respond_plan_proposal"
+      },
       "BrowserReply_set_auto_compaction": {
         "contentType": "application/json",
         "correlationId": {
@@ -1220,6 +1262,18 @@
           "$ref": "#/components/schemas/BrowserReply_set_model"
         },
         "title": "BrowserReply_set_model"
+      },
+      "BrowserReply_set_plan_mode": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "name": "BrowserReply_set_plan_mode",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserReply_set_plan_mode"
+        },
+        "title": "BrowserReply_set_plan_mode"
       },
       "BrowserReply_set_session_name": {
         "contentType": "application/json",
@@ -1713,6 +1767,18 @@
         },
         "title": "BrowserRequest_get_messages_page"
       },
+      "BrowserRequest_get_plan_state": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.\n\nBrowser: Read the live runner state without spawning a session; null means no live runner, not Build mode. Where the native operation returns undefined, the browser wrapper returns null.",
+        "name": "BrowserRequest_get_plan_state",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserRequest_get_plan_state"
+        },
+        "title": "BrowserRequest_get_plan_state"
+      },
       "BrowserRequest_get_session_stats": {
         "contentType": "application/json",
         "correlationId": {
@@ -1929,6 +1995,18 @@
         },
         "title": "BrowserRequest_remove_queued_message"
       },
+      "BrowserRequest_respond_plan_proposal": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+        "name": "BrowserRequest_respond_plan_proposal",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserRequest_respond_plan_proposal"
+        },
+        "title": "BrowserRequest_respond_plan_proposal"
+      },
       "BrowserRequest_set_auto_compaction": {
         "contentType": "application/json",
         "correlationId": {
@@ -2024,6 +2102,18 @@
           "$ref": "#/components/schemas/BrowserRequest_set_model"
         },
         "title": "BrowserRequest_set_model"
+      },
+      "BrowserRequest_set_plan_mode": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/rid"
+        },
+        "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+        "name": "BrowserRequest_set_plan_mode",
+        "payload": {
+          "$ref": "#/components/schemas/BrowserRequest_set_plan_mode"
+        },
+        "title": "BrowserRequest_set_plan_mode"
       },
       "BrowserRequest_set_session_name": {
         "contentType": "application/json",
@@ -3517,6 +3607,85 @@
                 ],
                 "description": "Usage: Request cancellation of a scoped job or service.\nInputs: Supply its id, kind, incarnation and generation from a current snapshot.\nInvariants: A cancellation request is not proof that work has stopped; stale identities and forbidden targets fail.\nEffects: Signals the selected job or service; already produced output is not rolled back.\nRecovery: Refresh the snapshot and inspect status after uncertainty; do not reuse an identity from a replaced runner.",
                 "title": "AgentCommand_cancel_job",
+                "type": "object"
+              },
+              {
+                "allOf": [
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "get_plan_state",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {},
+                    "type": "object"
+                  }
+                ],
+                "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.\n\nBrowser: Read the live runner state without spawning a session; null means no live runner, not Build mode. Where the native operation returns undefined, the browser wrapper returns null.",
+                "title": "AgentCommand_get_plan_state",
+                "type": "object"
+              },
+              {
+                "allOf": [
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "set_plan_mode",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["enabled"],
+                    "type": "object"
+                  }
+                ],
+                "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+                "title": "AgentCommand_set_plan_mode",
+                "type": "object"
+              },
+              {
+                "allOf": [
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "respond_plan_proposal",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "approved": {
+                        "type": "boolean"
+                      },
+                      "feedback": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "approved"],
+                    "type": "object"
+                  }
+                ],
+                "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+                "title": "AgentCommand_respond_plan_proposal",
                 "type": "object"
               },
               {
@@ -22093,6 +22262,78 @@
                           }
                         },
                         "required": ["type", "goal"],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "web": {
+                            "description": "Browser-assigned ordering cursor; a different streamId starts a distinct sequence.",
+                            "properties": {
+                              "first": {
+                                "description": "First sequence included in a merged delta; sequence is the last, and the range is inclusive. Within the same streamId, a snapshot at S where first <= S < sequence already includes only part of the delta: never replay the whole delta on it. Buffer and reconcile with a covering snapshot.",
+                                "type": "number"
+                              },
+                              "sequence": {
+                                "description": "Ordering sequence within this stream; compare only cursors with the same streamId.",
+                                "type": "number"
+                              },
+                              "streamId": {
+                                "description": "Identifies the browser event stream whose sequence is being counted.",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["streamId", "sequence"],
+                            "type": "object"
+                          }
+                        },
+                        "required": ["web"],
+                        "type": "object"
+                      }
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "enabled": {
+                            "description": "Whether native plan mode is active.",
+                            "type": "boolean"
+                          },
+                          "proposal": {
+                            "description": "The pending plan artifact and decision identity presented for review.",
+                            "properties": {
+                              "content": {
+                                "description": "Plan artifact text presented for approval.",
+                                "type": "string"
+                              },
+                              "id": {
+                                "description": "Identity of this pending review; decisions must match it.",
+                                "type": "string"
+                              },
+                              "planFilePath": {
+                                "description": "Session-local plan artifact URI on the owning host.",
+                                "type": "string"
+                              },
+                              "title": {
+                                "description": "OMP plan title.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "content",
+                              "planFilePath"
+                            ],
+                            "type": "object"
+                          },
+                          "type": {
+                            "const": "plan_state_changed",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "enabled"],
                         "type": "object"
                       },
                       {
@@ -41529,6 +41770,48 @@
                                         "type": "object"
                                       },
                                       {
+                                        "properties": {
+                                          "enabled": {
+                                            "description": "Whether native plan mode is active.",
+                                            "type": "boolean"
+                                          },
+                                          "proposal": {
+                                            "description": "The pending plan artifact and decision identity presented for review.",
+                                            "properties": {
+                                              "content": {
+                                                "description": "Plan artifact text presented for approval.",
+                                                "type": "string"
+                                              },
+                                              "id": {
+                                                "description": "Identity of this pending review; decisions must match it.",
+                                                "type": "string"
+                                              },
+                                              "planFilePath": {
+                                                "description": "Session-local plan artifact URI on the owning host.",
+                                                "type": "string"
+                                              },
+                                              "title": {
+                                                "description": "OMP plan title.",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "title",
+                                              "content",
+                                              "planFilePath"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "type": {
+                                            "const": "plan_state_changed",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["type", "enabled"],
+                                        "type": "object"
+                                      },
+                                      {
                                         "allOf": [
                                           {
                                             "properties": {
@@ -52572,6 +52855,130 @@
                         "type": "object"
                       },
                       {
+                        "anyOf": [
+                          {
+                            "description": "Current plan mode and, when present, its pending approval.",
+                            "properties": {
+                              "enabled": {
+                                "description": "Whether native plan mode is active.",
+                                "type": "boolean"
+                              },
+                              "proposal": {
+                                "description": "The pending plan artifact and decision identity presented for review.",
+                                "properties": {
+                                  "content": {
+                                    "description": "Plan artifact text presented for approval.",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "description": "Identity of this pending review; decisions must match it.",
+                                    "type": "string"
+                                  },
+                                  "planFilePath": {
+                                    "description": "Session-local plan artifact URI on the owning host.",
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "description": "OMP plan title.",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "title",
+                                  "content",
+                                  "planFilePath"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": ["enabled"],
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      {
+                        "description": "Current plan mode and, when present, its pending approval.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Whether native plan mode is active.",
+                            "type": "boolean"
+                          },
+                          "proposal": {
+                            "description": "The pending plan artifact and decision identity presented for review.",
+                            "properties": {
+                              "content": {
+                                "description": "Plan artifact text presented for approval.",
+                                "type": "string"
+                              },
+                              "id": {
+                                "description": "Identity of this pending review; decisions must match it.",
+                                "type": "string"
+                              },
+                              "planFilePath": {
+                                "description": "Session-local plan artifact URI on the owning host.",
+                                "type": "string"
+                              },
+                              "title": {
+                                "description": "OMP plan title.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "content",
+                              "planFilePath"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": ["enabled"],
+                        "type": "object"
+                      },
+                      {
+                        "description": "Current plan mode and, when present, its pending approval.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Whether native plan mode is active.",
+                            "type": "boolean"
+                          },
+                          "proposal": {
+                            "description": "The pending plan artifact and decision identity presented for review.",
+                            "properties": {
+                              "content": {
+                                "description": "Plan artifact text presented for approval.",
+                                "type": "string"
+                              },
+                              "id": {
+                                "description": "Identity of this pending review; decisions must match it.",
+                                "type": "string"
+                              },
+                              "planFilePath": {
+                                "description": "Session-local plan artifact URI on the owning host.",
+                                "type": "string"
+                              },
+                              "title": {
+                                "description": "OMP plan title.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "content",
+                              "planFilePath"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": ["enabled"],
+                        "type": "object"
+                      },
+                      {
                         "description": "Native evidence for queried client message IDs: persisted, resolved, unresolved and possibly queued.",
                         "properties": {
                           "messages": {
@@ -62584,6 +62991,137 @@
         "title": "BrowserReply_get_messages_page",
         "type": "object"
       },
+      "BrowserReply_get_plan_state": {
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "properties": {
+                  "data": {
+                    "anyOf": [
+                      {
+                        "description": "Current plan mode and, when present, its pending approval.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Whether native plan mode is active.",
+                            "type": "boolean"
+                          },
+                          "proposal": {
+                            "description": "The pending plan artifact and decision identity presented for review.",
+                            "properties": {
+                              "content": {
+                                "description": "Plan artifact text presented for approval.",
+                                "type": "string"
+                              },
+                              "id": {
+                                "description": "Identity of this pending review; decisions must match it.",
+                                "type": "string"
+                              },
+                              "planFilePath": {
+                                "description": "Session-local plan artifact URI on the owning host.",
+                                "type": "string"
+                              },
+                              "title": {
+                                "description": "OMP plan title.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "content",
+                              "planFilePath"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": ["enabled"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "success": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["success", "data"],
+                "type": "object"
+              },
+              {
+                "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "const": "refused",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unknown",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "hostOffline": {
+                    "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["error"],
+                "title": "ApiError",
+                "type": "object"
+              }
+            ]
+          },
+          "deduped": {
+            "type": "boolean"
+          },
+          "recvAt": {
+            "type": "number"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "type": "number"
+          },
+          "type": {
+            "const": "reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "rid",
+          "status",
+          "recvAt",
+          "at",
+          "deduped",
+          "data"
+        ],
+        "title": "BrowserReply_get_plan_state",
+        "type": "object"
+      },
       "BrowserReply_get_session_stats": {
         "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
         "properties": {
@@ -69160,6 +69698,125 @@
         "title": "BrowserReply_remove_queued_message",
         "type": "object"
       },
+      "BrowserReply_respond_plan_proposal": {
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "properties": {
+                  "data": {
+                    "description": "Current plan mode and, when present, its pending approval.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Whether native plan mode is active.",
+                        "type": "boolean"
+                      },
+                      "proposal": {
+                        "description": "The pending plan artifact and decision identity presented for review.",
+                        "properties": {
+                          "content": {
+                            "description": "Plan artifact text presented for approval.",
+                            "type": "string"
+                          },
+                          "id": {
+                            "description": "Identity of this pending review; decisions must match it.",
+                            "type": "string"
+                          },
+                          "planFilePath": {
+                            "description": "Session-local plan artifact URI on the owning host.",
+                            "type": "string"
+                          },
+                          "title": {
+                            "description": "OMP plan title.",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "title", "content", "planFilePath"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["enabled"],
+                    "type": "object"
+                  },
+                  "success": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["success", "data"],
+                "type": "object"
+              },
+              {
+                "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "const": "refused",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unknown",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "hostOffline": {
+                    "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["error"],
+                "title": "ApiError",
+                "type": "object"
+              }
+            ]
+          },
+          "deduped": {
+            "type": "boolean"
+          },
+          "recvAt": {
+            "type": "number"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "type": "number"
+          },
+          "type": {
+            "const": "reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "rid",
+          "status",
+          "recvAt",
+          "at",
+          "deduped",
+          "data"
+        ],
+        "title": "BrowserReply_respond_plan_proposal",
+        "type": "object"
+      },
       "BrowserReply_set_auto_compaction": {
         "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
         "properties": {
@@ -69868,6 +70525,125 @@
           "data"
         ],
         "title": "BrowserReply_set_model",
+        "type": "object"
+      },
+      "BrowserReply_set_plan_mode": {
+        "description": "The request rid correlates this reply. HTTP-style failures are inside data and never imply that an uncertain native write is safe to retry.",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "properties": {
+                  "data": {
+                    "description": "Current plan mode and, when present, its pending approval.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Whether native plan mode is active.",
+                        "type": "boolean"
+                      },
+                      "proposal": {
+                        "description": "The pending plan artifact and decision identity presented for review.",
+                        "properties": {
+                          "content": {
+                            "description": "Plan artifact text presented for approval.",
+                            "type": "string"
+                          },
+                          "id": {
+                            "description": "Identity of this pending review; decisions must match it.",
+                            "type": "string"
+                          },
+                          "planFilePath": {
+                            "description": "Session-local plan artifact URI on the owning host.",
+                            "type": "string"
+                          },
+                          "title": {
+                            "description": "OMP plan title.",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "title", "content", "planFilePath"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["enabled"],
+                    "type": "object"
+                  },
+                  "success": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["success", "data"],
+                "type": "object"
+              },
+              {
+                "description": "An unsuccessful web-server response, not proof that a mutation was refused. Optional delivery metadata distinguishes a known refusal from uncertainty; callers must reconcile uncertain outcomes before independently retrying.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "const": "refused",
+                        "type": "string"
+                      },
+                      {
+                        "const": "unknown",
+                        "type": "string"
+                      }
+                    ],
+                    "description": "Command delivery state when reported: refused means no native command write occurred, not that preparation had no side effects. unknown means it may have run; reconcile rather than retrying independently. An absent delivery field does not establish that a mutation was refused."
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "hostOffline": {
+                    "description": "When true, the owning host is offline; unavailable data does not prove that a resource or in-flight work is absent on that host.",
+                    "type": "boolean"
+                  }
+                },
+                "required": ["error"],
+                "title": "ApiError",
+                "type": "object"
+              }
+            ]
+          },
+          "deduped": {
+            "type": "boolean"
+          },
+          "recvAt": {
+            "type": "number"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "type": "number"
+          },
+          "type": {
+            "const": "reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "rid",
+          "status",
+          "recvAt",
+          "at",
+          "deduped",
+          "data"
+        ],
+        "title": "BrowserReply_set_plan_mode",
         "type": "object"
       },
       "BrowserReply_set_session_name": {
@@ -72700,6 +73476,50 @@
         "title": "BrowserRequest_get_messages_page",
         "type": "object"
       },
+      "BrowserRequest_get_plan_state": {
+        "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.\n\nBrowser: Read the live runner state without spawning a session; null means no live runner, not Build mode. Where the native operation returns undefined, the browser wrapper returns null.",
+        "properties": {
+          "advisor": {
+            "type": "boolean"
+          },
+          "command": {
+            "allOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "get_plan_state",
+                    "type": "string"
+                  }
+                },
+                "required": ["type"],
+                "type": "object"
+              },
+              {
+                "properties": {},
+                "type": "object"
+              }
+            ],
+            "type": "object"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          },
+          "type": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "rid", "session", "command"],
+        "title": "BrowserRequest_get_plan_state",
+        "type": "object"
+      },
       "BrowserRequest_get_session_stats": {
         "description": "Usage: Read session usage statistics.\nInputs: No arguments.\nInvariants: Statistics describe the current session snapshot.\nEffects: Reads usage without changing the session.\nRecovery: Refresh after further activity.\n\nBrowser: Read session statistics with the wrapper's current session name. Where the native operation returns undefined, the browser wrapper returns null.",
         "properties": {
@@ -73766,6 +74586,61 @@
         "title": "BrowserRequest_remove_queued_message",
         "type": "object"
       },
+      "BrowserRequest_respond_plan_proposal": {
+        "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+        "properties": {
+          "advisor": {
+            "type": "boolean"
+          },
+          "command": {
+            "allOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "respond_plan_proposal",
+                    "type": "string"
+                  }
+                },
+                "required": ["type"],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "approved": {
+                    "type": "boolean"
+                  },
+                  "feedback": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "approved"],
+                "type": "object"
+              }
+            ],
+            "type": "object"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          },
+          "type": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "rid", "session", "command"],
+        "title": "BrowserRequest_respond_plan_proposal",
+        "type": "object"
+      },
       "BrowserRequest_set_auto_compaction": {
         "description": "Usage: Configure automatic compaction.\nInputs: Supply enabled.\nInvariants: This changes the setting, not an existing compaction result.\nEffects: Enables or disables future automatic compaction.\nRecovery: Read session state after uncertainty.",
         "properties": {
@@ -74241,6 +75116,55 @@
         },
         "required": ["type", "seq", "rid", "session", "command"],
         "title": "BrowserRequest_set_model",
+        "type": "object"
+      },
+      "BrowserRequest_set_plan_mode": {
+        "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+        "properties": {
+          "advisor": {
+            "type": "boolean"
+          },
+          "command": {
+            "allOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "set_plan_mode",
+                    "type": "string"
+                  }
+                },
+                "required": ["type"],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["enabled"],
+                "type": "object"
+              }
+            ],
+            "type": "object"
+          },
+          "rid": {
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          },
+          "type": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "rid", "session", "command"],
+        "title": "BrowserRequest_set_plan_mode",
         "type": "object"
       },
       "BrowserRequest_set_session_name": {
@@ -76097,6 +77021,29 @@
       },
       "summary": "get_messages_page"
     },
+    "operation_get_plan_state": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.\n\nBrowser: Read the live runner state without spawning a session; null means no live runner, not Build mode. Where the native operation returns undefined, the browser wrapper returns null.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/BrowserRequest_get_plan_state"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/BrowserReply_get_plan_state"
+          }
+        ]
+      },
+      "summary": "get_plan_state"
+    },
     "operation_get_session_stats": {
       "action": "receive",
       "channel": {
@@ -76511,6 +77458,29 @@
       },
       "summary": "remove_queued_message"
     },
+    "operation_respond_plan_proposal": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/BrowserRequest_respond_plan_proposal"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/BrowserReply_respond_plan_proposal"
+          }
+        ]
+      },
+      "summary": "respond_plan_proposal"
+    },
     "operation_set_auto_compaction": {
       "action": "receive",
       "channel": {
@@ -76694,6 +77664,29 @@
         ]
       },
       "summary": "set_model"
+    },
+    "operation_set_plan_mode": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/BrowserRequest_set_plan_mode"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/BrowserReply_set_plan_mode"
+          }
+        ]
+      },
+      "summary": "set_plan_mode"
     },
     "operation_set_session_name": {
       "action": "receive",

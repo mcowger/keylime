@@ -36,6 +36,7 @@ import {
 } from "../correlation";
 import { checkSettled, scheduledTurnProbe } from "../events";
 import { GOAL_OPS, GoalController } from "../goal";
+import { planController } from "../plan";
 import {
   PromptResults,
   type PromptTicket,
@@ -581,6 +582,7 @@ export const promptingCommands: CommandTable = {
   /** @apiCommand abort */
   async abort(ctx) {
     stopForAbort(ctx);
+    await planController(ctx).cancelPending();
     await ctx.session.abort({ reason: USER_INTERRUPT_LABEL });
     return undefined;
   },
@@ -590,6 +592,7 @@ export const promptingCommands: CommandTable = {
     // recorded) before aborting, so neither the aborted turn nor abort()'s queue drain runs it.
     const restored = ctx.session.clearQueue({ forInterrupt: true });
     stopForAbort(ctx);
+    await planController(ctx).cancelPending();
     await ctx.session.abort({ reason: USER_INTERRUPT_LABEL });
     return restored;
   },
@@ -601,6 +604,7 @@ export const promptingCommands: CommandTable = {
     state.goals.stopForHostAbort();
     state.abortBuiltins("Command aborted by host");
     try {
+      await planController(ctx).cancelPending();
       await ctx.session.abort({ reason: USER_INTERRUPT_LABEL });
     } catch (error) {
       // Never dispatched: free the id so the host can resend it.
@@ -669,6 +673,7 @@ export const promptingCommands: CommandTable = {
   },
   /** @apiCommand goal */
   async goal(ctx, args) {
+    if (ctx.session.getPlanModeState()?.enabled) throw new Error("Exit plan mode before changing goal mode");
     const op = GOAL_OPS.find((candidate) => candidate === args.op);
     if (!op) throw new Error(`goal: op must be one of ${GOAL_OPS.join(", ")}`);
     if (args.objective !== undefined && typeof args.objective !== "string") {

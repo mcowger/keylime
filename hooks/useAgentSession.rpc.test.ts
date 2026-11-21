@@ -12241,6 +12241,61 @@ test("a fresh chat's first prompt attaches one event stream instead of an observ
   );
 });
 
+test("a fresh chat applies Plan before its first prompt", async () => {
+  resetWorld();
+  world.holds.push({
+    match: (method, url) => method === "POST" && url === "/api/agent/new",
+    produce: async () => ({ value: { sessionId: "fresh-plan" } }),
+  });
+  const w = await mountSession(null, undefined, {
+    newSessionCwd: "/workspace",
+    onSessionCreated() {},
+  });
+  await act(async () => {
+    await w.latest.handlePlanModeChange(true);
+  });
+  assert.equal(w.latest.planEnabled, true);
+  assert.equal(callsTo("POST", "/api/agent/new").length, 0);
+  let sent!: Promise<PromptSubmissionResult>;
+  await act(async () => {
+    sent = w.latest.handleSend("first prompt");
+    await sleep(30);
+  });
+  await act(async () => {
+    lastEs().open();
+    await sent;
+  });
+  const calls = callsTo("POST", "/api/agent/fresh-plan");
+  const planIndex = calls.findIndex((call) => call.body?.type === "set_plan_mode" && call.body.enabled === true);
+  const promptIndex = calls.findIndex((call) => call.body?.type === "prompt");
+  assert.ok(planIndex >= 0 && promptIndex > planIndex);
+  w.unmount();
+});
+
+test("plan review tracks native events and sends the matching decision", async () => {
+  resetWorld();
+  primeSession("plan-review", [userMsg("u0", "plan this")]);
+  const w = await mountSession("plan-review");
+  const proposal = { id: "p1", title: "Plan", content: "Details", planFilePath: "/plans/p1.md" };
+  await act(async () => {
+    w.latest.handleAgentEventRef.current?.({ type: "plan_state_changed", enabled: true, proposal } as AgentEvent);
+  });
+  assert.equal(w.latest.planEnabled, true);
+  assert.deepEqual(w.latest.planProposal, proposal);
+  await act(async () => {
+    await w.latest.respondToPlanProposal("p1", false, "Add tests");
+  });
+  assert.ok(callsTo("POST", "/api/agent/plan-review").some((call) =>
+    call.body?.type === "respond_plan_proposal" && call.body.id === "p1" && call.body.approved === false && call.body.feedback === "Add tests"
+  ));
+  await act(async () => {
+    w.latest.handleAgentEventRef.current?.({ type: "plan_state_changed", enabled: false } as AgentEvent);
+  });
+  assert.equal(w.latest.planEnabled, false);
+  assert.equal(w.latest.planProposal, undefined);
+  w.unmount();
+});
+
 test("upload continuity: a fresh chat sends completion proof only with its direct prompt", async () => {
   resetWorld();
   world.holds.push({

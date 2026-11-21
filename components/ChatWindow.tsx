@@ -50,6 +50,7 @@ import { ChatLiveTail } from "./ChatWindow-live-tail";
 import { HeldMessageView, MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ExtensionDialog } from "./ExtensionDialog";
+import { PlanReview } from "./PlanReview";
 import type { ShipTarget } from "./ShipDialog";
 import { useShipAvailability } from "@/hooks/useShipAvailability";
 import { SubagentTranscriptDialog } from "./SubagentTranscriptDialog";
@@ -701,6 +702,11 @@ function HostChatWindow({
     usageLimit,
     externalRunActive,
     toolPreset,
+    planEnabled,
+    planProposal,
+    planCommandPending,
+    handlePlanModeChange,
+    respondToPlanProposal,
     liveModelMeta,
     retryInfo,
     contextUsage,
@@ -1321,8 +1327,8 @@ function HostChatWindow({
   // The extension dialog renders inside the collapsible composer wrapper;
   // never let a pending approval prompt sit hidden behind the minimized pill.
   useEffect(() => {
-    if (extensionDialog) setComposerMinimized(false);
-  }, [extensionDialog]);
+    if (extensionDialog || planProposal) setComposerMinimized(false);
+  }, [extensionDialog, planProposal]);
   const messageCwd = session?.cwd ?? newSessionCwd ?? undefined;
   const activeBtwRecord = btw.records.find(
     (record) => record.id === btw.activeId,
@@ -1543,7 +1549,7 @@ function HostChatWindow({
       outbox={!isNew}
       isStreaming={sessionBusy}
       submissionBlocked={
-        editingEntryId !== null || workspaceSourceRequired || !!startupStage
+        editingEntryId !== null || workspaceSourceRequired || !!startupStage || !!planProposal
       }
       model={displayModelValue}
       isAutoModelSelection={isAutoModelSelection}
@@ -1555,6 +1561,9 @@ function HostChatWindow({
       onRefreshModels={refreshModels}
       onRevalidateModels={revalidateModels}
       onModelChange={handleModelChange}
+      planEnabled={planEnabled}
+      planCommandPending={planCommandPending}
+      onPlanModeChange={session || isNew ? handlePlanModeChange : undefined}
       onAbortCompaction={handleAbortCompaction}
       isCompacting={isCompacting}
       compactResult={compactResult}
@@ -2271,6 +2280,14 @@ function HostChatWindow({
                           margin: "0 auto",
                         }}
                       >
+                        {planProposal && (
+                          <PlanReview
+                            key={planProposal.id}
+                            proposal={planProposal}
+                            pending={planCommandPending}
+                            onRespond={respondToPlanProposal}
+                          />
+                        )}
                         {extensionDialog && (
                           <div style={{ marginBottom: 8 }}>
                             <ExtensionDialog

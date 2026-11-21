@@ -39,6 +39,7 @@ export const NO_SPAWN_REPLIES: Record<string, unknown> = {
   get_jobs: { available: false, generation: "", jobs: [], services: [] },
   get_job_output: null,
   cancel_job: null,
+  get_plan_state: null,
 };
 
 /** keylime's own failures carry a stable code the client can localize; omp's

@@ -8,6 +8,7 @@
  * `ask_reanswer_unsupported`) as a `CommandError`.
  */
 import * as path from "node:path";
+import { planController } from "../plan";
 import type { Model } from "@oh-my-pi/pi-ai";
 import { modelsAreEqual } from "@oh-my-pi/pi-catalog/models";
 import {
@@ -90,6 +91,8 @@ async function changeSession<T extends { cancelled: boolean }>(
 ): Promise<T> {
   const state = prompting(ctx);
   await settleToolsBeforeSessionChange(ctx.session);
+  const plan = planController(ctx);
+  await plan.beforeSessionChange();
   await state.goals.beginSessionChange();
   let result: T | undefined;
   let detached = false;
@@ -98,6 +101,7 @@ async function changeSession<T extends { cancelled: boolean }>(
   } finally {
     // A change that throws may already have detached the run: count it as detached.
     detached = detachesRun(result);
+    await plan.afterSessionChange();
     await state.goals.endSessionChange({ detachedRun: detached });
     // Respond only once this change's reattach (and any queued ahead of it) has run.
     await state.goals.settled();

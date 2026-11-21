@@ -14,6 +14,18 @@ import {
   TodoItemSchema,
 } from "./domain";
 
+/** Live plan review owned by the session's runner. */
+export const PlanProposalSchema = Type.Object({
+  id: Type.String({ description: "Identity of this pending review; decisions must match it." }),
+  title: Type.String({ description: "OMP plan title." }),
+  content: Type.String({ description: "Plan artifact text presented for approval." }),
+  planFilePath: Type.String({ description: "Session-local plan artifact URI on the owning host." }),
+}, { description: "The pending plan artifact and decision identity presented for review." });
+export const PlanStateSchema = Type.Object({
+  enabled: Type.Boolean({ description: "Whether native plan mode is active." }),
+  proposal: Type.Optional(PlanProposalSchema),
+}, { description: "Current plan mode and, when present, its pending approval." });
+
 const s = () => Type.String();
 const n = () => Type.Number();
 const b = () => Type.Boolean();
@@ -542,6 +554,7 @@ export const runnerEventSchemas: readonly TSchema[] = [
     goal: Type.Union([goal, Type.Null()]),
     state: opt(goalState),
   }),
+  event("plan_state_changed", PlanStateSchema.properties),
   Type.Intersect([
     event("queue_update"),
     QueuedMessagesSchema,

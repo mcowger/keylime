@@ -100,6 +100,7 @@ export const NO_OMP_REPLY_COMMANDS: ReadonlySet<string> = new Set([
   "get_jobs",
   "get_job_output",
   "cancel_job",
+  "get_plan_state",
   "host_tool_result",
   "host_uri_result",
   "ui_response",

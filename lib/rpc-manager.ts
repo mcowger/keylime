@@ -217,6 +217,9 @@ const PASSTHROUGH_COMMANDS = new Set([
   "get_jobs",
   "get_job_output",
   "cancel_job",
+  "get_plan_state",
+  "set_plan_mode",
+  "respond_plan_proposal",
   "get_client_message_status",
 ]);
 

@@ -239,6 +239,7 @@ export async function runHeadless(
     // shortcut: exits without waiting for a running command's `res`; queue behind it if a host needs that.
     onShutdown: () => void exit(),
   });
+  await channel.initializePlan();
   channel.release();
   await reading.catch((err) =>
     logger.warn("headless omp: stdin failed", { error: String(err) }),

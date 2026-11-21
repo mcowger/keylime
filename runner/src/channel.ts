@@ -41,6 +41,7 @@ import { isRecord, logger } from "@oh-my-pi/pi-utils";
 import { commands, frames } from "./commands";
 import { watchSubagents } from "./commands/agents";
 import { watchSessionIdentity } from "./commands/session";
+import { planController } from "./plan";
 import { closeToolsForHost } from "./commands/tools";
 import { type CommandContext, CommandError } from "./commands/types";
 import { subscribeHostEvents } from "./events";
@@ -243,6 +244,11 @@ export class HostChannel {
     const held = this.#held ?? [];
     this.#held = undefined;
     for (const message of held) this.#receive(message);
+  }
+
+  /** Restore plan mode before accepting headless input. */
+  async initializePlan(): Promise<void> {
+    await planController({ session: this.#session, send: (frame) => this.#send(frame) }).initialize();
   }
 
   async #dial(): Promise<void> {

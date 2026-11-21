@@ -160,6 +160,9 @@
         "RunnerReply_get_messages_page": {
           "$ref": "#/components/messages/RunnerReply_get_messages_page"
         },
+        "RunnerReply_get_plan_state": {
+          "$ref": "#/components/messages/RunnerReply_get_plan_state"
+        },
         "RunnerReply_get_session_lease": {
           "$ref": "#/components/messages/RunnerReply_get_session_lease"
         },
@@ -232,6 +235,9 @@
         "RunnerReply_remove_queued_message": {
           "$ref": "#/components/messages/RunnerReply_remove_queued_message"
         },
+        "RunnerReply_respond_plan_proposal": {
+          "$ref": "#/components/messages/RunnerReply_respond_plan_proposal"
+        },
         "RunnerReply_set_auto_compaction": {
           "$ref": "#/components/messages/RunnerReply_set_auto_compaction"
         },
@@ -264,6 +270,9 @@
         },
         "RunnerReply_set_model": {
           "$ref": "#/components/messages/RunnerReply_set_model"
+        },
+        "RunnerReply_set_plan_mode": {
+          "$ref": "#/components/messages/RunnerReply_set_plan_mode"
         },
         "RunnerReply_set_session_name": {
           "$ref": "#/components/messages/RunnerReply_set_session_name"
@@ -430,6 +439,9 @@
         "RunnerRequest_get_messages_page": {
           "$ref": "#/components/messages/RunnerRequest_get_messages_page"
         },
+        "RunnerRequest_get_plan_state": {
+          "$ref": "#/components/messages/RunnerRequest_get_plan_state"
+        },
         "RunnerRequest_get_session_lease": {
           "$ref": "#/components/messages/RunnerRequest_get_session_lease"
         },
@@ -502,6 +514,9 @@
         "RunnerRequest_remove_queued_message": {
           "$ref": "#/components/messages/RunnerRequest_remove_queued_message"
         },
+        "RunnerRequest_respond_plan_proposal": {
+          "$ref": "#/components/messages/RunnerRequest_respond_plan_proposal"
+        },
         "RunnerRequest_set_auto_compaction": {
           "$ref": "#/components/messages/RunnerRequest_set_auto_compaction"
         },
@@ -534,6 +549,9 @@
         },
         "RunnerRequest_set_model": {
           "$ref": "#/components/messages/RunnerRequest_set_model"
+        },
+        "RunnerRequest_set_plan_mode": {
+          "$ref": "#/components/messages/RunnerRequest_set_plan_mode"
         },
         "RunnerRequest_set_session_name": {
           "$ref": "#/components/messages/RunnerRequest_set_session_name"
@@ -1179,6 +1197,18 @@
         },
         "title": "RunnerReply_get_messages_page"
       },
+      "RunnerReply_get_plan_state": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_get_plan_state",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_get_plan_state"
+        },
+        "title": "RunnerReply_get_plan_state"
+      },
       "RunnerReply_get_session_lease": {
         "contentType": "application/json",
         "correlationId": {
@@ -1467,6 +1497,18 @@
         },
         "title": "RunnerReply_remove_queued_message"
       },
+      "RunnerReply_respond_plan_proposal": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_respond_plan_proposal",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_respond_plan_proposal"
+        },
+        "title": "RunnerReply_respond_plan_proposal"
+      },
       "RunnerReply_set_auto_compaction": {
         "contentType": "application/json",
         "correlationId": {
@@ -1598,6 +1640,18 @@
           "$ref": "#/components/schemas/RunnerReply_set_model"
         },
         "title": "RunnerReply_set_model"
+      },
+      "RunnerReply_set_plan_mode": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "name": "RunnerReply_set_plan_mode",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerReply_set_plan_mode"
+        },
+        "title": "RunnerReply_set_plan_mode"
       },
       "RunnerReply_set_session_name": {
         "contentType": "application/json",
@@ -2259,6 +2313,18 @@
         },
         "title": "RunnerRequest_get_messages_page"
       },
+      "RunnerRequest_get_plan_state": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.",
+        "name": "RunnerRequest_get_plan_state",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_get_plan_state"
+        },
+        "title": "RunnerRequest_get_plan_state"
+      },
       "RunnerRequest_get_session_lease": {
         "contentType": "application/json",
         "correlationId": {
@@ -2547,6 +2613,18 @@
         },
         "title": "RunnerRequest_remove_queued_message"
       },
+      "RunnerRequest_respond_plan_proposal": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+        "name": "RunnerRequest_respond_plan_proposal",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_respond_plan_proposal"
+        },
+        "title": "RunnerRequest_respond_plan_proposal"
+      },
       "RunnerRequest_set_auto_compaction": {
         "contentType": "application/json",
         "correlationId": {
@@ -2678,6 +2756,18 @@
           "$ref": "#/components/schemas/RunnerRequest_set_model"
         },
         "title": "RunnerRequest_set_model"
+      },
+      "RunnerRequest_set_plan_mode": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+        "name": "RunnerRequest_set_plan_mode",
+        "payload": {
+          "$ref": "#/components/schemas/RunnerRequest_set_plan_mode"
+        },
+        "title": "RunnerRequest_set_plan_mode"
       },
       "RunnerRequest_set_session_name": {
         "contentType": "application/json",
@@ -18341,6 +18431,43 @@
                       }
                     },
                     "required": ["type", "goal"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "enabled": {
+                        "description": "Whether native plan mode is active.",
+                        "type": "boolean"
+                      },
+                      "proposal": {
+                        "description": "The pending plan artifact and decision identity presented for review.",
+                        "properties": {
+                          "content": {
+                            "description": "Plan artifact text presented for approval.",
+                            "type": "string"
+                          },
+                          "id": {
+                            "description": "Identity of this pending review; decisions must match it.",
+                            "type": "string"
+                          },
+                          "planFilePath": {
+                            "description": "Session-local plan artifact URI on the owning host.",
+                            "type": "string"
+                          },
+                          "title": {
+                            "description": "OMP plan title.",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "title", "content", "planFilePath"],
+                        "type": "object"
+                      },
+                      "type": {
+                        "const": "plan_state_changed",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type", "enabled"],
                     "type": "object"
                   },
                   {
@@ -36678,6 +36805,48 @@
                         "type": "object"
                       },
                       {
+                        "properties": {
+                          "enabled": {
+                            "description": "Whether native plan mode is active.",
+                            "type": "boolean"
+                          },
+                          "proposal": {
+                            "description": "The pending plan artifact and decision identity presented for review.",
+                            "properties": {
+                              "content": {
+                                "description": "Plan artifact text presented for approval.",
+                                "type": "string"
+                              },
+                              "id": {
+                                "description": "Identity of this pending review; decisions must match it.",
+                                "type": "string"
+                              },
+                              "planFilePath": {
+                                "description": "Session-local plan artifact URI on the owning host.",
+                                "type": "string"
+                              },
+                              "title": {
+                                "description": "OMP plan title.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "content",
+                              "planFilePath"
+                            ],
+                            "type": "object"
+                          },
+                          "type": {
+                            "const": "plan_state_changed",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "enabled"],
+                        "type": "object"
+                      },
+                      {
                         "allOf": [
                           {
                             "properties": {
@@ -47492,6 +47661,86 @@
         "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
         "title": "RunnerReply_get_messages_page"
       },
+      "RunnerReply_get_plan_state": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "description": "Current plan mode and, when present, its pending approval.",
+                "properties": {
+                  "enabled": {
+                    "description": "Whether native plan mode is active.",
+                    "type": "boolean"
+                  },
+                  "proposal": {
+                    "description": "The pending plan artifact and decision identity presented for review.",
+                    "properties": {
+                      "content": {
+                        "description": "Plan artifact text presented for approval.",
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "Identity of this pending review; decisions must match it.",
+                        "type": "string"
+                      },
+                      "planFilePath": {
+                        "description": "Session-local plan artifact URI on the owning host.",
+                        "type": "string"
+                      },
+                      "title": {
+                        "description": "OMP plan title.",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "title", "content", "planFilePath"],
+                    "type": "object"
+                  }
+                },
+                "required": ["enabled"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_get_plan_state"
+      },
       "RunnerReply_get_session_lease": {
         "anyOf": [
           {
@@ -56132,6 +56381,86 @@
         "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
         "title": "RunnerReply_remove_queued_message"
       },
+      "RunnerReply_respond_plan_proposal": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "description": "Current plan mode and, when present, its pending approval.",
+                "properties": {
+                  "enabled": {
+                    "description": "Whether native plan mode is active.",
+                    "type": "boolean"
+                  },
+                  "proposal": {
+                    "description": "The pending plan artifact and decision identity presented for review.",
+                    "properties": {
+                      "content": {
+                        "description": "Plan artifact text presented for approval.",
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "Identity of this pending review; decisions must match it.",
+                        "type": "string"
+                      },
+                      "planFilePath": {
+                        "description": "Session-local plan artifact URI on the owning host.",
+                        "type": "string"
+                      },
+                      "title": {
+                        "description": "OMP plan title.",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "title", "content", "planFilePath"],
+                    "type": "object"
+                  }
+                },
+                "required": ["enabled"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_respond_plan_proposal"
+      },
       "RunnerReply_set_auto_compaction": {
         "anyOf": [
           {
@@ -56783,6 +57112,86 @@
         ],
         "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
         "title": "RunnerReply_set_model"
+      },
+      "RunnerReply_set_plan_mode": {
+        "anyOf": [
+          {
+            "properties": {
+              "data": {
+                "description": "Current plan mode and, when present, its pending approval.",
+                "properties": {
+                  "enabled": {
+                    "description": "Whether native plan mode is active.",
+                    "type": "boolean"
+                  },
+                  "proposal": {
+                    "description": "The pending plan artifact and decision identity presented for review.",
+                    "properties": {
+                      "content": {
+                        "description": "Plan artifact text presented for approval.",
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "Identity of this pending review; decisions must match it.",
+                        "type": "string"
+                      },
+                      "planFilePath": {
+                        "description": "Session-local plan artifact URI on the owning host.",
+                        "type": "string"
+                      },
+                      "title": {
+                        "description": "OMP plan title.",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "title", "content", "planFilePath"],
+                    "type": "object"
+                  }
+                },
+                "required": ["enabled"],
+                "type": "object"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "data"],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "id": {
+                "type": "number"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "t": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["t", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Match id to the submitted command. An error belongs only to that command, not to another in-flight request.",
+        "title": "RunnerReply_set_plan_mode"
       },
       "RunnerReply_set_session_name": {
         "anyOf": [
@@ -59152,6 +59561,29 @@
         "title": "RunnerRequest_get_messages_page",
         "type": "object"
       },
+      "RunnerRequest_get_plan_state": {
+        "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.",
+        "properties": {
+          "args": {
+            "properties": {},
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "get_plan_state",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_get_plan_state",
+        "type": "object"
+      },
       "RunnerRequest_get_session_lease": {
         "description": "Usage: Probe session lease ownership.\nInputs: Supply sessionIds.\nInvariants: Held and unknown are separate classifications; unknown is not proof of an available lease.\nEffects: Reads lease state without taking a lease.\nRecovery: Probe again when unknown ownership can be resolved.",
         "properties": {
@@ -59943,6 +60375,40 @@
         "title": "RunnerRequest_remove_queued_message",
         "type": "object"
       },
+      "RunnerRequest_respond_plan_proposal": {
+        "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+        "properties": {
+          "args": {
+            "properties": {
+              "approved": {
+                "type": "boolean"
+              },
+              "feedback": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "approved"],
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "respond_plan_proposal",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_respond_plan_proposal",
+        "type": "object"
+      },
       "RunnerRequest_set_auto_compaction": {
         "description": "Usage: Configure automatic compaction.\nInputs: Supply enabled.\nInvariants: This changes the setting, not an existing compaction result.\nEffects: Enables or disables future automatic compaction.\nRecovery: Read session state after uncertainty.",
         "properties": {
@@ -60373,6 +60839,34 @@
         },
         "required": ["t", "id", "op", "args"],
         "title": "RunnerRequest_set_model",
+        "type": "object"
+      },
+      "RunnerRequest_set_plan_mode": {
+        "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+        "properties": {
+          "args": {
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": ["enabled"],
+            "type": "object"
+          },
+          "id": {
+            "type": "number"
+          },
+          "op": {
+            "const": "set_plan_mode",
+            "type": "string"
+          },
+          "t": {
+            "const": "cmd",
+            "type": "string"
+          }
+        },
+        "required": ["t", "id", "op", "args"],
+        "title": "RunnerRequest_set_plan_mode",
         "type": "object"
       },
       "RunnerRequest_set_session_name": {
@@ -61969,6 +62463,29 @@
       },
       "summary": "get_messages_page"
     },
+    "operation_get_plan_state": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read the runner's current planning state and pending review.\nInputs: No arguments.\nInvariants: The proposal is present only while awaiting a decision.\nEffects: None.\nRecovery: Refresh after reconnect or an uncertain decision.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_get_plan_state"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_get_plan_state"
+          }
+        ]
+      },
+      "summary": "get_plan_state"
+    },
     "operation_get_session_lease": {
       "action": "send",
       "channel": {
@@ -62521,6 +63038,29 @@
       },
       "summary": "remove_queued_message"
     },
+    "operation_respond_plan_proposal": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Approve a pending plan or request revisions.\nInputs: Supply the current proposal id, approval choice and optional feedback.\nInvariants: A stale proposal id cannot decide another review; revision retains Plan mode. Approval stops the planning turn and restores the pre-plan model and effort before execution.\nEffects: Approval starts an implementation turn; revision returns feedback to the planner.\nRecovery: Read planning state and the transcript before retrying an uncertain decision; do not repeat an approved implementation turn.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_respond_plan_proposal"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_respond_plan_proposal"
+          }
+        ]
+      },
+      "summary": "respond_plan_proposal"
+    },
     "operation_set_auto_compaction": {
       "action": "send",
       "channel": {
@@ -62773,6 +63313,29 @@
         ]
       },
       "summary": "set_model"
+    },
+    "operation_set_plan_mode": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/RunnerRequest_set_plan_mode"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/RunnerReply_set_plan_mode"
+          }
+        ]
+      },
+      "summary": "set_plan_mode"
     },
     "operation_set_session_name": {
       "action": "send",
