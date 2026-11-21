@@ -45294,7 +45294,7 @@
     },
     "/api/hosts/{id}/releases": {
       "get": {
-        "description": "### Usage\n\nList builds available to deploy to the selected standalone host.\n\n### Inputs\n\nSelect the linked host in the URL.\n\n### Invariants\n\nOnly complete daemon and runner pairs matching the host OS and CPU are listed. The server reads its own builds, not paths supplied by the client.\n\n### Effects\n\nReturns opaque build IDs, UTC build times, and whether each build matches the host's installed binaries, newest first. Does not transfer or install anything.\n\n### Recovery\n\nAn empty list means no complete compatible build was found. Build a release on the server and reopen the list. An unknown comparison blocks deployment; check the link and the installed daemon's support for binary reporting.",
+        "description": "### Usage\n\nList builds available to deploy to the selected standalone host.\n\n### Inputs\n\nSelect the linked host in the URL.\n\n### Invariants\n\nOnly complete daemon and runner pairs matching the host OS and CPU are listed. The server reads its own builds, not paths supplied by the client.\n\n### Effects\n\nReturns opaque build IDs, UTC build times, and whether each build matches the host's installed binaries, newest first. An older daemon without digest reporting yields unverified; other comparison failures yield unknown. Does not transfer or install anything.\n\n### Recovery\n\nAn empty list means no complete compatible build was found. An unverified build may be deployed with operator confirmation. An unknown comparison blocks deployment; check the host link and binary access.",
         "operationId": "listHostReleases",
         "parameters": [
           {
@@ -45337,11 +45337,15 @@
                                 "type": "string"
                               },
                               {
+                                "const": "unverified",
+                                "type": "string"
+                              },
+                              {
                                 "const": "unknown",
                                 "type": "string"
                               }
                             ],
-                            "description": "Installed means both binaries match byte for byte. Different means at least one differs or the runner is missing. Unknown means the comparison could not be verified."
+                            "description": "Installed means both binaries match byte for byte. Different means at least one differs or the runner is missing. Unverified means the daemon cannot report digests; an operator may still deploy. Unknown means a comparison failed and deployment is blocked."
                           }
                         },
                         "required": ["id", "builtAt", "status"],
@@ -45692,15 +45696,15 @@
         ],
         "summary": "List compatible standalone host releases",
         "x-client-semantics": {
-          "Effects": "Returns opaque build IDs, UTC build times, and whether each build matches the host's installed binaries, newest first. Does not transfer or install anything.",
+          "Effects": "Returns opaque build IDs, UTC build times, and whether each build matches the host's installed binaries, newest first. An older daemon without digest reporting yields unverified; other comparison failures yield unknown. Does not transfer or install anything.",
           "Inputs": "Select the linked host in the URL.",
           "Invariants": "Only complete daemon and runner pairs matching the host OS and CPU are listed. The server reads its own builds, not paths supplied by the client.",
-          "Recovery": "An empty list means no complete compatible build was found. Build a release on the server and reopen the list. An unknown comparison blocks deployment; check the link and the installed daemon's support for binary reporting.",
+          "Recovery": "An empty list means no complete compatible build was found. An unverified build may be deployed with operator confirmation. An unknown comparison blocks deployment; check the host link and binary access.",
           "Usage": "List builds available to deploy to the selected standalone host."
         }
       },
       "post": {
-        "description": "### Usage\n\nDeploy the selected build to a linked standalone host and stream progress as NDJSON.\n\n### Inputs\n\nSupply the selected release ID and a new operation ID.\n\n### Invariants\n\nBoth binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build and be readable, except that the runner can be absent. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.\n\n### Effects\n\nStreams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.\n\n### Recovery\n\nA pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
+        "description": "### Usage\n\nDeploy the selected build to a linked standalone host and stream progress as NDJSON.\n\n### Inputs\n\nSupply the selected release ID and a new operation ID.\n\n### Invariants\n\nBoth binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build when the daemon reports digests; a daemon without digest reporting allows an unverified deployment. Other digest failures block it. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.\n\n### Effects\n\nStreams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.\n\n### Recovery\n\nA pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
         "operationId": "deployHostRelease",
         "parameters": [
           {
@@ -46215,7 +46219,7 @@
         "x-client-semantics": {
           "Effects": "Streams cumulative host-acknowledged bytes across both binaries, then reports installation after both are staged. Acceptance does not confirm the restart.",
           "Inputs": "Supply the selected release ID and a new operation ID.",
-          "Invariants": "Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build and be readable, except that the runner can be absent. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.",
+          "Invariants": "Both binaries come from the same server build. Caller paths, binary names and digests are not accepted. The installed binaries must differ from the selected build when the daemon reports digests; a daemon without digest reporting allows an unverified deployment. Other digest failures block it. The host refuses busy or incompatible installs and adds a missing runner without overwriting an existing file.",
           "Recovery": "A pending result or lost reply requires GET /api/hosts/{id}/artifacts with the original operation ID. Disconnect cancels remaining transfer, but can race activation. Do not blindly send another deployment.",
           "Usage": "Deploy the selected build to a linked standalone host and stream progress as NDJSON."
         }

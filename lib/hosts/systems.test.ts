@@ -87,7 +87,12 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       if (name === "worker") {
         git(repo, "remote", "add", "origin", repo);
         git(repo, "update-ref", "refs/remotes/origin/trunk", "HEAD");
-        git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+        git(
+          repo,
+          "symbolic-ref",
+          "refs/remotes/origin/HEAD",
+          "refs/remotes/origin/trunk",
+        );
       }
       return repo;
     });
@@ -248,7 +253,8 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
     );
     assert.equal((await taskStatus()).status, "in_progress");
     assert.equal(
-      readHierarchy().projects.find((project) => project.path === worker)?.hidden,
+      readHierarchy().projects.find((project) => project.path === worker)
+        ?.hidden,
       true,
     );
     assert.equal(effort.members[0].defaultBranch, undefined);
@@ -257,7 +263,8 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
     const workerCheckout = effort.members[1].path;
     git(worker, "switch", "-c", "source-branch");
     git(workerCheckout, "switch", "trunk");
-    let observed = (await systemsOperation({ action: "list" }, runtime)).efforts[0];
+    let observed = (await systemsOperation({ action: "list" }, runtime))
+      .efforts[0];
     assert.equal(observed.members[1].currentBranch, "trunk");
     assert.equal(observed.members[1].defaultBranch, "trunk");
     git(workerCheckout, "switch", "--detach");
@@ -266,7 +273,7 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
     assert.equal(observed.members[1].defaultBranch, "trunk");
     git(workerCheckout, "switch", effort.branch);
 
-    const statePath = path.join(process.env.PI_CODING_AGENT_DIR!, "keylime", "systems.json");
+    const statePath = path.join(dir, "agent", "keylime", "systems.json");
     const stateBefore = fs.readFileSync(statePath, "utf8");
     const stored = JSON.parse(stateBefore);
     stored.efforts[0].members[1].currentBranch = "stale-current";
@@ -282,7 +289,8 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
     const checkoutGit = path.join(workerCheckout, ".git");
     fs.renameSync(checkoutGit, `${checkoutGit}.hidden`);
     try {
-      observed = (await systemsOperation({ action: "list" }, runtime)).efforts[0];
+      observed = (await systemsOperation({ action: "list" }, runtime))
+        .efforts[0];
       assert.equal(observed.members[1].currentBranch, undefined);
       assert.equal(observed.members[1].defaultBranch, "trunk");
     } finally {
@@ -291,7 +299,8 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
     const repoGit = path.join(worker, ".git");
     fs.renameSync(repoGit, `${repoGit}.hidden`);
     try {
-      observed = (await systemsOperation({ action: "list" }, runtime)).efforts[0];
+      observed = (await systemsOperation({ action: "list" }, runtime))
+        .efforts[0];
       assert.equal(observed.members[1].currentBranch, undefined);
       assert.equal(observed.members[1].defaultBranch, undefined);
     } finally {
@@ -420,7 +429,6 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       prompt: completed.prompt,
       status: "ready",
     });
-    const statePath = path.join(dir, "agent", "keylime", "systems.json");
     const state = JSON.parse(fs.readFileSync(statePath, "utf8")) as {
       efforts: { id: string; planningCompletionPending?: boolean }[];
     };

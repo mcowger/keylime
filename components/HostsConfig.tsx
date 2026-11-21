@@ -478,7 +478,8 @@ function StageArtifactDialog({
   const canInstall = deployingRelease
     ? activation.kind === "idle" &&
       releaseAvailable &&
-      selectedRelease?.status === "different"
+      (selectedRelease?.status === "different" ||
+        selectedRelease?.status === "unverified")
     : canConfigure &&
       isLinkUp(host.status) &&
       /^[0-9a-f]{64}$/.test(expectedHash);
@@ -792,6 +793,11 @@ function StageArtifactDialog({
                       {t("hostsConfig.releaseAlreadyInstalled")}
                     </div>
                   )}
+                  {selectedRelease?.status === "unverified" && (
+                    <div role="status">
+                      {t("hostsConfig.releaseComparisonUnverified")}
+                    </div>
+                  )}
                   {(!selectedRelease ||
                     selectedRelease.status === "unknown") && (
                     <div role="status">
@@ -811,6 +817,11 @@ function StageArtifactDialog({
                     name,
                     id: releaseId,
                   })}
+                </p>
+              )}
+              {confirming && selectedRelease?.status === "unverified" && (
+                <p role="alert" style={{ margin: 0 }}>
+                  {t("hostsConfig.releaseUnverifiedWarning")}
                 </p>
               )}
             </>
@@ -1105,7 +1116,7 @@ function HostCard({
       try {
         const response = await fetch(request.url, {
           cache: "no-store",
-          signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+          signal,
         });
         const data: unknown = await response.json();
         if (!response.ok) {
@@ -1130,7 +1141,8 @@ function HostCard({
             typeof item.builtAt !== "string" ||
             (item.status !== "installed" &&
               item.status !== "different" &&
-              item.status !== "unknown")
+              item.status !== "unknown" &&
+              item.status !== "unverified")
           ) {
             finish({ kind: "error" });
             return;
@@ -1160,7 +1172,9 @@ function HostCard({
           ? "hostsConfig.releaseComparisonEmpty"
           : newest.status === "installed"
             ? "hostsConfig.releaseComparisonCurrent"
-            : "hostsConfig.releaseComparisonDifferent";
+            : newest.status === "unverified"
+              ? "hostsConfig.releaseComparisonUnverified"
+              : "hostsConfig.releaseComparisonDifferent";
   const versionText = (version?: string | null) => {
     if (!version) return t("hostsConfig.binaryVersionUnavailable");
     return linked
@@ -1287,9 +1301,15 @@ function HostCard({
           <button
             type="button"
             className="ui-focus-ring"
-            style={newest?.status === "different" ? primaryStyle : buttonStyle}
+            style={
+              newest?.status === "different" || newest?.status === "unverified"
+                ? primaryStyle
+                : buttonStyle
+            }
             aria-label={t("hostsConfig.deployReleaseTitle", { name })}
-            disabled={newest?.status !== "different"}
+            disabled={
+              newest?.status !== "different" && newest?.status !== "unverified"
+            }
             onClick={() => setArtifactMode("release")}
           >
             {t("hostsConfig.deployRelease")}

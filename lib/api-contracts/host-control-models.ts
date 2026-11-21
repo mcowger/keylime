@@ -303,11 +303,12 @@ export const HostReleaseListSchema = Type.Object(
           [
             Type.Literal("installed"),
             Type.Literal("different"),
+            Type.Literal("unverified"),
             Type.Literal("unknown"),
           ],
           {
             description:
-              "Installed means both binaries match byte for byte. Different means at least one differs or the runner is missing. Unknown means the comparison could not be verified.",
+              "Installed means both binaries match byte for byte. Different means at least one differs or the runner is missing. Unverified means the daemon cannot report digests; an operator may still deploy. Unknown means a comparison failed and deployment is blocked.",
           },
         ),
       }),

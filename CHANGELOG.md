@@ -247,6 +247,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Fixed
 - Local deployment prunes older generated releases, keeping the three newest and active and previous selections for rollback.
+- Managed release deployment works on hosts that can't report binary digests, with an explicit warning instead of a failed build check.
 - Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
 - Opening the model picker no longer starts a saved session or blocks Send while it reads Auto-prewalk.
 - The Auto Prewalk button keeps keyboard focus while a mode change is pending.
@@ -434,6 +435,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Merged PR tracking is bound to the original workspace, preventing cleanup or task completion from affecting a replacement workspace at the same path. Older PR records without workspace IDs no longer trigger automatic cleanup
 - Tasks complete when their launched workspace is merged, deleted, or shipped; Effort tasks complete after all member workspaces are removed
 - Local deployment prunes older generated releases, retaining the three newest and active and previous selections for rollback
+- Managed release deployment works on hosts that can't report binary digests, with an explicit warning instead of a failed build check
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

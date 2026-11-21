@@ -22,6 +22,7 @@ import {
   hostReleaseTarget,
   readHostInstalledBinaryDigests,
 } from "./hub";
+import { HostOpError } from "./link-protocol";
 
 const DAEMON = "keylime";
 const RUNNER = "keylime-omp";
@@ -31,11 +32,24 @@ type Release = Omit<HostReleaseList["releases"][number], "status"> & {
   directory: string;
 };
 
+function binaryDigestsUnsupported(error: unknown): boolean {
+  return (
+    error instanceof HostOpError &&
+    error.code === "host_binary_digests_unsupported"
+  );
+}
+
 async function requireDifferentBuild(
   hostId: string,
   release: HostInstalledBinaryDigests,
 ) {
-  const installed = await readHostInstalledBinaryDigests(hostId);
+  let installed: HostInstalledBinaryDigests;
+  try {
+    installed = await readHostInstalledBinaryDigests(hostId);
+  } catch (error) {
+    if (binaryDigestsUnsupported(error)) return;
+    throw error;
+  }
   if (
     installed.keylime === release.keylime &&
     installed.runner === release.runner
@@ -145,13 +159,19 @@ export async function listHostReleases(
 ): Promise<HostReleaseList> {
   const candidates = await catalog(hostId);
   if (!candidates.length) return { releases: [] };
+  let unverified = false;
   const installed = await readHostInstalledBinaryDigests(hostId).catch(
-    () => null,
+    (error: unknown) => {
+      unverified = binaryDigestsUnsupported(error);
+      return null;
+    },
   );
   const releases: HostReleaseList["releases"] = [];
   for (const release of candidates) {
     signal?.throwIfAborted();
-    let status: HostReleaseList["releases"][number]["status"] = "unknown";
+    let status: HostReleaseList["releases"][number]["status"] = unverified
+      ? "unverified"
+      : "unknown";
     if (installed) {
       status = await withReleaseBinaries(release, async (daemon, runner) => {
         const keylime = (await digestBinary(daemon, signal)).sha256;

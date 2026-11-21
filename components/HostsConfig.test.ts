@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import type { TestContext } from "node:test";
 import { createElement } from "react";
+import en from "../lib/i18n/locales/en.json";
 const { act, cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react/pure.js");
 const { default: userEvent } = await import("@testing-library/user-event");
@@ -65,7 +66,6 @@ function mockHostRequests(
   );
 }
 
-
 test("the one-time host token survives Escape; only Done closes it", async (t) => {
   // The hosts list rides the shared event-stream worker; a silent one keeps it idle.
   globalThis.Worker = FakeWorker as unknown as typeof Worker;
@@ -81,7 +81,9 @@ test("the one-time host token survives Escape; only Done closes it", async (t) =
   await user.click(screen.getByRole("button", { name: "Add host" }));
   const enrollment = within(screen.getByRole("dialog", { name: "Add a host" }));
   assert.ok(
-    enrollment.getByText(/the host uses its own provider credentials and setup/i),
+    enrollment.getByText(
+      /the host uses its own provider credentials and setup/i,
+    ),
   );
   assert.ok(
     enrollment.getByText(
@@ -339,7 +341,6 @@ async function showHosts(hosts: ReturnType<typeof hostRow>[]) {
   return view;
 }
 
-
 test("staging shows the host recovery path when the confirmation body stalls", async (t) => {
   let uploadId = "";
   mockHostRequests(t, async (url, init) => {
@@ -391,4 +392,137 @@ test("staging shows the host recovery path when the confirmation body stalls", a
   assert.ok(dialog.getByText(`<agent dir>/keylime/host-artifacts/${uploadId}`));
   await user.click(dialog.getByRole("button", { name: "Close" }));
   assert.equal(screen.queryByRole("dialog"), null);
+});
+
+test("unverified releases require review and can be deployed", async (t) => {
+  const deployments: unknown[] = [];
+  mockHostRequests(t, async (url, init) => {
+    assert.equal(String(url), "/api/hosts/h1/releases");
+    if (init?.method === "POST") {
+      deployments.push(JSON.parse(String(init.body)));
+      return new Response(
+        JSON.stringify({ type: "result", result: { state: "succeeded" } }) +
+          "\n",
+      );
+    }
+    return Response.json({
+      releases: [
+        {
+          id: "build-a",
+          builtAt: "2026-11-20T00:00:00Z",
+          status: "unverified",
+        },
+        {
+          id: "build-b",
+          builtAt: "2026-11-19T00:00:00Z",
+          status: "unknown",
+        },
+        {
+          id: "build-c",
+          builtAt: "2026-11-18T00:00:00Z",
+          status: "installed",
+        },
+      ],
+    });
+  });
+  const user = userEvent.setup();
+  await showHosts([
+    hostRow({
+      id: "h1",
+      label: "Laptop",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+  ]);
+  const deploy = screen.getByRole<HTMLButtonElement>("button", {
+    name: "Deploy release to Laptop",
+  });
+  await screen.findByText(en["hostsConfig.releaseComparisonUnverified"]);
+  assert.equal(deploy.disabled, false);
+  assert.equal(
+    screen.queryByText(en["hostsConfig.releaseComparisonDifferent"]),
+    null,
+  );
+  await user.click(deploy);
+  const dialog = within(screen.getByRole("dialog"));
+  assert.ok(dialog.getByText(en["hostsConfig.releaseComparisonUnverified"]));
+  const review = dialog.getByRole<HTMLButtonElement>("button", {
+    name: "Review deployment",
+  });
+  assert.equal(review.disabled, false);
+
+  assert.equal(deployments.length, 0);
+  await user.click(review);
+  assert.ok(dialog.getByText(en["hostsConfig.releaseUnverifiedWarning"]));
+  assert.equal(deployments.length, 0);
+  await user.click(dialog.getByRole("button", { name: "Deploy & restart" }));
+  await waitFor(() => assert.equal(deployments.length, 1));
+  assert.match(JSON.stringify(deployments[0]), /"releaseId":"build-a"/);
+  await dialog.findByText(
+    "Deployed build-a to Laptop and confirmed the restart.",
+  );
+});
+
+test("unknown and installed newest releases cannot be deployed", async (t) => {
+  mockHostRequests(t, async (url) => {
+    const status = String(url).includes("/h1/") ? "unknown" : "installed";
+    return Response.json({
+      releases: [{ id: "build-a", builtAt: "2026-11-20T00:00:00Z", status }],
+    });
+  });
+  await showHosts([
+    hostRow({
+      id: "h1",
+      label: "Laptop",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+    hostRow({
+      id: "h2",
+      label: "Server",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+  ]);
+  await screen.findByText(en["hostsConfig.releaseComparisonFailed"]);
+  await screen.findByText(en["hostsConfig.releaseComparisonCurrent"]);
+  assert.equal(
+    screen.getByRole<HTMLButtonElement>("button", {
+      name: "Deploy release to Laptop",
+    }).disabled,
+    true,
+  );
+  assert.equal(
+    screen.getByRole<HTMLButtonElement>("button", {
+      name: "Deploy release to Server",
+    }).disabled,
+    true,
+  );
+});
+
+test("release catalog requests are aborted when the card unmounts", async (t) => {
+  const signals: AbortSignal[] = [];
+  mockHostRequests(t, async (url, init) => {
+    assert.equal(String(url), "/api/hosts/h1/releases");
+    const signal = init?.signal;
+    assert.ok(signal);
+    signals.push(signal);
+    const { promise, reject } = Promise.withResolvers<Response>();
+    signal.addEventListener("abort", () => reject(signal.reason), {
+      once: true,
+    });
+    return promise;
+  });
+  const view = await showHosts([
+    hostRow({
+      id: "h1",
+      label: "Laptop",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+  ]);
+  await waitFor(() => assert.equal(signals.length, 1));
+  assert.equal(signals[0].aborted, false);
+  view.unmount();
+  assert.equal(signals[0].aborted, true);
 });

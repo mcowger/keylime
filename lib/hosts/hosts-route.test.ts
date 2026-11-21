@@ -351,3 +351,140 @@ test("release deployment refuses an installed pair even if an earlier check foun
     else process.env.KEYLIME_PACKAGE_DIR = previous;
   }
 });
+
+for (const supportsDigests of [false, true]) {
+  test(
+    supportsDigests
+      ? "release deployment fails closed when a supported digest request fails"
+      : "release deployment reaches upload when the host cannot report digests",
+    async () => {
+      const arch = process.arch === "arm64" ? "x64" : "arm64";
+      const fixture = join(agentDir, `release/keylime-linux-${arch}`);
+      mkdirSync(fixture, { recursive: true });
+      for (const name of ["keylime", "keylime-omp"]) {
+        const path = join(fixture, name);
+        writeFileSync(path, name);
+        chmodSync(path, 0o755);
+      }
+
+      const previous = process.env.KEYLIME_PACKAGE_DIR;
+      process.env.KEYLIME_PACKAGE_DIR = agentDir;
+      const { host, token } = await (
+        await send("POST", { label: "Release digest host" })
+      ).json();
+      let link = new LinkDriver(host.id, token);
+      try {
+        await link.dial({
+          hello: {
+            arch,
+            canActivateArtifact: true,
+            canReportBinaryDigests: supportsDigests,
+          },
+        });
+        const ops: string[] = [];
+        void link.serve({
+          hostInstalledBinaryDigests() {
+            ops.push("compare");
+            throw new Error("digest read failed");
+          },
+          uploadStart() {
+            ops.push("upload");
+            throw new Error("upload stopped by test");
+          },
+          uploadAbort() {
+            return null;
+          },
+        });
+
+        const url = `${BASE}/${host.id}/releases`;
+        const context = { params: Promise.resolve({ id: host.id }) };
+        const list = await (
+          await releases.GET(new Request(url), context)
+        ).json();
+        assert.ok(list.releases.length > 0);
+        assert.ok(
+          list.releases.every(
+            (release: { status: string }) =>
+              release.status === (supportsDigests ? "unknown" : "unverified"),
+          ),
+        );
+        const deployment = await releases.POST(
+          new Request(url, {
+            method: "POST",
+            body: JSON.stringify({
+              releaseId: list.releases[0].id,
+              operationId: crypto.randomUUID(),
+            }),
+            headers: { "content-type": "application/json" },
+          }),
+          { ...context, disableIdleTimeout() {} },
+        );
+        const frames = (await deployment.text())
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        const failure = frames.at(-1);
+        assert.equal(failure.type, "error");
+        assert.equal(failure.status, 500);
+        assert.equal(failure.code, "host_op_failed");
+        assert.match(
+          failure.error,
+          supportsDigests ? /digest read failed$/ : /upload stopped by test$/,
+        );
+        assert.deepEqual(
+          ops,
+          supportsDigests ? ["compare", "compare"] : ["upload"],
+        );
+
+        if (!supportsDigests) {
+          // A replacement daemon can advertise digest support after the list was read.
+          link.drop();
+          link = new LinkDriver(host.id, token);
+          await link.dial({
+            hello: {
+              arch,
+              canActivateArtifact: true,
+              canReportBinaryDigests: true,
+            },
+          });
+          void link.serve({
+            hostInstalledBinaryDigests() {
+              ops.push("compare");
+              throw new Error("digest read failed after reconnect");
+            },
+            uploadStart() {
+              ops.push("upload");
+              throw new Error("must not upload");
+            },
+          });
+          const retry = await releases.POST(
+            new Request(url, {
+              method: "POST",
+              body: JSON.stringify({
+                releaseId: list.releases[0].id,
+                operationId: crypto.randomUUID(),
+              }),
+              headers: { "content-type": "application/json" },
+            }),
+            { ...context, disableIdleTimeout() {} },
+          );
+          const retryFrames = (await retry.text())
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
+          assert.equal(retryFrames.length, 1);
+          assert.equal(retryFrames[0].code, "host_op_failed");
+          assert.match(
+            retryFrames[0].error,
+            /digest read failed after reconnect$/,
+          );
+          assert.deepEqual(ops, ["upload", "compare"]);
+        }
+      } finally {
+        if (link.socket) link.drop();
+        if (previous === undefined) delete process.env.KEYLIME_PACKAGE_DIR;
+        else process.env.KEYLIME_PACKAGE_DIR = previous;
+      }
+    },
+  );
+}

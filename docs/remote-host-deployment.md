@@ -66,7 +66,7 @@ In **Settings → Hosts**, each remote host shows its reported Keylime and omp
 versions and whether the newest compatible build on the web server differs.
 Keylime compares both binaries byte for byte, so a rebuild can differ even
 if the reported versions haven't changed. **Deploy release** is disabled when
-the newest build is already installed or Keylime can't confirm a difference.
+the newest build is already installed or a comparison fails.
 
 When a different build is available, open **Deploy release**, pick a build,
 review it, then choose **Deploy & restart**. If you select a build that's already
@@ -91,10 +91,11 @@ For native builds, the catalog uses the timestamp assigned when the build
 starts. For unpacked builds, it uses the newer of the two binaries' modification
 times.
 
-Deploy from Hosts requires a standalone remote daemon that can report its
-installed binary digests. For an older daemon that can't report them, install
-the matched pair from the host console and restart the service once. There's
-no need to re-enroll. This action doesn't update the web server or its daemon.
+An older standalone daemon may not report installed binary digests. Its build
+comparison is unverified; you can still select a release and confirm deployment.
+The selected build may already be installed. Deployment still verifies both
+transferred binaries and runs preflight before replacement. There is no need to
+re-enroll. This action doesn't update the web server or its daemon.
 
 The picker checks OS, CPU, and whether both binaries are present. It doesn't
 check whether a build can report deployment status. If you deploy a build
