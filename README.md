@@ -11,10 +11,16 @@ Thanks to [omercnet](https://github.com/omercnet) and the [Paseo shared browser 
 ## Features
 
 - Chat with OMP agents, steer or queue messages, edit conversation history, fork sessions, and ask side questions with `/btw`. Existing-session messages are held in an outbox until delivery is confirmed; uncertain delivery remains visible rather than being silently retried.
+- Switch between Build and Plan modes, then approve a proposed plan or request revisions. Plan mode does not sandbox shell commands or extensions.
+- Select workspace chat roles in the model picker. The session-only Auto Prewalk control can report OMP's recommended model handoffs or enable them without changing the starting model.
 - Organize work by host, project, and workspace. Register projects explicitly, import existing worktrees and sessions selectively, and use multiple chats and terminals in a workspace. Git workspaces support prompt-first creation, configurable setup commands, and Paseo recipes. See [projects and workspaces](docs/worktrees.md).
+- Group repositories, shared instructions, and service commands into a System. Create an Effort to work across coordinated branches and worktrees, with a root chat and service terminals. See [Systems and Efforts](docs/worktrees.md#systems-and-efforts).
+- Keep Markdown notes and a task board outside Git on the owning host. Improve a task brief and launch it as the first prompt in a new Workspace or Effort. See [Notes and Tasks](docs/worktrees.md#notes-and-tasks).
 - Run persistent terminal shells on the workspace's host. Switching tabs or restarting the web server does not stop them; restarting the host daemon does.
 - Attach to the same live OMP session from the browser and the native terminal with `klc`, including across linked hosts. Multiple terminal clients share the host-owned screen and input. See [terminal attachment](#terminal-attachment-with-klc).
-- Inspect files, upload attachments, search sessions, view tool output and subagent activity, and follow todo progress. Ship changes from a workspace using the Git and pull request workflow.
+- Watch an agent's Chromium page in a workspace Browser tab and take shared control without pausing the agent. Video streams when available, with snapshots as a fallback. See [chat tabs](docs/worktrees.md#chat-tabs).
+- Inspect files, upload attachments, search sessions, view tool output and subagent activity, and follow todo progress. The live Jobs panel shows background jobs, services, process details, and output; cancel owned jobs or stop services from the panel.
+- Ship changes from a workspace by landing locally or opening a pull request. Optionally monitor PR comments and reviews and send feedback links to a workspace chat; monitoring can also be started or stopped independently of Ship. See [PR monitoring](docs/specs/2026-11-20-ship-pr-monitoring-design.md).
 - Link independent remote hosts and choose where each session runs. Each host uses its own settings, plugins, environment, and provider logins.
 - Configure models, provider logins, MCP servers, skills, plugins, and agent settings. Get browser notifications for completed runs, requests for input, and failures.
 - Use the responsive interface on desktop or mobile, including an installable web app, light and dark themes, and per-browser display settings.
