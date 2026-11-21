@@ -338,3 +338,44 @@ test("a role reply from a previous session does not close the new picker", async
     globalThis.fetch = originalFetch;
   }
 });
+
+test("reopening roles shows the scoped cache immediately and revalidates it", async () => {
+  const originalFetch = globalThis.fetch;
+  const refresh = Promise.withResolvers<Response>();
+  const other = Promise.withResolvers<Response>();
+  let requests = 0;
+  const roles = (name: string) => ({ roles: [
+    { id: "smol", provider: "p", modelId: name, modelName: name, thinkingLevel: null, effectiveThinkingLevel: null },
+  ] });
+  globalThis.fetch = Object.assign(async () => {
+    requests++;
+    if (requests === 1) return Response.json(roles("Cached"));
+    if (requests === 2) return refresh.promise;
+    return other.promise;
+  }, { preconnect: originalFetch.preconnect }) as typeof fetch;
+  const props = {
+    modelOptions: [], filteredModelOptions: [], modelSearchQuery: "", onSearchQueryChange() {}, onSelectModel() {},
+    roleHostId: "cache-host", roleCwd: "/cache-workspace", roleSessionId: "cache-session",
+    onSelectRole: async () => true,
+  };
+  try {
+    const first = render(React.createElement(ModelPickerPanel, props));
+    await screen.findByRole("button", { name: /Fast Cached/ });
+    first.unmount();
+
+    const reopened = render(React.createElement(ModelPickerPanel, props));
+    assert.ok(screen.getByRole("button", { name: /Fast Cached/ }));
+    assert.equal(requests, 2);
+    await act(async () => refresh.resolve(Response.json(roles("Updated"))));
+    assert.ok(screen.getByRole("button", { name: /Fast Updated/ }));
+
+    reopened.rerender(React.createElement(ModelPickerPanel, { ...props, roleHostId: "another-host" }));
+    assert.equal(screen.queryByRole("button", { name: /Fast Updated/ }), null);
+    assert.equal(screen.queryByRole("button", { name: /Fast Cached/ }), null);
+    await act(async () => other.resolve(Response.json(roles("Other"))));
+    assert.ok(screen.getByRole("button", { name: /Fast Other/ }));
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});

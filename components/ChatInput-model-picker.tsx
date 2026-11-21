@@ -28,6 +28,8 @@ import {
 } from "./ui/primitives";
 
 const FAVORITE_MODELS_KEY = "keylime:favorite-models";
+const MAX_ROLE_CACHE_ENTRIES = 32;
+const roleCache = new Map<string, ChatRoles["roles"]>();
 
 function readFavoriteModels(): Set<string> {
   try {
@@ -165,7 +167,21 @@ export function ModelPickerPanel({
   onClose,
 }: ModelPickerPanelProps) {
   const { t } = useI18n();
-  const [roles, setRoles] = useState<ChatRoles["roles"]>([]);
+  const roleQuery = roleHostId && roleCwd && onSelectRole
+    ? new URLSearchParams({
+        hostId: roleHostId,
+        cwd: roleCwd,
+        ...(roleSessionId ? { sessionId: roleSessionId } : {}),
+        ...(roleThinkingLevel ? { thinkingLevel: roleThinkingLevel } : {}),
+        ...(currentModel?.provider && currentModel.modelId
+          ? { currentProvider: currentModel.provider, currentModelId: currentModel.modelId }
+          : {}),
+      }).toString()
+    : null;
+  const [roleResult, setRoleResult] = useState<{ query: string; roles: ChatRoles["roles"] } | null>(null);
+  const roles = roleQuery
+    ? roleResult?.query === roleQuery ? roleResult.roles : roleCache.get(roleQuery) ?? []
+    : [];
   const [rolesError, setRolesError] = useState<"load" | "select" | null>(null);
   const [rolePending, setRolePending] = useState(false);
   const roleOwnerRef = useRef(0);
@@ -174,38 +190,29 @@ export function ModelPickerPanel({
     return () => { roleOwnerRef.current += 1; };
   }, [roleHostId, roleCwd, roleSessionId]);
   useEffect(() => {
-    setRoles([]);
     setRolesError(null);
-    if (!roleHostId || !roleCwd || !onSelectRole) return;
+    if (!roleQuery) return;
     const controller = new AbortController();
-    const query = new URLSearchParams({ hostId: roleHostId, cwd: roleCwd });
-    if (roleSessionId) query.set("sessionId", roleSessionId);
-    if (roleThinkingLevel) query.set("thinkingLevel", roleThinkingLevel);
-    if (currentModel?.provider && currentModel.modelId) {
-      query.set("currentProvider", currentModel.provider);
-      query.set("currentModelId", currentModel.modelId);
-    }
-    void fetch(`/api/chat-roles?${query}`, { signal: controller.signal })
+    void fetch(`/api/chat-roles?${roleQuery}`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error("Failed to load chat roles");
         return response.json() as Promise<ChatRoles>;
       })
       .then((data) => {
-        if (!controller.signal.aborted) setRoles(data.roles);
+        if (controller.signal.aborted) return;
+        roleCache.delete(roleQuery);
+        roleCache.set(roleQuery, data.roles);
+        if (roleCache.size > MAX_ROLE_CACHE_ENTRIES) {
+          const oldest = roleCache.keys().next().value;
+          if (oldest !== undefined) roleCache.delete(oldest);
+        }
+        setRoleResult({ query: roleQuery, roles: data.roles });
       })
       .catch(() => {
         if (!controller.signal.aborted) setRolesError("load");
       });
     return () => controller.abort();
-  }, [
-    roleHostId,
-    roleCwd,
-    roleSessionId,
-    roleThinkingLevel,
-    currentModel?.provider,
-    currentModel?.modelId,
-    onSelectRole,
-  ]);
+  }, [roleQuery]);
   const roleLabels: Record<string, string> = {
     default: t("chatInput.roleDefault"),
     smol: t("chatInput.roleFast"),
