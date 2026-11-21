@@ -54,6 +54,8 @@ test("mode button cycles between Build and Plan, including during a run", () => 
     onPlanModeChange: (enabled: boolean) => selections.push(enabled),
   };
   const { rerender } = render(React.createElement(ChatInput, { ...props, planEnabled: false }));
+  assert.equal(screen.queryByRole("button", { name: "Build mode. Switch to Plan" }), null);
+  fireEvent.click(screen.getByRole("button", { name: /Change model/ }));
   fireEvent.click(screen.getByRole("button", { name: "Build mode. Switch to Plan" }));
   rerender(React.createElement(ChatInput, { ...props, planEnabled: true }));
   fireEvent.click(screen.getByRole("button", { name: "Plan mode. Switch to Build" }));

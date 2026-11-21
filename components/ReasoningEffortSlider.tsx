@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type CSSProperties, type ReactNode } from "react";
+import { useId, type CSSProperties } from "react";
 import { useI18n } from "@/lib/i18n";
 
 export function ReasoningEffortSlider({
@@ -8,14 +8,12 @@ export function ReasoningEffortSlider({
   value,
   labels,
   disabled,
-  leading,
   onChange,
 }: {
   levels: string[];
   value: string;
   labels?: Record<string, string | null> | null;
   disabled: boolean;
-  leading?: ReactNode;
   onChange?: (value: string) => void;
 }) {
   const { t } = useI18n();
@@ -24,11 +22,9 @@ export function ReasoningEffortSlider({
   const index = manual.indexOf(value);
   return (
     <fieldset className="effort-slider" disabled={disabled} aria-label={t("chatInput.reasoningLabel")}>
-      <div className="effort-slider-layout" data-leading={Boolean(leading)}>
-        {leading && <div className="effort-leading">{leading}</div>}
+      <div className="effort-slider-layout">
         {onChange && (
           <div className="effort-reasoning">
-            <div className="effort-heading">{t("chatInput.reasoningLabel")}</div>
             <div className="effort-reasoning-controls">
         {onChange && (
           <button

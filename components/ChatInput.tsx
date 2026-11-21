@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ClipboardPaste,
   CornerDownRight,
+  Footprints,
   Hammer,
   ListChecks,
   Loader2,
@@ -3173,7 +3174,9 @@ export const ChatInput = memo(
           ? "chatInput.autoPrewalkSuggest"
           : autoPrewalk === "on"
             ? "chatInput.autoPrewalkOn"
-            : "chatInput.autoPrewalkUnknown",
+            : autoPrewalkError
+              ? "chatInput.autoPrewalkUnknown"
+              : "chatInput.autoPrewalkDefault",
     );
     const nextAutoPrewalk =
       autoPrewalk === "off" ? "suggest" : autoPrewalk === "suggest" ? "on" : "off";
@@ -5313,20 +5316,27 @@ export const ChatInput = memo(
                           }}
                           onClose={() => setModelDropdownOpen(false)}
                         />
-                        {(onThinkingLevelChange || onAutoPrewalkChange) && (
-                          <ReasoningEffortSlider
-                            levels={thinkingLevelOptions}
-                            value={thinkingLevel ?? "auto"}
-                            labels={thinkingLevelMap}
-                            disabled={isStreaming || roleChangePending}
-                            onChange={onThinkingLevelChange}
-                            leading={onAutoPrewalkChange && (
-                              <div className="effort-prewalk">
-                                <span>{t("chatInput.autoPrewalk")}</span>
+                        {(onPlanModeChange || onAutoPrewalkChange || onThinkingLevelChange) && <div className="picker-effort-row">
+                          {(onPlanModeChange || onAutoPrewalkChange) && (
+                            <div className="picker-mode-controls">
+                              {onPlanModeChange && (
+                                <button
+                                  type="button"
+                                  aria-label={t(planEnabled ? "chatInput.modePlanSwitch" : "chatInput.modeBuildSwitch")}
+                                  title={t(planEnabled ? "chatInput.modePlanSwitch" : "chatInput.modeBuildSwitch")}
+                                  disabled={planCommandPending}
+                                  onClick={() => onPlanModeChange(!planEnabled)}
+                                  style={{ color: planEnabled ? "var(--accent)" : "var(--text-muted)" }}
+                                >
+                                  {planEnabled ? <SquareChartGantt size={16} aria-hidden="true" /> : <Hammer size={16} aria-hidden="true" />}
+                                </button>
+                              )}
+                              {onAutoPrewalkChange && (
                                 <button
                                   type="button"
                                   aria-label={`${t("chatInput.autoPrewalk")}: ${autoPrewalkLabel}`}
                                   title={[
+                                    `${t("chatInput.autoPrewalk")}: ${autoPrewalkLabel}`,
                                     t("chatInput.autoPrewalkCycle"),
                                     autoPrewalk == null ? t("chatInput.autoPrewalkUnknownDescription") : "",
                                     t("chatInput.autoPrewalkHostScope"),
@@ -5340,44 +5350,30 @@ export const ChatInput = memo(
                                     if (!isStreaming && !autoPrewalkPending)
                                       onAutoPrewalkChange(nextAutoPrewalk);
                                   }}
+                                  data-prewalk={autoPrewalk ?? "default"}
                                 >
-                                  <span aria-hidden="true">{autoPrewalk == null ? "?" : autoPrewalkLabel}</span>
+                                  <Footprints size={16} aria-hidden="true" />
+                                  <span className="prewalk-state" aria-hidden="true" />
                                 </button>
-                              </div>
-                            )}
-                          />
-                        )}
+                              )}
+                            </div>
+                          )}
+                          {onThinkingLevelChange && (
+                            <ReasoningEffortSlider
+                              levels={thinkingLevelOptions}
+                              value={thinkingLevel ?? "auto"}
+                              labels={thinkingLevelMap}
+                              disabled={isStreaming || roleChangePending}
+                              onChange={onThinkingLevelChange}
+                            />
+                          )}
+                        </div>}
                         {onAutoPrewalkChange && autoPrewalkError && (
                           <div role="alert" style={{ color: "var(--status-error)", fontSize: "var(--text-xs)", padding: "0 12px 6px", overflowWrap: "anywhere" }}>{autoPrewalkError}</div>
                         )}
                       </div>
                     )}
                   </div>
-                )}
-                {onPlanModeChange && (
-                  <button
-                    type="button"
-                    aria-label={t(planEnabled ? "chatInput.modePlanSwitch" : "chatInput.modeBuildSwitch")}
-                    title={t(planEnabled ? "chatInput.modePlanSwitch" : "chatInput.modeBuildSwitch")}
-                    disabled={planCommandPending}
-                    onClick={() => onPlanModeChange(!planEnabled)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: "var(--control-height-sm)",
-                      height: "var(--control-height-sm)",
-                      padding: 0,
-                      background: "none",
-                      border: "none",
-                      borderRadius: 7,
-                      color: planEnabled ? "var(--accent)" : "var(--text-muted)",
-                      cursor: planCommandPending ? "wait" : "pointer",
-                      opacity: planCommandPending ? 0.5 : 1,
-                    }}
-                  >
-                    {planEnabled ? <SquareChartGantt size={16} aria-hidden="true" /> : <Hammer size={16} aria-hidden="true" />}
-                  </button>
                 )}
 
                 {todoPhases && subagents && onSelectSubagent && (

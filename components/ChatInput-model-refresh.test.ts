@@ -94,7 +94,7 @@ test("auto-prewalk can be selected without changing the model and reports errors
   view.rerender(React.createElement(ChatInput, { ...props, autoPrewalk: "off" }));
   fireEvent.click(screen.getByRole("button", { name: "Auto Prewalk: Off" }));
   view.rerender(React.createElement(ChatInput, { ...props, autoPrewalk: null }));
-  fireEvent.click(screen.getByRole("button", { name: "Auto Prewalk: Unknown" }));
+  fireEvent.click(screen.getByRole("button", { name: "Auto Prewalk: Default" }));
   assert.deepEqual(selected, ["on", "off", "suggest", "off"]);
   assert.equal(modelChanges, 0);
   view.rerender(React.createElement(ChatInput, { ...props, autoPrewalkError: "Command failed" }));

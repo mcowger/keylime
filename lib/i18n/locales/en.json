@@ -56,6 +56,7 @@
   "chatInput.autoPrewalk": "Auto Prewalk",
   "chatInput.autoPrewalkHostScope": "For this running session only; resets when OMP exits. A native judge is required. The selected model starts each task.",
   "chatInput.autoPrewalkBeforeFirstPrompt": "Applied before the first prompt.",
+  "chatInput.autoPrewalkDefault": "Default",
   "chatInput.autoPrewalkUnknown": "Unknown",
   "chatInput.autoPrewalkUnknownDescription": "The current mode is unavailable. Press to set Off.",
   "chatInput.autoPrewalkCycle": "Press to cycle through Off, Suggest and On.",
