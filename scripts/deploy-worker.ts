@@ -18,6 +18,7 @@ import {
   prepareFrontend,
   selectFrontend,
 } from "./deploy-frontend";
+import { pruneDeployReleases } from "./deploy-retention";
 import {
   readDeployState,
   saveDeployState,
@@ -120,6 +121,7 @@ try {
     }
     onPhase("building");
     let candidate: string;
+    const protectedReleases: string[] = [];
     if (values.activate) {
       // Activation uses an immutable, already-built release, not source to regenerate.
       candidate = realpathSync(path.resolve(values.activate));
@@ -183,6 +185,7 @@ try {
           recursive: true,
         });
         const previous = realpathSync(path.join(base, "frontend-current"));
+        protectedReleases.push(previous);
         prepareFrontend(candidate, previous);
         onPhase("select-frontend", { candidate, previous, sha });
         selectFrontend(base, candidate);
@@ -254,8 +257,10 @@ try {
         console.log(`Built release: ${candidate}`);
       }
     }
-    if (!values.frontend)
-      await activateRelease({
+    if (!values.frontend) {
+      const pointer = path.join(base, "frontend-current");
+      if (existsSync(pointer)) protectedReleases.push(realpathSync(pointer));
+      const { previous } = await activateRelease({
         candidate,
         base,
         agent,
@@ -267,6 +272,13 @@ try {
             ? undefined
             : Number(values.timeout) * 1000,
       });
+      protectedReleases.push(previous);
+    }
+    try {
+      pruneDeployReleases(base, protectedReleases);
+    } catch (error) {
+      console.error("Release cleanup failed:", error);
+    }
   }
 } catch (error) {
   onPhase("failed", {

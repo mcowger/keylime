@@ -6,13 +6,6 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ## [Unreleased]
 
-### Fixed
-- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
-- Opening the model picker no longer starts a saved session or blocks Send while it reads Auto-prewalk.
-- The Auto Prewalk button keeps keyboard focus while a mode change is pending.
-- Chat role discovery uses the host's agent environment. Role selection, model selection and session state replies omit provider headers before leaving the host.
-- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
-
 ### Breaking Changes
 - Removed host pools and shared project identities. New daemons use one controller and link protocol 14. Upgrade the controller first; it still accepts enrolled v13 daemons so you can upgrade them individually.
 - `bun run api` replaces `api:generate` and `api:check`, validating documents in parallel and caching successful AsyncAPI validation for unchanged, self-contained documents.
@@ -253,6 +246,12 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Local deployment prunes older generated releases, keeping the three newest and active and previous selections for rollback.
+- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
+- Opening the model picker no longer starts a saved session or blocks Send while it reads Auto-prewalk.
+- The Auto Prewalk button keeps keyboard focus while a mode change is pending.
+- Chat role discovery uses the host's agent environment. Role selection, model selection and session state replies omit provider headers before leaving the host.
+- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
 - Repos and Systems with only default-branch work start collapsed. Empty groups start collapsed too.
 - A merged PR can no longer complete a task or remove a replacement Workspace that reused the old path. Older PR records without workspace IDs no longer run automatic cleanup.
 - Tasks move to **Done** when their launched Workspace is merged, deleted, or shipped. Effort tasks complete after all member workspaces are removed.
@@ -434,6 +433,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Repos and Systems with only default-branch work start collapsed. Empty groups start collapsed too
 - Merged PR tracking is bound to the original workspace, preventing cleanup or task completion from affecting a replacement workspace at the same path. Older PR records without workspace IDs no longer trigger automatic cleanup
 - Tasks complete when their launched workspace is merged, deleted, or shipped; Effort tasks complete after all member workspaces are removed
+- Local deployment prunes older generated releases, retaining the three newest and active and previous selections for rollback
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

@@ -31,6 +31,12 @@ editing or updating the checkout cannot change an in-flight transaction.
 The command exports committed HEAD into a private build directory, installs the
 pinned dependencies, and builds the runner and production binary. It never
 serves this working tree. Releases stay in `~/.local/share/keylime/releases/`.
+After a successful full or frontend-only deployment, the worker keeps the three
+newest deploy-generated directories in each of `releases/` and
+`frontend-releases/`, plus the active and immediately previous selections. Older
+generated directories are deleted. Manually named release directories are left
+alone. Cleanup failures are logged without failing the deployment; failed and
+recovery deployments do not prune releases.
 If the active release has the same committed runner tree and pinned runtime, its
 runner binary is reused; otherwise the runner is built from the pinned packages.
 Local builds skip the unused release tarball and smoke suite. Preflight still
@@ -79,7 +85,8 @@ mise exec -- bun run deploy:local:frontend
 Frontend-only deployment accepts changes limited to browser components, hooks,
 and app files outside `app/api`. Changes to shared code, dependencies, or the
 backend require a normal deployment. Existing hashed assets and worker versions
-are retained so tabs opened before a switch can still load them.
+are copied into the new frontend so tabs opened before a switch can still load
+them. Those assets can continue to grow even when old release directories are pruned.
 
 ## Rollback
 
@@ -107,4 +114,4 @@ If a worker itself crashes, inspect `--status` and its log, then run
 `mise exec -- bun run deploy:local --recover --wait` to start both services at the selected release.
 New deployments refuse an unfinished transaction until explicit recovery.
 This is a recoverable service transaction, not zero-downtime or a power-loss
-atomicity guarantee. Builds remain for manual disk management.
+atomicity guarantee. Build directories remain for manual disk management.
