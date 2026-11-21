@@ -21767,6 +21767,7 @@
                       {
                         "properties": {
                           "pending": {
+                            "description": "Whether an available advisor is evaluating a turn boundary, reviewing queued output, or delivering its review. False does not guarantee a review was scheduled or completed.",
                             "type": "boolean"
                           },
                           "type": {
@@ -41434,6 +41435,7 @@
                                       {
                                         "properties": {
                                           "pending": {
+                                            "description": "Whether an available advisor is evaluating a turn boundary, reviewing queued output, or delivering its review. False does not guarantee a review was scheduled or completed.",
                                             "type": "boolean"
                                           },
                                           "type": {

@@ -820,7 +820,10 @@ Recovery: Refresh after reconnecting or when state changes.`,
     Type.Intersect([
       RpcSessionStateSchema,
       Type.Object({
-        advisorReviewPending: Type.Boolean(),
+        advisorReviewPending: Type.Boolean({
+          description:
+            "An available advisor is evaluating a primary turn boundary, reviewing queued output, or delivering its review. False does not guarantee a review was scheduled or completed.",
+        }),
         queuedMessages: queueSnapshot,
         todoPhases: Type.Array(todoPhase),
         goal: nullable(goalState),

@@ -18000,6 +18000,7 @@
                   {
                     "properties": {
                       "pending": {
+                        "description": "Whether an available advisor is evaluating a turn boundary, reviewing queued output, or delivering its review. False does not guarantee a review was scheduled or completed.",
                         "type": "boolean"
                       },
                       "type": {
@@ -36362,6 +36363,7 @@
                       {
                         "properties": {
                           "pending": {
+                            "description": "Whether an available advisor is evaluating a turn boundary, reviewing queued output, or delivering its review. False does not guarantee a review was scheduled or completed.",
                             "type": "boolean"
                           },
                           "type": {
@@ -48325,7 +48327,7 @@
                     "description": "Runner session state; model metadata excludes host-local provider headers and credentials.",
                     "properties": {
                       "advisorReviewPending": {
-                        "description": "An active, unpaused advisor has output in its review backlog; mirrored by advisor_review.",
+                        "description": "An available advisor is evaluating a primary turn boundary, reviewing queued output, or delivering its review; mirrored by advisor_review. A false value does not guarantee a review was scheduled or completed.",
                         "type": "boolean"
                       },
                       "autoCompactionEnabled": {
@@ -48714,6 +48716,7 @@
                   {
                     "properties": {
                       "advisorReviewPending": {
+                        "description": "An available advisor is evaluating a primary turn boundary, reviewing queued output, or delivering its review. False does not guarantee a review was scheduled or completed.",
                         "type": "boolean"
                       },
                       "dumpTools": {

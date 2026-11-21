@@ -1399,6 +1399,76 @@ test("advisor review follows snapshots and events beyond the primary run and rec
   assert.equal(w.latest.advisorReviewPending, false);
 });
 
+test("unknown advisor snapshots do not clear a pending review", async () => {
+  resetWorld();
+  primeSession("advisor-unknown", [userMsg("u0", "q")]);
+  world.agents.set("advisor-unknown", {
+    running: true,
+    state: { advisorReviewPending: true },
+  });
+  const w = await mountSession("advisor-unknown");
+  const es = lastEs();
+  await act(() => es.open());
+  await settle();
+
+  // A recovered response does not establish that the review finished.
+  world.respond = (method, url) =>
+    method === "GET" && url === "/api/agent/advisor-unknown"
+      ? jsonResponse(200, { running: false, recovered: true })
+      : null;
+  await act(() => es.emit({ type: "agent_end", isTerminal: true }));
+  await settle();
+  assert.equal(w.latest.advisorReviewPending, true);
+
+  // An older runner may omit the field altogether.
+  world.respond = (method, url) =>
+    method === "GET" && url === "/api/agent/advisor-unknown"
+      ? jsonResponse(200, { running: true, state: {} })
+      : null;
+  await act(() => es.dropRecoverably());
+  await act(() => es.open());
+  await settle();
+  assert.equal(w.latest.advisorReviewPending, true);
+
+  // A confirmed absent wrapper cannot still be reviewing.
+  world.respond = (method, url) =>
+    method === "GET" && url === "/api/agent/advisor-unknown"
+      ? jsonResponse(200, { running: false })
+      : null;
+  await act(() => es.dropRecoverably());
+  await act(() => es.open());
+  await settle();
+  assert.equal(w.latest.advisorReviewPending, false);
+});
+
+test("a delayed advisor snapshot cannot override a newer review event", async () => {
+  resetWorld();
+  primeSession("advisor-snapshot-race", [userMsg("u0", "q")]);
+  world.agents.set("advisor-snapshot-race", {
+    running: true,
+    state: { advisorReviewPending: false },
+  });
+  const w = await mountSession("advisor-snapshot-race");
+  const es = lastEs();
+  const response = Promise.withResolvers<HeldResponse>();
+  world.holds.push({
+    match: (method, url) =>
+      method === "GET" && url === "/api/agent/advisor-snapshot-race",
+    produce: () => response.promise,
+  });
+  await act(() => es.open());
+  await act(() => es.emit({ type: "advisor_review", pending: true }));
+  assert.equal(w.latest.advisorReviewPending, true);
+  await act(async () => {
+    response.resolve({
+      value: { running: true, state: { advisorReviewPending: false } },
+    });
+    await response.promise;
+  });
+  await settle();
+  assert.equal(w.latest.advisorReviewPending, true);
+});
+
 test("advisor review clears when the runner exits", async () => {
   resetWorld();
   primeSession("advisor-exit", [userMsg("u0", "q")]);
@@ -13492,6 +13562,14 @@ test("workspace warns about a background crash until its chat is closed or remov
     }),
   );
   await until(() => view.queryByText("Mac project"), "workspace renders");
+  await act(async () => {
+    const project = view.getByRole("button", { name: "Mac project" });
+    if (project.getAttribute("aria-expanded") === "false") fireEvent.click(project);
+  });
+  await until(
+    () => world.runningStreams.some((stream) => !stream.closedByCaller),
+    "the sidebar subscribes to running sessions",
+  );
   assert.equal(
     view.queryByRole("button", { name: "Close Mac conversation" }),
     null,

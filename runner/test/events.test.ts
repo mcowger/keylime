@@ -116,12 +116,14 @@ describe("host events bridge", () => {
       sessionId: session.sessionId,
     });
   });
-  it("tracks advisor backlog independently of primary events and snapshots it on reconnect", async () => {
+  it("keeps review pending until advisor card delivery finishes and snapshots it on reconnect", async () => {
     const { session, events, waitFor } = await bridged();
     let advisors: AdvisorStatusOverviewEntry[] = [];
     const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
       () => ({ configured: true, advisors }),
     );
+    const delivery = Promise.withResolvers<boolean>();
+    const catchup = spyOn(session, "waitForAdvisorCatchup").mockReturnValue(delivery.promise);
     const reviewEvents = () => events.filter((event) => event.type === "advisor_review");
     try {
       expect(sessionState(session).advisorReviewPending).toBe(false);
@@ -130,28 +132,152 @@ describe("host events bridge", () => {
       await waitFor("advisor_review");
       expect(reviewEvents()).toEqual([{ type: "advisor_review", pending: true }]);
 
-      // Finishing without advice still clears the indicator, without advisor_yielded.
+      // OMP can finish the model review before its card event is delivered.
       advisors = [];
-      await waitFor("advisor_review", 2);
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      unsubscribe?.();
+      unsubscribe = subscribeHostEvents(session, (frame) => {
+        if (frame.t === "event") events.push(frame.event as Event);
+      });
       expect(reviewEvents()).toEqual([
         { type: "advisor_review", pending: true },
-        { type: "advisor_review", pending: false },
+        { type: "advisor_review", pending: true },
       ]);
-
-      advisors = [
-        { name: "paused", yielded: false, backlog: 1, status: "running", isPaused: true },
-        { name: "failed", yielded: false, backlog: 1, status: "error", isPaused: false },
-        { name: "idle", yielded: false, backlog: 0, status: "running", isPaused: false },
-      ];
+      delivery.resolve(true);
+      await delivery.promise;
+      // Let the tracker's continuation publish the completed drain.
+      await Promise.resolve();
       expect(sessionState(session).advisorReviewPending).toBe(false);
-      expect(reviewEvents()).toHaveLength(2);
-
-      advisors = [{ name: "reviewer", yielded: false, backlog: 1, status: "running", isPaused: false }];
-      unsubscribe?.();
-      unsubscribe = undefined;
-      expect(sessionState(session).advisorReviewPending).toBe(true);
+      expect(reviewEvents().at(-1)).toEqual({ type: "advisor_review", pending: false });
     } finally {
+      delivery.resolve(true);
       status.mockRestore();
+      catchup.mockRestore();
+    }
+  });
+
+  it("covers the asynchronous turn-end hook before the advisor backlog exists", async () => {
+    const { session, events, waitFor } = await bridged([{ content: ["done"] }]);
+    let advisors: AdvisorStatusOverviewEntry[] = [
+      { name: "reviewer", yielded: false, backlog: 0, status: "running", isPaused: false },
+    ];
+    const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
+      () => ({ configured: true, advisors }),
+    );
+    const hook = Promise.withResolvers<void>();
+    const delivery = Promise.withResolvers<boolean>();
+    const catchup = spyOn(session, "waitForAdvisorCatchup").mockReturnValue(delivery.promise);
+    session.agent.setOnTurnEnd(async () => {
+      await hook.promise;
+      advisors = [{ name: "reviewer", yielded: false, backlog: 1, status: "running", isPaused: false }];
+    });
+    try {
+      const prompt = session.prompt("hello");
+      await waitFor("turn_end");
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      expect(events.filter((event) => event.type === "advisor_review")).toEqual([
+        { type: "advisor_review", pending: true },
+      ]);
+      hook.resolve();
+      await prompt;
+      await waitFor("agent_end");
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      advisors = [];
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      delivery.resolve(true);
+      await waitFor("advisor_review", 2);
+      expect(sessionState(session).advisorReviewPending).toBe(false);
+    } finally {
+      hook.resolve();
+      delivery.resolve(true);
+      status.mockRestore();
+      catchup.mockRestore();
+    }
+  });
+
+  it("clears the boundary when OMP skips a review on its configured cadence", async () => {
+    const { session, waitFor } = await bridged([{ content: ["done"] }]);
+    const status = spyOn(session, "getAdvisorStatusOverview").mockReturnValue({
+      configured: true,
+      advisors: [{ name: "reviewer", yielded: false, backlog: 0, status: "running", isPaused: false }],
+    });
+    const hook = Promise.withResolvers<void>();
+    session.agent.setOnTurnEnd(() => hook.promise);
+    try {
+      const prompt = session.prompt("hello");
+      await waitFor("turn_end");
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      hook.resolve();
+      await prompt;
+      await waitFor("advisor_review", 2);
+      expect(sessionState(session).advisorReviewPending).toBe(false);
+    } finally {
+      hook.resolve();
+      status.mockRestore();
+    }
+  });
+
+  it("does not clear after a failed catchup until card processing is idle", async () => {
+    const { session, waitFor } = await bridged();
+    let advisors: AdvisorStatusOverviewEntry[] = [
+      { name: "reviewer", yielded: false, backlog: 1, status: "running", isPaused: false },
+    ];
+    const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
+      () => ({ configured: true, advisors }),
+    );
+    const idle = Promise.withResolvers<void>();
+    const catchup = spyOn(session, "waitForAdvisorCatchup").mockResolvedValue(false);
+    const waitIdle = spyOn(session, "waitForIdle").mockReturnValue(idle.promise);
+    try {
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      await waitFor("advisor_review");
+      advisors = [{ name: "reviewer", yielded: true, backlog: 1, status: "error", isPaused: false }];
+      await Promise.resolve();
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      idle.resolve();
+      await waitFor("advisor_review", 2);
+      expect(sessionState(session).advisorReviewPending).toBe(false);
+    } finally {
+      idle.resolve();
+      status.mockRestore();
+      catchup.mockRestore();
+      waitIdle.mockRestore();
+    }
+  });
+
+  it("keeps queued work pending after an unsuccessful drain while the advisor can still recover", async () => {
+    const { session, waitFor } = await bridged();
+    let advisors: AdvisorStatusOverviewEntry[] = [
+      { name: "reviewer", yielded: false, backlog: 1, status: "error", isPaused: true },
+    ];
+    const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
+      () => ({ configured: true, advisors }),
+    );
+    const retry = Promise.withResolvers<boolean>();
+    const catchup = spyOn(session, "waitForAdvisorCatchup")
+      .mockResolvedValueOnce(false)
+      .mockReturnValue(retry.promise);
+    const idleEntered = Promise.withResolvers<void>();
+    const waitIdle = spyOn(session, "waitForIdle").mockImplementation(() => {
+      idleEntered.resolve();
+      return Promise.resolve();
+    });
+    try {
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      await waitFor("advisor_review");
+      // Neither an error status nor a pause proves queued work was abandoned.
+      await idleEntered.promise;
+      await Promise.resolve();
+      expect(sessionState(session).advisorReviewPending).toBe(true);
+      advisors = [];
+      retry.resolve(true);
+      await waitFor("advisor_review", 2);
+      expect(sessionState(session).advisorReviewPending).toBe(false);
+    } finally {
+      retry.resolve(true);
+      status.mockRestore();
+      catchup.mockRestore();
+      waitIdle.mockRestore();
     }
   });
 

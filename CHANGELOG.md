@@ -12,6 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
+- Advisor review status covers turn-boundary scheduling and review delivery, and survives inconclusive reconnect snapshots.
 - Tap the mode icon next to the model picker to switch between **Build** and **Plan**. Approval restores the previous model and reasoning effort before implementation; requesting revisions stays in Plan. Switching back to Build also restores write access. As in OMP, shell commands and extensions are not sandboxed.
 - The composer model selector offers a session-only Auto Prewalk button beside Reasoning that cycles through Off, Suggest, and On. Suggest reports the native judge's decision; On arms recommended handoffs without changing the model that starts a task.
 - The composer model picker lists workspace chat roles and applies them with OMP's role selection behavior without changing role settings.
@@ -172,6 +173,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Host-specific settings, model discovery, sessions, notifications, restore claims, and outbox quotas; combined search checks metadata across hosts and transcripts locally
 - **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart
 - Deploying a matched release can restore a missing `keylime-omp` on a standalone host
+- Advisor review status covers turn-boundary scheduling and review delivery, and survives inconclusive reconnect snapshots
 
 ### Changed
 - `bun run build:binary` builds the browser assets and runners, then compiles and packages all four Keylime targets in parallel. Runner builds use faster native addon compression.

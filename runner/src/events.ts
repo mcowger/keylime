@@ -34,7 +34,7 @@ import { logger } from "@oh-my-pi/pi-utils";
 import type { CommandContext, CommandTable } from "./commands/types";
 import { onClientQueueChange, stampClientMessageId } from "./correlation";
 import { resetActivity, trackActivity } from "./activity";
-import { advisorReviewPending } from "./advisor";
+import { advisorReviewPending, resetAdvisorBoundary, subscribeAdvisorReview } from "./advisor";
 
 type MessageUpdates = "full" | "delta";
 
@@ -280,18 +280,9 @@ export function subscribeHostEvents(
     event,
     () => scheduledTurns.get(session)?.() ?? false,
   );
-  // Advisor backlog can change without a session event, including after agent_end.
-  // Keep polling for the lifetime of the bridge, not just the primary run.
-  let reviewPending = false;
-  const checkAdvisorReview = () => {
-    const pending = advisorReviewPending(session);
-    if (pending === reviewPending) return;
-    reviewPending = pending;
-    event({ type: "advisor_review", pending });
-  };
-  const advisorTimer = setInterval(checkAdvisorReview, 100);
-  advisorTimer.unref();
-  checkAdvisorReview();
+  const unsubscribeAdvisor = subscribeAdvisorReview(session, (pending) =>
+    event({ type: "advisor_review", pending }),
+  );
   const emitCommands = async () => {
     event({
       type: "available_commands_update",
@@ -306,8 +297,8 @@ export function subscribeHostEvents(
     ),
     session.subscribe((sessionEvent) => {
       // Synchronous: the stamp reads the live queues.
+      advisorReviewPending(session);
       forwarder.forward(stampClientMessageId(session, sessionEvent));
-      checkAdvisorReview();
       settle.observe(sessionEvent);
     }),
     onClientQueueChange(session, (queueEvent) => forwarder.forward(queueEvent)),
@@ -339,7 +330,7 @@ export function subscribeHostEvents(
   ];
   void emitCommands();
   return () => {
-    clearInterval(advisorTimer);
+    unsubscribeAdvisor();
     for (const unsubscribe of unsubscribers) unsubscribe();
     bridges.delete(session);
   };
@@ -369,6 +360,7 @@ export function checkSettled(session: AgentSession): void {
 /** After new/switch/branch/fork/open session: the detached run sends no terminal `agent_end`, and the command catalog may differ. */
 export async function afterSessionChange(session: AgentSession): Promise<void> {
   resetActivity(session);
+  resetAdvisorBoundary(session);
   const bridge = bridges.get(session);
   if (!bridge) return;
   void bridge.settle.check();

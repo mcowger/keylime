@@ -2,6 +2,7 @@
 
 import type { Static } from "@sinclair/typebox";
 import type { PlanStateSchema } from "@/lib/api-contracts/runner-native-events";
+import type { AgentStateResponse as AgentHttpStateResponse } from "@/lib/api-contracts/http-sessions";
 import {
   useState,
   useCallback,
@@ -1011,10 +1012,27 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const [advisorReviewPending, setAdvisorReviewPending] = useState(false);
   const advisorAppliedSeqRef = useRef(0);
   const applyAdvisorSnapshot = useCallback((seq: number, value: unknown) => {
-    if (seq <= advisorAppliedSeqRef.current) return;
+    if (typeof value !== "boolean" || seq <= advisorAppliedSeqRef.current)
+      return;
     advisorAppliedSeqRef.current = seq;
-    setAdvisorReviewPending(value === true);
+    setAdvisorReviewPending(value);
   }, []);
+  const applyAdvisorStateSnapshot = useCallback(
+    (
+      seq: number,
+      response: Partial<Pick<AgentHttpStateResponse, "running" | "recovered" | "state">>,
+    ) => {
+      // An unresponsive wrapper or an older runner without the field says
+      // nothing about review activity. Only a confirmed absent wrapper clears it.
+      const pending =
+        (isRecord(response.state) ? response.state.advisorReviewPending : undefined) ??
+        (response.running === false && !response.state && !response.recovered
+          ? false
+          : undefined);
+      applyAdvisorSnapshot(seq, pending);
+    },
+    [applyAdvisorSnapshot],
+  );
   useEffect(() => {
     advisorAppliedSeqRef.current = ++queueSeqRef.current;
     setAdvisorReviewPending(false);
@@ -1852,6 +1870,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                   .json()
                   .catch(() => ({}))) as {
                   running: boolean;
+                  recovered?: boolean;
                   state?: AgentStateResponse;
                   exited?: ExitedRpcSession;
                   outbox?: OutboxEntry[];
@@ -2057,7 +2076,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           }
 
           const liveState = agentState.state;
-          applyAdvisorSnapshot(queueRevision, liveState?.advisorReviewPending);
+          applyAdvisorStateSnapshot(queueRevision, agentState);
           if (liveState?.modelActivity)
             applyModelActivity(liveState.modelActivity);
           else if (!agentState.running) setModelActivity(IDLE_MODEL_ACTIVITY);
@@ -2135,7 +2154,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       applyAuthoritativeModel,
       beginAuthoritativeModelSync,
       applyQueueStateSnapshot,
-      applyAdvisorSnapshot,
+      applyAdvisorStateSnapshot,
     ],
   );
 
@@ -2483,10 +2502,14 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         const res = await fetchForHost(`/api/agent/${encodeURIComponent(sid)}`);
         if (!res.ok || !hookAliveRef.current || sessionIdRef.current !== sid)
           return;
-        const data = (await res.json()) as { running?: boolean; state?: AgentStateResponse };
+        const data = (await res.json()) as {
+          running?: boolean;
+          recovered?: boolean;
+          state?: AgentStateResponse;
+        };
         if (!hookAliveRef.current || sessionIdRef.current !== sid) return;
         applyQueueStateSnapshot(queueRevision, data.state?.queuedMessages);
-        applyAdvisorSnapshot(queueRevision, data.state?.advisorReviewPending);
+        applyAdvisorStateSnapshot(queueRevision, data);
         if (data.running && !newSessionPlanRef.current) {
           try {
             const state = await commandForHost<Static<typeof PlanStateSchema> | null>(sid, { type: "get_plan_state" });
@@ -2502,7 +2525,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         // The next live update or state snapshot heals these views.
       }
     },
-    [applyQueueStateSnapshot, applyAdvisorSnapshot, commandForHost, fetchForHost],
+    [applyQueueStateSnapshot, applyAdvisorStateSnapshot, commandForHost, fetchForHost],
   );
 
   const reconcileHandoff = useCallback(async () => {
@@ -3724,6 +3747,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         if (!res.ok) return;
         const data = (await res.json()) as {
           running?: boolean;
+          recovered?: boolean;
           state?: AgentStateResponse;
         };
         // A slow response can straddle a run boundary (previous run finished
@@ -3737,7 +3761,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         )
           return;
         const state = data.state;
-        applyAdvisorSnapshot(queueRevision, state?.advisorReviewPending);
+        applyAdvisorStateSnapshot(queueRevision, data);
         if (state?.modelActivity) applyModelActivity(state.modelActivity);
         else if (!data.running) setModelActivity(IDLE_MODEL_ACTIVITY);
         if (!promptDispatchPendingRef.current && state?.responseObserved)
@@ -3795,7 +3819,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       applyModelActivity,
       applyNativeCompacting,
       applyQueueStateSnapshot,
-      applyAdvisorSnapshot,
+      applyAdvisorStateSnapshot,
       finishPromptWithoutStream,
       refreshSubagentRoster,
     ],
@@ -4301,7 +4325,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
             fetchForHost(`/api/agent/${encodeURIComponent(endedSid)}`)
               .then((r) =>
                 r.ok
-                  ? (r.json() as Promise<{ state?: AgentStateResponse }>)
+                  ? (r.json() as Promise<{
+                      running?: boolean;
+                      recovered?: boolean;
+                      state?: AgentStateResponse;
+                    }>)
                   : null,
               )
               .then((d) => {
@@ -4317,10 +4345,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
                 // The queue does not depend on a model: an exited wrapper still
                 // means nothing is queued.
                 applyQueueStateSnapshot(queueRevision, d.state?.queuedMessages);
-                applyAdvisorSnapshot(
-                  queueRevision,
-                  d.state?.advisorReviewPending,
-                );
+                applyAdvisorStateSnapshot(queueRevision, d);
                 if (!d.state?.model) return;
                 const applied = applyAuthoritativeModel(
                   toThinkingModelMeta(d.state.model),
@@ -5065,6 +5090,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       beginAuthoritativeModelSync,
       setCompacting,
       applyAdvisorSnapshot,
+      applyAdvisorStateSnapshot,
       setLiveToolResult,
       surfaceQuotaOnStream,
       updateQueuedMessages,

@@ -1778,7 +1778,7 @@ export const RpcSessionStateSchema = {
     advisorReviewPending: {
       ...Type.Optional(Type.Boolean()),
       description:
-        "An active, unpaused advisor has output in its review backlog; mirrored by advisor_review.",
+        "An available advisor is evaluating a primary turn boundary, reviewing queued output, or delivering its review; mirrored by advisor_review. A false value does not guarantee a review was scheduled or completed.",
     },
     queuedMessages: {
       ...Type.Optional(QueuedMessagesSchema),

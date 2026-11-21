@@ -532,7 +532,12 @@ export const runnerEventSchemas: readonly TSchema[] = [
     "todo_auto_clear",
     "session_settled",
   ].map((type) => event(type)),
-  event("advisor_review", { pending: b() }),
+  event("advisor_review", {
+    pending: Type.Boolean({
+      description:
+        "Whether an available advisor is evaluating a turn boundary, reviewing queued output, or delivering its review. False does not guarantee a review was scheduled or completed.",
+    }),
+  }),
   event("ttsr_triggered", { rules: Type.Array(rule) }),
   event("todo_reminder", {
     todos: Type.Array(TodoItemSchema),

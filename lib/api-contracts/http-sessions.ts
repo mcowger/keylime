@@ -59,6 +59,7 @@ const agentState = Type.Object({
   state: Type.Optional(stateResult),
   recovered: Type.Optional(Type.Boolean()),
 });
+export type AgentStateResponse = Static<typeof agentState>;
 const runningSession = Type.Object({
   id: str(),
   cwd: str(),
