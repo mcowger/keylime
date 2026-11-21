@@ -107,7 +107,7 @@ With Follow Paseo enabled, open the right sidebar and select **Scripts** in a re
 
 Choose **Run** for a one-shot or **Start** for an entry with `"type": "service"`. Commands must stay in the foreground. **Stop** ends the run and keeps its output. **View output** opens the retained terminal, even after a browser reload. Closing that terminal stops the process and discards the screen. Changing the recipe or switching to Manual does not stop or hide retained runs. A host-daemon restart clears them.
 
-Commands run in the selected workspace and receive `PASEO_SOURCE_CHECKOUT_PATH`, `PASEO_WORKTREE_PATH`, and `PASEO_BRANCH_NAME` (empty on detached HEAD). They also receive the `PASEO_PROJECT_PATH`, `PASEO_WORKSPACE_PATH`, and `PASEO_BRANCH` aliases and their `OMP_` equivalents.
+Commands run in the selected workspace using the host account's interactive login shell, like a workspace terminal. Write commands in that shell's syntax; for example, fish does not accept all POSIX shell syntax. They receive `PASEO_SOURCE_CHECKOUT_PATH`, `PASEO_WORKTREE_PATH`, and `PASEO_BRANCH_NAME` (empty on detached HEAD), plus the `PASEO_PROJECT_PATH`, `PASEO_WORKSPACE_PATH`, and `PASEO_BRANCH` aliases and their `OMP_` equivalents.
 
 Services get `PASEO_PORT` on the owning host. Set `port` to an integer from 1 to 65535 for a fixed port, or omit it for an automatically assigned port. An occupied fixed port is refused. If the recipe sets `worktree.servicePorts`, specify an explicit port for each service you start; Keylime does not use the custom allocator.
 

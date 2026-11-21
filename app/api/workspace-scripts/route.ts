@@ -52,7 +52,7 @@ export async function GET(request: Request) {
  * @apiContract workspaceScriptsPost
  * @apiUsage Launch a named Paseo script or stop a retained run.
  * @apiInputs Send hostId, cwd and either a launch action with name or a stop action with terminalId, as at most 64 KiB of JSON.
- * @apiInvariants Commands are selected by exact recipe name on the owning host; requests do not supply shell text. A successful launch does not imply readiness.
+ * @apiInvariants Commands are selected by exact recipe name on the owning host; requests do not supply shell text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. A successful launch does not imply readiness.
  * @apiEffects Launch starts a host terminal; stop ends the run while retaining its screen.
  * @apiRecovery List runs after an uncertain response before retrying a mutation.
  */

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import test from "node:test";
@@ -168,6 +174,90 @@ test("workspace terminals prefer the OS login shell over the service environment
     else process.env.SHELL = previousShell;
     if (home === undefined) delete process.env.HOME;
     else process.env.HOME = home;
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("Paseo scripts and services use the terminal's interactive login shell", async (t) => {
+  const fish = Bun.which("fish");
+  if (!fish) return t.skip("fish is not installed");
+  const sandbox = realpathSync(
+    mkdtempSync(join(tmpdir(), "keylime-paseo-shell-")),
+  );
+  const cwd = join(sandbox, "workspace");
+  const config = join(sandbox, "config");
+  const original = {
+    agentDir: process.env.PI_CODING_AGENT_DIR,
+    shell: process.env.SHELL,
+    home: process.env.HOME,
+    config: process.env.XDG_CONFIG_HOME,
+    password: process.env.KEYLIME_PASSWORD_HASH,
+  };
+  process.env.PI_CODING_AGENT_DIR = join(sandbox, "agent");
+  process.env.SHELL = "/bin/false";
+  process.env.HOME = sandbox;
+  process.env.XDG_CONFIG_HOME = config;
+  process.env.KEYLIME_PASSWORD_HASH = "fixture-host-secret";
+  const manager = new TerminalManager(
+    () => {},
+    () => false,
+    () => ({ shell: fish, home: sandbox }),
+  );
+  try {
+    mkdirSync(cwd);
+    mkdirSync(join(config, "fish"), { recursive: true });
+    writeFileSync(
+      join(config, "fish", "config.fish"),
+      [
+        "function paseo_shell_probe",
+        '  if status is-login; and status is-interactive; and test "$SHELL" = "$EXPECTED_SHELL"; and not set -q KEYLIME_PASSWORD_HASH',
+        '    printf "startup:%s:%s\\n" "$PASEO_BRANCH_NAME" "$PASEO_PORT"',
+        "  end",
+        "end",
+      ].join("\n"),
+    );
+    registerEffortRoot(cwd, "Paseo shell fixture");
+    for (const kind of ["script", "service"] as const) {
+      const terminal = manager.startWorkspaceScript({
+        cwd,
+        name: kind,
+        kind,
+        command: "paseo_shell_probe; exit 7",
+        env: { EXPECTED_SHELL: fish, PASEO_BRANCH_NAME: "fixture" },
+      });
+      const deadline = Date.now() + 10000;
+      let snapshot = "";
+      while (Date.now() < deadline) {
+        snapshot = (await manager.snapshot(terminal.id)).snapshot;
+        if (
+          !manager.isRunning(terminal.id) &&
+          snapshot.includes("startup:fixture:")
+        )
+          break;
+        await setImmediate();
+      }
+      const run = manager
+        .listWorkspaceScriptRuns(cwd)
+        .find((entry) => entry.name === kind)?.run;
+      assert.equal(run?.status, "exited", snapshot);
+      assert.equal(run?.exitCode, 7, snapshot);
+      assert.match(
+        snapshot,
+        kind === "service" ? /startup:fixture:\d+/ : /startup:fixture:/,
+      );
+    }
+  } finally {
+    await manager.stop();
+    for (const [name, value] of Object.entries({
+      PI_CODING_AGENT_DIR: original.agentDir,
+      SHELL: original.shell,
+      HOME: original.home,
+      XDG_CONFIG_HOME: original.config,
+      KEYLIME_PASSWORD_HASH: original.password,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
     rmSync(sandbox, { recursive: true, force: true });
   }
 });

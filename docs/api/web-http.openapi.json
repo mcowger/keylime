@@ -102399,7 +102399,7 @@
         }
       },
       "post": {
-        "description": "### Usage\n\nLaunch a named Paseo script or stop a retained run.\n\n### Inputs\n\nSend hostId, cwd and either a launch action with name or a stop action with terminalId, as at most 64 KiB of JSON.\n\n### Invariants\n\nCommands are selected by exact recipe name on the owning host; requests do not supply shell text. A successful launch does not imply readiness.\n\n### Effects\n\nLaunch starts a host terminal; stop ends the run while retaining its screen.\n\n### Recovery\n\nList runs after an uncertain response before retrying a mutation.",
+        "description": "### Usage\n\nLaunch a named Paseo script or stop a retained run.\n\n### Inputs\n\nSend hostId, cwd and either a launch action with name or a stop action with terminalId, as at most 64 KiB of JSON.\n\n### Invariants\n\nCommands are selected by exact recipe name on the owning host; requests do not supply shell text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. A successful launch does not imply readiness.\n\n### Effects\n\nLaunch starts a host terminal; stop ends the run while retaining its screen.\n\n### Recovery\n\nList runs after an uncertain response before retrying a mutation.",
         "operationId": "workspaceScriptsPost",
         "requestBody": {
           "content": {
@@ -102901,7 +102901,7 @@
         "x-client-semantics": {
           "Effects": "Launch starts a host terminal; stop ends the run while retaining its screen.",
           "Inputs": "Send hostId, cwd and either a launch action with name or a stop action with terminalId, as at most 64 KiB of JSON.",
-          "Invariants": "Commands are selected by exact recipe name on the owning host; requests do not supply shell text. A successful launch does not imply readiness.",
+          "Invariants": "Commands are selected by exact recipe name on the owning host; requests do not supply shell text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. A successful launch does not imply readiness.",
           "Recovery": "List runs after an uncertain response before retrying a mutation.",
           "Usage": "Launch a named Paseo script or stop a retained run."
         }

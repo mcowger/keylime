@@ -562,7 +562,7 @@ export class TerminalManager {
         "terminal_limit",
         "Too many terminals on this host",
       );
-    const account = argv ? undefined : this.resolveAccount();
+    const account = !argv || named ? this.resolveAccount() : undefined;
     const envShell = globalThis.process.env.SHELL;
     const shell =
       account?.shell || (executableShell(envShell) ? envShell : "/bin/sh");
@@ -614,19 +614,22 @@ export class TerminalManager {
     }
     let process: Bun.Subprocess;
     try {
-      // csh/tcsh require -l to be the only flag; the PTY makes them interactive.
+      // csh login mode requires argv[0] to begin with '-' when passing a command.
+      const csh = /^(?:tcsh|csh)$/.test(basename(shell));
       process = Bun.spawn(
-        argv ??
-          (/^(?:tcsh|csh)$/.test(basename(shell))
-            ? [shell, "-l"]
-            : [shell, "-i", "-l"]),
+        named
+          ? csh
+            ? [shell, "-i", "-c", argv![2]]
+            : [shell, "-i", "-l", "-c", argv![2]]
+          : (argv ?? (csh ? [shell, "-l"] : [shell, "-i", "-l"])),
         {
+          ...(named && csh ? { argv0: `-${basename(shell)}` } : {}),
           detached: true,
           cwd: directory,
           env: createChildProcessEnvironment(
             {
               ...serviceEnv,
-              ...(!argv
+              ...(!argv || named
                 ? {
                     SHELL: shell,
                     ...(!globalThis.process.env.HOME && account?.home

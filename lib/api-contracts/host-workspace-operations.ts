@@ -107,7 +107,7 @@ Recovery: Re-list or snapshot after disconnection; a restarted daemon does not p
     "workspaceScripts",
     `Usage: List or control named Paseo scripts and services for a workspace.
 Inputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.
-Invariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.
+Invariants: Commands come from the host's current recipe, never from request text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. Running means alive, not ready.
 Effects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.
 Recovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.`,
     obj({ input: M.WorkspaceScriptsRequestSchema }),

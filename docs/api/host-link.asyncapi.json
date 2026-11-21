@@ -1976,7 +1976,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to workspaceScripts; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+        "description": "Reply to workspaceScripts; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
         "name": "HostReply_workspaceScripts",
         "payload": {
           "$ref": "#/components/schemas/HostReply_workspaceScripts"
@@ -3056,7 +3056,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+        "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
         "name": "HostRequest_workspaceScripts",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_workspaceScripts"
@@ -81815,7 +81815,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to workspaceScripts; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+        "description": "Reply to workspaceScripts; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
         "title": "HostReply_workspaceScripts"
       },
       "HostRequest_activateHostArtifact": {
@@ -88074,7 +88074,7 @@
         "type": "object"
       },
       "HostRequest_workspaceScripts": {
-        "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+        "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
         "properties": {
           "args": {
             "properties": {
@@ -90225,7 +90225,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
+      "description": "Usage: List or control named Paseo scripts and services for a workspace.\nInputs: List by host cwd, launch an exact recipe name, or stop a retained run by terminal ID.\nInvariants: Commands come from the host's current recipe, never from request text. They run in the host account's interactive login shell, falling back to the daemon's SHELL or /bin/sh when unavailable, and must use that shell's syntax. Running means alive, not ready.\nEffects: Launch starts a daemon-owned terminal; stop ends the process while retaining its screen. List observes current entries and retained runs.\nRecovery: List after uncertain delivery before retrying; a restarted daemon does not preserve runs.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_workspaceScripts"
