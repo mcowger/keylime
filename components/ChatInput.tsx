@@ -5246,7 +5246,9 @@ export const ChatInput = memo(
                         className="picker-panel"
                         style={{
                           position: isMobile ? "fixed" : "absolute",
-                          bottom: isMobile ? 8 : "calc(100% + 6px)",
+                          bottom: isMobile
+                            ? "calc(8px + env(safe-area-inset-bottom, 0px))"
+                            : "calc(100% + 6px)",
                           ...(isMobile
                             ? {
                                 left: 8,
@@ -5261,7 +5263,7 @@ export const ChatInput = memo(
                           display: "flex",
                           flexDirection: "column",
                           maxHeight: isMobile
-                            ? "calc(100dvh - 32px)"
+                            ? "calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))"
                             : "min(360px, calc(100dvh - 32px))",
                         }}
                       >

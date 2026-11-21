@@ -256,6 +256,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- The mobile model picker and terminal keys clear the device's bottom safe area in installed apps.
 - Paseo scripts and services use the host account's interactive login shell, matching workspace terminals.
 - Ship now watches the pushed PR and merges only after its checks pass and GitHub reports it mergeable, instead of attempting an immediate merge.
 - Workspace terminal scrollbars stay within the visible terminal after tab switches and resizes, so you can scroll back to the latest output and prompt.
@@ -463,6 +464,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - New workspace terminals start the host account's interactive login shell, even when the daemon inherits a different `SHELL`
 - Ship now watches the pushed PR and merges only after its checks pass and GitHub reports it mergeable, instead of attempting an immediate merge
 - Paseo scripts and services use the host account's interactive login shell, matching workspace terminals
+- Mobile model picker and terminal key controls now account for the device's bottom safe area in installed apps
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
