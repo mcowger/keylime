@@ -8,12 +8,20 @@ import {
   useRef,
   useState,
 } from "react";
+import type { Static } from "@sinclair/typebox";
+import type { GitActionRequestSchema } from "@/lib/api-contracts/workspace-models";
+import type { GitAction } from "@/lib/workspace-types";
+import { Popover } from "@base-ui/react/popover";
 import {
   AtSign,
+  ArrowDownToLine,
+  ArrowUpFromLine,
   Check,
   ChevronRight,
   ExternalLink,
   GitBranch,
+  GitMerge,
+  Download,
   RefreshCw,
   Search,
   X,
@@ -41,6 +49,20 @@ const COLLAPSE_REASON_LABEL_KEYS: Record<GitCollapseReason, string> = {
   documentation: "gitChanges.reasonDocumentation",
   "no-diff": "gitChanges.reasonNoDiff",
 };
+
+const ACTION_BUTTON_STYLE = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 26,
+  height: 26,
+  padding: 0,
+  background: "none",
+  border: "none",
+  borderRadius: "var(--radius-control)",
+  color: "var(--text-dim)",
+  flexShrink: 0,
+} as const;
 
 interface Props {
   cwd: string;
@@ -130,6 +152,21 @@ export function GitChangesPanel({
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   const [showAttributeFiles, setShowAttributeFiles] = useState(false);
+  const [statusOwner, setStatusOwner] = useState<string | null>(null);
+  const [actionErrors, setActionErrors] = useState<
+    Record<string, string | null>
+  >({});
+  const [rebaseOpen, setRebaseOpen] = useState(false);
+  const pendingWorkspaces = useRef(new Set<string>());
+  const [pendingKeys, setPendingKeys] = useState<Set<string>>(() => new Set());
+  const mounted = useRef(false);
+  const owner = JSON.stringify([hostId, cwd, sourceSessionId ?? null]);
+  const workspace = JSON.stringify([hostId, cwd]);
+  const currentWorkspace = useRef(workspace);
+  currentWorkspace.current = workspace;
+  const actionError = actionErrors[owner];
+  const actionsDisabled =
+    loading || !isRepo || statusOwner !== owner || pendingKeys.has(workspace);
   const attributeListId = useId();
   const filterInputRef = useRef<HTMLInputElement>(null);
   const patchRequestRef = useRef(0);
@@ -141,12 +178,79 @@ export function GitChangesPanel({
   onRefreshDoneRef.current = onRefreshDone;
 
   useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setRebaseOpen(false);
+  }, [owner]);
+
+  const runAction = useCallback(
+    async (action: GitAction) => {
+      if (pendingWorkspaces.current.has(workspace)) return;
+      pendingWorkspaces.current.add(workspace);
+      setPendingKeys(new Set(pendingWorkspaces.current));
+      setRebaseOpen(false);
+      setActionErrors((errors) => ({ ...errors, [owner]: null }));
+      let actionError: string | null = null;
+      try {
+        const response = await fetch("/api/git/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cwd,
+            hostId,
+            sessionId: sourceSessionId ?? null,
+            action,
+          } satisfies Static<typeof GitActionRequestSchema>),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as {
+            error?: string;
+            code?: string;
+          };
+          const formatted = formatApiError({
+            ...body,
+            error:
+              body.error ??
+              translate("gitChanges.actionFailed", { status: response.status }),
+          });
+          actionError =
+            body.error && body.error !== formatted
+              ? `${formatted}\n${body.error}`
+              : formatted;
+        }
+      } catch (error) {
+        actionError = `${translate("gitChanges.actionUncertain")}\n${error instanceof Error ? error.message : String(error)}`;
+      } finally {
+        pendingWorkspaces.current.delete(workspace);
+        if (mounted.current) {
+          setPendingKeys(new Set(pendingWorkspaces.current));
+          if (actionError) {
+            actionError += `\n${translate("gitChanges.actionCheckState")}`;
+            if (action === "rebase-main" || action === "rebase-origin-main")
+              actionError += `\n${translate("gitChanges.rebaseRecovery")}`;
+          }
+          setActionErrors((errors) => ({ ...errors, [owner]: actionError }));
+          if (currentWorkspace.current === workspace)
+            setTreeRefreshKey((key) => key + 1);
+        }
+      }
+    },
+    [cwd, hostId, sourceSessionId, owner, workspace],
+  );
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     fetchStatus(cwd, hostId, sourceSessionId)
       .then((status) => {
         if (cancelled) return;
+        setStatusOwner(owner);
         const nextFiles = status.isGitRepository ? status.files : [];
         setFiles(nextFiles);
         setIsRepo(status.isGitRepository);
@@ -165,6 +269,7 @@ export function GitChangesPanel({
       })
       .catch((e) => {
         if (cancelled) return;
+        setStatusOwner(owner);
         setFiles([]);
         setIsRepo(false);
         setSelectedPath(null);
@@ -177,7 +282,7 @@ export function GitChangesPanel({
     return () => {
       cancelled = true;
     };
-  }, [cwd, hostId, sourceSessionId, refreshToken]);
+  }, [cwd, hostId, sourceSessionId, refreshToken, owner]);
 
   useEffect(() => {
     if (!selectedPath) {
@@ -492,6 +597,90 @@ export function GitChangesPanel({
             <X size={12} strokeWidth={2.4} aria-hidden="true" />
           </button>
         )}
+        {(
+          [
+            ["push", "gitChanges.push", ArrowUpFromLine],
+            ["pull", "gitChanges.pull", ArrowDownToLine],
+            ["fetch", "gitChanges.fetch", Download],
+          ] as const
+        ).map(([action, label, Icon]) => (
+          <button
+            key={action}
+            type="button"
+            className="ui-focus-ring"
+            title={t(label)}
+            aria-label={t(label)}
+            disabled={actionsDisabled}
+            onClick={() => void runAction(action)}
+            style={{
+              ...ACTION_BUTTON_STYLE,
+              cursor: actionsDisabled ? "default" : "pointer",
+              opacity: actionsDisabled ? 0.5 : 1,
+            }}
+          >
+            <Icon size={14} strokeWidth={2} aria-hidden="true" />
+          </button>
+        ))}
+        <Popover.Root open={rebaseOpen} onOpenChange={setRebaseOpen}>
+          <Popover.Trigger
+            type="button"
+            className="ui-focus-ring"
+            title={t("gitChanges.rebase")}
+            aria-label={t("gitChanges.rebase")}
+            disabled={actionsDisabled}
+            style={{
+              ...ACTION_BUTTON_STYLE,
+              cursor: actionsDisabled ? "default" : "pointer",
+              opacity: actionsDisabled ? 0.5 : 1,
+            }}
+          >
+            <GitMerge size={14} strokeWidth={2} aria-hidden="true" />
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Positioner
+              side="bottom"
+              align="end"
+              sideOffset={4}
+              collisionPadding={8}
+              style={{ zIndex: 220 }}
+            >
+              <Popover.Popup
+                className="picker-panel ui-focus-ring"
+                aria-label={t("gitChanges.rebase")}
+                style={{ padding: 4, minWidth: 150 }}
+              >
+                {(
+                  [
+                    ["rebase-main", "gitChanges.rebaseLocalMain"],
+                    ["rebase-origin-main", "gitChanges.rebaseOriginMain"],
+                  ] as const
+                ).map(([action, label]) => (
+                  <button
+                    key={action}
+                    type="button"
+                    className="ui-focus-ring"
+                    disabled={actionsDisabled}
+                    onClick={() => void runAction(action)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "6px 8px",
+                      border: "none",
+                      borderRadius: "var(--radius-control)",
+                      background: "none",
+                      color: "var(--text)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      textAlign: "left",
+                    }}
+                  >
+                    {t(label)}
+                  </button>
+                ))}
+              </Popover.Popup>
+            </Popover.Positioner>
+          </Popover.Portal>
+        </Popover.Root>
         <button
           className="git-refresh"
           type="button"
@@ -524,6 +713,21 @@ export function GitChangesPanel({
           <RefreshCw size={13} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
+
+      {actionError && (
+        <div
+          role="alert"
+          style={{
+            padding: "8px 12px",
+            color: "var(--status-error)",
+            fontSize: 11,
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {actionError}
+        </div>
+      )}
 
       {loading ? (
         <div

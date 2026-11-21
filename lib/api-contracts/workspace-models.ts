@@ -662,6 +662,49 @@ export const GitFileStatusSchema = Type.Object(
       "Git status for a file, including normalized category and separate raw index and worktree status codes.",
   },
 );
+export const GitActionSchema = Type.Union(
+  [
+    Type.Literal("push"),
+    Type.Literal("pull"),
+    Type.Literal("fetch"),
+    Type.Literal("rebase-main"),
+    Type.Literal("rebase-origin-main"),
+  ],
+  {
+    description:
+      "Git operation to execute on the owning host; rebase targets a local ref without fetching.",
+  },
+);
+export const GitActionRequestSchema = Type.Object(
+  {
+    cwd: Type.String({
+      description:
+        "Checkout directory on the owning host; a session overrides this value.",
+    }),
+    hostId: Type.String({
+      description: "Identifier of the host owning the checkout.",
+    }),
+    sessionId: Type.Optional(
+      Type.Union([Type.String(), Type.Null()], {
+        description:
+          "Optional session whose host and working directory are authoritative.",
+      }),
+    ),
+    action: GitActionSchema,
+  },
+  {
+    description:
+      "Request one Git action in an authorized workspace on its owning host.",
+  },
+);
+export const GitActionResponseSchema = Type.Object(
+  {
+    output: Type.String({
+      description: "Bounded Git stdout and stderr from the completed action.",
+    }),
+  },
+  { description: "Output from a successfully completed Git action." },
+);
 export const GitStatusResponseSchema = Type.Object(
   {
     isGitRepository: Type.Boolean(),

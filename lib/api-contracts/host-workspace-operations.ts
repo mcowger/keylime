@@ -410,6 +410,16 @@ Recovery: Refresh after filesystem or Git changes.`,
     M.GitStatusResponseSchema,
   ),
   op(
+    "gitAction",
+    `Usage: Execute a Git action on a host checkout.
+Inputs: cwd and optional session owner identify the authorized workspace; action selects push, pull, fetch or a rebase target.
+Invariants: A session owner confines access to its authoritative workspace. Push passes no force options and honors Git configuration. Rebase uses existing main or origin/main without fetching.
+Effects: Runs Git once; network actions contact the remote, and conflicts leave Git's normal in-progress state intact.
+Recovery: Inspect repository and remote state after a timeout or link loss before deciding what to do; resolve or abort conflicts using Git.`,
+    obj({ cwd: str, action: M.GitActionSchema, owner }),
+    M.GitActionResponseSchema,
+  ),
+  op(
     "gitDiff",
     `Usage: Inspect a file's Git diff.
 Inputs: cwd, path and optional owner identify a host checkout and file.

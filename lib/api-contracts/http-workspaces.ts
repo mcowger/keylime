@@ -15,6 +15,8 @@ import {
   WorkspaceIndexSchema,
   GitStatusResponseSchema,
   GitFileDiffResponseSchema,
+  GitActionRequestSchema,
+  GitActionResponseSchema,
   WorkspaceDirectoryBrowseSchema,
   HierarchyRequestSchema,
   HierarchySnapshotSchema,
@@ -338,6 +340,24 @@ export const workspaceHttpOperations: readonly HttpOperation[] = [
     {
       parameters: [hostId, session, cwd],
       responses: responses(GitStatusResponseSchema),
+    },
+  ),
+  ops(
+    "/api/git/action",
+    "post",
+    "workspaceGitAction",
+    "Run a workspace Git action",
+    {
+      requestBody: jsonBody(GitActionRequestSchema),
+      responses: {
+        ...responses(GitActionResponseSchema),
+        502: error(
+          "The host returned an invalid result; the Git action may have run.",
+        ),
+        504: error(
+          "The host or Git action timed out; inspect repository and remote state before deciding what to do.",
+        ),
+      },
     },
   ),
   ops("/api/git/diff", "get", "workspaceGitDiff", "Get a workspace file diff", {

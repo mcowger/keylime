@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -33,6 +33,8 @@ import { isBashOutputPathReferencedBySession } from "../session-file-references"
 import { isRecord } from "../type-guards";
 import type {
   GitOrigin,
+  GitAction,
+  GitActionResponse,
   WorkspaceFileEvent,
   WorkspaceFileInfo,
   WorkspaceFileRequest,
@@ -121,6 +123,122 @@ const git = async (cwd: string, ...args: string[]) =>
       env: createGitEnvironment({ LC_ALL: "C" }),
     })
   ).stdout;
+
+const gitActionArgs: Record<GitAction, readonly string[]> = {
+  push: ["push"],
+  pull: ["pull", "--no-edit"],
+  fetch: ["fetch"],
+  "rebase-main": ["rebase", "refs/heads/main"],
+  "rebase-origin-main": ["rebase", "refs/remotes/origin/main"],
+};
+
+async function runGitAction(
+  cwd: string,
+  action: GitAction,
+): Promise<GitActionResponse> {
+  if (typeof action !== "string" || !Object.hasOwn(gitActionArgs, action))
+    throw invalid();
+  try {
+    const { promise, resolve, reject } = Promise.withResolvers<{
+      stdout: string;
+      stderr: string;
+    }>();
+    let timedOut = false;
+    let outputBytes = 0;
+    let overflow = false;
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    const child = spawn("git", ["-C", cwd, ...gitActionArgs[action]], {
+      detached: true,
+      env: createGitEnvironment({
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_ASKPASS: "false",
+        SSH_ASKPASS: "false",
+        SSH_ASKPASS_REQUIRE: "never",
+        GIT_EDITOR: "true",
+        GIT_SEQUENCE_EDITOR: "true",
+        GIT_MERGE_AUTOEDIT: "no",
+      }),
+    });
+    const terminate = () => {
+      try {
+        if (child.pid) process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminate();
+    }, 20_000);
+    timer.unref?.();
+    const collect = (chunks: Buffer[], chunk: Buffer) => {
+      outputBytes += chunk.length;
+      if (outputBytes > 1024 * 1024) {
+        overflow = true;
+        terminate();
+      } else chunks.push(chunk);
+    };
+    child.stdout.on("data", (chunk: Buffer) => collect(stdoutChunks, chunk));
+    child.stderr.on("data", (chunk: Buffer) => collect(stderrChunks, chunk));
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      const output = {
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stderr: Buffer.concat(stderrChunks).toString("utf8"),
+      };
+      if (code !== 0 || signal || timedOut || overflow) {
+        reject(
+          Object.assign(new Error("Git action failed"), output, {
+            timedOut,
+            signal,
+            code: overflow ? "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" : code,
+          }),
+        );
+      } else resolve(output);
+    });
+    child.stdin.end();
+    const { stdout, stderr } = await promise;
+    return {
+      output: [stdout, stderr].filter(Boolean).join("\n").slice(0, 32768),
+    };
+  } catch (error) {
+    const failure = error as Error & {
+      stdout?: string;
+      stderr?: string;
+      killed?: boolean;
+      signal?: string;
+      code?: string | number;
+      timedOut?: boolean;
+    };
+    const details = [failure.stderr, failure.stdout]
+      .filter(Boolean)
+      .join("\n")
+      .trim()
+      .slice(0, 30000);
+    if (
+      failure.timedOut ||
+      failure.killed ||
+      failure.signal ||
+      failure.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+    )
+      throw new HostOpError(
+        504,
+        "git_outcome_unknown",
+        `Git did not finish normally; its outcome may be unknown. Inspect the repository and remote before deciding what to do.${details ? `\n${details}` : ""}`,
+      );
+    throw new HostOpError(
+      409,
+      "git_action_failed",
+      details || failure.message || "Git action failed",
+    );
+  }
+}
 
 /** Unauthorized, missing and non-repository paths answer the same as a plain folder. */
 async function gitOrigin(requested: string): Promise<Omit<GitOrigin, "path">> {
@@ -408,6 +526,10 @@ export function createWorkspaceService(
     gitStatus: (cwd, owner) =>
       result(async () =>
         getGitStatus(await authorizeWorkspaceDirectory(cwd, owner)),
+      ),
+    gitAction: (cwd, action, owner) =>
+      result(async () =>
+        runGitAction(await authorizeWorkspaceDirectory(cwd, owner), action),
       ),
     gitDiff: (cwd, requested, owner) =>
       result(async () => {

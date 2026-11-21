@@ -32462,6 +32462,97 @@
         }
       ]
     },
+    "host_gitAction_args": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "const": "push",
+              "type": "string"
+            },
+            {
+              "const": "pull",
+              "type": "string"
+            },
+            {
+              "const": "fetch",
+              "type": "string"
+            },
+            {
+              "const": "rebase-main",
+              "type": "string"
+            },
+            {
+              "const": "rebase-origin-main",
+              "type": "string"
+            }
+          ],
+          "description": "Git operation to execute on the owning host; rebase targets a local ref without fetching."
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "owner": {
+          "description": "Derived from a live wrapper or durable creation journal, never browser cwd.",
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": ["sessionId", "cwd"],
+          "type": "object"
+        }
+      },
+      "required": ["cwd", "action"],
+      "type": "object"
+    },
+    "host_gitAction_result": {
+      "anyOf": [
+        {
+          "properties": {
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            },
+            "value": {
+              "description": "Output from a successfully completed Git action.",
+              "properties": {
+                "output": {
+                  "description": "Bounded Git stdout and stderr from the completed action.",
+                  "type": "string"
+                }
+              },
+              "required": ["output"],
+              "type": "object"
+            }
+          },
+          "required": ["ok", "value"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "number"
+            }
+          },
+          "required": ["ok", "status", "code", "error"],
+          "type": "object"
+        }
+      ]
+    },
     "host_gitDiff_args": {
       "properties": {
         "cwd": {
@@ -196011,6 +196102,93 @@
         }
       },
       "required": ["path", "isDir"],
+      "type": "object"
+    },
+    "workspace_GitAction": {
+      "anyOf": [
+        {
+          "const": "push",
+          "type": "string"
+        },
+        {
+          "const": "pull",
+          "type": "string"
+        },
+        {
+          "const": "fetch",
+          "type": "string"
+        },
+        {
+          "const": "rebase-main",
+          "type": "string"
+        },
+        {
+          "const": "rebase-origin-main",
+          "type": "string"
+        }
+      ],
+      "description": "Git operation to execute on the owning host; rebase targets a local ref without fetching."
+    },
+    "workspace_GitActionRequest": {
+      "description": "Request one Git action in an authorized workspace on its owning host.",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "const": "push",
+              "type": "string"
+            },
+            {
+              "const": "pull",
+              "type": "string"
+            },
+            {
+              "const": "fetch",
+              "type": "string"
+            },
+            {
+              "const": "rebase-main",
+              "type": "string"
+            },
+            {
+              "const": "rebase-origin-main",
+              "type": "string"
+            }
+          ],
+          "description": "Git operation to execute on the owning host; rebase targets a local ref without fetching."
+        },
+        "cwd": {
+          "description": "Checkout directory on the owning host; a session overrides this value.",
+          "type": "string"
+        },
+        "hostId": {
+          "description": "Identifier of the host owning the checkout.",
+          "type": "string"
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional session whose host and working directory are authoritative."
+        }
+      },
+      "required": ["cwd", "hostId", "action"],
+      "type": "object"
+    },
+    "workspace_GitActionResponse": {
+      "description": "Output from a successfully completed Git action.",
+      "properties": {
+        "output": {
+          "description": "Bounded Git stdout and stderr from the completed action.",
+          "type": "string"
+        }
+      },
+      "required": ["output"],
       "type": "object"
     },
     "workspace_GitCollapseReason": {

@@ -398,6 +398,8 @@ export function validWorkspaceResult(
             typeof tree.isMain === "boolean",
         )
       );
+    case "gitAction":
+      return text(value.output);
     case "gitStatus":
       return (
         typeof value.isGitRepository === "boolean" &&

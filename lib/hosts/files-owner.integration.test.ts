@@ -258,6 +258,8 @@ const { closeNotificationStore } = await import("../notification-store.ts");
 const filesRoute = await import("../../app/api/files/[...path]/route.ts");
 const indexRoute = await import("../../app/api/file-index/route.ts");
 const statusRoute = await import("../../app/api/git/status/route.ts");
+// Route imports follow fixture environment initialization so host resolution uses this isolated store.
+const actionRoute = await import("../../app/api/git/action/route.ts");
 const diffRoute = await import("../../app/api/git/diff/route.ts");
 allowFileRoot(central.project);
 
@@ -1191,6 +1193,26 @@ test("Git status and diff preserve DTOs and unpublished owner changes without gr
     ).status,
     403,
   );
+});
+
+test("Git actions bind to the session host and cwd and reject malformed or mismatched requests", async () => {
+  const remote = join(scratch, "action-owner.git");
+  git(scratch, "init", "--bare", "-q", remote);
+  git(ownerA.project, "push", remote, "HEAD:refs/heads/main");
+  git(ownerA.project, "remote", "add", "origin", remote);
+  const post = (body: unknown) => actionRoute.POST(new Request("http://main.test/api/git/action", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }));
+  const body = { hostId: ownerA.hostId, sessionId: A_ID, cwd: central.project, action: "fetch" };
+  const response = await post(body);
+  assert.equal(response.status, 200);
+  assert.equal(typeof (await response.json()).output, "string");
+  assert.equal(git(ownerA.project, "rev-parse", "refs/remotes/origin/main").trim(), git(remote, "rev-parse", "refs/heads/main").trim());
+  assert.equal((await post({ ...body, hostId: "local" })).status, 404);
+  assert.equal((await post({ ...body, action: "push --force" })).status, 400);
+  assert.equal((await post({ ...body, sessionId: 123 })).status, 400);
 });
 
 test("two native owner watches keep the same logical path separate and detach on unsubscribe", async (t) => {

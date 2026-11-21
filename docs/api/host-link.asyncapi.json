@@ -160,6 +160,9 @@
         "HostReply_fileInfo": {
           "$ref": "#/components/messages/HostReply_fileInfo"
         },
+        "HostReply_gitAction": {
+          "$ref": "#/components/messages/HostReply_gitAction"
+        },
         "HostReply_gitDiff": {
           "$ref": "#/components/messages/HostReply_gitDiff"
         },
@@ -423,6 +426,9 @@
         },
         "HostRequest_fileInfo": {
           "$ref": "#/components/messages/HostRequest_fileInfo"
+        },
+        "HostRequest_gitAction": {
+          "$ref": "#/components/messages/HostRequest_gitAction"
         },
         "HostRequest_gitDiff": {
           "$ref": "#/components/messages/HostRequest_gitDiff"
@@ -1142,6 +1148,18 @@
           "$ref": "#/components/schemas/HostReply_fileInfo"
         },
         "title": "HostReply_fileInfo"
+      },
+      "HostReply_gitAction": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to gitAction; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Execute a Git action on a host checkout.\nInputs: cwd and optional session owner identify the authorized workspace; action selects push, pull, fetch or a rebase target.\nInvariants: A session owner confines access to its authoritative workspace. Push passes no force options and honors Git configuration. Rebase uses existing main or origin/main without fetching.\nEffects: Runs Git once; network actions contact the remote, and conflicts leave Git's normal in-progress state intact.\nRecovery: Inspect repository and remote state after a timeout or link loss before deciding what to do; resolve or abort conflicts using Git.",
+        "name": "HostReply_gitAction",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_gitAction"
+        },
+        "title": "HostReply_gitAction"
       },
       "HostReply_gitDiff": {
         "contentType": "application/json",
@@ -2198,6 +2216,18 @@
           "$ref": "#/components/schemas/HostRequest_fileInfo"
         },
         "title": "HostRequest_fileInfo"
+      },
+      "HostRequest_gitAction": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Execute a Git action on a host checkout.\nInputs: cwd and optional session owner identify the authorized workspace; action selects push, pull, fetch or a rebase target.\nInvariants: A session owner confines access to its authoritative workspace. Push passes no force options and honors Git configuration. Rebase uses existing main or origin/main without fetching.\nEffects: Runs Git once; network actions contact the remote, and conflicts leave Git's normal in-progress state intact.\nRecovery: Inspect repository and remote state after a timeout or link loss before deciding what to do; resolve or abort conflicts using Git.",
+        "name": "HostRequest_gitAction",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_gitAction"
+        },
+        "title": "HostRequest_gitAction"
       },
       "HostRequest_gitDiff": {
         "contentType": "application/json",
@@ -47727,6 +47757,192 @@
         "description": "Reply to fileInfo; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Inspect a workspace filesystem entry.\nInputs: File request supplies path segments and optional session ownership.\nInvariants: Paths resolve on the host and access restrictions apply.\nEffects: Reads file metadata, not file contents.\nRecovery: Re-query after a change; metadata is a snapshot.",
         "title": "HostReply_fileInfo"
       },
+      "HostReply_gitAction": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "ok": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "value": {
+                        "description": "Output from a successfully completed Git action.",
+                        "properties": {
+                          "output": {
+                            "description": "Bounded Git stdout and stderr from the completed action.",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["output"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["ok", "value"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "ok": {
+                        "const": false,
+                        "type": "boolean"
+                      },
+                      "status": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["ok", "status", "code", "error"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "ok": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "value": {
+                      "description": "Output from a successfully completed Git action.",
+                      "properties": {
+                        "output": {
+                          "description": "Bounded Git stdout and stderr from the completed action.",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["output"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["ok", "value"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["ok", "status", "code", "error"],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to gitAction; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Execute a Git action on a host checkout.\nInputs: cwd and optional session owner identify the authorized workspace; action selects push, pull, fetch or a rebase target.\nInvariants: A session owner confines access to its authoritative workspace. Push passes no force options and honors Git configuration. Rebase uses existing main or origin/main without fetching.\nEffects: Runs Git once; network actions contact the remote, and conflicts leave Git's normal in-progress state intact.\nRecovery: Inspect repository and remote state after a timeout or link loss before deciding what to do; resolve or abort conflicts using Git.",
+        "title": "HostReply_gitAction"
+      },
       "HostReply_gitDiff": {
         "anyOf": [
           {
@@ -82313,6 +82529,77 @@
         "title": "HostRequest_fileInfo",
         "type": "object"
       },
+      "HostRequest_gitAction": {
+        "description": "Usage: Execute a Git action on a host checkout.\nInputs: cwd and optional session owner identify the authorized workspace; action selects push, pull, fetch or a rebase target.\nInvariants: A session owner confines access to its authoritative workspace. Push passes no force options and honors Git configuration. Rebase uses existing main or origin/main without fetching.\nEffects: Runs Git once; network actions contact the remote, and conflicts leave Git's normal in-progress state intact.\nRecovery: Inspect repository and remote state after a timeout or link loss before deciding what to do; resolve or abort conflicts using Git.",
+        "properties": {
+          "args": {
+            "properties": {
+              "action": {
+                "anyOf": [
+                  {
+                    "const": "push",
+                    "type": "string"
+                  },
+                  {
+                    "const": "pull",
+                    "type": "string"
+                  },
+                  {
+                    "const": "fetch",
+                    "type": "string"
+                  },
+                  {
+                    "const": "rebase-main",
+                    "type": "string"
+                  },
+                  {
+                    "const": "rebase-origin-main",
+                    "type": "string"
+                  }
+                ],
+                "description": "Git operation to execute on the owning host; rebase targets a local ref without fetching."
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "owner": {
+                "description": "Derived from a live wrapper or durable creation journal, never browser cwd.",
+                "properties": {
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  }
+                },
+                "required": ["sessionId", "cwd"],
+                "type": "object"
+              }
+            },
+            "required": ["cwd", "action"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "gitAction",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_gitAction",
+        "type": "object"
+      },
       "HostRequest_gitDiff": {
         "description": "Usage: Inspect a file's Git diff.\nInputs: cwd, path and optional owner identify a host checkout and file.\nInvariants: A diff may be unsupported; patch is present only when available.\nEffects: Reads Git and filesystem state.\nRecovery: Refresh after changes rather than applying an old patch as current state.",
         "properties": {
@@ -87216,7 +87503,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 88 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 89 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "14"
   },
@@ -87703,6 +87990,29 @@
         ]
       },
       "summary": "fileInfo"
+    },
+    "operation_gitAction": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Execute a Git action on a host checkout.\nInputs: cwd and optional session owner identify the authorized workspace; action selects push, pull, fetch or a rebase target.\nInvariants: A session owner confines access to its authoritative workspace. Push passes no force options and honors Git configuration. Rebase uses existing main or origin/main without fetching.\nEffects: Runs Git once; network actions contact the remote, and conflicts leave Git's normal in-progress state intact.\nRecovery: Inspect repository and remote state after a timeout or link loss before deciding what to do; resolve or abort conflicts using Git.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_gitAction"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_gitAction"
+          }
+        ]
+      },
+      "summary": "gitAction"
     },
     "operation_gitDiff": {
       "action": "send",

@@ -62,6 +62,145 @@ test("Git status, patch and repository links come from the authorized owning dae
   assert.equal(worktrees.value.worktrees[0].branch, null);
 });
 
+test("Git actions execute on the owning daemon and preserve rebase conflicts", async (t) => {
+  const f = await workspaceHarness();
+  t.after(() => f.close());
+  const owner = await f.startHost();
+  const cwd = owner.project;
+  const remote = join(f.root, "remote.git");
+  const peer = join(f.root, "peer");
+  const git = (dir: string, ...args: string[]) =>
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-C", dir, ...args], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  git(f.root, "init", "--bare", "-q", remote);
+  git(remote, "symbolic-ref", "HEAD", "refs/heads/main");
+  git(cwd, "init", "-q", "-b", "main");
+  git(cwd, "config", "user.name", "Workspace test");
+  git(cwd, "config", "user.email", "test@example.invalid");
+  git(cwd, "remote", "add", "upstream", remote);
+  writeFileSync(join(cwd, "shared.txt"), "base\n");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "base");
+  git(cwd, "push", "-u", "upstream", "main");
+  writeFileSync(join(cwd, "pushed.txt"), "via configured upstream\n");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "push action");
+  await owner.host.sessionOps.validateCwd(cwd);
+
+  const push = await owner.host.workspaceOps.gitAction(cwd, "push");
+  assert.ok(push.ok, JSON.stringify(push));
+  assert.equal(
+    git(remote, "rev-parse", "refs/heads/main").trim(),
+    git(cwd, "rev-parse", "HEAD").trim(),
+  );
+  git(f.root, "clone", "-q", remote, peer);
+  git(peer, "config", "user.name", "Workspace peer");
+  git(peer, "config", "user.email", "peer@example.invalid");
+  writeFileSync(join(peer, "peer.txt"), "peer\n");
+  git(peer, "add", ".");
+  git(peer, "commit", "-qm", "peer change");
+  git(peer, "push", "-q");
+  const rejected = await owner.host.workspaceOps.gitAction(cwd, "push");
+  assert.ok(!rejected.ok);
+  assert.equal(rejected.code, "git_action_failed");
+  assert.match(rejected.error, /rejected|fetch first|non-fast-forward/i);
+  assert.equal(
+    git(remote, "rev-parse", "refs/heads/main").trim(),
+    git(peer, "rev-parse", "HEAD").trim(),
+  );
+  const pull = await owner.host.workspaceOps.gitAction(cwd, "pull");
+  assert.ok(pull.ok, JSON.stringify(pull));
+  assert.equal(
+    git(cwd, "rev-parse", "HEAD").trim(),
+    git(peer, "rev-parse", "HEAD").trim(),
+  );
+  git(cwd, "remote", "add", "origin", remote);
+  git(cwd, "tag", "main", "HEAD");
+  git(cwd, "tag", "origin/main", "HEAD");
+
+  git(cwd, "checkout", "-qb", "feature");
+  writeFileSync(join(cwd, "feature.txt"), "feature\n");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "feature");
+  git(cwd, "switch", "-q", "main");
+  writeFileSync(join(cwd, "main.txt"), "main\n");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "main change");
+  git(cwd, "checkout", "-q", "feature");
+  const rebaseMain = await owner.host.workspaceOps.gitAction(
+    cwd,
+    "rebase-main",
+  );
+  assert.ok(rebaseMain.ok, JSON.stringify(rebaseMain));
+  git(cwd, "merge-base", "--is-ancestor", "refs/heads/main", "HEAD");
+
+  writeFileSync(join(peer, "another.txt"), "remote\n");
+  git(peer, "add", ".");
+  git(peer, "commit", "-qm", "remote change");
+  git(peer, "push", "-q");
+  const fetch = await owner.host.workspaceOps.gitAction(cwd, "fetch");
+  assert.ok(fetch.ok, JSON.stringify(fetch));
+  assert.equal(
+    git(cwd, "rev-parse", "refs/remotes/origin/main").trim(),
+    git(peer, "rev-parse", "HEAD").trim(),
+  );
+  const rebaseOrigin = await owner.host.workspaceOps.gitAction(
+    cwd,
+    "rebase-origin-main",
+  );
+  assert.ok(rebaseOrigin.ok, JSON.stringify(rebaseOrigin));
+  git(cwd, "merge-base", "--is-ancestor", "refs/remotes/origin/main", "HEAD");
+
+  writeFileSync(join(cwd, "shared.txt"), "local conflict\n");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "local conflict");
+  writeFileSync(join(peer, "shared.txt"), "remote conflict\n");
+  git(peer, "add", ".");
+  git(peer, "commit", "-qm", "remote conflict");
+  git(peer, "push", "-q");
+  const fetchedConflict = await owner.host.workspaceOps.gitAction(cwd, "fetch");
+  assert.ok(fetchedConflict.ok, JSON.stringify(fetchedConflict));
+  const conflict = await owner.host.workspaceOps.gitAction(
+    cwd,
+    "rebase-origin-main",
+  );
+  assert.ok(!conflict.ok);
+  assert.equal(conflict.code, "git_action_failed");
+  assert.match(conflict.error, /conflict/i);
+  assert.match(git(cwd, "status", "--porcelain"), /^UU shared\.txt/m);
+  assert.match(git(cwd, "status"), /rebase in progress/i);
+});
+
+test("rebase rejects missing branches even when same-named tags exist", async (t) => {
+  const f = await workspaceHarness();
+  t.after(() => f.close());
+  const owner = await f.startHost();
+  const cwd = owner.project;
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-C", cwd, ...args], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  git("init", "-q", "-b", "feature");
+  git("config", "user.name", "Workspace test");
+  git("config", "user.email", "test@example.invalid");
+  writeFileSync(join(cwd, "file.txt"), "content\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  git("tag", "main");
+  git("tag", "origin/main");
+  await owner.host.sessionOps.validateCwd(cwd);
+  const head = git("rev-parse", "HEAD");
+  for (const action of ["rebase-main", "rebase-origin-main"] as const) {
+    const result = await owner.host.workspaceOps.gitAction(cwd, action);
+    assert.ok(!result.ok);
+    assert.equal(result.code, "git_action_failed");
+    assert.equal(git("rev-parse", "HEAD"), head);
+  }
+});
+
 test("gitOrigins answers each requested path in order with its origin and main-checkout state", async (t) => {
   const f = await workspaceHarness();
   t.after(() => f.close());

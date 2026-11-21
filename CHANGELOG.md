@@ -12,6 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
+- The Git drawer offers Push, Pull, Fetch, and rebase onto local `main` or `origin/main`.
 - Advisor review status covers turn-boundary scheduling and review delivery, and survives inconclusive reconnect snapshots.
 - Tap the mode icon next to the model picker to switch between **Build** and **Plan**. Approval restores the previous model and reasoning effort before implementation; requesting revisions stays in Plan. Switching back to Build also restores write access. As in OMP, shell commands and extensions are not sandboxed.
 - The composer model selector offers a session-only Auto Prewalk button beside Reasoning that cycles through Off, Suggest, and On. Suggest reports the native judge's decision; On arms recommended handoffs without changing the model that starts a task.
@@ -175,6 +176,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Deploying a matched release can restore a missing `keylime-omp` on a standalone host
 - Advisor review status covers turn-boundary scheduling and review delivery, and survives inconclusive reconnect snapshots
 - Project settings let you browse and choose repository-discovered icons, including icons found in nested directories
+- The Git drawer offers Push, Pull, Fetch, and rebase onto local `main` or `origin/main`
 
 ### Changed
 - Browser tabs show the active workspace name instead of its directory name.

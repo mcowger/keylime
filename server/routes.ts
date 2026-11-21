@@ -18,6 +18,7 @@ import * as eventsLink from "@/app/api/events/link/route";
 import * as fileIndex from "@/app/api/file-index/route";
 import * as filesPath from "@/app/api/files/[...path]/route";
 import * as hierarchy from "@/app/api/hierarchy/route";
+import * as gitAction from "@/app/api/git/action/route";
 import * as gitDiff from "@/app/api/git/diff/route";
 import * as gitStatus from "@/app/api/git/status/route";
 import * as githubRepo from "@/app/api/github-repo/route";
@@ -135,6 +136,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "events/link": eventsLink,
   "file-index": fileIndex,
   "files/[...path]": filesPath,
+  "git/action": gitAction,
   "git/diff": gitDiff,
   "git/status": gitStatus,
   "github-repo": githubRepo,

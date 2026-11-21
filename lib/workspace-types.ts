@@ -62,6 +62,8 @@ export type WorkspaceFileEvent = SchemaWorkspaceFileEvent;
 /** Discovered Git worktrees, not necessarily canonical workspace registrations. */
 export type WorkspaceWorktrees = Static<typeof M.WorkspaceWorktreesSchema>;
 export type GitOrigin = Static<typeof M.GitOriginSchema>;
+export type GitAction = Static<typeof M.GitActionSchema>;
+export type GitActionResponse = Static<typeof M.GitActionResponseSchema>;
 /** Host filesystem directory-picker snapshot, distinct from project registration. */
 export type WorkspaceDirectoryBrowse = Static<
   typeof M.WorkspaceDirectoryBrowseSchema
@@ -174,6 +176,11 @@ export interface WorkspaceOps {
     cwd: string,
     owner?: WorkspaceOwner,
   ): Promise<OpResult<GitStatusResponse>>;
+  gitAction(
+    cwd: string,
+    action: GitAction,
+    owner?: WorkspaceOwner,
+  ): Promise<OpResult<GitActionResponse>>;
   gitDiff(
     cwd: string,
     path: string,
@@ -249,6 +256,7 @@ export const WORKSPACE_OP_PARAMS: {
   shipMonitorStatus: ["input"],
   systems: ["input"],
   planning: ["operation"],
+  gitAction: ["cwd", "action", "owner"],
 };
 
 export function isWorkspaceOp(value: string): value is keyof WorkspaceOps {
