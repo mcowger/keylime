@@ -2762,7 +2762,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+        "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal. Entering during a turn steers in plan context; a different plan model takes effect after that turn.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
         "name": "RunnerRequest_set_plan_mode",
         "payload": {
           "$ref": "#/components/schemas/RunnerRequest_set_plan_mode"
@@ -60842,7 +60842,7 @@
         "type": "object"
       },
       "RunnerRequest_set_plan_mode": {
-        "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+        "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal. Entering during a turn steers in plan context; a different plan model takes effect after that turn.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
         "properties": {
           "args": {
             "properties": {
@@ -63319,7 +63319,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
+      "description": "Usage: Enter Plan mode or manually return to Build mode.\nInputs: enabled selects Plan when true, Build when false.\nInvariants: Manual exit restores write access without approving a proposal. Entering during a turn steers in plan context; a different plan model takes effect after that turn.\nEffects: Changes native planning state and may change the model and reasoning effort.\nRecovery: Read planning state after an uncertain response.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/RunnerRequest_set_plan_mode"
