@@ -3292,8 +3292,17 @@ export function AppShell({ appName }: { appName: string }) {
     }
   }, [sidebarHistory.exitNeedsNativeBack, t]);
 
-  const activeCwdName = activeCwd ? getFileName(activeCwd) || activeCwd : null;
-  const windowTitle = activeCwdName ? `${activeCwdName} - ${appName}` : appName;
+  const activeWorkspaceName =
+    activeEffort?.name ??
+    workspaceOptions.projects.find(
+      (workspace) =>
+        (workspace.hostId ?? LOCAL_HOST_ID) === workspaceHostId &&
+        workspace.path === terminalWorkspace?.path,
+    )?.name ??
+    (activeCwd ? getFileName(activeCwd) || activeCwd : null);
+  const windowTitle = activeWorkspaceName
+    ? `${activeWorkspaceName} - ${appName}`
+    : appName;
 
   useEffect(() => {
     const syncWindowTitle = () => {

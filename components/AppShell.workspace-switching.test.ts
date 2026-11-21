@@ -704,6 +704,31 @@ test("delayed discovery preserves a draft edited after workspace entry", async (
   clearDraft(key);
   cleanup();
 });
+test("browser title follows the active workspace name", async () => {
+  window.history.replaceState(null, "", "/?cwd=%2Frepo");
+  const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+  await waitFor(() => assert.equal(tabProps.cwd, "/repo"));
+  act(() => {
+    updateWorkspaceOptions(
+      [
+        { path: "/repo", hostId: "local", name: "Fix Terminal Tab Layout" },
+        { path: "/other", hostId: "local", name: "Another workspace" },
+      ],
+      null,
+      "/repo",
+      "local",
+    );
+  });
+  await waitFor(() =>
+    assert.equal(document.title, "Fix Terminal Tab Layout - Keylime"),
+  );
+  fireEvent.click(view.getByRole("button", { name: "/other" }));
+  await waitFor(() =>
+    assert.equal(document.title, "Another workspace - Keylime"),
+  );
+  cleanup();
+});
+
 test("restored and nested workspaces switch on the first click", async () => {
   window.history.replaceState(null, "", "/?cwd=%2Frepo");
   const view = render(React.createElement(AppShell, { appName: "Keylime" }));

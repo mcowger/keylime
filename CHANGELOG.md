@@ -176,6 +176,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Advisor review status covers turn-boundary scheduling and review delivery, and survives inconclusive reconnect snapshots
 
 ### Changed
+- Browser tabs show the active workspace name instead of its directory name.
 - `bun run build:binary` builds the browser assets and runners, then compiles and packages all four Keylime targets in parallel. Runner builds use faster native addon compression.
 - Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged.
 - Repo and System Notes & Tasks use the workspace's compact typography, with a shorter notes editor and task actions on one row where space allows.
@@ -241,6 +242,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Linked hosts use their own OMP settings, plugins, environment, and provider logins. Keylime no longer mirrors configuration or brokers provider credentials. Binary deployment is unchanged
 - Agent tools remain on their calling host, and pending work from before this release is neither migrated nor replayed
 - Linked hosts retain per-server login state and reject v14-only settings and model catalog operations on v13 daemons with an upgrade-required response
+- Browser tabs show the active workspace name instead of its directory name
 
 ### Removed
 - Removed runtime version numbers from the chat welcome screen
