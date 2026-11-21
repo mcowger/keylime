@@ -21,6 +21,9 @@ import {
   invalidateSessionPathCache,
 } from "../session-reader";
 import type { ShipPrDigest } from "./link-protocol";
+import type { Host } from "./host.ts";
+import type { RpcFrame, RpcProcess } from "../omp/rpc-process.ts";
+import { isRecord } from "../type-guards";
 import type {
   PlanningBoard,
   PlanningOperation,
@@ -44,6 +47,7 @@ import {
 } from "./workspace-creation.ts";
 import {
   acceptShipDigestReceipt,
+  registerShipPr,
   removeShipMonitorsForSession,
   shipFinish,
   shipMonitorStatus,
@@ -1123,6 +1127,269 @@ async function waitForFile(file: string) {
   while (!existsSync(file) && Date.now() < deadline) await delay(10);
   assert.ok(existsSync(file), file);
 }
+
+test("registers an existing PR without shipping and preserves its monitor", async (t) => {
+  const f = await fixture(t);
+  addChat(t, f);
+  setOpenPr(f, 42);
+  const prUrl = "https://github.com/test/repo/pull/42";
+  const input = { sessionId: firstChat, prUrl };
+  const head = f.git(f.workspace, "rev-parse", "HEAD");
+  const refs = f.git(f.project, "show-ref");
+  const pr = await registerShipPr(input);
+  assert.equal(pr.number, 42);
+  assert.equal(pr.cleanup, false);
+  assert.deepEqual(prState(f), pr);
+  writeFileSync(join(f.root, "pr-state"), "OPEN");
+  const monitor = await startShipMonitor(
+    { ...f.input, ...input, monitorId: firstGrant },
+    "server-a",
+  );
+  assert.deepEqual((await registerShipPr(input)).monitor, monitor);
+  await assert.rejects(
+    registerShipPr({ ...input, prUrl: "https://github.com/test/repo/pull/43" }),
+    {
+      code: "pr_workspace_mismatch",
+    },
+  );
+  assert.deepEqual(prState(f)?.monitor, monitor);
+  assert.equal(f.git(f.workspace, "rev-parse", "HEAD"), head);
+  assert.equal(f.git(f.project, "show-ref"), refs);
+  const log = readFileSync(join(f.root, "gh.log"), "utf8");
+  assert.doesNotMatch(log, /pr (create|merge)/);
+});
+
+test("model monitoring starts a scoped durable watch through a linked host", async (t) => {
+  const f = await fixture(t);
+  addChat(t, f);
+  const otherChat = "22222222-2222-4222-8222-222222222222";
+  addChat(t, f, otherChat);
+  setOpenPr(f, 42);
+  writeFileSync(join(f.root, "pr-state"), "OPEN");
+  const prUrl = "https://github.com/test/repo/pull/42";
+
+  const { linkLocalDaemon, until } =
+    await import("./link-driver.test-helper.ts");
+  const hub = await import("./hub.ts");
+  const outbox = await import("../message-outbox.ts");
+  const { AgentSessionWrapper } = await import("../rpc-manager.ts");
+  const { monitorWorkspacePrForSession, startShipMonitorForHost } =
+    await import("../ship-monitor-start.ts");
+  const { HostOpError } = await import("./link-protocol.ts");
+  // The linked fixture dispatches the actual daemon operation with an owner,
+  // just as an authenticated daemon link does.
+  const link = await linkLocalDaemon({
+    startShipMonitor: async ({ input }) => {
+      try {
+        return {
+          ok: true,
+          value: await startShipMonitor(
+            input as Parameters<typeof startShipMonitor>[0],
+            "server-a",
+          ),
+        };
+      } catch (error) {
+        const e = error as { status?: number; code?: string; message: string };
+        return {
+          ok: false,
+          status: e.status ?? 500,
+          code: e.code ?? "host_op_failed",
+          error: e.message,
+        };
+      }
+    },
+  });
+  t.after(() => {
+    link.drop();
+    outbox.closeOutboxStore();
+  });
+  const host = hub.getHost("local")!;
+  const credential = hub.getShipHostCredential(host.id)!;
+  assert.ok(credential);
+  await assert.rejects(
+    monitorWorkspacePrForSession(host, firstChat),
+    /No open pull request is recorded.*register_workspace_pr/,
+  );
+  let listener: (frame: RpcFrame) => void = () => {};
+  const frames: RpcFrame[] = [];
+  const proc = {
+    isAlive: true,
+    onFrame: (callback: (frame: RpcFrame) => void) => {
+      listener = callback;
+      return () => {};
+    },
+    sendFrame: (frame: RpcFrame) => frames.push(frame),
+    dispose: async () => {},
+  } as unknown as RpcProcess;
+  const wrapper = new AgentSessionWrapper(
+    proc,
+    f.workspace,
+    null,
+    false,
+    firstChat,
+    0,
+    host,
+  );
+  wrapper.start();
+  t.after(() => wrapper.destroyAndWait());
+  const toolResult = (frame: RpcFrame): unknown => {
+    assert.ok(isRecord(frame.result));
+    assert.ok(Array.isArray(frame.result.content));
+    const [first] = frame.result.content;
+    assert.ok(isRecord(first));
+    assert.ok(typeof first.text === "string");
+    return JSON.parse(first.text);
+  };
+  listener({
+    type: "host_tool_call",
+    id: "pr-before",
+    toolName: "get_workspace_pr",
+    arguments: {},
+  });
+  await until(() => frames.length > 0, "unlinked PR lookup");
+  assert.equal(frames[0].isError, false);
+  assert.deepEqual(toolResult(frames[0]), { pr: null });
+  frames.length = 0;
+  await registerShipPr({ sessionId: firstChat, prUrl });
+  listener({
+    type: "host_tool_call",
+    id: "pr-after",
+    toolName: "get_workspace_pr",
+    arguments: {},
+  });
+  await until(() => frames.length > 0, "linked PR lookup");
+  assert.equal(frames[0].isError, false);
+  assert.deepEqual(toolResult(frames[0]), { pr: prState(f) });
+  frames.length = 0;
+  listener({
+    type: "host_tool_call",
+    id: "monitor-1",
+    toolName: "monitor_workspace_pr",
+    arguments: {},
+  });
+  await until(() => frames.length > 0, "monitor tool response");
+  assert.equal(frames[0].isError, false);
+  const result = frames[0].result as { content: { text: string }[] };
+  assert.deepEqual(JSON.parse(result.content[0].text), {
+    status: "started",
+    message:
+      "PR feedback monitoring started. New feedback links will be sent to this chat; monitoring does not block merging.",
+  });
+  const monitor = prState(f)?.monitor;
+  assert.equal(monitor?.state, "watching");
+  assert.ok(monitor?.id);
+  const offer: ShipPrDigest = {
+    id: "33333333-3333-4333-8333-333333333333",
+    monitorId: monitor.id,
+    sessionId: firstChat,
+    createdAt: Date.now(),
+    prUrl,
+    feedback: [{ kind: "conversation", id: 1 }],
+    omitted: 0,
+  };
+  const scope = { projectPath: f.project, path: f.workspace };
+  assert.deepEqual(
+    outbox.findShipDigestGrant(host.id, credential, offer),
+    scope,
+  );
+  assert.equal(
+    outbox.acceptShipDigestOffer("other-host", credential, offer, scope),
+    false,
+  );
+  assert.equal(
+    outbox.acceptShipDigestOffer(host.id, "wrong-credential", offer, scope),
+    false,
+  );
+  assert.equal(
+    outbox.acceptShipDigestOffer(
+      host.id,
+      credential,
+      { ...offer, sessionId: otherChat },
+      scope,
+    ),
+    false,
+  );
+  assert.equal(
+    outbox.acceptShipDigestOffer(
+      host.id,
+      credential,
+      { ...offer, prUrl: "https://github.com/test/repo/pull/43" },
+      scope,
+    ),
+    false,
+  );
+  assert.equal(
+    outbox.acceptShipDigestOffer(host.id, credential, offer, {
+      ...scope,
+      path: f.project,
+    }),
+    false,
+  );
+  assert.equal(
+    outbox.acceptShipDigestOffer(host.id, credential, offer, scope),
+    true,
+  );
+  const already = await monitorWorkspacePrForSession(host, otherChat);
+  assert.equal(already.status, "already_monitoring");
+  assert.match(already.message, /another chat/);
+  assert.equal(prState(f)?.monitor?.id, monitor.id);
+
+  // Known refusals revoke; uncertain delivery or malformed success retain the
+  // grant because the daemon may already have started the watch.
+  for (const [mode, retained] of [
+    ["refused", false],
+    ["preflight", false],
+    ["offline", true],
+    ["server-error", true],
+    ["bad-result", true],
+  ] as const) {
+    let sentId = "";
+    const simulatedHost = {
+      id: host.id,
+      supportsWorkspaceOp: () => true,
+      workspaceOps: {
+        startShipMonitor: async (input: { monitorId: string }) => {
+          sentId = input.monitorId;
+          if (mode === "preflight")
+            throw new HostOpError(503, "server_stopping", "stopping");
+          if (mode === "offline")
+            throw new HostOpError(503, "host_offline", "connection lost");
+          if (mode === "refused")
+            return {
+              ok: false as const,
+              status: 409,
+              code: "conflict",
+              error: "refused",
+            };
+          if (mode === "server-error")
+            return {
+              ok: false as const,
+              status: 500,
+              code: "failed",
+              error: "uncertain",
+            };
+          return {
+            ok: true as const,
+            value: { id: "wrong", state: "watching" as const },
+          };
+        },
+      },
+    } as unknown as Host;
+    const input = { ...scope, prUrl, sessionId: firstChat };
+    if (mode === "refused" || mode === "server-error") {
+      const result = await startShipMonitorForHost(simulatedHost, input);
+      assert.equal(result.ok, false);
+    } else {
+      await assert.rejects(startShipMonitorForHost(simulatedHost, input));
+    }
+    assert.ok(sentId);
+    const grant = outbox.findShipDigestGrant(host.id, credential, {
+      ...offer,
+      monitorId: sentId,
+    });
+    assert.deepEqual(grant, retained ? scope : null);
+  }
+});
 
 test("standalone start pins the PR, preserves Ship settings and only watches new feedback", async (t) => {
   const f = await fixture(t);

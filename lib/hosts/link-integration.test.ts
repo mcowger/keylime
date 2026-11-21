@@ -46,7 +46,11 @@ type OmpLogEntry = {
     t?: string;
     op?: string;
     id?: string | number;
-    args?: { message?: string };
+    args?: {
+      message?: string;
+      tools?: { name: string }[];
+      schemes?: { scheme: string; writable: boolean }[];
+    };
     isError: boolean;
     result: { content: { text: string }[] };
   };
@@ -796,11 +800,15 @@ test("a restarted web server adopts its running omp children, resumed or new: ea
     InstanceType<typeof AgentSessionWrapper>,
     AgentEvent[]
   >();
-  AgentSessionWrapper.prototype.adopt = function (replay) {
+  AgentSessionWrapper.prototype.adopt = function (
+    replay,
+    joined,
+    registration,
+  ) {
     const events: AgentEvent[] = [];
     this.onEvent((event) => events.push(event), { internal: true });
     adopted.set(this, events);
-    return adopt.call(this, replay);
+    return adopt.call(this, replay, joined, registration);
   };
   await restartWeb();
   for (const run of runs) writeFileSync(slowGo(run.id), "");
@@ -965,6 +973,19 @@ test("a stopping web server sends nothing more and takes nothing in: a closing t
       },
     ],
   });
+  await session.send({
+    type: "set_host_uri_schemes",
+    schemes: [{ scheme: "pi-web", writable: true }],
+  });
+  await waitFor(
+    () =>
+      ompLog().some(
+        (entry) =>
+          entry.sessionId === TOOL_ID &&
+          entry.command?.op === "set_host_uri_schemes",
+      ),
+    "the initial URI registration",
+  );
   const before: AgentEvent[] = [];
   const leave = session.onEvent((event) => before.push(event));
   await session.send({ type: "prompt", message: "tool" });
@@ -980,11 +1001,15 @@ test("a stopping web server sends nothing more and takes nothing in: a closing t
     InstanceType<typeof AgentSessionWrapper>,
     AgentEvent[]
   >();
-  AgentSessionWrapper.prototype.adopt = function (replay) {
+  AgentSessionWrapper.prototype.adopt = function (
+    replay,
+    joined,
+    registration,
+  ) {
     const events: AgentEvent[] = [];
     this.onEvent((event) => events.push(event), { internal: true });
     adopted.set(this, events);
-    return adopt.call(this, replay);
+    return adopt.call(this, replay, joined, registration);
   };
   const refusedBefore = seen.refusedUpgrades;
   await restartWeb({
@@ -1037,6 +1062,24 @@ test("a stopping web server sends nothing more and takes nothing in: a closing t
     () => events.some((event) => event.type === "agent_end"),
     "the run to end",
   );
+  const registrations = ompLog().filter(
+    (entry) => entry.sessionId === TOOL_ID && entry.kind === "stdin",
+  );
+  const latestTools = registrations
+    .filter((entry) => entry.command?.op === "set_host_tools")
+    .at(-1)?.command?.args?.tools;
+  const latestSchemes = registrations
+    .filter((entry) => entry.command?.op === "set_host_uri_schemes")
+    .at(-1)?.command?.args?.schemes;
+  assert.ok(
+    latestTools?.some((tool: { name: string }) => tool.name === "browser_open"),
+  );
+  assert.ok(
+    latestTools?.some(
+      (tool: { name: string }) => tool.name === "monitor_workspace_pr",
+    ),
+  );
+  assert.deepEqual(latestSchemes, [{ scheme: "pi-web", writable: true }]);
   assert.ok(
     events.some(
       (event) =>
@@ -1083,11 +1126,15 @@ test("a request omp opens while the web server stops reaches the next server onc
     InstanceType<typeof AgentSessionWrapper>,
     AgentEvent[]
   >();
-  AgentSessionWrapper.prototype.adopt = function (replay) {
+  AgentSessionWrapper.prototype.adopt = function (
+    replay,
+    joined,
+    registration,
+  ) {
     const events: AgentEvent[] = [];
     this.onEvent((event) => events.push(event), { internal: true });
     adopted.set(this, events);
-    return adopt.call(this, replay);
+    return adopt.call(this, replay, joined, registration);
   };
   const refusedBefore = seen.refusedUpgrades;
   await restartWeb({

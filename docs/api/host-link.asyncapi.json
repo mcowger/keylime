@@ -277,6 +277,9 @@
         "HostReply_readThinking": {
           "$ref": "#/components/messages/HostReply_readThinking"
         },
+        "HostReply_registerShipPr": {
+          "$ref": "#/components/messages/HostReply_registerShipPr"
+        },
         "HostReply_removeRegisteredWorktree": {
           "$ref": "#/components/messages/HostReply_removeRegisteredWorktree"
         },
@@ -546,6 +549,9 @@
         },
         "HostRequest_readThinking": {
           "$ref": "#/components/messages/HostRequest_readThinking"
+        },
+        "HostRequest_registerShipPr": {
+          "$ref": "#/components/messages/HostRequest_registerShipPr"
         },
         "HostRequest_removeRegisteredWorktree": {
           "$ref": "#/components/messages/HostRequest_removeRegisteredWorktree"
@@ -1622,6 +1628,18 @@
           "$ref": "#/components/schemas/HostReply_readThinking"
         },
         "title": "HostReply_readThinking"
+      },
+      "HostReply_registerShipPr": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to registerShipPr; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Associate an existing open pull request with the calling chat's registered workspace.\nInputs: sessionId identifies a live workspace chat; prUrl is the canonical GitHub pull request URL.\nInvariants: The PR must match the workspace branch and repository; existing active records are not replaced.\nEffects: Persists the local PR association without pushing, merging, starting monitoring, or cleaning up.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain result.",
+        "name": "HostReply_registerShipPr",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_registerShipPr"
+        },
+        "title": "HostReply_registerShipPr"
       },
       "HostReply_removeRegisteredWorktree": {
         "contentType": "application/json",
@@ -2702,6 +2720,18 @@
           "$ref": "#/components/schemas/HostRequest_readThinking"
         },
         "title": "HostRequest_readThinking"
+      },
+      "HostRequest_registerShipPr": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Associate an existing open pull request with the calling chat's registered workspace.\nInputs: sessionId identifies a live workspace chat; prUrl is the canonical GitHub pull request URL.\nInvariants: The PR must match the workspace branch and repository; existing active records are not replaced.\nEffects: Persists the local PR association without pushing, merging, starting monitoring, or cleaning up.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain result.",
+        "name": "HostRequest_registerShipPr",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_registerShipPr"
+        },
+        "title": "HostRequest_registerShipPr"
       },
       "HostRequest_removeRegisteredWorktree": {
         "contentType": "application/json",
@@ -50765,7 +50795,7 @@
                 "description": "Operator-editable policy for one daemon. Never includes environment variables.",
                 "properties": {
                   "agentToolsEnabled": {
-                    "description": "Enable cross-session agent tools on this daemon.",
+                    "description": "Enable agent collaboration and PR registration tools on this daemon.",
                     "type": "boolean"
                   },
                   "autoResumeSessions": {
@@ -50843,7 +50873,7 @@
               "description": "Operator-editable policy for one daemon. Never includes environment variables.",
               "properties": {
                 "agentToolsEnabled": {
-                  "description": "Enable cross-session agent tools on this daemon.",
+                  "description": "Enable agent collaboration and PR registration tools on this daemon.",
                   "type": "boolean"
                 },
                 "autoResumeSessions": {
@@ -50929,7 +50959,7 @@
                 "description": "Operator-editable policy for one daemon. Never includes environment variables.",
                 "properties": {
                   "agentToolsEnabled": {
-                    "description": "Enable cross-session agent tools on this daemon.",
+                    "description": "Enable agent collaboration and PR registration tools on this daemon.",
                     "type": "boolean"
                   },
                   "autoResumeSessions": {
@@ -51007,7 +51037,7 @@
               "description": "Operator-editable policy for one daemon. Never includes environment variables.",
               "properties": {
                 "agentToolsEnabled": {
-                  "description": "Enable cross-session agent tools on this daemon.",
+                  "description": "Enable agent collaboration and PR registration tools on this daemon.",
                   "type": "boolean"
                 },
                 "autoResumeSessions": {
@@ -53333,6 +53363,34 @@
                     ],
                     "description": "Still-open blocking runner request lines, or null when the snapshot exceeded the pending byte cap."
                   },
+                  "registration": {
+                    "description": "Current daemon-owned host tool and URI scheme registration for this channel. Absent when the host cannot report it.",
+                    "properties": {
+                      "schemes": {
+                        "items": {
+                          "description": "A host-advertised URI scheme and whether it can be written.",
+                          "properties": {
+                            "scheme": {
+                              "type": "string"
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["scheme", "writable"],
+                          "title": "HostUriScheme",
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "tools": {
+                        "items": {},
+                        "type": "array"
+                      }
+                    },
+                    "required": ["tools", "schemes"],
+                    "type": "object"
+                  },
                   "streaming": {
                     "anyOf": [
                       {
@@ -53445,6 +53503,34 @@
                     }
                   ],
                   "description": "Still-open blocking runner request lines, or null when the snapshot exceeded the pending byte cap."
+                },
+                "registration": {
+                  "description": "Current daemon-owned host tool and URI scheme registration for this channel. Absent when the host cannot report it.",
+                  "properties": {
+                    "schemes": {
+                      "items": {
+                        "description": "A host-advertised URI scheme and whether it can be written.",
+                        "properties": {
+                          "scheme": {
+                            "type": "string"
+                          },
+                          "writable": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["scheme", "writable"],
+                        "title": "HostUriScheme",
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "tools": {
+                      "items": {},
+                      "type": "array"
+                    }
+                  },
+                  "required": ["tools", "schemes"],
+                  "type": "object"
                 },
                 "streaming": {
                   "anyOf": [
@@ -71193,6 +71279,362 @@
         "description": "Reply to readThinking; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read an assistant thinking block.\nInputs: Supply session ID, entry ID and block index.\nInvariants: Session, assistant entry and block must exist.\nEffects: Reads the session file without starting a runner.\nRecovery: Refresh session context if the entry or block is absent.",
         "title": "HostReply_readThinking"
       },
+      "HostReply_registerShipPr": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "ok": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "value": {
+                        "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
+                        "properties": {
+                          "autoMerge": {
+                            "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
+                            "type": "boolean"
+                          },
+                          "checkedAt": {
+                            "description": "ISO time of the last gh pr view.",
+                            "type": "string"
+                          },
+                          "checks": {
+                            "anyOf": [
+                              {
+                                "const": "pending",
+                                "type": "string"
+                              },
+                              {
+                                "const": "passing",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failing",
+                                "type": "string"
+                              },
+                              {
+                                "const": "none",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "cleanup": {
+                            "type": "boolean"
+                          },
+                          "monitor": {
+                            "description": "Public state of an existing PR feedback watch. No routing or chat details.",
+                            "properties": {
+                              "id": {
+                                "description": "Watch generation ID used to stop this watch without affecting a replacement.",
+                                "type": "string"
+                              },
+                              "state": {
+                                "anyOf": [
+                                  {
+                                    "const": "watching",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "error",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "delivery-expired",
+                                    "type": "string"
+                                  }
+                                ],
+                                "description": "Active watch health: watching, polling error, or expired delivery."
+                              }
+                            },
+                            "required": ["id", "state"],
+                            "type": "object"
+                          },
+                          "number": {
+                            "type": "number"
+                          },
+                          "state": {
+                            "anyOf": [
+                              {
+                                "const": "open",
+                                "type": "string"
+                              },
+                              {
+                                "const": "merged",
+                                "type": "string"
+                              },
+                              {
+                                "const": "closed",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "number",
+                          "url",
+                          "state",
+                          "checks",
+                          "autoMerge",
+                          "cleanup",
+                          "checkedAt"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["ok", "value"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "ok": {
+                        "const": false,
+                        "type": "boolean"
+                      },
+                      "status": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["ok", "status", "code", "error"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "ok": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "value": {
+                      "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
+                      "properties": {
+                        "autoMerge": {
+                          "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
+                          "type": "boolean"
+                        },
+                        "checkedAt": {
+                          "description": "ISO time of the last gh pr view.",
+                          "type": "string"
+                        },
+                        "checks": {
+                          "anyOf": [
+                            {
+                              "const": "pending",
+                              "type": "string"
+                            },
+                            {
+                              "const": "passing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "failing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "none",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "cleanup": {
+                          "type": "boolean"
+                        },
+                        "monitor": {
+                          "description": "Public state of an existing PR feedback watch. No routing or chat details.",
+                          "properties": {
+                            "id": {
+                              "description": "Watch generation ID used to stop this watch without affecting a replacement.",
+                              "type": "string"
+                            },
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "watching",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "error",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "delivery-expired",
+                                  "type": "string"
+                                }
+                              ],
+                              "description": "Active watch health: watching, polling error, or expired delivery."
+                            }
+                          },
+                          "required": ["id", "state"],
+                          "type": "object"
+                        },
+                        "number": {
+                          "type": "number"
+                        },
+                        "state": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "merged",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "number",
+                        "url",
+                        "state",
+                        "checks",
+                        "autoMerge",
+                        "cleanup",
+                        "checkedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["ok", "value"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["ok", "status", "code", "error"],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to registerShipPr; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Associate an existing open pull request with the calling chat's registered workspace.\nInputs: sessionId identifies a live workspace chat; prUrl is the canonical GitHub pull request URL.\nInvariants: The PR must match the workspace branch and repository; existing active records are not replaced.\nEffects: Persists the local PR association without pushing, merging, starting monitoring, or cleaning up.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain result.",
+        "title": "HostReply_registerShipPr"
+      },
       "HostReply_removeRegisteredWorktree": {
         "anyOf": [
           {
@@ -83803,7 +84245,7 @@
             "description": "Patch one daemon's policy, preserving omitted fields.",
             "properties": {
               "agentToolsEnabled": {
-                "description": "Enable cross-session agent tools on this daemon.",
+                "description": "Enable agent collaboration and PR registration tools on this daemon.",
                 "type": "boolean"
               },
               "autoResumeSessions": {
@@ -86112,6 +86554,53 @@
         "title": "HostRequest_readThinking",
         "type": "object"
       },
+      "HostRequest_registerShipPr": {
+        "description": "Usage: Associate an existing open pull request with the calling chat's registered workspace.\nInputs: sessionId identifies a live workspace chat; prUrl is the canonical GitHub pull request URL.\nInvariants: The PR must match the workspace branch and repository; existing active records are not replaced.\nEffects: Persists the local PR association without pushing, merging, starting monitoring, or cleaning up.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain result.",
+        "properties": {
+          "args": {
+            "properties": {
+              "input": {
+                "additionalProperties": false,
+                "description": "Link an already-open GitHub pull request to the registered workspace containing this active chat.",
+                "properties": {
+                  "prUrl": {
+                    "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+                    "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["sessionId", "prUrl"],
+                "type": "object"
+              }
+            },
+            "required": ["input"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "registerShipPr",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_registerShipPr",
+        "type": "object"
+      },
       "HostRequest_removeRegisteredWorktree": {
         "description": "Usage: Remove a registered worktree.\nInputs: Host project and worktree paths plus stopProcesses, discardChanges, keepBranch and cancel control admission.\nInvariants: Unregistered projects are rejected; processes, dirty changes and branch decisions can require confirmation.\nEffects: Accepted removal can stop processes, discard changes, remove the worktree and delete its branch. Successful Git removal discards retained terminal screens.\nRecovery: Inspect returned status and current hierarchy/Git state before retrying an uncertain removal.",
         "properties": {
@@ -88168,7 +88657,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 90 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 91 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "14"
   },
@@ -89552,6 +90041,29 @@
         ]
       },
       "summary": "readThinking"
+    },
+    "operation_registerShipPr": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Associate an existing open pull request with the calling chat's registered workspace.\nInputs: sessionId identifies a live workspace chat; prUrl is the canonical GitHub pull request URL.\nInvariants: The PR must match the workspace branch and repository; existing active records are not replaced.\nEffects: Persists the local PR association without pushing, merging, starting monitoring, or cleaning up.\nRecovery: Refresh the workspace hierarchy before retrying an uncertain result.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_registerShipPr"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_registerShipPr"
+          }
+        ]
+      },
+      "summary": "registerShipPr"
     },
     "operation_removeRegisteredWorktree": {
       "action": "send",

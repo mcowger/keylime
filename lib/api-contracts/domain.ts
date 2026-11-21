@@ -757,11 +757,7 @@ export const HostToolDefinitionSchema = Type.Object(
     ),
     hidden: Type.Optional(Type.Boolean()),
     loadMode: Type.Optional(
-      Type.Union([
-        Type.Literal("always"),
-        Type.Literal("discoverable"),
-        Type.Literal("explicit"),
-      ]),
+      Type.Union([Type.Literal("essential"), Type.Literal("discoverable")]),
     ),
   },
   {

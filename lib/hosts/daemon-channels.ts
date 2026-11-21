@@ -635,6 +635,10 @@ export class ChannelTable {
     return {
       ch: channel.ch,
       joined,
+      registration: channel.shared?.registrationFor(link.id) ?? {
+        tools: [],
+        schemes: [],
+      },
       pending: this.pendingFor(channel, link),
       streaming: channel.snapshot.whole(),
       cwd: channel.cwd,

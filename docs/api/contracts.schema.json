@@ -13106,7 +13106,7 @@
       "description": "Operator-editable policy for one daemon. Never includes environment variables.",
       "properties": {
         "agentToolsEnabled": {
-          "description": "Enable cross-session agent tools on this daemon.",
+          "description": "Enable agent collaboration and PR registration tools on this daemon.",
           "type": "boolean"
         },
         "autoResumeSessions": {
@@ -13139,7 +13139,7 @@
       "description": "Patch one daemon's policy, preserving omitted fields.",
       "properties": {
         "agentToolsEnabled": {
-          "description": "Enable cross-session agent tools on this daemon.",
+          "description": "Enable agent collaboration and PR registration tools on this daemon.",
           "type": "boolean"
         },
         "autoResumeSessions": {
@@ -20421,15 +20421,11 @@
         "loadMode": {
           "anyOf": [
             {
-              "const": "always",
+              "const": "essential",
               "type": "string"
             },
             {
               "const": "discoverable",
-              "type": "string"
-            },
-            {
-              "const": "explicit",
               "type": "string"
             }
           ]
@@ -33916,7 +33912,7 @@
       "description": "Operator-editable policy for one daemon. Never includes environment variables.",
       "properties": {
         "agentToolsEnabled": {
-          "description": "Enable cross-session agent tools on this daemon.",
+          "description": "Enable agent collaboration and PR registration tools on this daemon.",
           "type": "boolean"
         },
         "autoResumeSessions": {
@@ -33949,7 +33945,7 @@
       "description": "Patch one daemon's policy, preserving omitted fields.",
       "properties": {
         "agentToolsEnabled": {
-          "description": "Enable cross-session agent tools on this daemon.",
+          "description": "Enable agent collaboration and PR registration tools on this daemon.",
           "type": "boolean"
         },
         "autoResumeSessions": {
@@ -33977,7 +33973,7 @@
       "description": "Operator-editable policy for one daemon. Never includes environment variables.",
       "properties": {
         "agentToolsEnabled": {
-          "description": "Enable cross-session agent tools on this daemon.",
+          "description": "Enable agent collaboration and PR registration tools on this daemon.",
           "type": "boolean"
         },
         "autoResumeSessions": {
@@ -34966,6 +34962,34 @@
             }
           ],
           "description": "Still-open blocking runner request lines, or null when the snapshot exceeded the pending byte cap."
+        },
+        "registration": {
+          "description": "Current daemon-owned host tool and URI scheme registration for this channel. Absent when the host cannot report it.",
+          "properties": {
+            "schemes": {
+              "items": {
+                "description": "A host-advertised URI scheme and whether it can be written.",
+                "properties": {
+                  "scheme": {
+                    "type": "string"
+                  },
+                  "writable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["scheme", "writable"],
+                "title": "HostUriScheme",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "tools": {
+              "items": {},
+              "type": "array"
+            }
+          },
+          "required": ["tools", "schemes"],
+          "type": "object"
         },
         "streaming": {
           "anyOf": [
@@ -44227,6 +44251,158 @@
         }
       ]
     },
+    "host_registerShipPr_args": {
+      "properties": {
+        "input": {
+          "additionalProperties": false,
+          "description": "Link an already-open GitHub pull request to the registered workspace containing this active chat.",
+          "properties": {
+            "prUrl": {
+              "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+              "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+              "type": "string"
+            },
+            "sessionId": {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            }
+          },
+          "required": ["sessionId", "prUrl"],
+          "type": "object"
+        }
+      },
+      "required": ["input"],
+      "type": "object"
+    },
+    "host_registerShipPr_result": {
+      "anyOf": [
+        {
+          "properties": {
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            },
+            "value": {
+              "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
+              "properties": {
+                "autoMerge": {
+                  "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
+                  "type": "boolean"
+                },
+                "checkedAt": {
+                  "description": "ISO time of the last gh pr view.",
+                  "type": "string"
+                },
+                "checks": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "passing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "none",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "cleanup": {
+                  "type": "boolean"
+                },
+                "monitor": {
+                  "description": "Public state of an existing PR feedback watch. No routing or chat details.",
+                  "properties": {
+                    "id": {
+                      "description": "Watch generation ID used to stop this watch without affecting a replacement.",
+                      "type": "string"
+                    },
+                    "state": {
+                      "anyOf": [
+                        {
+                          "const": "watching",
+                          "type": "string"
+                        },
+                        {
+                          "const": "error",
+                          "type": "string"
+                        },
+                        {
+                          "const": "delivery-expired",
+                          "type": "string"
+                        }
+                      ],
+                      "description": "Active watch health: watching, polling error, or expired delivery."
+                    }
+                  },
+                  "required": ["id", "state"],
+                  "type": "object"
+                },
+                "number": {
+                  "type": "number"
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "open",
+                      "type": "string"
+                    },
+                    {
+                      "const": "merged",
+                      "type": "string"
+                    },
+                    {
+                      "const": "closed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "number",
+                "url",
+                "state",
+                "checks",
+                "autoMerge",
+                "cleanup",
+                "checkedAt"
+              ],
+              "type": "object"
+            }
+          },
+          "required": ["ok", "value"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "number"
+            }
+          },
+          "required": ["ok", "status", "code", "error"],
+          "type": "object"
+        }
+      ]
+    },
     "host_removeRegisteredWorktree_args": {
       "properties": {
         "input": {
@@ -50878,6 +51054,34 @@
             }
           ],
           "description": "Still-open blocking runner request lines, or null when the snapshot exceeded the pending byte cap."
+        },
+        "registration": {
+          "description": "Current daemon-owned host tool and URI scheme registration for this channel. Absent when the host cannot report it.",
+          "properties": {
+            "schemes": {
+              "items": {
+                "description": "A host-advertised URI scheme and whether it can be written.",
+                "properties": {
+                  "scheme": {
+                    "type": "string"
+                  },
+                  "writable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["scheme", "writable"],
+                "title": "HostUriScheme",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "tools": {
+              "items": {},
+              "type": "array"
+            }
+          },
+          "required": ["tools", "schemes"],
+          "type": "object"
         },
         "streaming": {
           "anyOf": [
@@ -198571,6 +198775,23 @@
         }
       },
       "required": ["id", "state"],
+      "type": "object"
+    },
+    "workspace_ShipRegisterPrInput": {
+      "additionalProperties": false,
+      "description": "Link an already-open GitHub pull request to the registered workspace containing this active chat.",
+      "properties": {
+        "prUrl": {
+          "description": "Canonical GitHub.com PR being monitored. Must match the server grant.",
+          "pattern": "^https://github\\.com/[a-z0-9][a-z0-9-]{0,38}/(?!\\.\\.?/)[a-z0-9._-]{1,100}/pull/[1-9][0-9]{0,15}$",
+          "type": "string"
+        },
+        "sessionId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "type": "string"
+        }
+      },
+      "required": ["sessionId", "prUrl"],
       "type": "object"
     },
     "workspace_ShipRequest": {

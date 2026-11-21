@@ -1221,7 +1221,10 @@ async function adopt(
   sessionId: string,
   cwd: string,
   replay: string[],
-  metadata?: Pick<SpawnResult, "advisorSpawned" | "launchAdvisor">,
+  metadata?: Pick<
+    SpawnResult,
+    "advisorSpawned" | "launchAdvisor" | "registration"
+  >,
 ): Promise<boolean> {
   try {
     // rpc-manager imports the hub: resolving adoption lazily avoids their initialization cycle.
@@ -2199,7 +2202,21 @@ function isSpawnResult(value: unknown): value is {
 
 function isOpenResult(value: unknown): value is OpenChannelResult {
   if (!isRecord(value)) return false;
-  const { ch, joined, pending, streaming, advisorSpawned } = value;
+  const { ch, joined, pending, streaming, advisorSpawned, registration } =
+    value;
+  if (registration !== undefined) {
+    if (
+      !isRecord(registration) ||
+      !Array.isArray(registration.tools) ||
+      !Array.isArray(registration.schemes)
+    )
+      return false;
+    try {
+      validateHostTools(registration.tools, registration.schemes);
+    } catch {
+      return false;
+    }
+  }
   return (
     isSpawnResult(value) &&
     typeof ch === "string" &&
@@ -2375,6 +2392,7 @@ export class RemoteHost implements Host {
           launchAdvisor: value.launchAdvisor,
           advisorSpawned: value.advisorSpawned,
           joined: value.joined,
+          registration: value.registration,
           pending: value.pending,
           streaming,
         };

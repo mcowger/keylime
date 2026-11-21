@@ -188,6 +188,8 @@ export function validWorkspaceResult(
         ) &&
         (value.pr === null || shipPr(value.pr))
       );
+    case "registerShipPr":
+      return shipPr(value);
     case "startShipMonitor":
       return Value.Check(ShipPrMonitorSchema, value);
     case "stopShipMonitor":

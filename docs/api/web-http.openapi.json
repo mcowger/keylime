@@ -101243,7 +101243,7 @@
                       "description": "Operator-editable policy for one daemon. Never includes environment variables.",
                       "properties": {
                         "agentToolsEnabled": {
-                          "description": "Enable cross-session agent tools on this daemon.",
+                          "description": "Enable agent collaboration and PR registration tools on this daemon.",
                           "type": "boolean"
                         },
                         "autoResumeSessions": {
@@ -101542,7 +101542,7 @@
                     "description": "Patch one daemon's policy, preserving omitted fields.",
                     "properties": {
                       "agentToolsEnabled": {
-                        "description": "Enable cross-session agent tools on this daemon.",
+                        "description": "Enable agent collaboration and PR registration tools on this daemon.",
                         "type": "boolean"
                       },
                       "autoResumeSessions": {
@@ -101603,7 +101603,7 @@
                       "description": "Operator-editable policy for one daemon. Never includes environment variables.",
                       "properties": {
                         "agentToolsEnabled": {
-                          "description": "Enable cross-session agent tools on this daemon.",
+                          "description": "Enable agent collaboration and PR registration tools on this daemon.",
                           "type": "boolean"
                         },
                         "autoResumeSessions": {

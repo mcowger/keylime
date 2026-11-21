@@ -1,6 +1,8 @@
 # Monitor pull requests from Ship
 
-Ship starts the watch directly. There is no subscription tool or setup turn. A quiet PR doesn't wake the agent.
+Ship can start the watch directly. An agent can inspect its workspace's linked PR and start monitoring without a browser or confirmation; with Agent tools enabled on its host, it can also register an existing PR. A quiet PR doesn't wake the agent.
+
+`get_workspace_pr` returns the recorded PR and its last-observed status, or `pr: null` when no PR is linked. It does not query GitHub or prove that no PR exists there.
 
 ## User flow
 
@@ -18,7 +20,7 @@ Reuse Ship's poll schedule and the host's `gh` authentication for new conversati
 
 The initiating server owns the outbox. Bind the watch to that authenticated host link's configured server identity, stable across reconnects and not taken from browser input. The daemon persists the digest and its stable ID with the GitHub observation before sending. It sends an explicit targeted host-link message only to that server; no failover or broadcast. `sessions_changed` only invalidates lists and can go to every peer. Neither hierarchy nor job status contains digest contents or routing credentials.
 
-Only authenticated web requests to Ship or **Start monitoring** can issue an opt-in. The web server commits a new grant tied to the host credential, workspace and chat before asking the daemon to start the watch. Standalone start also pins the grant to the recorded PR URL at issuance; for Ship, the first matching observation pins the PR URL inside the same outbox transaction that admits the digest. The daemon uses the grant ID for the monitor. When feedback arrives, main asks the source host for the current watch for that grant. Later offers must still match that exact PR and active watch. An authenticated link alone can't enqueue a digest. Stop revokes the grant; closing or merging the PR or archiving the chat removes the watch. The daemon is still the source of GitHub observations; the server doesn't independently fetch comments.
+An authenticated web request to Ship or **Start monitoring**, or an agent's `monitor_workspace_pr` call, can start a watch. The web server commits a new grant tied to the host credential, workspace and chat before asking the daemon to start the watch. Standalone start pins the grant to the recorded PR URL at issuance; for Ship, the first matching observation pins the PR URL inside the same outbox transaction that admits the digest. The daemon uses the grant ID for the monitor. When feedback arrives, main asks the source host for the current watch for that grant. Later offers must still match that exact PR and active watch. An authenticated link alone can't enqueue a digest. Stop revokes the grant; closing or merging the PR or archiving the chat removes the watch. The daemon is still the source of GitHub observations; the server doesn't independently fetch comments.
 
 The server builds the GitHub links and follow-up text from the pinned PR and validated event IDs. Monitoring doesn't authorize pushing, posting, resolving threads, or merging. GitHub feedback is untrusted; if the agent reads it, that goes through its normal tools and shared transcript.
 

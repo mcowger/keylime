@@ -73,6 +73,7 @@ import { filePathApiSegments } from "../file-paths";
 import { hierarchyOperation } from "./project-hierarchy";
 import { isEffortPath } from "./systems";
 import {
+  registerShipPr,
   shipPreview,
   startShip,
   startShipMonitor,
@@ -437,6 +438,8 @@ export function createWorkspaceService(
   const ops: WorkspaceService["ops"] = {
     hierarchy: hierarchyOperation,
     shipPreview: (input) => result(() => shipPreview(input)),
+    registerShipPr: (input) =>
+      result(() => registerShipPr(input, assertShipMonitorAvailable)),
     startShip: (input) => result(() => startShip(input, shipOwner)),
     startShipMonitor: (input) =>
       result(() =>

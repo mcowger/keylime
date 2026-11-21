@@ -143,6 +143,16 @@ export class SharedRequests {
     this.dispatch();
   }
 
+  /** Return an independent snapshot only to the link that owns the registration. */
+  registrationFor(id: string): Registration {
+    const registration = this.registration;
+    if (registration?.id !== id) return { tools: [], schemes: [] };
+    return structuredClone({
+      tools: registration.tools,
+      schemes: registration.schemes,
+    });
+  }
+
   remove(id: string): void {
     if (this.registration?.id !== id) return;
     this.registration = undefined;

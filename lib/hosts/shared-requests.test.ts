@@ -34,6 +34,64 @@ function harness({ defer = false } = {}) {
   };
 }
 
+test("registration snapshots are independent, scoped and follow replacement and removal", () => {
+  const h = harness();
+  const tools = [
+    {
+      name: "open_url",
+      description: "Open a URL in the user's browser.",
+      parameters: {
+        type: "object",
+        properties: { url: { type: "string" } },
+        required: ["url"],
+      },
+    },
+    {
+      name: "monitor_workspace_pr",
+      parameters: { type: "object", properties: {} },
+    },
+  ];
+  const schemes = [{ scheme: "pi-web", writable: true }];
+  const empty = { tools: [], schemes: [] };
+  assert.deepEqual(h.shared.registrationFor("a"), empty);
+  h.shared.setTools("a", tools, schemes);
+  assert.deepEqual(h.shared.registrationFor("a"), { tools, schemes });
+  assert.deepEqual(h.shared.registrationFor("b"), empty);
+
+  const snapshot = h.shared.registrationFor("a");
+  const parameters = snapshot.tools[0].parameters;
+  assert.ok(
+    parameters && typeof parameters === "object" && "properties" in parameters,
+  );
+  const properties = parameters.properties;
+  assert.ok(
+    properties && typeof properties === "object" && "url" in properties,
+  );
+  const url = properties.url;
+  assert.ok(url && typeof url === "object" && "type" in url);
+  url.type = "changed";
+  snapshot.schemes[0].writable = false;
+  snapshot.tools.pop();
+  assert.deepEqual(h.shared.registrationFor("a"), { tools, schemes });
+
+  assert.throws(() => h.shared.setTools("b", [{ name: "" }], []));
+  assert.deepEqual(h.shared.registrationFor("a"), { tools, schemes });
+  const replacement = [{ name: "other" }];
+  h.shared.setTools("b", replacement, []);
+  assert.deepEqual(h.shared.registrationFor("a"), empty);
+  assert.deepEqual(h.shared.registrationFor("b"), {
+    tools: replacement,
+    schemes: [],
+  });
+  h.shared.remove("a");
+  assert.deepEqual(h.shared.registrationFor("b"), {
+    tools: replacement,
+    schemes: [],
+  });
+  h.shared.remove("b");
+  assert.deepEqual(h.shared.registrationFor("b"), empty);
+});
+
 test("first dialog answer wins and native cancellation prevents a late answer", () => {
   const h = harness();
   const q = { t: "ui_request", id: 1, method: "formDialog", args: [] };

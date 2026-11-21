@@ -901,7 +901,8 @@ export const HostSettingsSchema = Type.Object(
       description: "Resume sessions interrupted on this daemon.",
     }),
     agentToolsEnabled: Type.Boolean({
-      description: "Enable cross-session agent tools on this daemon.",
+      description:
+        "Enable agent collaboration and PR registration tools on this daemon.",
     }),
     uploadRetentionDays: Type.Union(
       [Type.Integer({ minimum: 1, maximum: 3650 }), Type.Null()],

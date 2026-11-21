@@ -3,19 +3,24 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { Value } from "@sinclair/typebox/value";
 import { getAgentDir, getSessionsDir } from "../omp/paths";
 import { readSessionHeaderSync } from "../omp/session-files";
 import { isValidSessionId } from "../session-file-references-core";
 import { resolveSessionPath } from "../session-reader";
 import { createGitEnvironment } from "../project-command-env";
 import { resolveGithubRepo } from "../github-repo";
-import { SHIP_MONITOR_GRANT_ID_PATTERN } from "../api-contracts/workspace-models";
+import {
+  SHIP_MONITOR_GRANT_ID_PATTERN,
+  ShipRegisterPrInputSchema,
+} from "../api-contracts/workspace-models";
 import type {
   ShipJob,
   ShipPr,
   ShipPrMonitor,
   ShipPreview,
   ShipMonitorStatusResult,
+  ShipRegisterPrInput,
   ShipStartInput,
   ShipStartMonitorInput,
   ShipStepName,
@@ -359,6 +364,101 @@ async function openPr(
     checkedAt: new Date().toISOString(),
   };
 }
+export async function registerShipPr(
+  input: ShipRegisterPrInput,
+  assertAvailable?: (path: string) => void,
+): Promise<ShipPr> {
+  if (!Value.Check(ShipRegisterPrInputSchema, input))
+    throw new HostOpError(
+      400,
+      "invalid_request",
+      "Invalid PR registration request",
+    );
+  const pinned = githubShipPr(input.prUrl);
+  if (pinned.url !== input.prUrl)
+    throw new HostOpError(400, "invalid_request", "Invalid canonical PR URL");
+  const matches = readHierarchy().projects.flatMap((project) =>
+    project.workspaces
+      .filter((workspace) => workspace.sessionIds.includes(input.sessionId))
+      .map((workspace) => ({
+        projectPath: project.path,
+        path: workspace.path,
+      })),
+  );
+  if (matches.length !== 1)
+    throw new HostOpError(
+      409,
+      "ship_session_unavailable",
+      "Chat has no unique registered workspace",
+    );
+  const target = matches[0];
+  const { workspace, base } = registered(target);
+  const workspaceId = workspace.id;
+  const assertIdle = () => {
+    assertAvailable?.(target.path);
+    if (active.has(target.path) || startingMonitors.has(target.path))
+      throw new HostOpError(
+        409,
+        "ship_running",
+        "Workspace shipping or monitoring is starting",
+      );
+  };
+  assertIdle();
+  const file = await resolveSessionPath(input.sessionId);
+  assertLiveShipSession(target, input.sessionId, file);
+  const [head, baseBranch, repo] = await Promise.all([
+    branch(target.path),
+    branch(base.path),
+    resolveGithubRepo(target.path),
+  ]);
+  if (!head || !baseBranch || !repo || repo.toLowerCase() !== pinned.repo)
+    throw new HostOpError(
+      409,
+      "pr_workspace_mismatch",
+      "Pull request does not match this workspace",
+    );
+  const pr = await openPr(target.path, repo, head);
+  if (!pr || pr.url !== pinned.url)
+    throw new HostOpError(
+      409,
+      "pr_workspace_mismatch",
+      "Open pull request does not match this workspace",
+    );
+  assertIdle();
+  requireWorkspace(target, workspaceId);
+  assertLiveShipSession(target, input.sessionId, file);
+  const all = records();
+  const current = all[target.path];
+  if (
+    current?.workspaceId === workspaceId &&
+    current.projectPath === target.projectPath
+  ) {
+    if (current.pr.url === pr.url && current.pr.state === "open")
+      return publicPr(current);
+    if (
+      current.pr.state === "open" ||
+      current.monitor ||
+      current.autoMerge ||
+      current.pr.cleanup
+    )
+      throw new HostOpError(
+        409,
+        "ship_pr_conflict",
+        "Another pull request is recorded for this workspace",
+      );
+  }
+  all[target.path] = {
+    ...target,
+    workspaceId,
+    base: baseBranch,
+    generation: randomUUID(),
+    pr,
+  };
+  saveRecords(all);
+  changed();
+  return pr;
+}
+
 export async function shipPreview(input: {
   projectPath: string;
   path: string;

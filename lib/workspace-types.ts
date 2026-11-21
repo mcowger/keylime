@@ -29,6 +29,8 @@ import type {
 } from "./workspace-creation-types";
 import type {
   ShipJob,
+  ShipPr,
+  ShipRegisterPrInput,
   ShipPrMonitor,
   ShipPreview,
   ShipMonitorStatusResult,
@@ -96,6 +98,7 @@ export interface WorkspaceOps {
     projectPath: string;
     path: string;
   }): Promise<OpResult<ShipPreview>>;
+  registerShipPr(input: ShipRegisterPrInput): Promise<OpResult<ShipPr>>;
   startShip(input: ShipStartInput): Promise<OpResult<ShipJob>>;
   shipStatus(id: string): Promise<OpResult<ShipJob>>;
   shipFinish(input: {
@@ -262,6 +265,7 @@ export const WORKSPACE_OP_PARAMS: {
   planning: ["operation"],
   gitAction: ["cwd", "action", "owner"],
   workspaceScripts: ["input"],
+  registerShipPr: ["input"],
 };
 
 export function isWorkspaceOp(value: string): value is keyof WorkspaceOps {

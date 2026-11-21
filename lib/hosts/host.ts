@@ -1,7 +1,10 @@
 import type { RpcTransport } from "../omp/rpc-transport";
 import type { SessionOps } from "./session-ops";
 import type { WorkspaceOps } from "../workspace-types";
-import type { SpawnRequest as SchemaSpawnRequest } from "../api-contracts/host-control-models";
+import type {
+  OpenChannelResult,
+  SpawnRequest as SchemaSpawnRequest,
+} from "../api-contracts/host-control-models";
 import type {
   HostModels,
   HostSettings,
@@ -33,6 +36,8 @@ export interface SpawnResult {
   advisorSpawned?: boolean;
   /** Existing shared channel: startup/ready already completed on the daemon. */
   joined?: boolean;
+  /** Current daemon-owned registration, absent when the host cannot report it. */
+  registration?: OpenChannelResult["registration"];
   pending?: string[];
   streaming?: string | null;
 }

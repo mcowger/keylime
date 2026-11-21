@@ -472,6 +472,18 @@ export const ShipStartInputSchema = Type.Object(
   },
 );
 
+export const ShipRegisterPrInputSchema = Type.Object(
+  {
+    sessionId: ShipPrDigestSchema.properties.sessionId,
+    prUrl: ShipPrDigestSchema.properties.prUrl,
+  },
+  {
+    additionalProperties: false,
+    description:
+      "Link an already-open GitHub pull request to the registered workspace containing this active chat.",
+  },
+);
+
 const monitorPath = Type.String({ minLength: 1, pattern: "^[^\\x00]+$" });
 export const ShipStartMonitorRequestSchema = Type.Object(
   {

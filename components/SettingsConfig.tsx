@@ -879,9 +879,9 @@ const SETTING_INDEX: SettingIndexEntry[] = [
     labelKey: "settingsConfig.agentTools",
     descKey: "settingsConfig.agentToolsDesc",
     fallbackSection: "System",
-    fallbackLabel: "Agent tools (cross-session)",
+    fallbackLabel: "Agent tools",
     fallbackDesc:
-      "Let agents list, start, and message other sessions on this host, even with no browser open. Applies to sessions started or reconnected after saving.",
+      "Let agents link PRs and list, start, and message other sessions on this host, even with no browser open. Applies to sessions started or reconnected after saving.",
   },
   {
     id: "upload-retention",

@@ -73,6 +73,12 @@ for (const [state, label] of [
           };
           return Response.json(snapshot);
         }
+        if (String(url) === "/api/ship/monitor/start") {
+          assert.equal(init?.method, "POST");
+          requests.push(JSON.parse(String(init?.body)));
+          monitored = true;
+          return Response.json({ id: "new-generation", state: "watching" });
+        }
         assert.equal(String(url), "/api/ship/monitor/stop");
         assert.equal(init?.method, "POST");
         requests.push(JSON.parse(String(init?.body)));
@@ -162,6 +168,23 @@ for (const [state, label] of [
       assert.equal(menu.open, false);
       fireEvent.click(within(picker).getByRole("button", { name: "Cancel" }));
       await waitFor(() => assert.equal(document.activeElement, summary));
+      assert.equal(requests.length, 1);
+      fireEvent.click(summary);
+      fireEvent.click(actions.getByRole("button", { name: "Start monitoring" }));
+      const secondDialog = await view.findByRole("dialog", {
+        name: "Monitor PR #42",
+      });
+      fireEvent.click(
+        within(secondDialog).getByRole("button", { name: "Start monitoring" }),
+      );
+      await waitFor(() => assert.equal(requests.length, 2));
+      assert.deepEqual(requests[1], {
+        host: "local",
+        projectPath: "/repo",
+        path: "/work",
+        sessionId: chat.id,
+        prUrl: "https://github.com/owner/repo/pull/42",
+      });
     } finally {
       cleanup();
       globalThis.fetch = originalFetch;

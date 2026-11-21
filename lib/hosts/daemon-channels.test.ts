@@ -185,6 +185,71 @@ function harness(launchAdvisor = false, hello: object = {}) {
   };
 }
 
+test("open snapshots retain only the current member's complete tool registration", async () => {
+  const h = harness();
+  const empty = { tools: [], schemes: [] };
+  const tools = [
+    {
+      name: "open_url",
+      description: "Open a URL in the user's browser.",
+      parameters: {
+        type: "object",
+        properties: { url: { type: "string" } },
+        required: ["url"],
+      },
+    },
+    {
+      name: "monitor_workspace_pr",
+      description: "Ask to monitor the linked PR",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  ];
+  const schemes = [
+    { scheme: "pi-web", writable: true },
+    { scheme: "https", writable: false },
+  ];
+  const first = await h.table.open(h.a, { sessionId: SAVED, launch });
+  assert.equal(first.joined, false);
+  assert.deepEqual(first.registration, empty);
+  h.table.release(h.a, first.ch);
+  h.table.setTools(h.a, first.ch, tools, schemes);
+
+  const reopened = await h.table.open(h.a, {
+    sessionId: SAVED,
+    launch,
+    expectedChannel: first.ch,
+  });
+  assert.equal(reopened.joined, true);
+  assert.deepEqual(reopened.registration, { tools, schemes });
+  h.table.release(h.a, first.ch);
+  h.table.setTools(h.a, first.ch, [], []);
+  const cleared = await h.table.open(h.a, { sessionId: SAVED, launch });
+  assert.equal(cleared.joined, true);
+  assert.deepEqual(cleared.registration, empty);
+  h.table.release(h.a, first.ch);
+  h.table.setTools(h.a, first.ch, tools, schemes);
+  await assert.rejects(h.table.open(h.b, { sessionId: SAVED, launch }), {
+    code: "channel_already_joined",
+  });
+
+  h.table.close(h.a, first.ch);
+  const joined = await h.table.open(h.b, { sessionId: SAVED, launch });
+  assert.equal(joined.joined, true);
+  assert.deepEqual(joined.registration, empty);
+  h.table.release(h.b, joined.ch);
+  const replacement = [{ name: "replacement", parameters: { type: "object" } }];
+  h.table.setTools(h.b, joined.ch, replacement, []);
+  assert.throws(() => h.table.setTools(h.a, joined.ch, tools, schemes));
+  const replaced = await h.table.open(h.b, { sessionId: SAVED, launch });
+  assert.deepEqual(replaced.registration, { tools: replacement, schemes: [] });
+  h.table.release(h.b, joined.ch);
+  await h.table.stop();
+});
+
 test("a controller reopen reports the actual advisor flag even when it requests another mode", async () => {
   for (const [requested, forced] of [
     [false, false],

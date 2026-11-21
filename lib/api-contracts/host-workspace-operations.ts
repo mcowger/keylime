@@ -549,4 +549,14 @@ Recovery: Read the board after a conflict or uncertain result. Never assume an u
     args: obj({ operation: PlanningOperationSchema }),
     result: PlanningBoardSchema,
   },
+  op(
+    "registerShipPr",
+    `Usage: Associate an existing open pull request with the calling chat's registered workspace.
+Inputs: sessionId identifies a live workspace chat; prUrl is the canonical GitHub pull request URL.
+Invariants: The PR must match the workspace branch and repository; existing active records are not replaced.
+Effects: Persists the local PR association without pushing, merging, starting monitoring, or cleaning up.
+Recovery: Refresh the workspace hierarchy before retrying an uncertain result.`,
+    obj({ input: M.ShipRegisterPrInputSchema }),
+    M.ShipPrSchema,
+  ),
 ];

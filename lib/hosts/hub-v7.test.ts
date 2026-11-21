@@ -39,6 +39,11 @@ type SharedOptions = {
   hostBusy?: boolean;
   failReplace?: boolean;
   leaseBusy?: boolean;
+  registration?: {
+    tools: unknown[];
+    schemes: { scheme: string; writable: boolean }[];
+  };
+  joined?: boolean;
 };
 async function nextRequest(link: Driver) {
   const message = await link.next();
@@ -115,6 +120,8 @@ async function sharedLink(
     hostBusy = false,
     failReplace = false,
     leaseBusy = false,
+    registration,
+    joined = true,
   }: SharedOptions = {},
 ) {
   let ch = `shared-${id}`;
@@ -160,6 +167,8 @@ async function sharedLink(
           actualAdvisor = desired;
         }
         return result(ch, {
+          joined: coldStarts === 0 ? joined : false,
+          ...(registration === undefined ? {} : { registration }),
           pending,
           streaming:
             typeof streaming === "function"
@@ -272,6 +281,50 @@ test("shell exclusion is forwarded on every bash command, including after reload
     .filter((m) => m.op === "bash");
   assert.equal(executions.length, 2);
   assert.ok(executions.every((m) => m.args.excludeFromContext === true));
+});
+
+test("open validates and returns a host's registration snapshot", async (t) => {
+  const link = await linkHost("Registration snapshot", {
+    hello: { v: LINK_PROTOCOL_VERSION },
+  });
+  t.after(() => hub.closeHostLink(link.id));
+  const host = hub.getHost(link.id)!;
+  const registration = {
+    tools: [{ name: "open_file", parameters: { type: "object" } }],
+    schemes: [{ scheme: "clipboard", writable: true }],
+  };
+  const id = sessionId();
+  const opening = host.spawnRpc(launch(id), id);
+  const request = await nextRequest(link);
+  await link.post({
+    type: "res",
+    id: request.id,
+    ok: true,
+    result: result("valid-inventory", { registration }),
+  });
+  const spawned = await opening;
+  assert.deepEqual(spawned.registration, registration);
+
+  for (const invalid of [
+    null,
+    { tools: [{ name: "open_file", parameters: [] }], schemes: [] },
+    { tools: [], schemes: [{ scheme: "clipboard", writable: "yes" }] },
+  ]) {
+    const invalidId = sessionId();
+    const attempt = host.spawnRpc(launch(invalidId), invalidId);
+    const req = await nextRequest(link);
+    await link.post({
+      type: "res",
+      id: req.id,
+      ok: true,
+      result: result(`bad-${invalidId}`, { registration: invalid }),
+    });
+    await assert.rejects(
+      attempt,
+      (error) =>
+        error instanceof HostOpError && error.code === "host_bad_result",
+    );
+  }
 });
 
 // A promise continuation is too late: the following stdout is applied in the same WebSocket frame.
@@ -828,6 +881,44 @@ test("adopted shared web callbacks report unknown outcome instead of blindly rep
   );
 });
 
+test("adopted shared lookup replays while monitoring stays unknown", async (t) => {
+  const id = sessionId();
+  const pending = [
+    {
+      t: "host_tool_call",
+      id: "lookup",
+      toolName: "get_workspace_pr",
+      arguments: {},
+    },
+    {
+      t: "host_tool_call",
+      id: "monitor",
+      toolName: "monitor_workspace_pr",
+      arguments: {},
+    },
+  ].map((call) => JSON.stringify(call));
+  const { messages } = await sharedLink(t, id, { listed: true, pending });
+  await until(
+    () =>
+      messages.filter(
+        (message) =>
+          message.type === "stdin" &&
+          JSON.parse(message.line).t === "host_tool_result",
+      ).length === 2,
+    "replayed PR tools answered",
+  );
+  const replies = messages
+    .filter((message) => message.type === "stdin")
+    .map((message) => JSON.parse(message.line))
+    .filter((frame) => frame.t === "host_tool_result");
+  const lookup = replies.find((frame) => frame.id === "lookup");
+  const monitor = replies.find((frame) => frame.id === "monitor");
+  assert.equal(lookup.isError, true);
+  assert.match(lookup.result.content[0].text, /Update or restart/);
+  assert.equal(monitor.isError, true);
+  assert.match(monitor.result.content[0].text, /outcome is unknown/);
+});
+
 test("v7 channels_changed observes a newly created run without any tab", async (t) => {
   const id = sessionId();
   const { link, ch, opens } = await sharedLink(t, id, {
@@ -845,6 +936,176 @@ test("v7 channels_changed observes a newly created run without any tab", async (
   assert.equal(getRpcSession(id, link.id)?.hasSubscribers(), false);
   assert.equal(getRpcSession(id, link.id)?.isRunning(), true);
   assert.equal(opens.length, 1);
+});
+
+test("joined and eager adoption retain browser tools and writable schemes while adding monitoring", async (t) => {
+  for (const listed of [false, true]) {
+    const id = sessionId();
+    const registration = {
+      tools: [
+        { name: "open_file", description: "Open a file" },
+        { name: "monitor_workspace_pr", description: "Old server definition" },
+        { name: "get_workspace_pr", description: "Old lookup definition" },
+      ],
+      schemes: [{ scheme: "clipboard", writable: true }],
+    };
+    const { link, ch, messages } = await sharedLink(t, id, {
+      listed,
+      registration,
+    });
+    if (listed) {
+      await until(
+        () => getRpcSession(id, link.id)?.isAlive(),
+        "eager adoption",
+      );
+    }
+    const { session } = await startRpcSession(
+      id,
+      launch(id).sessionFile,
+      "/w",
+      undefined,
+      false,
+      "/w",
+      undefined,
+      hub.getHost(link.id)!,
+    );
+    await until(
+      () => messages.some((message) => message.type === "host_tools"),
+      "merged registration",
+    );
+    const sent = messages.find((message) => message.type === "host_tools");
+    assert.ok(sent && sent.type === "host_tools");
+    assert.deepEqual(sent.schemes, registration.schemes);
+    const tools = sent.tools as { name: string; description?: string }[];
+    assert.ok(tools.some((tool) => tool.name === "open_file"));
+    assert.equal(
+      tools.filter((tool) => tool.name === "monitor_workspace_pr").length,
+      1,
+    );
+    assert.notEqual(
+      tools.find((tool) => tool.name === "monitor_workspace_pr")?.description,
+      "Old server definition",
+    );
+    assert.equal(
+      tools.filter((tool) => tool.name === "get_workspace_pr").length,
+      1,
+    );
+    assert.notEqual(
+      tools.find((tool) => tool.name === "get_workspace_pr")?.description,
+      "Old lookup definition",
+    );
+
+    const events: SessionEvent[] = [];
+    const detach = session.onEvent((event) => events.push(event));
+    t.after(detach);
+    await link.post(
+      {
+        type: "stdout",
+        ch,
+        line: JSON.stringify({
+          t: "host_tool_call",
+          id: "file",
+          toolName: "open_file",
+          arguments: {},
+        }),
+      },
+      {
+        type: "stdout",
+        ch,
+        line: JSON.stringify({
+          t: "host_uri_request",
+          id: "clipboard",
+          url: "clipboard://item",
+          operation: "write",
+        }),
+      },
+    );
+    await until(
+      () => events.some((event) => event.id === "clipboard"),
+      "writable clipboard request",
+    );
+    assert.ok(
+      events.some(
+        (event) => event.type === "host_tool_call" && event.id === "file",
+      ),
+    );
+    assert.ok(
+      events.some(
+        (event) =>
+          event.type === "host_uri_request" && event.id === "clipboard",
+      ),
+    );
+  }
+});
+
+test("joined older hosts retain unknown inventory until a browser registers", async (t) => {
+  const id = sessionId();
+  const { link, messages } = await sharedLink(t, id);
+  const { session } = await startRpcSession(
+    id,
+    launch(id).sessionFile,
+    "/w",
+    undefined,
+    false,
+    "/w",
+    undefined,
+    hub.getHost(link.id)!,
+  );
+  await session.send({
+    type: "set_host_uri_schemes",
+    schemes: [{ scheme: "clipboard", writable: true }],
+  });
+  assert.equal(
+    messages.some((message) => message.type === "host_tools"),
+    false,
+  );
+  await session.send({
+    type: "set_host_tools",
+    tools: [{ name: "open_file" }],
+  });
+  await until(
+    () => messages.some((message) => message.type === "host_tools"),
+    "browser registration",
+  );
+  const registrations = messages.filter(
+    (message) => message.type === "host_tools",
+  );
+  assert.equal(registrations.length, 1);
+  const sent = registrations[0]!;
+  assert.deepEqual(sent.schemes, [{ scheme: "clipboard", writable: true }]);
+  const names = (sent.tools as { name: string }[]).map((tool) => tool.name);
+  assert.ok(names.includes("monitor_workspace_pr"));
+  assert.ok(names.includes("get_workspace_pr"));
+  assert.ok(names.includes("open_file"));
+});
+
+test("fresh children and joined empty snapshots advertise monitor", async (t) => {
+  for (const options of [
+    { joined: false },
+    { registration: { tools: [], schemes: [] } },
+  ]) {
+    const id = sessionId();
+    const { link, messages } = await sharedLink(t, id, options);
+    await startRpcSession(
+      id,
+      launch(id).sessionFile,
+      "/w",
+      undefined,
+      false,
+      "/w",
+      undefined,
+      hub.getHost(link.id)!,
+    );
+    await until(
+      () => messages.some((message) => message.type === "host_tools"),
+      "server tool registration",
+    );
+    const sent = messages.find((message) => message.type === "host_tools");
+    assert.ok(sent && sent.type === "host_tools");
+    const names = (sent.tools as { name: string }[]).map((tool) => tool.name);
+    assert.ok(names.includes("monitor_workspace_pr"));
+    assert.ok(names.includes("get_workspace_pr"));
+  }
 });
 
 test("explicit v7 reload kills once, restores registrations and leaves startup settings to the daemon", async (t) => {

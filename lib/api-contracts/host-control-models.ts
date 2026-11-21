@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { CREATION_ID_RE } from "../hosts/creation-identity";
 import { UPLOAD_ID_RE } from "../upload-limits";
+import { HostUriSchemeSchema } from "./host-schemas";
 
 /** Bootstrapped with TypeBox Codegen from SpawnRequest and OpenChannelRequest/Result. */
 export const SpawnRequestSchema = Type.Object(
@@ -77,6 +78,18 @@ export const OpenChannelResultSchema = Type.Object(
     launchAdvisor: Type.Boolean(),
     advisorSpawned: Type.Boolean(),
     autoApproveExtension: Type.Boolean(),
+    registration: Type.Optional(
+      Type.Object(
+        {
+          tools: Type.Array(Type.Unknown()),
+          schemes: Type.Array(HostUriSchemeSchema),
+        },
+        {
+          description:
+            "Current daemon-owned host tool and URI scheme registration for this channel. Absent when the host cannot report it.",
+        },
+      ),
+    ),
     continuous: Type.Optional(
       Type.Boolean({
         description:

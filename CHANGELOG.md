@@ -12,6 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
+- Agents can inspect their workspace's linked PR, link an existing PR, and start PR feedback monitoring without a browser or confirmation.
 - The Git drawer offers Push, Pull, Fetch, and rebase onto local `main` or `origin/main`.
 - Run named Paseo scripts and start services from the **Scripts** tab in the right sidebar when the Repo follows Paseo workspace setup. Services use ports on the owning host. Stop keeps terminal output; successful worktree removal discards it.
 - Advisor review status covers turn-boundary scheduling and review delivery, and survives inconclusive reconnect snapshots.
@@ -256,6 +257,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Controller restarts preserve an active session's browser tools and clipboard scheme while restoring PR monitoring.
 - The mobile model picker and terminal keys clear the device's bottom safe area in installed apps.
 - Paseo scripts and services use the host account's interactive login shell, matching workspace terminals.
 - Ship now watches the pushed PR and merges only after its checks pass and GitHub reports it mergeable, instead of attempting an immediate merge.

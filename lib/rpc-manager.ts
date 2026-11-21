@@ -762,6 +762,8 @@ export class AgentSessionWrapper {
   /** Adopted, and no tab has registered host tools since: omp may call tools the
    * wrapper a restart lost registered, so every call routes as registered. */
   private hostToolsUnknown = false;
+  /** A newly adopted child can have pending browser calls before a tab returns. */
+  private awaitingAdoptedTab = false;
   private _adopted = false;
   /** host_tool_call ids awaiting a host_tool_result from the browser. */
   private pendingHostTools = new Map<
@@ -1288,12 +1290,42 @@ export class AgentSessionWrapper {
    * wedged child fails the adoption, then the daemon's lines of its open requests.
    * `joined`: false when this open started the shared child, so no other server's history precedes it.
    */
-  async adopt(replay?: string[], joined = true): Promise<void> {
+  async adopt(
+    replay?: string[],
+    joined = true,
+    registration?: SpawnResult["registration"],
+  ): Promise<void> {
     if (replay !== undefined) this.adoptionReplay = replay;
     this.handshaking = true;
     this.reportInterest();
     this._adopted = joined;
     this.hostToolsUnknown = true;
+    this.awaitingAdoptedTab = joined;
+    if (joined && registration !== undefined) {
+      this.registeredHostTools = registration.tools.filter(
+        (tool): tool is { name: string; [key: string]: unknown } =>
+          typeof tool === "object" &&
+          tool !== null &&
+          "name" in tool &&
+          typeof tool.name === "string" &&
+          !AGENT_TOOL_NAMES.has(tool.name),
+      );
+      this.hostToolNames = new Set(
+        this.registeredHostTools.map((tool) => tool.name as string),
+      );
+      this.registeredHostUriSchemes = registration.schemes;
+      this.hostUriSchemes = new Map(
+        registration.schemes.map(({ scheme, writable }) => [
+          scheme,
+          { writable },
+        ]),
+      );
+    } else if (joined) {
+      this.registeredHostTools = null;
+      this.hostToolNames.clear();
+      this.registeredHostUriSchemes = null;
+      this.hostUriSchemes.clear();
+    }
     // A refusal is tolerated, as at startup; a timeout or an exit fails the adoption.
     const optional = (
       command: { type: string; [key: string]: unknown },
@@ -1329,11 +1361,14 @@ export class AgentSessionWrapper {
       // Frames omp sent during the handshake are live: its agent tool calls there run normally.
       this.proc.release();
       this.adoptionReplay = undefined;
-      if (this.hostOwnedLifecycle && (await this.agentToolsAllowed())) {
+      // An older host cannot report the existing inventory. Replacing it would
+      // erase browser tools, so wait for a browser registration in that case.
+      if (!joined || registration !== undefined) {
         await this.dispatchCommand({
           type: "set_host_tools",
           tools: this.registeredHostTools ?? [],
-        });
+        }).catch(() => {});
+        this.awaitingAdoptedTab = joined;
       }
     } finally {
       this.handshaking = false;
@@ -1632,10 +1667,14 @@ export class AgentSessionWrapper {
       const key = `${event.type}:${event.id}`;
       if (this.deliveredCallbacks.has(key)) return;
       this.deliveredCallbacks.add(key);
-      // Only the read-only listing runs again (handled below); anything else may already have run.
+      // Read-only tools can run again; anything else may already have run.
       if (
         this.replaying &&
-        !(event.type === "host_tool_call" && event.toolName === "list_sessions")
+        !(
+          event.type === "host_tool_call" &&
+          (event.toolName === "list_sessions" ||
+            event.toolName === "get_workspace_pr")
+        )
       ) {
         this.proc.sendFrame(
           event.type === "host_tool_call"
@@ -1798,13 +1837,25 @@ export class AgentSessionWrapper {
         // browser routing, so they work with no tab open. A disabled gate
         // is an explicit error, not a silent hang and not a browser call.
         if (id && toolName && AGENT_TOOL_NAMES.has(toolName)) {
-          if (this.replaying && toolName !== "list_sessions") {
+          if (
+            this.replaying &&
+            toolName !== "list_sessions" &&
+            toolName !== "get_workspace_pr"
+          ) {
             this.proc.sendFrame({
               type: "host_tool_result",
               id,
               isError: true,
               result: {
-                content: [{ type: "text", text: AGENT_TOOL_UNKNOWN_OUTCOME }],
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      toolName === "monitor_workspace_pr"
+                        ? "Keylime restarted while monitoring was starting; the outcome is unknown. Check the workspace PR monitoring status before retrying."
+                        : AGENT_TOOL_UNKNOWN_OUTCOME,
+                  },
+                ],
               },
             });
           } else {
@@ -1858,7 +1909,7 @@ export class AgentSessionWrapper {
             return;
           }
           // Adopted with every tab gone with the old server: the next tab to attach answers it.
-          if (this.hostToolsUnknown) {
+          if (this.hostToolsUnknown || this.awaitingAdoptedTab) {
             this.parkHostTool(id, event);
             notifyRunningChange();
             return;
@@ -2515,10 +2566,7 @@ export class AgentSessionWrapper {
       });
     };
     try {
-      const args =
-        event.arguments && typeof event.arguments === "object"
-          ? (event.arguments as Record<string, unknown>)
-          : {};
+      const args = event.arguments === undefined ? {} : event.arguments;
       const context: AgentToolContext = {
         sourceSessionId: this.sessionId,
         sourceRequestId: id,
@@ -3074,10 +3122,14 @@ export class AgentSessionWrapper {
       this.reportInterest();
       try {
         if (this.hostOwnedLifecycle) {
-          await this.adopt([
-            ...(spawned.pending ?? []),
-            ...(spawned.streaming ? [spawned.streaming] : []),
-          ]);
+          await this.adopt(
+            [
+              ...(spawned.pending ?? []),
+              ...(spawned.streaming ? [spawned.streaming] : []),
+            ],
+            spawned.joined !== false,
+            spawned.registration,
+          );
         } else {
           await proc.waitReady(READY_TIMEOUT_MS);
           await proc
@@ -3107,13 +3159,16 @@ export class AgentSessionWrapper {
             ),
           );
         }
-        if (this.hostOwnedLifecycle) {
+        if (
+          this.hostOwnedLifecycle &&
+          (spawned.joined === false || spawned.registration !== undefined)
+        ) {
           if (this.registeredHostTools !== null) {
             await this.dispatchCommand({
               type: "set_host_tools",
               tools: this.registeredHostTools,
             });
-          } else if (await this.agentToolsAllowed()) {
+          } else {
             // Like initial startup, a runtime that never accepted host tools may reject this optional registration.
             await this.dispatchCommand({
               type: "set_host_tools",
@@ -3874,19 +3929,18 @@ export class AgentSessionWrapper {
           ? (command.tools as Array<{ name?: unknown; [key: string]: unknown }>)
           : [];
         const valid = tools.filter((t) => typeof t.name === "string" && t.name);
-        // Merge the server agent tools (#275) into every registration when
-        // the gate is on, so a later UI registration cannot drop them and
-        // a no-tab session keeps them after its startup registration.
-        // With the gate off the registration is exactly what the caller
-        // asked for, so existing behavior and tests are unchanged.
-        const merged = (await this.agentToolsAllowed())
-          ? [
-              ...valid,
-              ...AGENT_TOOL_DEFINITIONS.filter(
-                (t) => !valid.some((v) => v.name === t.name),
-              ),
-            ]
-          : valid;
+        // PR lookup and monitoring are always available; cross-session and
+        // registration tools remain subject to the host's agent-tools setting.
+        const enabled = await this.agentToolsAllowed();
+        const merged = [
+          ...valid.filter((t) => !AGENT_TOOL_NAMES.has(t.name as string)),
+          ...AGENT_TOOL_DEFINITIONS.filter(
+            (t) =>
+              enabled ||
+              t.name === "monitor_workspace_pr" ||
+              t.name === "get_workspace_pr",
+          ),
+        ];
         if (this.hostOwnedLifecycle) {
           const previousNames = this.hostToolNames;
           this.hostToolNames = new Set(merged.map((t) => t.name as string));
@@ -3906,6 +3960,7 @@ export class AgentSessionWrapper {
             (tool) => !AGENT_TOOL_NAMES.has(tool.name as string),
           );
           this.hostToolsUnknown = false;
+          this.awaitingAdoptedTab = false;
           return null;
         }
         // Applied as the successful reply is read, before a call in the same host-link batch is routed.
@@ -3920,6 +3975,7 @@ export class AgentSessionWrapper {
             );
             // omp now knows exactly these: an adopted child's lost registration is replaced.
             this.hostToolsUnknown = false;
+            this.awaitingAdoptedTab = false;
           },
         );
         return null;
@@ -3944,6 +4000,26 @@ export class AgentSessionWrapper {
               [key: string]: unknown;
             }>)
           : [];
+        // A scheme-only update from the first returning tab must not replace
+        // an older host's still-unknown browser tools.
+        if (
+          this.hostOwnedLifecycle &&
+          this.hostToolsUnknown &&
+          this.registeredHostTools === null
+        ) {
+          this.registeredHostUriSchemes = schemes;
+          this.hostUriSchemes = new Map(
+            schemes
+              .filter(
+                (entry) => typeof entry.scheme === "string" && entry.scheme,
+              )
+              .map((entry) => [
+                entry.scheme as string,
+                { writable: entry.writable === true },
+              ]),
+          );
+          return null;
+        }
         if (this.hostOwnedLifecycle) {
           const previous = this.hostUriSchemes;
           this.hostUriSchemes = new Map(
@@ -3958,14 +4034,16 @@ export class AgentSessionWrapper {
           );
           try {
             const tools = this.registeredHostTools ?? [];
-            const merged = (await this.agentToolsAllowed())
-              ? [
-                  ...tools,
-                  ...AGENT_TOOL_DEFINITIONS.filter(
-                    (tool) => !tools.some((entry) => entry.name === tool.name),
-                  ),
-                ]
-              : tools;
+            const enabled = await this.agentToolsAllowed();
+            const merged = [
+              ...tools,
+              ...AGENT_TOOL_DEFINITIONS.filter(
+                (tool) =>
+                  enabled ||
+                  tool.name === "monitor_workspace_pr" ||
+                  tool.name === "get_workspace_pr",
+              ),
+            ];
             await this.proc.transport.setHostTools!(
               merged,
               [...this.hostUriSchemes].map(([scheme, { writable }]) => ({
@@ -4498,6 +4576,41 @@ function createAgentToolOps(
   replaying: boolean,
 ): AgentToolSessionOps {
   return {
+    async registerWorkspacePr(prUrl) {
+      const host = getHost(source.sourceHostId);
+      if (!host || !isLinkUp(host.status()))
+        throw new Error("The calling host is unavailable");
+      if (!host.supportsWorkspaceOp("registerShipPr"))
+        throw new Error(
+          "Update or restart the host to register pull requests.",
+        );
+      const result = await host.workspaceOps.registerShipPr({
+        sessionId: source.sourceSessionId,
+        prUrl,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return result.value;
+    },
+
+    async getWorkspacePr() {
+      const host = getHost(source.sourceHostId);
+      if (!host || !isLinkUp(host.status()))
+        throw new Error("The calling host is unavailable");
+      // Avoid a static import cycle through the monitor service's outbox.
+      const { getWorkspacePrForSession } = await import("./ship-monitor-start");
+      return getWorkspacePrForSession(host, source.sourceSessionId);
+    },
+
+    async monitorWorkspacePr() {
+      const host = getHost(source.sourceHostId);
+      if (!host || !isLinkUp(host.status()))
+        throw new Error("The calling host is unavailable");
+      // The monitor service uses the outbox, which itself imports this module.
+      const { monitorWorkspacePrForSession } =
+        await import("./ship-monitor-start");
+      return monitorWorkspacePrForSession(host, source.sourceSessionId);
+    },
+
     async listSessions(hostId) {
       const host = getHost(hostId);
       if (!host || host.id !== source.sourceHostId || !isLinkUp(host.status()))
@@ -4922,6 +5035,7 @@ export async function startRpcSession(
             ...(spawned.streaming ? [spawned.streaming] : []),
           ],
           spawned.joined !== false,
+          spawned.registration,
         );
       } else {
         await created.waitUntilReady();
@@ -4940,16 +5054,9 @@ export async function startRpcSession(
       ) {
         await created.send({ type: "new_session" });
       }
-      // Register server agent tools (#275) at startup when the gate is on,
-      // so a session works for agent-to-agent calls even when no browser
-      // tab ever registers host tools for it. send() merges these with any
-      // later UI registration, so this never drops the UI tools. Older omp
-      // builds without host tools simply reject the registration; ignore
-      // that the way the UI registration does.
-      if (
-        !created.hostOwnedLifecycle &&
-        (await host.getSettings().catch(() => null))?.agentToolsEnabled
-      ) {
+      // Register server tools even without a browser; the monitor tool is
+      // available independently of the cross-session settings gate.
+      if (!created.hostOwnedLifecycle) {
         await created
           .send({ type: "set_host_tools", tools: AGENT_TOOL_DEFINITIONS })
           .catch(() => {});
@@ -5042,6 +5149,7 @@ export async function adoptRpcSession({
   creationId,
   advisorSpawned,
   launchAdvisor,
+  registration,
 }: {
   host: Host;
   transport: RpcTransport;
@@ -5051,6 +5159,7 @@ export async function adoptRpcSession({
   creationId?: string;
   advisorSpawned?: boolean;
   launchAdvisor?: boolean;
+  registration?: SpawnResult["registration"];
 }): Promise<AgentSessionWrapper> {
   if (transport.hostOwnedLifecycle && typeof advisorSpawned !== "boolean") {
     transport.close!();
@@ -5100,7 +5209,7 @@ export async function adoptRpcSession({
   created.start();
   const adopting = (async () => {
     try {
-      await created.adopt(replay);
+      await created.adopt(replay, true, registration);
       // The host names a child by the session it last reported; one that has since moved
       // to a session this server already runs would be its second writer.
       if (

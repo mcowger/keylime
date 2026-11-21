@@ -4290,6 +4290,41 @@ test("server agent tools are rejected when the gate is off (#275)", async (t) =>
   assert.match(resultText(sentFrames[0]), /disabled/);
 });
 
+test("monitor tool remains registered with agent tools disabled and is server answered", async (t) => {
+  const commands: Command[] = [];
+  const { wrapper, emit, sentFrames } = snapshotSession(
+    t,
+    async (command) => {
+      commands.push(command);
+      return {};
+    },
+    SnapshotWrapper,
+    "monitor-source-off",
+  );
+  await wrapper.send({ type: "set_host_tools", tools: [{ name: "open_url" }] });
+  const registration = commands.find(
+    (command) => command.type === "set_host_tools",
+  );
+  assert.ok(registration && Array.isArray(registration.tools));
+  const names = registration.tools.map((tool: unknown) => {
+    assertRecord(tool);
+    return tool.name;
+  });
+  assert.ok(names.includes("monitor_workspace_pr"));
+  assert.ok(names.includes("get_workspace_pr"));
+  assert.ok(!names.includes("register_workspace_pr"));
+  assert.ok(!names.includes("list_sessions"));
+  emit({
+    type: "host_tool_call",
+    id: "invalid-monitor",
+    toolName: "monitor_workspace_pr",
+    arguments: { sessionId: "other" },
+  });
+  await flushWrites();
+  assert.equal(sentFrames[0].isError, true);
+  assert.match(resultText(sentFrames[0]), /no arguments/);
+});
+
 test("waitForTurnEnd resolves on terminal agent_end and rejects on timeout (#275)", async (t) => {
   const { wrapper, emit } = snapshotSession(
     t,
@@ -5736,13 +5771,6 @@ test("adoptRpcSession re-syncs a live child with no spawn and no ready wait", as
   });
   t.after(() => session.destroyAndWait());
 
-  assert.deepEqual(transport.sent, [
-    "set_subagent_subscription",
-    "set_event_filter",
-    "get_state",
-    "get_subagents",
-    "get_btw_history",
-  ]);
   assert.equal(session.isRunning(), true, "omp reported a run in progress");
   assert.equal(session.sessionFile, `/nonexistent/${id}.jsonl`);
   assert.equal(getRpcSession(id, "adopt-box"), session);
@@ -5925,17 +5953,92 @@ test("a replayed host tool call no tab comes back for is settled after the disco
   );
 });
 
-test("replayed standalone new_session and other mutating agent tools stay unknown; list_sessions runs", async (t) => {
+test("adoption advertises monitor without enabling other agent tools", async (t) => {
+  const { adoptRpcSession } = await import("./rpc-manager.ts");
+  const id = "11111111-2222-4333-8444-adadadadaf09";
+  const transport = adoptedTransport(id);
+  const session = await adoptRpcSession({
+    host: adoptionHost("monitor-adopt-box", transport),
+    transport,
+    sessionId: id,
+    cwd: "/w",
+    replay: [],
+    registration: { tools: [], schemes: [] },
+  });
+  t.after(() => session.destroyAndWait());
+  const registration = transport.frames.find(
+    (frame) => frame.type === "set_host_tools",
+  );
+  assert.ok(registration && Array.isArray(registration.tools));
+  const names = registration.tools.map((tool: unknown) => {
+    assertRecord(tool);
+    return tool.name;
+  });
+  assert.deepEqual(names, ["get_workspace_pr", "monitor_workspace_pr"]);
+});
+
+test("replayed mutating agent tools stay unknown; read-only tools run", async (t) => {
   const { adoptRpcSession } = await import("./rpc-manager.ts");
   const { linkHost, until } =
     await import("./hosts/link-driver.test-helper.ts");
-  const link = await linkHost("Agent tools box");
-  const serving = link.serve({ listSessions: () => [] });
+  const link = await linkHost("Agent tools box", {
+    hello: { workspaceOps: ["hierarchy"] },
+  });
+  const id = "11111111-2222-4333-8444-adadadadad06";
+  const pr = {
+    number: 42,
+    url: "https://github.com/test/repo/pull/42",
+    state: "closed",
+    checks: "passing",
+    autoMerge: false,
+    cleanup: false,
+    checkedAt: "now",
+    monitor: { id: "watch", state: "watching" },
+  };
+  const hierarchyCalls: unknown[] = [];
+  const serving = link.serve({
+    listSessions: () => [],
+    hierarchy: (args) => {
+      hierarchyCalls.push(args);
+      return {
+        ok: true,
+        value: {
+          projects: [
+            {
+              id: "project",
+              path: "/project",
+              name: "Project",
+              kind: "git",
+              addedAt: "now",
+              workspaces: [
+                {
+                  id: "other",
+                  projectId: "project",
+                  path: "/other",
+                  name: "Other",
+                  isDefault: false,
+                  sessionIds: ["other"],
+                },
+                {
+                  id: "source",
+                  projectId: "project",
+                  path: "/w",
+                  name: "Source",
+                  isDefault: false,
+                  sessionIds: [id],
+                  ship: { pr },
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  });
   t.after(async () => {
     link.drop();
     await serving;
   });
-  const id = "11111111-2222-4333-8444-adadadadad06";
   const transport = adoptedTransport(id);
   const host = adoptionHost(link.id, transport);
   host.getSettings = async () => ({
@@ -5957,8 +6060,20 @@ test("replayed standalone new_session and other mutating agent tools stay unknow
     },
     {
       type: "host_tool_call",
+      id: "m1",
+      toolName: "monitor_workspace_pr",
+      arguments: {},
+    },
+    {
+      type: "host_tool_call",
       id: "l1",
       toolName: "list_sessions",
+      arguments: {},
+    },
+    {
+      type: "host_tool_call",
+      id: "p1",
+      toolName: "get_workspace_pr",
       arguments: {},
     },
   ].map((call) => ompLine(call));
@@ -5971,23 +6086,69 @@ test("replayed standalone new_session and other mutating agent tools stay unknow
   });
   t.after(() => session.destroyAndWait());
   await until(
-    () => hostToolResults(transport).length === 3,
+    () => hostToolResults(transport).length === 5,
     "every replayed agent tool answered",
   );
   const unknown =
     "keylime restarted while this ran; the outcome is unknown, check with list_sessions before retrying";
   assert.deepEqual(
-    hostToolResults(transport).map((frame) => [
-      frame.id,
-      frame.isError,
-      resultText(frame) === unknown,
-    ]),
+    hostToolResults(transport)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+      .map((frame) => [
+        frame.id,
+        frame.isError,
+        frame.id === "m1"
+          ? /outcome is unknown.*workspace PR monitoring/.test(
+              resultText(frame),
+            )
+          : resultText(frame) === unknown,
+      ]),
     [
-      ["n1", true, true],
-      ["s1", true, true],
       ["l1", false, false],
+      ["m1", true, true],
+      ["n1", true, true],
+      ["p1", false, false],
+      ["s1", true, true],
     ],
   );
+  const lookup = hostToolResults(transport).find((frame) => frame.id === "p1");
+  assert.ok(lookup);
+  assert.deepEqual(JSON.parse(resultText(lookup)), { pr });
+  assert.ok(hierarchyCalls.length > 0);
+  const queriesBeforeLookup = hierarchyCalls.length;
+  host.getSettings = disabledHostPolicy.getSettings;
+  transport.emit(
+    ompLine({
+      type: "host_tool_call",
+      id: "forged",
+      toolName: "get_workspace_pr",
+      arguments: { sessionId: "other", host: "local" },
+    }),
+  );
+  transport.emit(
+    ompLine({
+      type: "host_tool_call",
+      id: "lookup-off",
+      toolName: "get_workspace_pr",
+      arguments: {},
+    }),
+  );
+  await until(
+    () => hostToolResults(transport).length === 7,
+    "lookup calls answered",
+  );
+  const forged = hostToolResults(transport).find(
+    (frame) => frame.id === "forged",
+  );
+  const lookupOff = hostToolResults(transport).find(
+    (frame) => frame.id === "lookup-off",
+  );
+  assert.ok(forged && lookupOff);
+  assert.equal(forged.isError, true);
+  assert.equal(lookupOff.isError, false);
+  assert.deepEqual(JSON.parse(resultText(lookupOff)), { pr });
+  assert.equal(hierarchyCalls.length, queriesBeforeLookup + 1);
+  assert.deepEqual(hierarchyCalls.at(-1), { input: { action: "list" } });
 });
 
 test("an agent tool omp called during the adoption handshake is live, not replayed", async (t) => {

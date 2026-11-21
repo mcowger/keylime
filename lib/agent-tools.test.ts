@@ -18,7 +18,17 @@ function fakeOps(overrides: Partial<AgentToolSessionOps> = {}) {
     list: string[];
     create: AgentToolCreateSessionInput[];
     deliver: AgentToolDeliverInput[];
-  } = { list: [], create: [], deliver: [] };
+    register: string[];
+    monitor: number;
+    lookup: number;
+  } = {
+    list: [],
+    create: [],
+    deliver: [],
+    register: [],
+    monitor: 0,
+    lookup: 0,
+  };
   return {
     calls,
     async listSessions(sourceHostId: string) {
@@ -46,6 +56,26 @@ function fakeOps(overrides: Partial<AgentToolSessionOps> = {}) {
       calls.create.push(input);
       return { sessionId: "new-1" };
     },
+    async registerWorkspacePr(prUrl: string) {
+      calls.register.push(prUrl);
+      return {
+        number: 42,
+        url: prUrl,
+        state: "open" as const,
+        checks: "none" as const,
+        autoMerge: false,
+        cleanup: false,
+        checkedAt: new Date().toISOString(),
+      };
+    },
+    async getWorkspacePr() {
+      calls.lookup++;
+      return { pr: null };
+    },
+    async monitorWorkspacePr() {
+      calls.monitor++;
+      return { status: "started" as const, message: "Monitoring started" };
+    },
     async deliver(input: AgentToolDeliverInput) {
       calls.deliver.push(input);
       return {
@@ -72,13 +102,19 @@ const ctx = (overrides: Partial<AgentToolContext> = {}): AgentToolContext => ({
 
 test("agent tool definitions cover the three cross-session tools (#275)", () => {
   assert.deepEqual([...AGENT_TOOL_NAMES].sort(), [
+    "get_workspace_pr",
     "list_sessions",
+    "monitor_workspace_pr",
     "new_session",
+    "register_workspace_pr",
     "send_to_session",
   ]);
   assert.deepEqual(AGENT_TOOL_DEFINITIONS.map((t) => t.name).sort(), [
+    "get_workspace_pr",
     "list_sessions",
+    "monitor_workspace_pr",
     "new_session",
+    "register_workspace_pr",
     "send_to_session",
   ]);
   const send = AGENT_TOOL_DEFINITIONS.find((t) => t.name === "send_to_session");
@@ -97,7 +133,125 @@ test("agent tool definitions cover the three cross-session tools (#275)", () => 
   ]);
 });
 
-test("agent tools refuse every call while the Settings gate is off (#275)", async () => {
+test("register PR tool validates its URL and never accepts an alternate session", async () => {
+  const ops = fakeOps();
+  const prUrl = "https://github.com/test/repo/pull/42";
+  const result = await executeAgentTool(
+    "register_workspace_pr",
+    { prUrl },
+    ops,
+    ctx(),
+  );
+  assert.ok(isRecord(result));
+  assert.equal(result.url, prUrl);
+  assert.deepEqual(ops.calls.register, [prUrl]);
+  await assert.rejects(
+    () =>
+      executeAgentTool(
+        "register_workspace_pr",
+        { prUrl, sessionId: "other" },
+        ops,
+        ctx(),
+      ),
+    /canonical/,
+  );
+  await assert.rejects(
+    () =>
+      executeAgentTool(
+        "register_workspace_pr",
+        { prUrl },
+        ops,
+        ctx({ enabled: false }),
+      ),
+    /disabled/,
+  );
+  assert.deepEqual(ops.calls.register, [prUrl]);
+});
+
+test("PR lookup rejects targets, works with agent tools off and shares the rate cap", async () => {
+  const ops = fakeOps();
+  const context = ctx({ enabled: false });
+  const definition = AGENT_TOOL_DEFINITIONS.find(
+    (tool) => tool.name === "get_workspace_pr",
+  );
+  assert.ok(definition);
+  assert.equal(definition.loadMode, "essential");
+  assert.deepEqual(definition.parameters.properties, {});
+  assert.equal(definition.parameters.additionalProperties, false);
+  assert.deepEqual(
+    await executeAgentTool("get_workspace_pr", {}, ops, context),
+    { pr: null },
+  );
+  for (const args of [
+    { sessionId: "other" },
+    { host: "other" },
+    { path: "/tmp/other" },
+    { prUrl: "https://github.com/test/repo/pull/42" },
+    null,
+    [],
+  ]) {
+    await assert.rejects(() =>
+      executeAgentTool("get_workspace_pr", args, ops, context),
+    );
+  }
+  for (let i = 1; i < 20; i++)
+    await executeAgentTool(
+      i % 2 ? "monitor_workspace_pr" : "get_workspace_pr",
+      {},
+      ops,
+      context,
+    );
+  await assert.rejects(
+    () => executeAgentTool("get_workspace_pr", {}, ops, context),
+    /rate/i,
+  );
+  assert.equal(ops.calls.lookup, 10);
+  assert.equal(ops.calls.monitor, 10);
+});
+
+test("monitor tool remains available with the gate off, scoped and rate limited", async () => {
+  const ops = fakeOps();
+  const context = ctx();
+  const definition = AGENT_TOOL_DEFINITIONS.find(
+    (tool) => tool.name === "monitor_workspace_pr",
+  );
+  assert.ok(definition);
+  assert.equal(definition.loadMode, "essential");
+  assert.equal(definition.parameters.additionalProperties, false);
+  assert.deepEqual(
+    await executeAgentTool("monitor_workspace_pr", {}, ops, context),
+    {
+      status: "started",
+      message: "Monitoring started",
+    },
+  );
+  for (const args of [
+    { sessionId: "other" },
+    { prUrl: "https://github.com/test/repo/pull/42" },
+    { host: "other" },
+    { path: "/tmp/other" },
+    null,
+  ]) {
+    await assert.rejects(() =>
+      executeAgentTool("monitor_workspace_pr", args, ops, context),
+    );
+  }
+  await executeAgentTool(
+    "monitor_workspace_pr",
+    {},
+    ops,
+    ctx({ enabled: false }),
+  );
+  for (let i = 1; i < 20; i++)
+    await executeAgentTool("monitor_workspace_pr", {}, ops, context);
+  await assert.rejects(
+    () => executeAgentTool("monitor_workspace_pr", {}, ops, context),
+    /rate/i,
+  );
+  assert.equal(ops.calls.monitor, 21);
+});
+
+test("cross-session agent tools refuse calls while the Settings gate is off (#275)", async () => {
   const off = ctx({ enabled: false });
   await assert.rejects(
     () => executeAgentTool("list_sessions", {}, fakeOps(), off),
@@ -355,6 +509,12 @@ test("agent tools reject an explicit host before invoking any operation", async 
     ["list_sessions", {}],
     ["new_session", { cwd: "/tmp/source" }],
     ["send_to_session", { sessionId: "target-1", message: "hi" }],
+    [
+      "register_workspace_pr",
+      { prUrl: "https://github.com/test/repo/pull/42" },
+    ],
+    ["monitor_workspace_pr", {}],
+    ["get_workspace_pr", {}],
   ] as const) {
     for (const host of ["local", "h-build", null, undefined]) {
       await assert.rejects(
@@ -363,7 +523,14 @@ test("agent tools reject an explicit host before invoking any operation", async 
       );
     }
   }
-  assert.deepEqual(ops.calls, { list: [], create: [], deliver: [] });
+  assert.deepEqual(ops.calls, {
+    list: [],
+    create: [],
+    deliver: [],
+    register: [],
+    monitor: 0,
+    lookup: 0,
+  });
 });
 
 test("new_session pins remote creation to the caller and preserves shared workspace intent", async () => {

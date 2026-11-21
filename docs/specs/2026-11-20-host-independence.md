@@ -14,6 +14,7 @@ The host owns its sessions, archives, repos, workspaces, Systems, and runtime se
    - Check and insert outbox entries in one transaction. The 256 MiB/1,000-row undelivered limits are per destination host; retain the conversation cap and a separate server disk safeguard. With B offline and at its row cap or byte cap, B's next enqueue returns `outbox_full` and A's is durably accepted. Genuine disk pressure can block new messages but must not evict accepted messages.
 4. **Limit agent collaboration to its host.** Agent tools list, start, and message only on the calling host. Only the operator picks another host.
 5. **Remove daemon peers.** Keep authenticated links, browser-tab multiplexing, single-controller edit/command fences, live-child adoption after a controller restart, and managed binary deployment. Remove peer link selection, notifier election, and peer frame relays.
+   - On joined adoption, the daemon returns its current tool and URI-scheme registration. The controller retains those browser definitions when adding its server tools. If an older daemon cannot report the registration, the controller leaves it unchanged until a browser registers tools again.
 
 ## Cutover
 

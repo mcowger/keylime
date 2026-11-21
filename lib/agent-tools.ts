@@ -1,20 +1,13 @@
+import { Type } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
+import { ShipRegisterPrInputSchema } from "./api-contracts/workspace-models";
+import type { ShipPr } from "./workspace-ship-types";
 import type { HostToolDefinition } from "./pi-types";
 import { isRecord } from "./type-guards";
 
 /**
- * Server-side agent tools for issue #275: tools an agent running inside
- * keylime can call to reach *other* top-level keylime sessions. omp's own
- * `task` tool and `write agent://<id>` only work inside one omp process,
- * so cross-session work has to be answered by the keylime server itself —
- * never by an attached browser tab (the issue's key requirement: these
- * tools keep working with no tab open).
- *
- * This module is deliberately pure: it knows nothing about RpcProcess,
- * the session registry, or the session files. The caller (lib/rpc-manager)
- * supplies those through AgentToolSessionOps, which keeps the validation,
- * gating, attribution and loop-guard logic unit-testable without a live
- * omp child. The only keylime surface this module touches is the
- * HostToolDefinition shape omp already understands for set_host_tools.
+ * Server-side agent tools for cross-session work and workspace PR monitoring.
+ * The caller supplies host-scoped operations, so tools work without a browser.
  */
 
 /** Tools the server answers itself. Browser-routed tools are unaffected. */
@@ -22,7 +15,20 @@ export const AGENT_TOOL_NAMES = new Set([
   "list_sessions",
   "new_session",
   "send_to_session",
+  "register_workspace_pr",
+  "get_workspace_pr",
+  "monitor_workspace_pr",
 ]);
+
+const registerWorkspacePrArgs = Type.Pick(
+  ShipRegisterPrInputSchema,
+  ["prUrl"],
+  {
+    additionalProperties: false,
+  },
+);
+
+const workspacePrNoArgs = Type.Object({}, { additionalProperties: false });
 
 export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
   {
@@ -108,6 +114,27 @@ export const AGENT_TOOL_DEFINITIONS: HostToolDefinition[] = [
       required: ["sessionId", "message"],
     },
   },
+  {
+    name: "register_workspace_pr",
+    description:
+      "Link an already-open GitHub pull request to this chat's workspace without pushing, merging, or starting monitoring. Pass its canonical GitHub HTTPS URL.",
+    loadMode: "essential",
+    parameters: registerWorkspacePrArgs,
+  },
+  {
+    name: "get_workspace_pr",
+    description:
+      "Read this chat's currently recorded workspace PR, including its last-observed state, checks, checkedAt and public monitoring status. A watch may belong to another chat. A null PR means no link is recorded; it does not prove no GitHub PR exists. This does not refresh GitHub.",
+    loadMode: "essential",
+    parameters: workspacePrNoArgs,
+  },
+  {
+    name: "monitor_workspace_pr",
+    description:
+      "After opening or working on a PR, use get_workspace_pr to check whether a PR is linked. If not, use register_workspace_pr with the PR URL; if unavailable, ask the user to enable Agent tools on this host. Then start monitoring without approval, unless the user says not to. New feedback links go to this chat when monitoring starts; monitoring does not block merging.",
+    loadMode: "essential",
+    parameters: workspacePrNoArgs,
+  },
 ];
 
 /** A message that would also be rejected by the HTTP body limit is too big to relay. */
@@ -172,6 +199,12 @@ export interface AgentToolSessionOps {
   createSession(
     input: AgentToolCreateSessionInput,
   ): Promise<{ sessionId: string }>;
+  registerWorkspacePr(prUrl: string): Promise<ShipPr>;
+  getWorkspacePr(): Promise<{ pr: ShipPr | null }>;
+  monitorWorkspacePr(): Promise<{
+    status: "started" | "already_monitoring";
+    message: string;
+  }>;
   /** Foreign targets must be treated as not found. */
   deliver(input: AgentToolDeliverInput): Promise<AgentToolDeliverResult>;
 }
@@ -382,7 +415,11 @@ export async function executeAgentTool(
   ops: AgentToolSessionOps,
   ctx: AgentToolContext,
 ): Promise<unknown> {
-  if (!ctx.enabled) {
+  if (
+    !ctx.enabled &&
+    toolName !== "monitor_workspace_pr" &&
+    toolName !== "get_workspace_pr"
+  ) {
     throw new Error(
       'Agent tools are disabled. Enable "Agent tools" in keylime Settings (System) first.',
     );
@@ -394,6 +431,29 @@ export async function executeAgentTool(
     throw new Error(
       `Agent tools do not accept a "host" argument; they use the calling session's host.`,
     );
+  }
+
+  if (toolName === "register_workspace_pr") {
+    if (!Value.Check(registerWorkspacePrArgs, args))
+      throw new Error(
+        "Pass only the canonical GitHub pull request URL as prUrl.",
+      );
+    ctx.guard.checkRate(ctx.sourceSessionId);
+    return ops.registerWorkspacePr(args.prUrl);
+  }
+
+  if (toolName === "get_workspace_pr") {
+    if (!Value.Check(workspacePrNoArgs, args))
+      throw new Error("get_workspace_pr takes no arguments or targets.");
+    ctx.guard.checkRate(ctx.sourceSessionId);
+    return ops.getWorkspacePr();
+  }
+
+  if (toolName === "monitor_workspace_pr") {
+    if (!Value.Check(workspacePrNoArgs, args))
+      throw new Error("monitor_workspace_pr takes no arguments or targets.");
+    ctx.guard.checkRate(ctx.sourceSessionId);
+    return ops.monitorWorkspacePr();
   }
 
   if (toolName === "list_sessions") {
