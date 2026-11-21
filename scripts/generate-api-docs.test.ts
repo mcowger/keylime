@@ -131,3 +131,40 @@ test("conflicting schema names cannot silently replace a native client's message
     /conflicting message schema title Collision/,
   );
 });
+
+test("document validators reject invalid OpenAPI, AsyncAPI and JSON Schema", async () => {
+  for (const [name, document] of [
+    [
+      "invalid.openapi.json",
+      {
+        openapi: "3.1.0",
+        info: { title: "API", version: "1" },
+        paths: "invalid",
+      },
+    ],
+    [
+      "invalid.asyncapi.json",
+      {
+        asyncapi: "3.0.0",
+        info: { title: "API", version: "1" },
+        operations: { bad: { action: "fly" } },
+      },
+    ],
+    ["invalid.schema.json", { type: "not-a-json-schema-type" }],
+  ] as const) {
+    const child = Bun.spawn(
+      [process.execPath, `${import.meta.dir}/validate-api-document.ts`, name],
+      {
+        stdin: new Blob([JSON.stringify(document)]),
+        stdout: "ignore",
+        stderr: "pipe",
+      },
+    );
+    const [code, error] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+    ]);
+    assert.notEqual(code, 0, `${name} accepted an invalid document`);
+    assert.ok(error, `${name} did not report its validation error`);
+  }
+});

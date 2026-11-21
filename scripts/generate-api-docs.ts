@@ -1,11 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import SwaggerParser from "@apidevtools/swagger-parser";
-import { Parser } from "@asyncapi/parser";
 import { Kind, type TSchema } from "@sinclair/typebox";
 import ts from "typescript";
-import Ajv from "ajv";
 import type { SocketContract } from "../lib/api-contracts/types";
 import { hostLinkContract } from "../lib/api-contracts/host-link";
 import { completeBrowserLinkContract } from "../lib/api-contracts/browser-complete";
@@ -50,7 +47,7 @@ import * as system from "../lib/api-contracts/http-system";
 const root = path.resolve(import.meta.dir, "..");
 const outputDirectory = path.join(root, "docs/api");
 const generated =
-  "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.";
+  "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.";
 const dialect = "http://json-schema.org/draft-07/schema#";
 type JsonObject = Record<string, unknown>;
 
@@ -578,33 +575,38 @@ function schemaDocument(): JsonObject {
 }
 
 async function validateDocuments(
-  documents: Record<string, JsonObject>,
+  documents: Record<string, string>,
 ): Promise<void> {
-  for (const [name, document] of Object.entries(documents)) {
-    console.log(`[api] Validating ${name}`);
-    if (name.endsWith(".schema.json")) {
-      new Ajv({ strict: false, validateFormats: false }).compile(document);
-      continue;
-    }
-    if (name.endsWith(".openapi.json"))
-      await SwaggerParser.validate(JSON.parse(serializeDocument(document)), {
-        resolve: { external: false },
-      });
-    else {
-      // Parsing also materializes resolved models for every message; validation alone checks the same diagnostics without that expansion.
-      const diagnostics = await new Parser().validate(
-        serializeDocument(document),
+  const errors = await Promise.all(
+    Object.entries(documents).map(async ([name, content]) => {
+      console.log(`[api] Validating ${name}`);
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          path.join(root, "scripts/validate-api-document.ts"),
+          name,
+        ],
+        {
+          cwd: root,
+          stdin: new Blob([content]),
+          stdout: "ignore",
+          stderr: "pipe",
+        },
       );
-      const errors = diagnostics.filter(
-        (diagnostic) => diagnostic.severity === 0,
-      );
-      if (errors.length)
-        throw new Error(`${name}: ${JSON.stringify(errors, null, 2)}`);
-    }
-  }
+      const [exitCode, error] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      return exitCode === 0
+        ? null
+        : `${name}: ${error.trim() || `validator exited ${exitCode}`}`;
+    }),
+  );
+  const failures = errors.filter((error) => error !== null);
+  if (failures.length) throw new Error(failures.join("\n"));
 }
 
-/** Use the pinned runtime's formatter for both emission and comparison, so api:check and format:check agree. */
+/** Use the pinned runtime's formatter for both emission and comparison. */
 async function formatArtifact(
   name: string,
   document: JsonObject,
@@ -664,7 +666,7 @@ async function checkSchemaSemantics(): Promise<void> {
     );
 }
 
-export async function generateApiDocs(check: boolean): Promise<void> {
+export async function generateApiDocs(): Promise<void> {
   console.log("[api] Checking HTTP coverage");
   const semantics = await checkHttpCoverage();
   console.log("[api] Checking message coverage");
@@ -681,20 +683,26 @@ export async function generateApiDocs(check: boolean): Promise<void> {
     "runner-channel.asyncapi.json": socketDocument(runnerLinkContract),
     "contracts.schema.json": schemaDocument(),
   };
+  const formatted = Object.fromEntries(
+    await Promise.all(
+      Object.entries(documents).map(
+        async ([name, document]) =>
+          [name, await formatArtifact(name, document)] as const,
+      ),
+    ),
+  );
   console.log("[api] Validating documents");
-  await validateDocuments(documents);
-  if (!check) await mkdir(outputDirectory, { recursive: true });
-  for (const [name, document] of Object.entries(documents)) {
+  await validateDocuments(formatted);
+  await mkdir(outputDirectory, { recursive: true });
+  for (const [name, content] of Object.entries(formatted)) {
     const filename = path.join(outputDirectory, name);
-    const content = await formatArtifact(name, document);
-    if (check) {
-      if (
-        !(await Bun.file(filename).exists()) ||
-        (await Bun.file(filename).text()) !== content
-      )
-        throw new Error(`${name} is stale; run bun run api:generate`);
-    } else await Bun.write(filename, content);
-    console.log(`${check ? "Checked" : "Generated"} docs/api/${name}`);
+    await Bun.write(filename, content);
+    if (
+      !(await Bun.file(filename).exists()) ||
+      (await Bun.file(filename).text()) !== content
+    )
+      throw new Error(`${name} does not match the generated document`);
+    console.log(`Generated and verified docs/api/${name}`);
   }
   console.log(
     `Covered ${httpOperations.length} HTTP operations, ${hostOperations.length} host operations, ${runnerOperations.length} runner commands and ${agentOperations.length} web commands.`,
@@ -702,8 +710,6 @@ export async function generateApiDocs(check: boolean): Promise<void> {
 }
 
 if (import.meta.main) {
-  const args = process.argv.slice(2);
-  if (args.some((arg) => arg !== "--check"))
-    throw new Error("Usage: bun scripts/generate-api-docs.ts [--check]");
-  await generateApiDocs(args.includes("--check"));
+  if (process.argv.length > 2) throw new Error("Usage: bun run api");
+  await generateApiDocs();
 }

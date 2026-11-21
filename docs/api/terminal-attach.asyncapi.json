@@ -318,7 +318,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:terminal-attach",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nAuthenticated WebSocket with hostId and sessionId query parameters. The client sends hello first. A snapshot precedes output; input and resize are connection-scoped and never replayed. A new connection obtains a fresh snapshot. Slow clients or disconnected host links are closed.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated WebSocket with hostId and sessionId query parameters. The client sends hello first. A snapshot precedes output; input and resize are connection-scoped and never replayed. A new connection obtains a fresh snapshot. Slow clients or disconnected host links are closed.",
     "title": "Session terminal attachment",
     "version": "1"
   },

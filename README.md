@@ -123,7 +123,7 @@ mise exec -- bun run release:check # formatting, types, tests, build, smoke
 
 Live-agent tests and the smoke check require the runner build. GitHub Actions workflows are disabled; checks and releases are run locally. See [contributing](CONTRIBUTING.md), the [release checklist](docs/release.md), and [design](DESIGN.md).
 
-HTTP, host, browser, and runner contracts live in `lib/api-contracts/`. Generated API documents are checked in under [docs/api](docs/api/). After changing contracts or their documented semantics, run `mise exec -- bun run api:generate` and `mise exec -- bun run api:check`. Normal builds and releases do not regenerate or check those documents.
+HTTP, host, browser, and runner contracts live in `lib/api-contracts/`. Generated API documents are checked in under [docs/api](docs/api/). After changing contracts or their documented semantics, run `mise exec -- bun run api`. Normal builds and releases do not regenerate or check those documents.
 
 ## License
 

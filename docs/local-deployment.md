@@ -39,8 +39,8 @@ readiness. Run `bun run smoke` separately when needed; deployment no longer chec
 the SPA, APIs, or event stream before switching.
 
 Deployment does not generate or validate API documentation. Binary releases include
-the checked-in documents, which may be stale; use `bun run api:generate` and
-`bun run api:check` explicitly when maintaining them.
+the checked-in documents, which may be stale; use `bun run api` explicitly when
+maintaining them.
 
 Activation gives active runs and protected host work up to 60 seconds to finish.
 Use `keylime-deploy --timeout 10` or `mise exec -- bun run deploy:local:fast`

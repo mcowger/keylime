@@ -45,12 +45,11 @@ System tray integration is out of scope. Do not add tray processes, icons, deskt
   `@apiEffects` and `@apiRecovery` JSDoc. Operation descriptions require those same
   five sections; canonical schemas need intended-use and important field metadata.
   Document units, ownership, null/omission, ordering, side effects and safe recovery.
-- Run `mise exec -- bun run api:generate` after changing contract definitions,
-  route annotations, command/event inventories or their semantics. Commit the
-  regenerated `docs/api/` artifacts with the source changes, then run
-  `mise exec -- bun run api:check` before delivery. Do not hand-edit OpenAPI,
-  AsyncAPI or JSON Schema artifacts. `api:bootstrap` is a one-time TypeBox Codegen
-  conversion aid, not another permanently maintained source of types.
+- Run `mise exec -- bun run api` after changing contract definitions, route
+  annotations, command/event inventories or their semantics. It validates,
+  regenerates and verifies `docs/api/`; include the artifacts with source changes.
+  Do not hand-edit OpenAPI, AsyncAPI or JSON Schema artifacts. `api:bootstrap`
+  is a one-time TypeBox Codegen conversion aid, not another maintained source of types.
 - API documents are documentation only. Development, builds, source packaging,
   local deployment and `release:check` do not regenerate or check them. Run the
   explicit API commands when maintaining the documents; releases ship the checked-in
@@ -69,8 +68,7 @@ bun run test    # bun test --parallel
 bun run smoke   # build the runner, start the built server and `keylime host`, and check them
 bun run build:binary   # build the client and runners, then package all four platforms in parallel
 bun run typecheck  # bun check for the root project and runner
-bun run api:generate # regenerate and validate source-derived API documents
-bun run api:check    # validate semantic coverage and checked-in freshness
+bun run api          # validate, regenerate and verify source-derived API documents
 bun fmt            # format files; bun fmt --check checks formatting
 ```
 

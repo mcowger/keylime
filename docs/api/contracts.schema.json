@@ -197303,6 +197303,6 @@
       "type": "object"
     }
   },
-  "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.",
+  "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.",
   "title": "Keylime API schemas"
 }

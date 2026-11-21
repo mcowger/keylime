@@ -130,8 +130,7 @@ narrowing of untrusted headers may remain local. Production parsers retain their
 existing behavior; do not add request validation merely to generate documentation.
 
 ```bash
-bun run api:generate  # validate and write docs/api/*.json
-bun run api:check     # validate documents, handler bindings and checked-in freshness
+bun run api           # validate, write and verify docs/api/*.json
 bun run api:bootstrap -- lib/example.ts ExampleType AnotherType
 ```
 
@@ -144,10 +143,10 @@ references when migrating exported types. The compiler API is used in-process fo
 source analysis; `bun check` remains the project's typechecker.
 
 When API behavior changes, update the source schemas, semantics, and annotations,
-regenerate and commit the generated documents, and run `bun run api:check` before
-delivery. These commands are explicit: development, builds, packaging, deployment
-and release checks do not run them. Releases include the checked-in documents, which
-may be stale until regenerated.
+run `bun run api`, and include the generated documents with the source changes.
+These commands are explicit: development, builds, packaging, deployment and release
+checks do not run them. Releases include the checked-in documents, which may be
+stale until regenerated.
 
 Maintain shapes, field descriptions, examples and constraints inline in the canonical
 TypeBox declarations. Every exported `*Schema` needs an intended-use description;

@@ -23,14 +23,14 @@ regenerate and commit the API documents, and run the local release checks
 before delivery:
 
 ```bash
-# Run bun run api:check separately when verifying API documentation.
+# Run bun run api separately when maintaining API documentation.
 bun run release:check
 ```
 
 `release:check` includes formatting, typechecking, tests, the production build and
 smoke checks. `bun run smoke` builds the runner first. API documentation generation
-and freshness checks are explicit and do not gate development, builds or deployments;
-releases include the checked-in documents, which may be stale.
+is explicit and does not gate development, builds or deployments; releases include
+the checked-in documents, which may be stale.
 
 Release publication is not automated by this repository. Verify any publication
 procedure and destination separately; inherited upstream release settings are not

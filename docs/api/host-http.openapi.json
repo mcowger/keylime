@@ -19,7 +19,7 @@
     }
   },
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api:generate.\n\nDaemon-to-web HTTP endpoints. Authentication is optional when not configured; origin, ownership and secret-exclusion policies still apply. HEAD follows GET, OPTIONS reports allowed methods, and missing methods return 405. Streaming media descriptions identify SSE/NDJSON item schemas. WebSocket framing and command exchanges are generated separately as AsyncAPI documents.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nDaemon-to-web HTTP endpoints. Authentication is optional when not configured; origin, ownership and secret-exclusion policies still apply. HEAD follows GET, OPTIONS reports allowed methods, and missing methods return 405. Streaming media descriptions identify SSE/NDJSON item schemas. WebSocket framing and command exchanges are generated separately as AsyncAPI documents.",
     "title": "Keylime host HTTP API",
     "version": "1.0.0"
   },
