@@ -1734,10 +1734,17 @@ export const WebSessionModelSchema = Type.Object(
     name: Type.Optional(Type.String()),
     reasoning: Type.Optional(Type.Boolean()),
     thinking: Type.Optional(
-      Type.Object({ efforts: Type.Optional(Type.Array(Type.String())) }, { additionalProperties: false }),
+      Type.Object(
+        { efforts: Type.Optional(Type.Array(Type.String())) },
+        { additionalProperties: false },
+      ),
     ),
   },
-  { additionalProperties: false, description: "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials." },
+  {
+    additionalProperties: false,
+    description:
+      "Provider-qualified model identity and browser-visible reasoning metadata; excludes provider headers and credentials.",
+  },
 );
 
 export const RpcSessionStateSchema = {
@@ -1824,7 +1831,8 @@ export const RpcSessionStateSchema = {
     },
     modelActivity: Type.Optional(ModelActivitySchema),
   }),
-  description: "Runner session state; model metadata excludes host-local provider headers and credentials.",
+  description:
+    "Runner session state; model metadata excludes host-local provider headers and credentials.",
 };
 
 export const WebSessionStateSchema = {

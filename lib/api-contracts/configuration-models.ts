@@ -373,16 +373,30 @@ export const HostModelsSchema = Type.Composite(
 );
 export type HostModels = Static<typeof HostModelsSchema>;
 
-export const ChatRolesSchema = Type.Object({
-  roles: Type.Array(Type.Object({
-    id: Type.String(),
-    provider: Type.Union([Type.String(), Type.Null()]),
-    modelId: Type.Union([Type.String(), Type.Null()]),
-    modelName: Type.Union([Type.String(), Type.Null()]),
-    thinkingLevel: Type.Union([Type.String(), Type.Null()], { description: "Explicit role selector to apply; null preserves the chat's current selector." }),
-    effectiveThinkingLevel: Type.Union([Type.String(), Type.Null()], { description: "Selector expected after selection, including inherited effort or auto; null means unknown or unset." }),
-  })),
-}, { description: "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role." });
+export const ChatRolesSchema = Type.Object(
+  {
+    roles: Type.Array(
+      Type.Object({
+        id: Type.String(),
+        provider: Type.Union([Type.String(), Type.Null()]),
+        modelId: Type.Union([Type.String(), Type.Null()]),
+        modelName: Type.Union([Type.String(), Type.Null()]),
+        thinkingLevel: Type.Union([Type.String(), Type.Null()], {
+          description:
+            "Explicit role selector to apply; null preserves the chat's current selector.",
+        }),
+        effectiveThinkingLevel: Type.Union([Type.String(), Type.Null()], {
+          description:
+            "Selector expected after selection, including inherited effort or auto; null means unknown or unset.",
+        }),
+      }),
+    ),
+  },
+  {
+    description:
+      "Workspace-resolved OMP chat roles and their model and thinking selections; null model fields indicate an unresolved role.",
+  },
+);
 export type ChatRoles = Static<typeof ChatRolesSchema>;
 
 export type ModelThinkingConfig = Static<typeof ModelThinkingConfigSchema>;

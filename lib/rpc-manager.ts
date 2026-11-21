@@ -3707,7 +3707,10 @@ export class AgentSessionWrapper {
         );
         invalidateModelsCache();
         this.invalidateSessionLists();
-        return { model: projectWebModel(result.model), thinkingLevel: result.thinkingLevel } satisfies SetChatRoleResult;
+        return {
+          model: projectWebModel(result.model),
+          thinkingLevel: result.thinkingLevel,
+        } satisfies SetChatRoleResult;
       }
 
       case "set_fast_mode": {

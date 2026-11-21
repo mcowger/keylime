@@ -237,9 +237,9 @@ export function HierarchySidebar({
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(
     () => new Set(),
   );
-  const [projectExpansion, setProjectExpansion] = useState<Map<string, boolean>>(
-    () => new Map(),
-  );
+  const [projectExpansion, setProjectExpansion] = useState<
+    Map<string, boolean>
+  >(() => new Map());
   const sidebarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const dismissMenus = (event: PointerEvent) => {

@@ -60,7 +60,10 @@ import {
 import { useFontSize, type FontSizePreference } from "@/hooks/useFontSize";
 import { useUiScale, type UiScalePreference } from "@/hooks/useUiScale";
 import { useChatWidth, setChatWidth } from "@/hooks/useChatWidth";
-import { setShowPrewalkControl, useShowPrewalkControl } from "@/hooks/useShowPrewalkControl";
+import {
+  setShowPrewalkControl,
+  useShowPrewalkControl,
+} from "@/hooks/useShowPrewalkControl";
 import {
   useTouchTargets,
   type TouchTargetsPreference,
@@ -2953,7 +2956,9 @@ export function SettingsConfig({
                         <NativeSetting
                           searchId="show-prewalk-control"
                           label={t("settingsConfig.showPrewalkControl")}
-                          description={t("settingsConfig.showPrewalkControlDesc")}
+                          description={t(
+                            "settingsConfig.showPrewalkControlDesc",
+                          )}
                           scope="UI"
                         >
                           <ToggleSwitch
