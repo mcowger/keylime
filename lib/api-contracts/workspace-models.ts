@@ -335,7 +335,7 @@ export const ShipModeSchema = Type.Union(
   [Type.Literal("local"), Type.Literal("pr"), Type.Literal("pr-auto")],
   {
     description:
-      "Land locally, create a pull request, or enable auto-merge on a new or existing pull request.",
+      "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit.",
   },
 );
 export const ShipMergeMethodSchema = Type.Union(
@@ -374,7 +374,10 @@ export const ShipPrSchema = Type.Object(
     url: Type.String(),
     state: literals("open", "merged", "closed"),
     checks: literals("pending", "passing", "failing", "none"),
-    autoMerge: Type.Boolean(),
+    autoMerge: Type.Boolean({
+      description:
+        "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
+    }),
     cleanup: Type.Boolean(),
     checkedAt: Type.String({ description: "ISO time of the last gh pr view." }),
     monitor: Type.Optional(ShipPrMonitorSchema),

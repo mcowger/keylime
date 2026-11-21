@@ -11,7 +11,7 @@ A **Ship** button on a linked (non-default) workspace's chat opens one sheet:
 2. The sheet shows the changed files, the editable commit message(s) (a split plan shows one per commit), the changelog
    files omp will touch, and "N behind <base>" with **Rebase first** (checked when behind).
 3. Path: **Land locally** (rebase, fast-forward local base, clean up), **Open PR** (rebase, push, create PR),
-   **PR + auto-merge** (same, then `gh pr merge --auto`, squash by default). When an open PR already exists,
+   **PR + auto-merge** (same, then watch the pushed commit and merge after checks pass, squash by default). When an open PR already exists,
    Open PR is unavailable and PR + auto-merge adopts it without changing its title or body. New PR titles and bodies
    come from `generate_pr_description` and can be edited. If PR discovery fails, the sheet shows a warning and keeps
    both PR paths available. The job retries discovery after pushing. If that lookup fails, it uses the PR found in
@@ -51,8 +51,8 @@ Main gives these three commands a long timeout; a timeout never recycles the chi
 - **Base** is the project's default workspace and its current branch (local main). No fetch before a rebase.
 - **rebase**: `git rebase <base>` in the workspace; on conflict, `git rebase --abort` and `conflict`.
 - **fastForward**: in the default workspace, refused when dirty or not on the base branch; `git merge --ff-only`.
-- **push**: `git push -u origin HEAD`, `--force-with-lease` when the branch already has an upstream.
-- **createPr / autoMerge**: find an existing open PR for the branch or create one with `gh pr create --base --head --title --body-file -`; `gh pr merge <n> --<method> --auto` enables auto-merge.
+- **push**: `git push -u origin HEAD`, `--force-with-lease` when the branch already has an upstream. Auto-merge pushes the resolved commit ID to the branch explicitly, then sets its upstream, so a concurrent tracking-ref update cannot change the watched commit.
+- **createPr / autoMerge**: find an existing open PR for the branch or create one with `gh pr create --base --head --title --body-file -`; persist the pushed commit and merge strategy for the watcher.
 - **pullBase**: in the default workspace, `git pull --ff-only` when clean and on the base branch.
 - **archiveSessions / removeWorkspace**: stop the workspace's processes, archive its registered sessions (children
   first), then `removeRegisteredWorktree` (merged branches are deleted; a squash-merged PR's branch is deleted because
@@ -69,6 +69,8 @@ The daemon records each PR it opened or adopted (`<agent dir>/keylime/ship/prs.j
 with `gh pr view` every 60 s. `HierarchyWorkspace.ship` carries the PR and any running job, so the sidebar
 status follows the hierarchy refresh. When a PR merges and `cleanup` is set, the daemon runs `shipFinish`
 itself. Otherwise, use **Clean up merged workspace** in the workspace actions menu.
+
+Auto-merge waits for at least one completed passing check, a clean and mergeable non-draft PR, and the same pushed head. The daemon retries failed merge attempts. No checks, failing checks, a changed head, or a stopped daemon leave the PR open; rerun Ship after pushing a new head. The merge uses `--match-head-commit` so a concurrent push cannot be merged unseen. GitHub branch protection remains authoritative if check status changes after the poll.
 
 See [Monitor pull requests from Ship](2026-11-20-ship-pr-monitoring-design.md) for the optional review feedback watch.
 

@@ -37,6 +37,10 @@ interface ShipPrStatus {
   state: "OPEN" | "MERGED" | "CLOSED";
   mergedAt?: string | null;
   autoMergeRequest?: unknown;
+  headRefOid?: string;
+  mergeable?: string;
+  mergeStateStatus?: string;
+  isDraft?: boolean;
   statusCheckRollup?:
     | {
         status?: string;
@@ -57,7 +61,7 @@ export async function readShipPrStatus(
     "view",
     pinned.url,
     "--json",
-    "state,mergedAt,url,number,autoMergeRequest,statusCheckRollup",
+    "state,mergedAt,url,number,autoMergeRequest,statusCheckRollup,headRefOid,mergeable,mergeStateStatus,isDraft",
   ]);
   if (
     !isRecord(data) ||

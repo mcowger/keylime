@@ -33533,6 +33533,7 @@
                                   "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
                                   "properties": {
                                     "autoMerge": {
+                                      "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                                       "type": "boolean"
                                     },
                                     "checkedAt": {
@@ -44726,7 +44727,7 @@
                       "type": "string"
                     }
                   ],
-                  "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+                  "description": "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit."
                 },
                 "path": {
                   "type": "string"
@@ -44735,6 +44736,7 @@
                   "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
                   "properties": {
                     "autoMerge": {
+                      "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                       "type": "boolean"
                     },
                     "checkedAt": {
@@ -45334,6 +45336,7 @@
                       "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
                       "properties": {
                         "autoMerge": {
+                          "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                           "type": "boolean"
                         },
                         "checkedAt": {
@@ -45537,7 +45540,7 @@
                       "type": "string"
                     }
                   ],
-                  "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+                  "description": "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit."
                 },
                 "path": {
                   "type": "string"
@@ -45546,6 +45549,7 @@
                   "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
                   "properties": {
                     "autoMerge": {
+                      "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                       "type": "boolean"
                     },
                     "checkedAt": {
@@ -45899,7 +45903,7 @@
                   "type": "string"
                 }
               ],
-              "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+              "description": "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit."
             },
             "monitorGrantId": {
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -45996,7 +46000,7 @@
                       "type": "string"
                     }
                   ],
-                  "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+                  "description": "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit."
                 },
                 "path": {
                   "type": "string"
@@ -46005,6 +46009,7 @@
                   "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
                   "properties": {
                     "autoMerge": {
+                      "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                       "type": "boolean"
                     },
                     "checkedAt": {
@@ -196984,6 +196989,7 @@
                     "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
                     "properties": {
                       "autoMerge": {
+                        "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                         "type": "boolean"
                       },
                       "checkedAt": {
@@ -197462,6 +197468,7 @@
                           "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
                           "properties": {
                             "autoMerge": {
+                              "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                               "type": "boolean"
                             },
                             "checkedAt": {
@@ -197792,6 +197799,7 @@
               "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
               "properties": {
                 "autoMerge": {
+                  "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                   "type": "boolean"
                 },
                 "checkedAt": {
@@ -197962,7 +197970,7 @@
               "type": "string"
             }
           ],
-          "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+          "description": "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit."
         },
         "path": {
           "type": "string"
@@ -197971,6 +197979,7 @@
           "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
           "properties": {
             "autoMerge": {
+              "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
               "type": "boolean"
             },
             "checkedAt": {
@@ -198208,7 +198217,7 @@
           "type": "string"
         }
       ],
-      "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+      "description": "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit."
     },
     "workspace_ShipMonitorStatusResult": {
       "additionalProperties": false,
@@ -198242,6 +198251,7 @@
       "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
       "properties": {
         "autoMerge": {
+          "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
           "type": "boolean"
         },
         "checkedAt": {
@@ -198422,6 +198432,7 @@
               "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
               "properties": {
                 "autoMerge": {
+                  "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
                   "type": "boolean"
                 },
                 "checkedAt": {
@@ -198601,7 +198612,7 @@
               "type": "string"
             }
           ],
-          "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+          "description": "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit."
         },
         "monitorSessionId": {
           "description": "Chat to notify about new PR feedback. Omit to leave monitoring off. Only valid in PR modes; monitoring does not gate merges.",
@@ -198672,7 +198683,7 @@
               "type": "string"
             }
           ],
-          "description": "Land locally, create a pull request, or enable auto-merge on a new or existing pull request."
+          "description": "Land locally, create a pull request, or watch a new or existing pull request for a green mergeable pushed commit."
         },
         "monitorGrantId": {
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -201110,6 +201121,7 @@
           "description": "Last observed pull-request identity, merge/check state, auto-merge and cleanup settings.",
           "properties": {
             "autoMerge": {
+              "description": "Whether Keylime is watching the pushed commit for automatic merge or GitHub reports an auto-merge request. Keylime waits for at least one passing check and a clean, mergeable non-draft PR; a changed head is not merged.",
               "type": "boolean"
             },
             "checkedAt": {

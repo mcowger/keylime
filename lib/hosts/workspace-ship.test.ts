@@ -107,6 +107,7 @@ case "$1 $2" in
     if [ -f "$root/create-url" ]; then cat "$root/create-url"; else echo https://github.com/test/repo/pull/42; fi;;
   'pr merge') if [ -f "$root/auto-fails" ]; then echo 'Auto-merge disabled' >&2; exit 1; fi;;
   'pr view')
+    if [ -f "$root/pr-status" ]; then cat "$root/pr-status"; exit 0; fi
     gate view
     number=\${3##*/}
     state=MERGED
@@ -332,22 +333,101 @@ for (const mode of ["pr", "pr-auto"] as const) {
   });
 }
 
-test("failed auto-merge does not complete a task", async (t) => {
+test("auto-merge waits for green checks and pins the pushed head", async (t) => {
   const f = await fixture(t);
   const planning = await planningFixture(f);
-  writeFileSync(join(f.root, "auto-fails"), "");
+  const pushed = f.git(f.workspace, "rev-parse", "HEAD");
+  const other = f.git(
+    f.project,
+    "commit-tree",
+    "HEAD^{tree}",
+    "-p",
+    "HEAD",
+    "-m",
+    "other",
+  );
+  const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+  const gitWrapper = join(f.root, "bin", "git");
+  writeFileSync(
+    gitWrapper,
+    `#!/bin/sh
+"${realGit}" "$@"
+result=$?
+if [ "$result" -eq 0 ] && [ "$1" = push ]; then
+  "${realGit}" update-ref refs/remotes/origin/feature ${other}
+fi
+exit "$result"
+`,
+  );
+  chmodSync(gitWrapper, 0o755);
   const job = await finished(
     await startShip({
       ...f.input,
       mode: "pr-auto",
       rebase: false,
       cleanup: false,
+      mergeMethod: "rebase",
       pr: { title: "Feature", body: "Details" },
     }),
   );
-  assert.equal(job.status, "failed");
-  assert.match(job.error!, /Auto-merge disabled/);
-  await assertPlanningStatus(planning, "in_progress");
+  assert.equal(job.status, "complete", job.error);
+  assert.equal(job.pr?.autoMerge, true);
+  await assertPlanningStatus(planning, "done");
+  const head = f.git(f.workspace, "rev-parse", "HEAD");
+  assert.equal(head, pushed);
+  assert.equal(
+    f.git(join(f.root, "remote.git"), "rev-parse", "refs/heads/feature"),
+    pushed,
+  );
+  assert.equal(
+    f.git(f.workspace, "rev-parse", "refs/remotes/origin/feature"),
+    other,
+  );
+  assert.equal(
+    f.git(f.workspace, "rev-parse", "--abbrev-ref", "@{upstream}"),
+    "origin/feature",
+  );
+  const status = {
+    state: "OPEN",
+    url: "https://github.com/test/repo/pull/42",
+    number: 42,
+    autoMergeRequest: null,
+    headRefOid: head,
+    mergeable: "MERGEABLE",
+    mergeStateStatus: "CLEAN",
+    isDraft: false,
+    statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+  };
+  const observe = async (changes: Partial<typeof status>) => {
+    writeFileSync(
+      join(f.root, "pr-status"),
+      JSON.stringify({ ...status, ...changes }),
+    );
+    await refreshShipPrs();
+    assert.doesNotMatch(
+      readFileSync(join(f.root, "gh.log"), "utf8"),
+      /pr merge /,
+    );
+  };
+  await observe({ statusCheckRollup: [] });
+  await observe({
+    statusCheckRollup: [{ status: "IN_PROGRESS", conclusion: "" }],
+  });
+  await observe({
+    statusCheckRollup: [{ status: "COMPLETED", conclusion: "FAILURE" }],
+  });
+  await observe({ mergeable: "UNKNOWN" });
+  await observe({ mergeStateStatus: "BLOCKED" });
+  await observe({ isDraft: true });
+  await observe({ headRefOid: other });
+  writeFileSync(join(f.root, "pr-status"), JSON.stringify(status));
+  await refreshShipPrs();
+  assert.match(
+    readFileSync(join(f.root, "gh.log"), "utf8"),
+    new RegExp(
+      `pr merge https://github.com/test/repo/pull/42 --rebase --match-head-commit ${head}`,
+    ),
+  );
 });
 
 test("observing a merged PR completes its task without cleanup, idempotently", async (t) => {
@@ -821,10 +901,7 @@ test("preview discovers an existing PR and auto-merge adopts it", async (t) => {
   assert.equal(job.pr?.autoMerge, true);
   assert.equal(job.pr?.cleanup, true);
   const log = readFileSync(join(f.root, "gh.log"), "utf8");
-  assert.match(
-    log,
-    /pr merge https:\/\/github\.com\/test\/repo\/pull\/17 --squash --auto/,
-  );
+  assert.doesNotMatch(log, /pr merge/);
   assert.doesNotMatch(log, /pr create/);
   await refreshShipPrs();
   const deadline = Date.now() + 15000;
@@ -855,10 +932,7 @@ test("auto-merge retains the job preview PR only when post-push discovery fails"
   );
   assert.equal(job.status, "complete", job.error);
   assert.equal(job.pr?.number, 17);
-  assert.match(
-    readFileSync(join(f.root, "gh.log"), "utf8"),
-    /pr merge https:\/\/github\.com\/test\/repo\/pull\/17 --squash --auto/,
-  );
+  assert.equal(job.pr?.autoMerge, true);
 });
 
 test("auto-merge does not reuse a preview PR after a successful empty lookup", async (t) => {
@@ -956,10 +1030,7 @@ test("auto-merge adopts a PR created concurrently", async (t) => {
   );
   assert.equal(job.status, "complete", job.error);
   assert.equal(job.pr?.number, 17);
-  assert.match(
-    readFileSync(join(f.root, "gh.log"), "utf8"),
-    /pr merge https:\/\/github\.com\/test\/repo\/pull\/17 --squash --auto/,
-  );
+  assert.equal(job.pr?.autoMerge, true);
 });
 
 const firstChat = "11111111-1111-4111-8111-111111111111";
@@ -1298,16 +1369,30 @@ test("adoption records the watch before auto-merge, and a repeat cannot take it 
   const offers = startOffers(t);
   const input = { ...monitorInput(f), mode: "pr-auto" as const, pr: undefined };
   const first = await finished(await startShip(input, "server-a"));
-  assert.equal(first.status, "failed");
-  assert.match(first.error!, /Auto-merge disabled/);
+  assert.equal(first.status, "complete", first.error);
   assert.equal(first.pr?.number, 17);
   assert.equal(first.pr?.monitor?.state, "watching");
   writeFileSync(
     join(f.root, "conversation"),
     JSON.stringify([[issueComment(9)]]),
   );
+  writeFileSync(
+    join(f.root, "pr-status"),
+    JSON.stringify({
+      state: "OPEN",
+      url: "https://github.com/test/repo/pull/17",
+      number: 17,
+      headRefOid: f.git(f.workspace, "rev-parse", "HEAD"),
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      isDraft: false,
+      statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+    }),
+  );
   await refreshShipPrs();
   assert.equal(offers.length, 1);
+  assert.match(readFileSync(join(f.root, "gh.log"), "utf8"), /pr merge/);
+  rmSync(join(f.root, "pr-status"));
   const original = persistedPr(f).monitor;
 
   rmSync(join(f.root, "auto-fails"));

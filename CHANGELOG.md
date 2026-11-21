@@ -254,6 +254,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Ship now watches the pushed PR and merges only after its checks pass and GitHub reports it mergeable, instead of attempting an immediate merge.
 - Workspace terminal scrollbars stay within the visible terminal after tab switches and resizes, so you can scroll back to the latest output and prompt.
 - Workspace terminals fit their visible area without clipping the last rows or columns.
 - New workspace terminals start the host account's interactive login shell, even when the daemon inherits a different `SHELL`.
@@ -457,6 +458,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Explicit artifact installs force-drain busy hosts and restart them, interrupting active work instead of refusing installation
 - Workspace terminal scrollbars stay within the visible terminal after tab switches and resizes, so you can scroll back to the latest output and prompt
 - New workspace terminals start the host account's interactive login shell, even when the daemon inherits a different `SHELL`
+- Ship now watches the pushed PR and merges only after its checks pass and GitHub reports it mergeable, instead of attempting an immediate merge
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

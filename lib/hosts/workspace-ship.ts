@@ -56,6 +56,7 @@ interface RecordPr {
   /** Replaced by each Ship, not by watcher/receipt updates. Older records have no generation. */
   generation?: string;
   monitor?: PrMonitor;
+  autoMerge?: { head: string; method: "squash" | "merge" | "rebase" };
   retryAt?: number;
   /** The watcher attempted automatic cleanup; a failure leaves cleanup to the workspace menu. */
   autoFinished?: boolean;
@@ -248,11 +249,13 @@ function command(
   job?: ShipJob,
   allowConflict = false,
   env?: NodeJS.ProcessEnv,
+  timeout?: number,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(program, args, {
       cwd,
       env: { ...createGitEnvironment(), ...env },
+      timeout,
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "",
@@ -856,6 +859,7 @@ export async function startShip(
       });
       if (input.cleanup) await cleanup(job, workspaceId);
     } else {
+      let pushedHead = "";
       await step(job, "push", async () => {
         const upstream = await git(input.path, [
           "rev-parse",
@@ -863,6 +867,8 @@ export async function startShip(
           "--symbolic-full-name",
           "@{upstream}",
         ]).catch(() => "");
+        if (input.mode === "pr-auto")
+          pushedHead = await git(input.path, ["rev-parse", "HEAD"]);
         assertShipAllowed(input.path);
         validateSession();
         await git(
@@ -872,10 +878,22 @@ export async function startShip(
             ...(upstream ? ["--force-with-lease"] : []),
             "-u",
             "origin",
-            "HEAD",
+            input.mode === "pr-auto"
+              ? `${pushedHead}:refs/heads/${preview.branch}`
+              : "HEAD",
           ],
           job,
         );
+        if (input.mode === "pr-auto")
+          await git(
+            input.path,
+            [
+              "branch",
+              `--set-upstream-to=origin/${preview.branch}`,
+              preview.branch!,
+            ],
+            job,
+          );
       });
       await step(job, "createPr", async () => {
         if (!preview.github.repo || preview.github.gh !== "ok")
@@ -982,29 +1000,20 @@ export async function startShip(
       });
       if (input.mode === "pr-auto")
         await step(job, "autoMerge", async () => {
-          assertShipAllowed(input.path);
-          if (!job.pr!.autoMerge)
-            await command(
-              input.path,
-              "gh",
-              [
-                "pr",
-                "merge",
-                job.pr!.url,
-                `--${input.mergeMethod ?? "squash"}`,
-                "--auto",
-              ],
-              undefined,
-              job,
-            );
-          job.pr!.autoMerge = true;
+          requireWorkspace(input, workspaceId);
           const all = records();
           const record = all[input.path];
-          if (record?.generation === job.id) {
-            record.pr.autoMerge = true;
-            job.pr = publicPr(record);
-            saveRecords(all);
-          }
+          if (!record || record.generation !== job.id)
+            throw new Error(
+              "The recorded pull request changed during shipping",
+            );
+          record.autoMerge = {
+            head: pushedHead,
+            method: input.mergeMethod ?? "squash",
+          };
+          record.pr.autoMerge = true;
+          job.pr = publicPr(record);
+          saveRecords(all);
         });
       requireWorkspace(input, workspaceId);
       completePlanningWorkspace(input.projectPath, input.path);
@@ -1034,7 +1043,7 @@ async function refresh(record: RecordPr) {
         : data.state === "CLOSED"
           ? "closed"
           : "open",
-    autoMerge: !!data.autoMergeRequest,
+    autoMerge: !!current.autoMerge || !!data.autoMergeRequest,
     checks: !checks.length
       ? "none"
       : checks.some((c) =>
@@ -1056,12 +1065,16 @@ async function refresh(record: RecordPr) {
           : "passing",
     checkedAt: new Date().toISOString(),
   };
+  if (current.pr.state !== "open") {
+    delete current.autoMerge;
+    current.pr.autoMerge = false;
+  }
   if (current.pr.state !== "open") delete current.monitor;
   if (!wasMerged && current.pr.state === "merged" && matchesWorkspace(current))
     completePlanningWorkspace(current.projectPath, current.path);
   delete current.retryAt;
   saveRecords(all);
-  return current;
+  return { record: current, data };
 }
 export async function shipFinish(input: {
   projectPath: string;
@@ -1081,7 +1094,7 @@ export async function shipFinish(input: {
       "ship_running",
       "A ship job is already running for this workspace",
     );
-  const record = await refresh(snapshot);
+  const record = (await refresh(snapshot))?.record;
   if (
     !record ||
     !sameRecord(records()[input.path], record) ||
@@ -1499,8 +1512,73 @@ export async function refreshShipPrs() {
       )
         continue;
       try {
-        const refreshed = await refresh(record);
-        if (!refreshed) continue;
+        const result = await refresh(record);
+        if (!result) continue;
+        const { record: refreshed, data } = result;
+        if (
+          refreshed.autoMerge &&
+          refreshed.pr.state === "open" &&
+          data.headRefOid === refreshed.autoMerge.head &&
+          data.mergeable === "MERGEABLE" &&
+          data.mergeStateStatus === "CLEAN" &&
+          data.isDraft === false &&
+          Array.isArray(data.statusCheckRollup) &&
+          data.statusCheckRollup.length > 0 &&
+          data.statusCheckRollup.some((check) =>
+            check.status
+              ? check.conclusion === "SUCCESS"
+              : check.state === "SUCCESS",
+          ) &&
+          data.statusCheckRollup.every((check) =>
+            check.status
+              ? check.status === "COMPLETED" &&
+                ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(
+                  check.conclusion ?? "",
+                )
+              : check.state === "SUCCESS",
+          )
+        ) {
+          const current = records()[path];
+          if (
+            sameRecord(current, refreshed) &&
+            matchesWorkspace(current) &&
+            !active.has(path) &&
+            current.autoMerge?.head === refreshed.autoMerge.head &&
+            current.autoMerge.method === refreshed.autoMerge.method
+          ) {
+            try {
+              await command(
+                path,
+                "gh",
+                [
+                  "pr",
+                  "merge",
+                  refreshed.pr.url,
+                  `--${refreshed.autoMerge.method}`,
+                  "--match-head-commit",
+                  refreshed.autoMerge.head,
+                ],
+                undefined,
+                undefined,
+                false,
+                { GH_PROMPT_DISABLED: "1" },
+                20_000,
+              );
+              const all = records();
+              const latest = all[path];
+              if (
+                sameRecord(latest, refreshed) &&
+                latest.autoMerge?.head === refreshed.autoMerge.head &&
+                latest.autoMerge.method === refreshed.autoMerge.method
+              ) {
+                delete latest.autoMerge;
+                saveRecords(all);
+              }
+            } catch (error) {
+              console.warn("Ship auto-merge failed; will retry", error);
+            }
+          }
+        }
         if (refreshed.monitor) await pollMonitor(refreshed, refreshed.path);
         changed();
         if (
