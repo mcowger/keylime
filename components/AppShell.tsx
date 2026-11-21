@@ -775,6 +775,8 @@ export function AppShell({ appName }: { appName: string }) {
   const topBarRef = useRef<HTMLDivElement>(null);
   const [workspaceSwitcherTarget, setWorkspaceSwitcherTarget] =
     useState<HTMLDivElement | null>(null);
+  const [workspacePanelsTarget, setWorkspacePanelsTarget] =
+    useState<HTMLDivElement | null>(null);
   const [sessionInfoContainer, setSessionInfoContainer] =
     useState<HTMLDivElement | null>(null);
   const [shipButtonContainer, setShipButtonContainer] =
@@ -3754,6 +3756,7 @@ export function AppShell({ appName }: { appName: string }) {
               enabled={!settingsTab}
               mobile={isMobile}
               headerTarget={workspaceSwitcherTarget}
+              panelsTarget={workspacePanelsTarget}
               onSelectSaved={handleSelectSession}
               onGenerateTitle={() => void handleAutoName()}
               openSessionIds={[
@@ -3924,10 +3927,7 @@ export function AppShell({ appName }: { appName: string }) {
             />
             <div
               style={{
-                flex:
-                  !settingsTab && activeTerminalId?.startsWith("browser:")
-                    ? "0 0 auto"
-                    : 1,
+                flex: 1,
                 minHeight: 0,
                 minWidth: 0,
                 position: "relative",
@@ -5064,6 +5064,11 @@ export function AppShell({ appName }: { appName: string }) {
                     </div>
                   </>
                 )}
+                <div
+                  ref={setWorkspacePanelsTarget}
+                  inert={shipVisible ? true : undefined}
+                  style={{ display: "contents" }}
+                />
               </div>
               <div
                 style={{

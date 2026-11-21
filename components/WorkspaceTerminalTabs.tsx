@@ -42,6 +42,7 @@ export function WorkspaceTerminalTabs({
   onNewChat,
   mobile,
   headerTarget,
+  panelsTarget,
   onSelectSaved,
   onGenerateTitle,
   canGenerateTitle,
@@ -64,6 +65,7 @@ export function WorkspaceTerminalTabs({
   onNewChat: () => void;
   mobile: boolean;
   headerTarget: HTMLElement | null;
+  panelsTarget: HTMLElement | null;
   onSelectSaved: (session: SessionInfo) => void;
   onGenerateTitle: () => void;
   canGenerateTitle: boolean;
@@ -586,36 +588,39 @@ export function WorkspaceTerminalTabs({
           {error}
         </div>
       )}
-      <div
-        inert={contentInert ? true : undefined}
-        style={{ display: "contents" }}
-      >
-        {entries.map((entry) => (
-          <WorkspaceTerminal
-            key={`${entry.hostId}:${entry.terminal.id}`}
-            terminal={entry.terminal}
-            hostId={entry.hostId}
-            active={
-              !contentInert &&
-              enabled &&
-              entry.hostId === hostId &&
-              entry.terminal.cwd === cwd &&
-              activeId === entry.terminal.id
-            }
-          />
-        ))}
-        {browserTabs.map((tab) => (
-          <WorkspaceBrowser
-            key={sessionKey(tab.sessionId!, hostId)}
-            sessionId={tab.sessionId!}
-            hostId={hostId}
-            pages={browsers[sessionKey(tab.sessionId!, hostId)]}
-            active={
-              !contentInert && enabled && activeId === browserId(tab.sessionId!)
-            }
-          />
-        ))}
-      </div>
+      {panelsTarget &&
+        createPortal(
+          <>
+            {entries.map((entry) => (
+              <WorkspaceTerminal
+                key={`${entry.hostId}:${entry.terminal.id}`}
+                terminal={entry.terminal}
+                hostId={entry.hostId}
+                active={
+                  !contentInert &&
+                  enabled &&
+                  entry.hostId === hostId &&
+                  entry.terminal.cwd === cwd &&
+                  activeId === entry.terminal.id
+                }
+              />
+            ))}
+            {browserTabs.map((tab) => (
+              <WorkspaceBrowser
+                key={sessionKey(tab.sessionId!, hostId)}
+                sessionId={tab.sessionId!}
+                hostId={hostId}
+                pages={browsers[sessionKey(tab.sessionId!, hostId)]}
+                active={
+                  !contentInert &&
+                  enabled &&
+                  activeId === browserId(tab.sessionId!)
+                }
+              />
+            ))}
+          </>,
+          panelsTarget,
+        )}
     </>
   );
 }

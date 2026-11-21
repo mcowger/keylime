@@ -250,6 +250,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Workspace terminals fill the available space below the toolbar instead of pushing it down.
 - Local deployment prunes older generated releases, keeping the three newest and active and previous selections for rollback.
 - Managed release deployment works on hosts that can't report binary digests, with an explicit warning instead of a failed build check.
 - Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
@@ -440,6 +441,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Tasks complete when their launched workspace is merged, deleted, or shipped; Effort tasks complete after all member workspaces are removed
 - Local deployment prunes older generated releases, retaining the three newest and active and previous selections for rollback
 - Managed release deployment works on hosts that can't report binary digests, with an explicit warning instead of a failed build check
+- Workspace terminals fill the available space below the toolbar instead of pushing it down
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes

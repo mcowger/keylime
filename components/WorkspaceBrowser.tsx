@@ -935,7 +935,6 @@ export function WorkspaceBrowser({
     <section
       aria-label={t("workspaceBrowser.viewer")}
       style={{
-        order: 1,
         flex: 1,
         minHeight: 0,
         minWidth: 0,
