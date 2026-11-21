@@ -68,6 +68,7 @@ export function WorkspaceTerminal({
         coreService: {
           triggerDataEvent: (data: string, wasUserInput?: boolean) => void;
         };
+        _viewport: { queueSync: () => void };
       };
     };
     const coreService = terminalCore._core.coreService;
@@ -256,8 +257,20 @@ export function WorkspaceTerminal({
         void flush();
       }
     });
-    const observer = new ResizeObserver(resize);
+    const screen = element.querySelector(".xterm-screen");
+    const observer = new ResizeObserver((entries) => {
+      for (const { target, contentRect } of entries) {
+        if (target === element) resize();
+        else if (contentRect.height > 0) {
+          // xterm 6.0 can size its scrollbar before a hidden renderer applies
+          // its deferred resize (xtermjs/xterm.js#6117). Sync to the actual
+          // screen size once it is laid out, without moving the scrollback.
+          terminalCore._core._viewport.queueSync();
+        }
+      }
+    });
     observer.observe(element);
+    if (screen) observer.observe(screen);
     let stream: EventStream;
     const applyEvent = (
       event: Extract<TerminalEvent, { type: "output" | "resize" }>,

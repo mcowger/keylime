@@ -251,6 +251,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Workspace terminal scrollbars stay within the visible terminal after tab switches and resizes, so you can scroll back to the latest output and prompt.
 - Workspace terminals fit their visible area without clipping the last rows or columns.
 - New workspace terminals use the host account's configured shell and its interactive startup files.
 - Host release comparisons refresh after a daemon reconnects, even when its version string hasn't changed.
@@ -451,6 +452,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - New workspace terminals use the host account's configured shell and its interactive startup files
 - Host release comparisons refresh after daemon reconnects, even when version strings stay unchanged
 - Explicit artifact installs force-drain busy hosts and restart them, interrupting active work instead of refusing installation
+- Workspace terminal scrollbars stay within the visible terminal after tab switches and resizes, so you can scroll back to the latest output and prompt
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
