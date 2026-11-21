@@ -544,6 +544,9 @@ export function SubagentTranscriptDialog({
       if (seq === requestSeqRef.current) setLoading(false);
     }
   }, [sessionId, hostId, subagent?.id, live, fetchCompletion]);
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const [initialLoading, setInitialLoading] = useState(false);
 
   // Load the completion whenever the dialog opens for a subagent.
   useEffect(() => {
@@ -568,8 +571,13 @@ export function SubagentTranscriptDialog({
     refetchedVersionRef.current = 0;
     refetchedTranscriptVersionRef.current = 0;
     latestVersionRef.current = 0;
-    void load();
-  }, [open, sessionId, load]);
+    setInitialLoading(true);
+    const pending = loadRef.current();
+    const seq = requestSeqRef.current;
+    void pending.finally(() => {
+      if (seq === requestSeqRef.current) setInitialLoading(false);
+    });
+  }, [open, sessionId, hostId, subagent?.id]);
 
   // Live child events mean the final output may have just landed — refetch the
   // completion and (when the transcript is open) append its next page. Bumps
@@ -797,7 +805,7 @@ export function SubagentTranscriptDialog({
               </div>
             )}
 
-            {error ? (
+            {error && (
               <div
                 style={{
                   fontSize: 12,
@@ -807,124 +815,121 @@ export function SubagentTranscriptDialog({
               >
                 {error}
               </div>
-            ) : (
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <TaskBlock task={task} sourceSessionId={sessionId} />
+              <CompletionBlock
+                completion={completion}
+                truncated={completionTruncated}
+                sourceSessionId={sessionId}
+              />
+              {initialLoading && loading && (
+                <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                  {t("subagentTranscript.loading")}
+                </div>
+              )}
+              <button
+                type="button"
+                aria-expanded={transcriptOpen}
+                aria-controls="subagent-transcript-panel"
+                onClick={() => {
+                  const next = !transcriptOpen;
+                  setTranscriptOpen(next);
+                  if (
+                    next &&
+                    transcriptMessages.length === 0 &&
+                    !transcriptLoading
+                  ) {
+                    void loadTranscriptPage(0);
+                  }
+                }}
+                style={{
+                  alignSelf: "flex-start",
+                  background: "none",
+                  border: "none",
+                  color: "var(--accent)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  padding: 0,
+                }}
               >
-                <TaskBlock task={task} sourceSessionId={sessionId} />
-                <CompletionBlock
-                  completion={completion}
-                  truncated={completionTruncated}
-                  sourceSessionId={sessionId}
-                />
-                {loading && (
-                  <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                    {t("subagentTranscript.loading")}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  aria-expanded={transcriptOpen}
-                  aria-controls="subagent-transcript-panel"
-                  onClick={() => {
-                    const next = !transcriptOpen;
-                    setTranscriptOpen(next);
-                    if (
-                      next &&
-                      transcriptMessages.length === 0 &&
-                      !transcriptLoading
-                    ) {
-                      void loadTranscriptPage(0);
-                    }
-                  }}
+                {transcriptOpen
+                  ? t("subagentTranscript.hideTranscript")
+                  : t("subagentTranscript.showTranscript")}
+              </button>
+              {transcriptOpen && (
+                <div
+                  id="subagent-transcript-panel"
                   style={{
-                    alignSelf: "flex-start",
-                    background: "none",
-                    border: "none",
-                    color: "var(--accent)",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontFamily: "inherit",
-                    padding: 0,
+                    display: "grid",
+                    gap: 8,
+                    padding: "10px 12px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-card)",
+                    background: "var(--bg-panel)",
+                    maxHeight: "50dvh",
+                    overflowY: "auto",
                   }}
                 >
-                  {transcriptOpen
-                    ? t("subagentTranscript.hideTranscript")
-                    : t("subagentTranscript.showTranscript")}
-                </button>
-                {transcriptOpen && (
-                  <div
-                    id="subagent-transcript-panel"
-                    style={{
-                      display: "grid",
-                      gap: 8,
-                      padding: "10px 12px",
-                      border: "1px solid var(--border)",
-                      borderRadius: "var(--radius-card)",
-                      background: "var(--bg-panel)",
-                      maxHeight: "50dvh",
-                      overflowY: "auto",
-                    }}
-                  >
-                    {transcriptError && transcriptMessages.length > 0 && (
-                      <div
-                        style={{
-                          padding: "6px 8px",
-                          border:
-                            "1px solid color-mix(in srgb, var(--status-error) 40%, var(--border))",
-                          borderRadius: "var(--radius-control)",
-                          fontSize: 12,
-                          color: "var(--status-error)",
-                        }}
-                      >
-                        {transcriptError}
-                      </div>
-                    )}
-                    {transcriptMessages.length === 0 && !transcriptLoading ? (
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: transcriptError
-                            ? "var(--status-error)"
-                            : "var(--text-dim)",
-                          fontStyle: transcriptError ? "normal" : "italic",
-                        }}
-                      >
-                        {transcriptError ?? t("subagentTranscript.noMessages")}
-                      </div>
-                    ) : (
-                      transcriptMessages.map((message, i) => (
-                        <SubagentTranscriptRow key={i} message={message} />
-                      ))
-                    )}
-                    {transcriptLoading && (
-                      <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                        {t("subagentTranscript.loading")}
-                      </div>
-                    )}
-                    {!transcriptExhausted && !transcriptLoading && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void loadTranscriptPage(transcriptNextByte)
-                        }
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "var(--accent)",
-                          cursor: "pointer",
-                          fontSize: 12,
-                          fontFamily: "inherit",
-                          padding: 0,
-                        }}
-                      >
-                        {t("subagentTranscript.loadMore")}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                  {transcriptError && transcriptMessages.length > 0 && (
+                    <div
+                      style={{
+                        padding: "6px 8px",
+                        border:
+                          "1px solid color-mix(in srgb, var(--status-error) 40%, var(--border))",
+                        borderRadius: "var(--radius-control)",
+                        fontSize: 12,
+                        color: "var(--status-error)",
+                      }}
+                    >
+                      {transcriptError}
+                    </div>
+                  )}
+                  {transcriptMessages.length === 0 && !transcriptLoading ? (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: transcriptError
+                          ? "var(--status-error)"
+                          : "var(--text-dim)",
+                        fontStyle: transcriptError ? "normal" : "italic",
+                      }}
+                    >
+                      {transcriptError ?? t("subagentTranscript.noMessages")}
+                    </div>
+                  ) : (
+                    transcriptMessages.map((message, i) => (
+                      <SubagentTranscriptRow key={i} message={message} />
+                    ))
+                  )}
+                  {transcriptLoading && transcriptMessages.length === 0 && (
+                    <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                      {t("subagentTranscript.loading")}
+                    </div>
+                  )}
+                  {!transcriptExhausted && !transcriptLoading && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void loadTranscriptPage(transcriptNextByte)
+                      }
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent)",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontFamily: "inherit",
+                        padding: 0,
+                      }}
+                    >
+                      {t("subagentTranscript.loadMore")}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </>
         </DialogContent>
       )}

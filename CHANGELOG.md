@@ -6,9 +6,6 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ## [Unreleased]
 
-### Fixed
-- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
-
 ### Breaking Changes
 - Removed host pools and shared project identities. New daemons use one controller and link protocol 14. Upgrade the controller first; it still accepts enrolled v13 daemons so you can upgrade them individually.
 
@@ -244,6 +241,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The estimated token count and streaming tokens-per-second preview no longer appear in streaming response headers; the model name remains visible
 
 ### Fixed
+- Subagent detail dialogs stay stable and retain transcript expansion while live updates arrive.
+- Outbox receipts include the owning host, so delivered prompts no longer stay stuck on **Sending…** and block later prompts.
 - Workspace names in the sidebar stay on one line, with PR links below. The running-agent badge sits beside the actions menu, and empty Ship and setup slots leave more room for the name.
 - Settings keeps one host selection across Models, Providers, Usage, Agents, Intelligence, Extensions, Repos, and System. Usage and the model catalog come from the selected daemon. Manage linked-host OMP settings and provider credentials on that host.
 - Workspace names in the sidebar stay on one line and truncate with an ellipsis. PR links sit below the name, and running-agent and attention indicators have fixed slots.
@@ -413,6 +412,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - PR checks and monitoring bells show accurate status, with accessible pending-check labels
 - Workspace sidebar rows align running-agent and attention badges consistently while empty Ship and setup slots give workspace names more room
 - Settings keeps one host selection across Models, Providers, Usage, Agents, Intelligence, Extensions, Repos, and System. Usage and the model catalog come from the selected daemon. Manage linked-host OMP settings and provider credentials on that host
+- Subagent detail dialogs stay stable and retain transcript expansion while live updates arrive
 ## [v0.7.0] - 2026-11-14
 
 ### Breaking changes
