@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -39,6 +39,45 @@ const env = { ...process.env };
 const fixturePasswordHash = values["native-fixture"]
   ? process.env.KEYLIME_DEV_FIXTURE_PASSWORD_HASH
   : undefined;
+const fixtureModelUrl = values["native-fixture"]
+  ? process.env.KEYLIME_DEV_NATIVE_MODEL_URL
+  : undefined;
+if (fixtureModelUrl !== undefined) {
+  const providerUrl = new URL(fixtureModelUrl);
+  if (
+    providerUrl.protocol !== "http:" ||
+    providerUrl.hostname !== "127.0.0.1" ||
+    !providerUrl.port ||
+    providerUrl.pathname !== "/v1" ||
+    providerUrl.username ||
+    providerUrl.password ||
+    providerUrl.search ||
+    providerUrl.hash
+  )
+    throw new Error("Native fixture model URL must be an HTTP loopback /v1 URL with a port");
+  // JSON is valid YAML; only the isolated agent directory receives this provider.
+  writeFileSync(
+    path.join(agent, "models.yml"),
+    JSON.stringify({
+      providers: {
+        "keylime-fixture": {
+          baseUrl: providerUrl.href,
+          api: "openai-completions",
+          auth: "none",
+          models: [{
+            id: "offline",
+            name: "Keylime Offline Fixture",
+            reasoning: false,
+            input: ["text"],
+            contextWindow: 65536,
+            maxTokens: 4096,
+          }],
+        },
+      },
+    }),
+    { mode: 0o600 },
+  );
+}
 // Never inherit a running installation's auth, package root, session, or broker connection.
 for (const name of Object.keys(env)) {
   if (

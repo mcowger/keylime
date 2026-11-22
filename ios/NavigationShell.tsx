@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Pressable,
   SafeAreaView,
@@ -8,10 +8,12 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { ChatTranscript } from "./ChatTranscript";
-import type { operations } from "./generated/web-http";
+import {
+  ChatLocationPicker,
+  type ChatLocationChoice,
+} from "./ChatLocationPicker";
 import { HomeScreen, type HomeSessionInfo } from "./HomeScreen";
-import { requestJson } from "./keylime-http";
+import { LiveChat, type ChatTarget } from "./LiveChat";
 import { SettingsScreen } from "./SettingsScreen";
 import { Sidebar } from "./Sidebar";
 import { theme } from "./theme";
@@ -29,10 +31,12 @@ export type WorkspaceLocation = {
   path: string;
   title: string;
   effortId?: string;
+  project?: string;
 };
-type OpenTab = WorkspaceTab & { location: WorkspaceLocation };
-type SessionRead =
-  operations["getSession"]["responses"][200]["content"]["application/json"];
+type OpenTab = WorkspaceTab & {
+  location: WorkspaceLocation;
+  sessionId?: string;
+};
 
 const sessionTitle = (session: HomeSessionInfo) =>
   session.name || session.firstMessage || "New chat";
@@ -65,11 +69,8 @@ export function NavigationShell({
   const [location, setLocation] = useState<WorkspaceLocation | null>(null);
   const [tabs, setTabs] = useState<OpenTab[]>([]);
   const [activeKey, setActiveKey] = useState<string>();
-  const [history, setHistory] = useState<{
-    key: string;
-    context?: SessionRead["context"];
-    error?: string;
-  }>();
+  const [picker, setPicker] = useState<"project" | "workspace" | null>(null);
+  const draftSeq = useRef(0);
   const dark = useColorScheme() !== "light";
   const colors = dark
     ? theme
@@ -82,33 +83,18 @@ export function NavigationShell({
         accent: "#B03E22",
       };
   const selected = tabs.find((tab) => tab.key === activeKey);
-  const session = selected?.session;
-
-  useEffect(() => {
-    if (!selected?.session || section !== "workspace") return;
-    let active = true;
-    const { key, location, session } = selected;
-    const params = `hostId=${encodeURIComponent(location.hostId)}&tail=40`;
-    void requestJson<SessionRead>(
-      origin,
-      `/api/sessions/${encodeURIComponent(session.id)}?${params}`,
-    ).then(
-      ({ context }) => {
-        if (active) setHistory({ key, context });
-      },
-      (cause: unknown) => {
-        if (active)
-          setHistory({
-            key,
-            error:
-              cause instanceof Error ? cause.message : "Couldn't load chat.",
-          });
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [origin, section, selected]);
+  const target: ChatTarget | null = location
+    ? {
+        key:
+          selected?.key ??
+          JSON.stringify([location.hostId, location.path, "draft"]),
+        hostId: location.hostId,
+        path: location.path,
+        workspace: location.title,
+        project: location.project ?? location.title,
+        sessionId: selected?.sessionId ?? selected?.session?.id ?? null,
+      }
+    : null;
 
   const hierarchyByHost = useMemo(
     () =>
@@ -131,11 +117,22 @@ export function NavigationShell({
     [byHost],
   );
   const workspaceTabs = location
-    ? tabs.filter(
-        (tab) =>
-          tab.location.hostId === location.hostId &&
-          tab.location.path === location.path,
-      )
+    ? tabs
+        .filter(
+          (tab) =>
+            tab.location.hostId === location.hostId &&
+            tab.location.path === location.path,
+        )
+        .map((tab) => {
+          const session = sessions?.find(
+            (item) =>
+              (item.hostId ?? "local") === location.hostId &&
+              item.id === tab.sessionId,
+          );
+          return session
+            ? { ...tab, session, title: sessionTitle(session) }
+            : tab;
+        })
     : [];
   const savedSessions = location
     ? (sessions ?? []).filter((item) => {
@@ -171,6 +168,84 @@ export function NavigationShell({
     setSidebar(false);
   }
 
+  function newChat(at = location) {
+    if (!at) {
+      setPicker("project");
+      return;
+    }
+    const key = JSON.stringify([
+      at.hostId,
+      at.path,
+      "draft",
+      ++draftSeq.current,
+    ]);
+    setTabs((old) => [...old, { key, title: "New chat", location: at }]);
+    setLocation(at);
+    setActiveKey(key);
+    setSidebar(false);
+    setSection("workspace");
+  }
+
+  function onCreated(
+    key: string,
+    sessionId: string,
+    hostId: string,
+    path: string,
+  ) {
+    if (!location) return;
+    setTabs((old) => {
+      const existing = old.find((tab) => tab.key === key);
+      if (existing)
+        return old.map((tab) =>
+          tab.key === key ? { ...tab, sessionId } : tab,
+        );
+      return [
+        ...old,
+        {
+          key,
+          title: "New chat",
+          sessionId,
+          location: { ...location, hostId, path },
+        },
+      ];
+    });
+    setActiveKey((current) => (current === undefined ? key : current));
+  }
+
+  const choices: ChatLocationChoice[] = [];
+  for (const host of hosts) {
+    const inventory = byHost[host.id];
+    if (!inventory || inventory.unavailable) continue;
+    for (const project of inventory.hierarchy?.projects ?? []) {
+      if (
+        picker === "workspace" &&
+        (host.id !== location?.hostId ||
+          project.name !== (location.project ?? location.title))
+      )
+        continue;
+      const available = project.workspaces.filter(
+        (workspace) => !workspace.unavailable,
+      );
+      for (const workspace of picker === "workspace"
+        ? available
+        : [available.find((item) => item.isDefault) ?? available[0]]) {
+        if (!workspace) continue;
+        const next = {
+          hostId: host.id,
+          path: workspace.path,
+          title: workspace.name,
+          project: project.name,
+        };
+        choices.push({
+          key: JSON.stringify([host.id, workspace.id]),
+          title: picker === "workspace" ? workspace.name : project.name,
+          subtitle: workspace.path,
+          onSelect: () => newChat(next),
+        });
+      }
+    }
+  }
+
   function openSession(item: HomeSessionInfo) {
     const hostId = item.hostId ?? "local";
     const owner = locationForPath(byHost, hostId, item.cwd);
@@ -183,7 +258,12 @@ export function NavigationShell({
             effortId: owner.effort.id,
           }
         : owner.kind === "workspace"
-          ? { hostId, path: owner.workspace.path, title: owner.workspace.name }
+          ? {
+              hostId,
+              path: owner.workspace.path,
+              title: owner.workspace.name,
+              project: owner.project.name,
+            }
           : {
               hostId,
               path: item.cwd,
@@ -191,7 +271,11 @@ export function NavigationShell({
             };
     const key = tabKey(hostId, item.id);
     setTabs((old) =>
-      old.some((tab) => tab.key === key)
+      old.some(
+        (tab) =>
+          tab.key === key ||
+          (tab.location.hostId === hostId && tab.sessionId === item.id),
+      )
         ? old
         : [
             ...old,
@@ -200,11 +284,16 @@ export function NavigationShell({
               location: belonging,
               title: sessionTitle(item),
               session: item,
+              sessionId: item.id,
             },
           ],
     );
     setLocation(belonging);
-    setActiveKey(key);
+    setActiveKey(
+      tabs.find(
+        (tab) => tab.location.hostId === hostId && tab.sessionId === item.id,
+      )?.key ?? key,
+    );
     setSidebar(false);
     setSection("workspace");
   }
@@ -289,6 +378,7 @@ export function NavigationShell({
                     onSelectTab={(tab) => setActiveKey(tab.key)}
                     onCloseTab={closeTab}
                     onSelectSaved={openSession}
+                    onNewChat={() => newChat()}
                   />
                 )}
               </View>
@@ -340,25 +430,24 @@ export function NavigationShell({
                     {error ? "Couldn't load chats." : "Loading…"}
                   </Text>
                 )
-              ) : session &&
-                history?.key === selected?.key &&
-                history?.context ? (
-                <ChatTranscript
-                  messages={history.context.messages}
-                  entryIds={history.context.entryIds}
-                  mediaOrigin={origin}
-                  sessionKey={selected?.key}
-                />
-              ) : (
-                <Text style={[styles.status, { color: colors.muted }]}>
-                  {session
-                    ? (history?.key === selected?.key && history?.error) ||
-                      "Loading…"
-                    : location?.title}
-                </Text>
-              )}
+              ) : null}
             </>
           )}
+          <LiveChat
+            origin={origin}
+            link={link}
+            target={target}
+            visible={section === "workspace"}
+            onUnauthorized={onUnauthorized}
+            onCreated={onCreated}
+            onChooseProject={() => setPicker("project")}
+            onChooseWorkspace={() => setPicker("workspace")}
+          />
+          <ChatLocationPicker
+            kind={picker}
+            choices={choices}
+            onClose={() => setPicker(null)}
+          />
         </View>
         {sidebar && (
           <Sidebar
@@ -372,13 +461,21 @@ export function NavigationShell({
             }}
             onSettings={openSettings}
             onDismiss={() => setSidebar(false)}
-            onWorkspace={(hostId, workspace) =>
+            onNewSession={() => {
+              setSidebar(false);
+              newChat();
+            }}
+            onWorkspace={(hostId, workspace) => {
+              const repo = byHost[hostId]?.hierarchy?.projects.find(
+                (project) => project.id === workspace.projectId,
+              );
               goWorkspace({
                 hostId,
                 path: workspace.path,
                 title: workspace.name,
-              })
-            }
+                project: repo?.name,
+              });
+            }}
             onEffort={(hostId, effort) => {
               if (effort.root)
                 goWorkspace({

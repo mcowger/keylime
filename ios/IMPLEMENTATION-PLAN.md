@@ -60,6 +60,10 @@ Even on a healthy socket, `message_end` can arrive before the transcript is writ
 
 Exercise a reply whose `message_end` arrives before persistence. With the socket still healthy, verify that the persisted-session notification triggers a catch-up read and advances the durable cursor without duplicating the reply.
 
+**Milestone 2 progress.** The Release app opened a seeded long chat and loaded older entries, selected Project/Workspace and the live model catalog, and streamed first and existing-session replies through Browser Link against the real local daemon and compiled runner. Stop cancelled the model stream, and foregrounding the app returned to the same chat during a reply. The offline fixture runs only the model HTTP endpoint locally (`native-fixture.ts --offline-model`); it does not replace Keylime. Native captures are under `ios/screenshots/milestone-2/native/`. Fault-injected create/prompt acknowledgement loss, the exact persistence race, and blocking-dialog replay were not covered by this simulator walkthrough.
+
+The Stop regression check retained both the new user prompt and interrupted assistant reply immediately, then reopened the saved chat after app restart without duplicate rows (`stopped-echo.png`).
+
 ### 3. Settings and workspace tools
 
 Match the full-page Settings header, search, horizontal categories and setting cards. Start with Interface & Behavior controls that already have native behavior (appearance and transcript controls), host status, and model settings the chat consumes. Keep device-local display preferences separate from host policies and provider configuration. Bind settings to the same source and scope as the PWA; show an unavailable control only if that state exists in the reference. Don't ship inert switches. Provider or host secrets must not be exposed through the app.

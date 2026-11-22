@@ -16,7 +16,7 @@ export type BrowserLinkHandlers = {
   onEvent(data: unknown): void;
   /** Called for every fresh server subscription, including after a resync. */
   onOpen?(): void;
-  onEnd?(reason: string): void;
+  onEnd?(reason: string, code?: string): void;
 };
 export type BrowserLinkOptions = {
   onStatus?(status: BrowserLinkStatus): void;
@@ -457,6 +457,7 @@ export class BrowserLink {
             typeof control.error === "string"
               ? control.error
               : "Subscription refused",
+            typeof control.code === "string" ? control.code : undefined,
           );
         }
       } else this.subscriptions.get(value.name)?.handlers.onEvent(value.data);
