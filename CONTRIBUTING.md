@@ -47,6 +47,20 @@ the focused tests don't replace the full suite below. Git hooks check the workin
 tree, including unstaged changes. If Git uses a custom `core.hooksPath`, resolve
 that configuration before installing the hook.
 
+### Apple simulator tools
+
+On macOS with Xcode and an iOS simulator runtime installed, OMP discovers the
+project's `.omp/mcp.json` and starts MobileBuildMCP through the pinned Bun runtime.
+It exposes simulator, UI automation, debugging, macOS build and Xcode IDE bridge
+tools; its error telemetry is disabled. The first launch downloads the pinned
+server package and signed AXe 2.1.1 helper through mise. Select a simulator with
+`list_sims`, then set its ID with `session_set_defaults` before using UI automation.
+On this host, UI snapshots have timed out immediately after boot; allow the
+simulator to finish starting before retrying. Xcode project and scheme defaults
+can be set there too. The IDE bridge may require Xcode to be open and its trust
+prompt approved. The server requires macOS and Xcode; it cannot operate on Linux
+hosts.
+
 ### Development and browser testing
 
 ```bash

@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "mobilebuild": {
+      "command": "mise",
+      "args": [
+        "exec",
+        "github:cameroncooke/AXe[asset_pattern=AXe-macOS-v*-universal.tar.gz]@2.1.1",
+        "--",
+        "sh",
+        "-c",
+        "MOBILEBUILDMCP_AXE_PATH=$(command -v axe) || exit 1; export MOBILEBUILDMCP_AXE_PATH; exec bun x --bun mobilebuildmcp@2.7.1 mcp"
+      ],
+      "env": {
+        "MOBILEBUILDMCP_ENABLED_WORKFLOWS": "simulator,ui-automation,debugging,macos,xcode-ide",
+        "MOBILEBUILDMCP_SENTRY_DISABLED": "true"
+      }
+    }
+  }
+}
