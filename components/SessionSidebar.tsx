@@ -132,12 +132,20 @@ export type PlanningDestination = Omit<
   "onClose" | "launchDisabled"
 >;
 
+export type HomeSessions = {
+  sessions: SessionInfo[];
+  runningIds: ReadonlySet<string>;
+  awaitingInputIds: ReadonlySet<string>;
+};
+
 interface Props {
   selectedSessionId: string | null;
   selectedSessionHostId?: string;
   dismissExitedChatRef?: Ref<(id: string, hostId?: string) => void>;
   /** The active session can exist in memory before its JSONL file is flushed. */
   optimisticSession?: SessionInfo | null;
+  onHomeSessionsChange?: (value: HomeSessions) => void;
+  homeSelectSessionRef?: Ref<(session: SessionInfo) => void>;
   onSelectSession: (session: SessionInfo, isRestore?: boolean) => void;
   onOpenLinkedSession?: (sessionId: string, hostId?: string) => void;
   onOpenPlanning?: (destination: PlanningDestination) => void;
@@ -248,6 +256,8 @@ export const SessionSidebar = memo(function SessionSidebar({
   dismissExitedChatRef,
   optimisticSession,
   onSelectSession,
+  onHomeSessionsChange,
+  homeSelectSessionRef,
   onOpenLinkedSession,
   onOpenPlanning,
   onNewSession,
@@ -1088,6 +1098,26 @@ export const SessionSidebar = memo(function SessionSidebar({
     selectedCwd,
     selectedHostId,
   ]);
+  // Read the latest listener without re-publishing just because its identity
+  // changed during a parent render. Attaching a listener still sends a snapshot.
+  const homeSessionsListenerRef = useRef(onHomeSessionsChange);
+  const hasHomeSessionsListener = onHomeSessionsChange !== undefined;
+  useEffect(() => {
+    homeSessionsListenerRef.current = onHomeSessionsChange;
+  }, [onHomeSessionsChange]);
+  useEffect(() => {
+    if (!hasHomeSessionsListener) return;
+    homeSessionsListenerRef.current?.({
+      sessions: visibleSessions,
+      runningIds: runningSessionIds,
+      awaitingInputIds,
+    });
+  }, [
+    visibleSessions,
+    runningSessionIds,
+    awaitingInputIds,
+    hasHomeSessionsListener,
+  ]);
   const visibleProjects = projects;
 
   // ---- Derived project list ---------------------------------------------------
@@ -1550,6 +1580,9 @@ export const SessionSidebar = memo(function SessionSidebar({
     },
     [onSelectSession, expandProject, hostUnavailableReason, projectRootFor],
   );
+  useImperativeHandle(homeSelectSessionRef, () => handleSelectSessionFromList, [
+    handleSelectSessionFromList,
+  ]);
   const handleOpenSearchMatch = useCallback(
     (s: SessionInfo, target: SearchMatchTarget) => {
       handleSelectSessionFromList(s);

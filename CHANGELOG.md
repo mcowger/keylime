@@ -12,6 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
+- The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts.
 - Agents can inspect their workspace's linked PR, link an existing PR, and start PR feedback monitoring without a browser or confirmation.
 - The Git drawer offers Push, Pull, Fetch, and rebase onto local `main` or `origin/main`.
 - Run named Paseo scripts and start services from the **Scripts** tab in the right sidebar when the Repo follows Paseo workspace setup. Services use ports on the owning host. Stop keeps terminal output; successful worktree removal discards it.
@@ -181,6 +182,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Project settings let you browse and choose repository-discovered icons, including icons found in nested directories
 - The Git drawer offers Push, Pull, Fetch, and rebase onto local `main` or `origin/main`
 - Reopening the model picker shows cached workspace roles immediately while refreshing them in the background
+- The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts
 
 ### Changed
 - Browser tabs show the active workspace name instead of its directory name.

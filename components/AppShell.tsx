@@ -22,7 +22,13 @@ import {
   NAVIGATION_HISTORY_MAX_ENTRIES,
 } from "@/lib/navigation-history";
 import { useMobileSidebarGestures } from "@/hooks/useMobileSidebarGestures";
-import { SessionSidebar, type PlanningDestination } from "./SessionSidebar";
+import {
+  SessionSidebar,
+  type HomeSessions,
+  type PlanningDestination,
+} from "./SessionSidebar";
+import { HomeDashboard } from "./HomeDashboard";
+import { HomeStartDialog } from "./HomeStartDialog";
 import { PlanningPage } from "./PlanningDialog";
 import type { SearchMatchTarget } from "./SessionSearchMatches";
 import type { WorktreeContext } from "./SessionSidebar-helpers";
@@ -476,6 +482,33 @@ export function AppShell({ appName }: { appName: string }) {
   );
   const { hosts } = useHostRows();
   const systemsHosts = useSystemsHosts(hosts);
+  const [homeSessions, setHomeSessions] = useState<HomeSessions>({
+    sessions: [],
+    runningIds: new Set(),
+    awaitingInputIds: new Set(),
+  });
+  const homeSelectSessionRef = useRef<((session: SessionInfo) => void) | null>(
+    null,
+  );
+  const [homeStart, setHomeStart] = useState<"workspace" | "effort" | null>(
+    null,
+  );
+  const homeHostNames = useMemo(
+    () =>
+      Object.fromEntries(
+        (hosts ?? []).map((host) => [host.id, hostName(t, host)]),
+      ),
+    [hosts, t],
+  );
+  const availableHomeHosts = useMemo(
+    () =>
+      new Set(
+        (hosts ?? [])
+          .filter((host) => isLinkUp(host.status))
+          .map((host) => host.id),
+      ),
+    [hosts],
+  );
   const [effortDetails, setEffortDetails] = useState<EffortTarget | null>(null);
   const effortsByHost = useMemo(
     () =>
@@ -502,6 +535,35 @@ export function AppShell({ appName }: { appName: string }) {
         )[0]?.effort;
     },
     [effortsByHost],
+  );
+  const homeSessionPlace = useCallback(
+    (session: SessionInfo) => {
+      const host = session.hostId ?? LOCAL_HOST_ID;
+      const effort = effortForPath(host, session.cwd);
+      if (effort) return effort.name;
+      const cwd = comparableProjectPath(session.cwd);
+      let workspace: ManagedProject | undefined;
+      let longest = -1;
+      for (const project of workspaceOptions.projects) {
+        if ((project.hostId ?? LOCAL_HOST_ID) !== host) continue;
+        const path = comparableProjectPath(project.path);
+        if (
+          path.length > longest &&
+          (cwd === path || cwd.startsWith(path === "/" ? "/" : `${path}/`))
+        ) {
+          workspace = project;
+          longest = path.length;
+        }
+      }
+      if (
+        workspace?.isDefaultWorkspace &&
+        workspace.projectName &&
+        workspace.name
+      )
+        return `${workspace.projectName} / ${workspace.name}`;
+      return workspace?.name;
+    },
+    [effortForPath, workspaceOptions.projects],
   );
   const navigationProjects = useMemo(
     () => [
@@ -3361,6 +3423,8 @@ export function AppShell({ appName }: { appName: string }) {
       dismissExitedChatRef={dismissExitedChatRef}
       optimisticSession={selectedSession?.path === "" ? selectedSession : null}
       onSelectSession={handleSelectSession}
+      onHomeSessionsChange={setHomeSessions}
+      homeSelectSessionRef={homeSelectSessionRef}
       onOpenLinkedSession={openLinkedSession}
       onOpenPlanning={(destination) => {
         setPlanning(destination);
@@ -3437,6 +3501,30 @@ export function AppShell({ appName }: { appName: string }) {
   return (
     <>
       <ToastProvider>
+        {homeStart && (
+          <HomeStartDialog
+            kind={homeStart}
+            projects={workspaceOptions.projects}
+            systemsHosts={systemsHosts}
+            hostNames={homeHostNames}
+            availableHosts={availableHomeHosts}
+            onClose={() => setHomeStart(null)}
+            onNewWorkspace={(project) => {
+              setHomeStart(null);
+              handleNewWorkspace(project);
+            }}
+            onEffortCreated={(host, id) => {
+              setHomeStart(null);
+              setRefreshKey((key) => key + 1);
+              setEffortDetails({ host, id });
+            }}
+            onAddRepo={() => {
+              setHomeStart(null);
+              setSidebarOpen(true);
+              openAddProject(true);
+            }}
+          />
+        )}
         {detailEffort && effortDetails && (
           <EffortDetails
             key={`${effortDetails.host}:${detailEffort.id}`}
@@ -4966,118 +5054,18 @@ export function AppShell({ appName }: { appName: string }) {
                           title={t("appShell.selectSessionHint")}
                         />
                       ) : (
-                        <div
-                          style={{
-                            position: "absolute",
-                            top: 12,
-                            left: 12,
-                            display: "flex",
-                            alignItems: "flex-start",
-                            gap: 8,
-                            userSelect: "none",
-                          }}
-                        >
-                          <svg
-                            width="44"
-                            height="44"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="var(--accent)"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            style={{ opacity: 0.7, flexShrink: 0 }}
-                          >
-                            <line x1="20" y1="12" x2="4" y2="12" />
-                            <polyline points="10 6 4 12 10 18" />
-                          </svg>
-                          <div>
-                            <div
-                              className="display-heading"
-                              style={{
-                                fontSize: 20,
-                                color: "var(--text)",
-                                marginBottom: 8,
-                              }}
-                            >
-                              {t("appShell.getStarted")}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: "var(--text-muted)",
-                                lineHeight: 1.8,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  color: "var(--text-dim)",
-                                  marginRight: 6,
-                                }}
-                              >
-                                1.
-                              </span>
-                              {t("appShell.getStartedStep1")}
-                              <br />
-                              <span
-                                style={{
-                                  color: "var(--text-dim)",
-                                  marginRight: 6,
-                                }}
-                              >
-                                2.
-                              </span>
-                              {(() => {
-                                // One translatable sentence; the {models} slot is rendered
-                                // as the emphasized button name so word order stays free.
-                                const [before, after] = t(
-                                  "appShell.getStartedStep2",
-                                ).split("{models}");
-                                return (
-                                  <>
-                                    {before}
-                                    <strong style={{ color: "var(--text)" }}>
-                                      {t("appShell.models")}
-                                    </strong>
-                                    {after}
-                                  </>
-                                );
-                              })()}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSidebarOpen(true);
-                                  openAddProject(true);
-                                }}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                  width: "fit-content",
-                                  minHeight: 36,
-                                  marginTop: 12,
-                                  padding: "7px 10px",
-                                  border: "1px solid var(--border)",
-                                  borderRadius: "var(--radius-control)",
-                                  background: "var(--bg-panel)",
-                                  color: "var(--text)",
-                                  cursor: "pointer",
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  boxShadow: "var(--shadow-card)",
-                                }}
-                                className="ui-focus-ring"
-                              >
-                                <Folder
-                                  size={14}
-                                  strokeWidth={1.8}
-                                  aria-hidden="true"
-                                />
-                                {t("appShell.openWorkspaces")}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
+                        <HomeDashboard
+                          sessions={homeSessions.sessions}
+                          runningIds={homeSessions.runningIds}
+                          awaitingInputIds={homeSessions.awaitingInputIds}
+                          hostNames={homeHostNames}
+                          sessionPlace={homeSessionPlace}
+                          onSelectSession={(session) =>
+                            homeSelectSessionRef.current?.(session)
+                          }
+                          onNewWorkspace={() => setHomeStart("workspace")}
+                          onNewEffort={() => setHomeStart("effort")}
+                        />
                       )}
                     </div>
                   </>

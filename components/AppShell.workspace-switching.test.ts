@@ -5,12 +5,13 @@ import React from "react";
 import type { SessionSidebar } from "./SessionSidebar";
 import type { ChatWindow } from "./ChatWindow";
 import type { WorkspaceTerminalTabs } from "./WorkspaceTerminalTabs";
+import type { SessionInfo } from "@/lib/types";
 import type { EffortRecord } from "@/lib/api-contracts/systems";
 import type { EventStreamChannel } from "@/lib/event-stream";
 import type { ShipDialog } from "./ShipDialog";
 import { setDraft, clearDraft } from "@/lib/draft-store";
 import { sessionKey } from "@/lib/session-identity";
-const { render, fireEvent, waitFor, cleanup, act } =
+const { render, fireEvent, waitFor, cleanup, act, within } =
   await import("@testing-library/react/pure.js");
 
 const projects = ["/repo", "/repo/worktrees/B", "/other"].map((path) => ({
@@ -51,6 +52,7 @@ const effort: EffortRecord = {
   ],
 };
 let showEffort = false;
+let homeFixtures: SessionInfo[] | undefined;
 let updateWorkspaceOptions: NonNullable<
   React.ComponentProps<typeof SessionSidebar>["onWorkspaceOptionsChange"]
 >;
@@ -62,11 +64,43 @@ mock.module("./SessionSidebar", () => ({
         [
           ...projects,
           { path: "/repo/worktrees/B", hostId: "remote", name: "Remote B" },
+          ...(homeFixtures
+            ? [
+                {
+                  path: "/atlas",
+                  hostId: "local",
+                  name: "main",
+                  projectName: "Atlas",
+                  isDefaultWorkspace: true,
+                },
+                {
+                  path: "/orion",
+                  hostId: "local",
+                  name: "main",
+                  projectName: "Orion",
+                  isDefaultWorkspace: true,
+                },
+                {
+                  path: "/no-project-name",
+                  hostId: "local",
+                  name: "default",
+                  isDefaultWorkspace: true,
+                },
+              ]
+            : []),
         ],
         null,
         "/repo",
         "local",
       );
+    }, []);
+    React.useEffect(() => {
+      if (homeFixtures)
+        props.onHomeSessionsChange?.({
+          sessions: homeFixtures,
+          runningIds: new Set(),
+          awaitingInputIds: new Set(),
+        });
     }, []);
     React.useEffect(() => {
       if (props.selectedCwd)
@@ -417,6 +451,99 @@ globalThis.fetch = (async (url: Parameters<typeof fetch>[0]) =>
             : {},
   )) as typeof fetch;
 const { AppShell } = await import("./AppShell.tsx");
+
+test("home names efforts and the host's nearest registered workspace", async () => {
+  showEffort = true;
+  const session = (id: string, cwd: string, hostId = "local"): SessionInfo => ({
+    id,
+    cwd,
+    hostId,
+    path: "",
+    name: id,
+    firstMessage: "",
+    created: "2026-11-14",
+    modified: "2026-11-14",
+    messageCount: 1,
+  });
+  homeFixtures = [
+    session("Effort chat", "/efforts/test/member/src"),
+    session("Nested workspace", "/repo/worktrees/B/src"),
+    session("Remote workspace", "/repo/worktrees/B/src", "remote"),
+    session("Other host", "/efforts/test/member/src", "remote"),
+    session("Unregistered", "/unknown/new-chat"),
+  ];
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/");
+  try {
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => {
+      assert.match(
+        view.getByRole("button", { name: /Effort chat/ }).textContent!,
+        /Test effort/,
+      );
+      assert.match(
+        view.getByRole("button", { name: /Nested workspace/ }).textContent!,
+        /\/repo\/worktrees\/B/,
+      );
+      assert.match(
+        view.getByRole("button", { name: /Remote workspace/ }).textContent!,
+        /Remote B/,
+      );
+      assert.match(
+        view.getByRole("button", { name: /Other host/ }).textContent!,
+        /src/,
+      );
+      assert.match(
+        view.getByRole("button", { name: /Unregistered/ }).textContent!,
+        /new-chat/,
+      );
+    });
+  } finally {
+    cleanup();
+    showEffort = false;
+    homeFixtures = undefined;
+  }
+});
+
+test("home distinguishes default workspaces with the same name", async () => {
+  const session = (id: string, cwd: string): SessionInfo => ({
+    id,
+    cwd,
+    path: "",
+    name: id,
+    firstMessage: "",
+    created: "2026-11-14",
+    modified: "2026-11-14",
+    messageCount: 1,
+  });
+  homeFixtures = [
+    session("Atlas chat", "/atlas"),
+    session("Orion chat", "/orion"),
+    session("Fallback chat", "/no-project-name"),
+  ];
+  sessionStorage.clear();
+  window.history.replaceState(null, "", "/");
+  try {
+    const view = render(React.createElement(AppShell, { appName: "Keylime" }));
+    await waitFor(() => {
+      assert.match(
+        view.getByRole("button", { name: /Atlas chat/ }).textContent!,
+        /Atlas \/ main/,
+      );
+      assert.match(
+        view.getByRole("button", { name: /Orion chat/ }).textContent!,
+        /Orion \/ main/,
+      );
+      assert.match(
+        view.getByRole("button", { name: /Fallback chat/ }).textContent!,
+        /default/,
+      );
+    });
+  } finally {
+    cleanup();
+    homeFixtures = undefined;
+  }
+});
 
 for (const mobile of [false, true]) {
   test(`planning retains the workspace and leaves on selection (${mobile ? "mobile" : "desktop"})`, async () => {
@@ -1204,7 +1331,12 @@ test("new workspace chat proceeds while post setup is running or has failed", as
     const second = render(
       React.createElement(AppShell, { appName: "Keylime" }),
     );
-    fireEvent.click(second.getByRole("button", { name: "New workspace" }));
+    fireEvent.click(
+      within(second.getByRole("navigation", { name: "Repos" })).getByRole(
+        "button",
+        { name: "New workspace" },
+      ),
+    );
     await waitFor(() => assert.equal(sourceRequired, false));
     await act(async () => {
       assert.deepEqual(await prepareWorkspace("first prompt"), {

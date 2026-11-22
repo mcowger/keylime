@@ -4,12 +4,14 @@ import React from "react";
 import test from "node:test";
 import { sessionKey } from "@/lib/session-identity";
 import type { SessionInfo } from "../lib/types";
+import type { HomeSessions } from "./SessionSidebar";
 import type { EffortRecord, SystemRecord } from "../lib/api-contracts/systems";
 import { noSystemsSidebar } from "../tests/systems-sidebar-fixture";
 const { render, cleanup, fireEvent, screen, waitFor } =
   await import("@testing-library/react/pure.js");
 const { SessionSidebar } = await import("./SessionSidebar.tsx");
 const { HierarchySidebar } = await import("./HierarchySidebar.tsx");
+const { HomeDashboard } = await import("./HomeDashboard.tsx");
 // Components load after the DOM fixture is installed.
 const { SystemsSidebar } = await import("./SystemsSidebar.tsx");
 
@@ -141,7 +143,11 @@ test("Repos default to collapsed only when their work is confirmed default", asy
       ["Unknown default", true],
     ] as const) {
       const button = await screen.findByRole("button", { name });
-      assert.equal(button.getAttribute("aria-expanded"), String(expanded), name);
+      assert.equal(
+        button.getAttribute("aria-expanded"),
+        String(expanded),
+        name,
+      );
     }
 
     fireEvent.click(screen.getByRole("button", { name: "Trunk" }));
@@ -232,7 +238,10 @@ test("System expansion uses observed member branches and preserves manual choice
     view.rerender(React.createElement(SystemsSidebar, makeProps([effort])));
     assert.equal(expanded(), "false");
     view.rerender(
-      React.createElement(SystemsSidebar, makeProps([{ ...effort, members: [] }])),
+      React.createElement(
+        SystemsSidebar,
+        makeProps([{ ...effort, members: [] }]),
+      ),
     );
     assert.equal(expanded(), "false");
     const switched = {
@@ -264,7 +273,10 @@ test("System expansion uses observed member branches and preserves manual choice
     assert.equal(expanded(), "true");
     const mixed = {
       ...effort,
-      members: [member, { ...member, repoPath: "/other", defaultBranch: undefined }],
+      members: [
+        member,
+        { ...member, repoPath: "/other", defaultBranch: undefined },
+      ],
     };
     view.rerender(React.createElement(SystemsSidebar, makeProps([mixed])));
     assert.equal(expanded(), "true");
@@ -342,11 +354,79 @@ function renderSidebar(
     }),
   );
 }
+
+test("home opens a first-turn agent before its transcript exists", async () => {
+  const restore = setup(() => Response.json(snapshot));
+  const fallbackFetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname === "/api/sessions")
+        return Response.json({
+          sessions: [],
+          runningSessions: [
+            {
+              id: "first-turn",
+              hostId: "remote",
+              cwd: "/repo",
+              awaitingInput: true,
+            },
+          ],
+        });
+      return fallbackFetch(input, init);
+    },
+    { preconnect: fallbackFetch.preconnect },
+  );
+  let opened: SessionInfo | undefined;
+  function Home() {
+    const [home, setHome] = React.useState<HomeSessions>({
+      sessions: [],
+      runningIds: new Set(),
+      awaitingInputIds: new Set(),
+    });
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(SessionSidebar, {
+        ...noSystemsSidebar,
+        selectedSessionId: null,
+        onSelectSession() {},
+        onHomeSessionsChange: setHome,
+        skipInitialProjectSelection: true,
+        addProjectOpen: false,
+        setAddProjectOpen() {},
+      }),
+      React.createElement(HomeDashboard, {
+        ...home,
+        hostNames: { remote: "Remote host" },
+        sessionPlace: () => undefined,
+        onSelectSession: (session: SessionInfo) => {
+          opened = session;
+        },
+        onNewWorkspace() {},
+        onNewEffort() {},
+      }),
+    );
+  }
+  try {
+    render(React.createElement(Home));
+    await screen.findByText("Remote host");
+    const host = screen.getByText("Remote host");
+    const button = host.closest("button");
+    assert.ok(button);
+    fireEvent.click(button);
+    assert.equal(opened?.id, "first-turn");
+    assert.equal(opened?.hostId, "remote");
+    assert.equal(opened?.cwd, "/repo");
+  } finally {
+    restore();
+  }
+});
 async function expandProject(name = "Project") {
   const project = await screen.findByRole("button", { name });
-  if (project.getAttribute("aria-expanded") === "false") fireEvent.click(project);
+  if (project.getAttribute("aria-expanded") === "false")
+    fireEvent.click(project);
 }
-
 
 test("registered workspaces remain selectable under the single host heading", async () => {
   const hosts: (string | null)[] = [];
