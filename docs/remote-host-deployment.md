@@ -93,11 +93,23 @@ An older host still uses its installed worker's busy check for this upgrade.
 Let that host become idle before deploying a build with force-drain support.
 
 The list comes from builds already on the web server. It includes matching
-native builds from `~/.local/share/keylime/releases/` and the unpacked
-`release/keylime-<os>-<arch>/` build under the server's package directory. A
-build must contain both `keylime` and `keylime-omp` to appear. If the list is
-empty, [build a matching release](release.md#building-binary-archives) on the
-web server and reopen Hosts.
+native builds from `~/.local/share/keylime/releases/`, the unpacked
+`release/keylime-<os>-<arch>/` build, and the generated
+`host-releases/keylime-<os>-<arch>/` build under the server's package directory.
+A build must contain both `keylime` and `keylime-omp` to appear.
+
+When no compatible build is available, choose **Build release** on the host
+card. The controller builds the host's OS and CPU target from its own release's
+committed source snapshot; it does not install anything or restart the host.
+Keep the page open until the build completes, then use **Deploy release**.
+The generated build uses a separate directory and does not replace an incomplete
+unpacked build.
+Building requires mise, the pinned Bun runtime, network access for dependencies,
+and enough disk space on the controller. Local deployments created with this
+feature retain their source snapshot. Older or externally supplied releases
+without it need a new local deployment before they can build this way.
+The built pair belongs to the active controller release; a later controller
+deployment may require another build.
 
 For native builds, the catalog uses the timestamp assigned when the build
 starts. For unpacked builds, it uses the newer of the two binaries' modification

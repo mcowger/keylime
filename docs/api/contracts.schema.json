@@ -50709,6 +50709,17 @@
       "required": ["artifactId", "operationId", "target", "sha256"],
       "type": "object"
     },
+    "hostControl_BuildHostReleaseResult": {
+      "description": "A matching daemon and runner build is available on the controller; it has not been deployed.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": ["ok"],
+      "type": "object"
+    },
     "hostControl_DeployHostReleaseArgs": {
       "additionalProperties": false,
       "description": "Deploy the selected server build's matched daemon and runner.",

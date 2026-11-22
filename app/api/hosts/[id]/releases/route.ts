@@ -1,9 +1,11 @@
 import { Value } from "@sinclair/typebox/value";
 import {
   DeployHostReleaseArgsSchema,
+  type BuildHostReleaseResult,
   type HostReleaseDeployFrame,
 } from "@/lib/api-contracts/host-control-models";
 import { parseJsonWithinLimit } from "@/lib/bounded-form-data";
+import { buildHostRelease } from "@/lib/hosts/host-release-build";
 import { deployHostRelease, listHostReleases } from "@/lib/hosts/host-releases";
 import { UploadError, uploadErrorResponse } from "@/lib/uploads";
 import { requestOwner } from "@/lib/web-auth";
@@ -25,6 +27,29 @@ export async function GET(req: Request, { params }: Context) {
       await listHostReleases((await params).id, req.signal),
       { headers },
     );
+  } catch (error) {
+    return uploadErrorResponse(error);
+  }
+}
+
+/**
+ * @apiContract buildHostRelease
+ * @apiUsage Build a compatible daemon and runner for a linked standalone host on the controller.
+ * @apiInputs Select the host in the URL; the controller chooses its advertised OS and CPU.
+ * @apiInvariants The source is the active controller release's committed snapshot. A completed build does not replace an existing release or install anything on the host.
+ * @apiEffects Builds and publishes a matched pair to the controller's release catalog. The request stays open until the build completes; disconnect cancels it.
+ * @apiRecovery If the source snapshot or build tools are unavailable, deploy a controller release built with source support and retry. Refresh the release catalog before retrying an interrupted build.
+ */
+export async function PUT(
+  req: Request,
+  { params, disableIdleTimeout }: Context & { disableIdleTimeout: () => void },
+) {
+  try {
+    disableIdleTimeout();
+    await buildHostRelease((await params).id, req.signal);
+    return Response.json({ ok: true } satisfies BuildHostReleaseResult, {
+      headers,
+    });
   } catch (error) {
     return uploadErrorResponse(error);
   }

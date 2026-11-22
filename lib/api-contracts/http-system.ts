@@ -16,6 +16,7 @@ import {
   HostArtifactActivationArgsSchema,
   HostArtifactActivationResultSchema,
   HostReleaseListSchema,
+  BuildHostReleaseResultSchema,
   DeployHostReleaseArgsSchema,
   HostReleaseDeployFrameSchema,
 } from "./host-control-models";
@@ -358,6 +359,25 @@ add(
     responses: {
       501: fail("This host does not support paired releases."),
       503: fail("The host is offline."),
+    },
+  },
+);
+add(
+  "/api/hosts/[id]/releases",
+  "put",
+  "buildHostRelease",
+  "Build a compatible standalone host release",
+  BuildHostReleaseResultSchema,
+  {
+    parameters: [id],
+    responses: {
+      409: fail(
+        "The source snapshot is unavailable or a build is already running.",
+      ),
+      500: fail("The build or its cleanup failed on the controller."),
+      501: fail("This host does not support paired releases."),
+      503: fail("The host is offline."),
+      504: fail("The build exceeded its deadline."),
     },
   },
 );

@@ -13,6 +13,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Added
 - The context popup separates reported agent and subagent costs across the session file, including other branches. Costs update as history is saved and may exclude unreported or nested usage.
+- **Settings → Hosts** can build a missing compatible release from the controller's deployed source before deploying it to a standalone host. An incomplete existing build is left untouched.
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal.
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts.
 - Agents can inspect their workspace's linked PR, link an existing PR, and start PR feedback monitoring without a browser or confirmation.
