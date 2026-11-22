@@ -80,6 +80,10 @@ Root `bun install` fetches and installs the pinned OMP runner dependencies. For 
 `runner/release/keylime-omp-<os>-<arch>` (`bun runner/scripts/build-binary.ts`, this machine's target).
 Session browsing and seeded UI checks work without it.
 
+### iOS app development
+
+For the standalone Expo app, follow [`ios/AGENTS.md`](ios/AGENTS.md) for setup, compilation, and simulator testing. The root build and test commands don't cover the iOS app.
+
 ### Development and browser testing
 
 Use `bun run dev` for seeded development and browser checks. The launcher picks
