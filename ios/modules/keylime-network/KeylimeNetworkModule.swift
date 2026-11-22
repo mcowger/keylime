@@ -1,5 +1,8 @@
 import Foundation
 import ExpoModulesCore
+import UIKit
+import AVFoundation
+import UniformTypeIdentifiers
 
 private let networkQueueKey = DispatchSpecificKey<Bool>()
 private let networkQueue: DispatchQueue = {
@@ -20,14 +23,87 @@ public final class KeylimeNetworkModule: Module {
   private lazy var transport = KeylimeTransport { [weak self] event in
     self?.sendEvent("socketEvent", event)
   }
+  private lazy var emitSearch: ([String: Any?]) -> Void = { [weak self] event in
+    self?.sendEvent("searchEvent", event)
+  }
+  private var picker: AttachmentPicker?
+  private var pastePicker: AttachmentPastePicker?
+  private var speech: AVSpeechSynthesizer?
 
   public func definition() -> ModuleDefinition {
     Name("KeylimeNetwork")
-    Events("socketEvent")
+    Events("socketEvent", "searchEvent")
+    Function("newUploadId") { UUID().uuidString.lowercased() }
+
+    AsyncFunction("copyText") { (text: String) in
+      UIPasteboard.general.string = text
+    }.runOnQueue(.main)
+
+    AsyncFunction("readText") { (text: String) in
+      let synthesizer = self.speech ?? AVSpeechSynthesizer()
+      self.speech = synthesizer
+      synthesizer.stopSpeaking(at: .immediate)
+      if !text.isEmpty { synthesizer.speak(AVSpeechUtterance(string: text)) }
+    }.runOnQueue(.main)
+
 
     AsyncFunction("request") { (origin: String, path: String, method: String, headers: [String: String], body: String?, promise: Promise) in
       self.transport.request(origin: origin, path: path, method: method, headers: headers, body: body, promise: promise)
     }.runOnQueue(networkQueue)
+
+    AsyncFunction("startSearch") { (id: String, origin: String, path: String, promise: Promise) in
+      self.transport.startSearch(id: id, origin: origin, path: path, emit: self.emitSearch, promise: promise)
+    }.runOnQueue(networkQueue)
+
+    AsyncFunction("requestFileChunk") { (id: String, origin: String, path: String, file: String, offset: Int, length: Int, promise: Promise) in
+      self.transport.requestFileChunk(id: id, origin: origin, path: path, file: file, offset: offset, length: length, promise: promise)
+    }.runOnQueue(networkQueue)
+
+    AsyncFunction("requestMedia") { (id: String, origin: String, path: String, promise: Promise) in
+      self.transport.requestMedia(id: id, origin: origin, path: path, promise: promise)
+    }.runOnQueue(networkQueue)
+
+    AsyncFunction("removeMedia") { (id: String) in
+      self.transport.removeMedia(id: id)
+    }.runOnQueue(networkQueue)
+
+    AsyncFunction("cancelRequest") { (id: String) in
+      self.transport.cancelRequest(id: id)
+    }.runOnQueue(networkQueue)
+
+    AsyncFunction("pickAttachments") { (promise: Promise) in
+      guard self.picker == nil, let controller = self.appContext?.utilities?.currentViewController() else {
+        promise.reject("ERR_KEYLIME_PICKER", "File picker is unavailable")
+        return
+      }
+      let picker = AttachmentPicker(promise: promise) { [weak self] in self?.picker = nil }
+      self.picker = picker
+      picker.present(from: controller)
+    }.runOnQueue(.main)
+    AsyncFunction("pasteAttachmentImage") { (promise: Promise) in
+      guard self.pastePicker == nil, let controller = self.appContext?.utilities?.currentViewController() else {
+        promise.reject("ERR_KEYLIME_PASTE", "The paste sheet is unavailable.")
+        return
+      }
+      let picker = AttachmentPastePicker(promise: promise) { [weak self] in self?.pastePicker = nil }
+      self.pastePicker = picker
+      picker.present(from: controller)
+    }.runOnQueue(.main)
+
+
+    AsyncFunction("readAttachmentBase64") { (file: String, promise: Promise) in
+      do {
+        let url = try attachmentURL(file)
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
+        guard size <= 5 * 1024 * 1024 else { throw AttachmentError.invalidFile }
+        let data = try Data(contentsOf: url)
+        promise.resolve(data.base64EncodedString())
+      } catch { promise.reject("ERR_KEYLIME_FILE", "Could not read attachment") }
+    }
+
+    AsyncFunction("removeAttachmentFile") { (file: String) in
+      if let url = try? attachmentURL(file) { try? FileManager.default.removeItem(at: url) }
+    }
 
     AsyncFunction("connectSocket") { (id: String, url: String, promise: Promise) in
       self.transport.connectSocket(id: id, url: url, promise: promise)
@@ -42,6 +118,10 @@ public final class KeylimeNetworkModule: Module {
     }.runOnQueue(networkQueue)
 
     OnDestroy {
+      DispatchQueue.main.async {
+        self.speech?.stopSpeaking(at: .immediate)
+        self.speech = nil
+      }
       networkQueue.async { self.transport.shutdown() }
     }
   }
@@ -85,12 +165,59 @@ private final class SocketState {
   }
 }
 
+private final class SearchState {
+  let id: String
+  let origin: Origin
+  let emit: ([String: Any?]) -> Void
+  var buffer = Data()
+  var accepted = false
+
+  init(id: String, origin: Origin, emit: @escaping ([String: Any?]) -> Void) {
+    self.id = id
+    self.origin = origin
+    self.emit = emit
+  }
+}
+
+private let mediaByteLimit = 32 * 1024 * 1024
+private let mediaTotalByteLimit = 256 * 1024 * 1024
+private let mediaDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("keylime-media", isDirectory: true)
+
+private func mediaURL(_ id: String) -> URL? {
+  guard let uuid = UUID(uuidString: id), uuid.uuidString.lowercased() == id else { return nil }
+  return mediaDirectory.appendingPathComponent(id, isDirectory: false)
+}
+
+private final class MediaState {
+  let id: String
+  let origin: Origin
+  let url: URL
+  let handle: FileHandle
+  let promise: Promise
+  var count = 0
+  var accepted = false
+  var error: String?
+
+  init(id: String, origin: Origin, url: URL, handle: FileHandle, promise: Promise) {
+    self.id = id
+    self.origin = origin
+    self.url = url
+    self.handle = handle
+    self.promise = promise
+  }
+}
+
 // All state and URLSession delegate callbacks run on networkQueue.
-private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate {
+private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URLSessionDataDelegate {
   private let emit: ([String: Any?]) -> Void
   private var cookies: [Origin: [String: StoredCookie]] = [:]
   private var sockets: [String: SocketState] = [:]
   private var socketTasks: [Int: SocketState] = [:]
+  private var requests: [String: URLSessionDataTask] = [:]
+  private var mediaTasks: [Int: MediaState] = [:]
+  private var searchTasks: [Int: SearchState] = [:]
+  private var mediaFiles: [String: Int] = [:]
+  private var mediaBytes = 0
   private var stopped = false
 
   private lazy var session: URLSession = {
@@ -108,6 +235,7 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate {
 
   init(emit: @escaping ([String: Any?]) -> Void) {
     self.emit = emit
+    try? FileManager.default.removeItem(at: mediaDirectory)
   }
 
   private func fail(_ promise: Promise, _ message: String) {
@@ -115,12 +243,92 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate {
   }
 
   func request(origin: String, path: String, method: String, headers: [String: String], body: String?, promise: Promise) {
+    request(origin: origin, path: path, method: method, headers: headers, data: body.map { Data($0.utf8) }, id: nil, promise: promise)
+  }
+
+  func requestFileChunk(id: String, origin: String, path: String, file: String, offset: Int, length: Int, promise: Promise) {
+    guard !id.isEmpty, requests[id] == nil, offset >= 0, length > 0, length <= 1024 * 1024 else {
+      fail(promise, "Invalid file chunk")
+      return
+    }
+    do {
+      let handle = try FileHandle(forReadingFrom: attachmentURL(file))
+      defer { try? handle.close() }
+      try handle.seek(toOffset: UInt64(offset))
+      guard let data = try handle.read(upToCount: length), data.count == length else { throw AttachmentError.invalidFile }
+      request(origin: origin, path: path, method: "PUT", headers: ["Content-Type": "application/octet-stream"], data: data, id: id, promise: promise)
+    } catch { fail(promise, "Could not read attachment chunk") }
+  }
+
+  func cancelRequest(id: String) {
+    requests[id]?.cancel()
+  }
+
+  func startSearch(id: String, origin: String, path: String, emit: @escaping ([String: Any?]) -> Void, promise: Promise) {
+    guard !id.isEmpty, requests[id] == nil,
+          let (url, baseOrigin) = requestURL(origin: origin, path: path),
+          let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+          components.path == "/api/sessions/search" else {
+      fail(promise, "Invalid search request")
+      return
+    }
+    var request = URLRequest(url: url)
+    request.httpShouldHandleCookies = false
+    request.httpMethod = "GET"
+    if let cookie = cookieHeader(for: url, origin: baseOrigin) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+    let task = session.dataTask(with: request)
+    searchTasks[task.taskIdentifier] = SearchState(id: id, origin: baseOrigin, emit: emit)
+    requests[id] = task
+    task.resume()
+    promise.resolve()
+  }
+
+  func requestMedia(id: String, origin: String, path: String, promise: Promise) {
+    guard !id.isEmpty, requests[id] == nil, let file = mediaURL(id),
+          let (url, baseOrigin) = requestURL(origin: origin, path: path),
+          let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+          components.path.range(of: "^/api/media/[a-f0-9]{64}$", options: .regularExpression) != nil,
+          (components.queryItems ?? []).allSatisfy({ $0.name == "thumb" || $0.name == "hostId" }),
+          Set((components.queryItems ?? []).map { $0.name }).count == (components.queryItems ?? []).count else {
+      fail(promise, "Invalid media request")
+      return
+    }
+    do {
+      try FileManager.default.createDirectory(at: mediaDirectory, withIntermediateDirectories: true)
+      guard FileManager.default.createFile(atPath: file.path, contents: nil) else { throw AttachmentError.invalidFile }
+      let handle = try FileHandle(forWritingTo: file)
+      var request = URLRequest(url: url)
+      request.httpShouldHandleCookies = false
+      request.httpMethod = "GET"
+      if let cookie = cookieHeader(for: url, origin: baseOrigin) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+      let task = session.dataTask(with: request)
+      mediaTasks[task.taskIdentifier] = MediaState(id: id, origin: baseOrigin, url: file, handle: handle, promise: promise)
+      requests[id] = task
+      task.resume()
+    } catch {
+      try? FileManager.default.removeItem(at: file)
+      fail(promise, "Could not prepare media")
+    }
+  }
+
+  func removeMedia(id: String) {
+    guard let bytes = mediaFiles.removeValue(forKey: id), let file = mediaURL(id) else { return }
+    mediaBytes -= bytes
+    try? FileManager.default.removeItem(at: file)
+  }
+
+  private func requestURL(origin: String, path: String) -> (URL, Origin)? {
     guard !stopped, let base = URL(string: origin), let baseOrigin = Origin(base),
           let baseParts = URLComponents(url: base, resolvingAgainstBaseURL: false),
           (baseParts.path.isEmpty || baseParts.path == "/"), baseParts.query == nil, baseParts.fragment == nil,
           path.hasPrefix("/"), !path.hasPrefix("//"), !path.contains("\\"),
           let url = URL(string: path, relativeTo: base)?.absoluteURL,
-          Origin(url) == baseOrigin, url.fragment == nil else {
+          Origin(url) == baseOrigin, url.fragment == nil else { return nil }
+    return (url, baseOrigin)
+  }
+
+  private func request(origin: String, path: String, method: String, headers: [String: String], data: Data?, id: String?, promise: Promise) {
+    guard let (url, baseOrigin) = requestURL(origin: origin, path: path) else {
       fail(promise, "Invalid origin or request path")
       return
     }
@@ -131,13 +339,14 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate {
     var request = URLRequest(url: url)
     request.httpShouldHandleCookies = false
     request.httpMethod = method
-    request.httpBody = body.map { Data($0.utf8) }
+    request.httpBody = data
     for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
     if let cookie = cookieHeader(for: url, origin: baseOrigin) {
       request.setValue(cookie, forHTTPHeaderField: "Cookie")
     }
-    session.dataTask(with: request) { [weak self] data, response, error in
+    let task = session.dataTask(with: request) { [weak self] data, response, error in
       guard let self = self else { return }
+      if let id = id { self.requests[id] = nil }
       guard error == nil, let response = response as? HTTPURLResponse, let responseURL = response.url,
             Origin(responseURL) == baseOrigin else {
         self.fail(promise, "Request failed")
@@ -158,7 +367,9 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate {
         "body": String(decoding: data ?? Data(), as: UTF8.self),
         "url": responseURL.absoluteString
       ] as [String: Any])
-    }.resume()
+    }
+    if let id = id { requests[id] = task }
+    task.resume()
   }
 
   private func storeCookies(_ response: HTTPURLResponse, origin: Origin) {
@@ -312,12 +523,80 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate {
       socket.task.cancel(with: .goingAway, reason: nil)
       finish(socket, code: 1001, reason: "")
     }
+    for media in mediaTasks.values {
+      try? media.handle.close()
+      try? FileManager.default.removeItem(at: media.url)
+      fail(media.promise, "Request cancelled")
+    }
+    mediaTasks.removeAll()
+    searchTasks.removeAll()
+    mediaFiles.removeAll()
+    mediaBytes = 0
+    try? FileManager.default.removeItem(at: mediaDirectory)
+    requests.removeAll()
     cookies.removeAll()
     session.invalidateAndCancel()
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
     completionHandler(nil)
+  }
+
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+    if let search = searchTasks[dataTask.taskIdentifier] {
+      guard let http = response as? HTTPURLResponse, let url = http.url, Origin(url) == search.origin else {
+        completionHandler(.cancel)
+        return
+      }
+      storeCookies(http, origin: search.origin)
+      search.accepted = true
+      search.emit(["id": search.id, "type": "response", "status": http.statusCode])
+      completionHandler(.allow)
+      return
+    }
+    guard let media = mediaTasks[dataTask.taskIdentifier] else { completionHandler(.allow); return }
+    guard let http = response as? HTTPURLResponse, let url = http.url, Origin(url) == media.origin,
+          http.statusCode == 200, http.mimeType?.lowercased().hasPrefix("image/") == true,
+          response.expectedContentLength <= Int64(mediaByteLimit) else {
+      media.error = "Media request was refused or the image is too large"
+      completionHandler(.cancel)
+      return
+    }
+    storeCookies(http, origin: media.origin)
+    media.accepted = true
+    completionHandler(.allow)
+  }
+
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    if let search = searchTasks[dataTask.taskIdentifier] {
+      guard search.accepted else { return }
+      search.buffer.append(data)
+      if let newline = search.buffer.lastIndex(of: 10) {
+        let end = search.buffer.index(after: newline)
+        let complete = search.buffer.prefix(upTo: end)
+        guard let text = String(data: complete, encoding: .utf8) else {
+          dataTask.cancel()
+          return
+        }
+        search.buffer.removeSubrange(..<end)
+        search.emit(["id": search.id, "type": "data", "data": text])
+      }
+      return
+    }
+    guard let media = mediaTasks[dataTask.taskIdentifier], media.accepted else { return }
+    guard data.count <= mediaByteLimit - media.count, data.count <= mediaTotalByteLimit - mediaBytes else {
+      media.error = "Image is too large"
+      dataTask.cancel()
+      return
+    }
+    do {
+      try media.handle.write(contentsOf: data)
+      media.count += data.count
+      mediaBytes += data.count
+    } catch {
+      media.error = "Could not save image"
+      dataTask.cancel()
+    }
   }
 
   func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
@@ -334,6 +613,29 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate {
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    if let search = searchTasks.removeValue(forKey: task.taskIdentifier) {
+      requests[search.id] = nil
+      if error == nil, search.accepted, let tail = String(data: search.buffer, encoding: .utf8) {
+        if !tail.isEmpty { search.emit(["id": search.id, "type": "data", "data": tail]) }
+        search.emit(["id": search.id, "type": "done"])
+      } else {
+        search.emit(["id": search.id, "type": "error"])
+      }
+      return
+    }
+    if let media = mediaTasks.removeValue(forKey: task.taskIdentifier) {
+      requests[media.id] = nil
+      try? media.handle.close()
+      if error != nil || media.error != nil || !media.accepted || media.count == 0 {
+        try? FileManager.default.removeItem(at: media.url)
+        mediaBytes -= media.count
+        fail(media.promise, media.error ?? "Media request failed")
+      } else {
+        mediaFiles[media.id] = media.count
+        media.promise.resolve(["id": media.id, "uri": media.url.absoluteString])
+      }
+      return
+    }
     guard let socket = socketTasks[task.taskIdentifier] else { return }
     if error != nil { emit(["id": socket.id, "type": "error"]) }
     finish(socket, code: 1006, reason: "")

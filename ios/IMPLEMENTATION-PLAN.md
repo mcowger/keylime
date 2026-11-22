@@ -78,6 +78,8 @@ Reuse the mobile workspace panel and horizontally scrollable tabs for Explorer a
 
 The simulator showed `Never fold tool activity` replacing a Process details group with its `read ideas.md` row. The switch stayed on after app relaunch. Atlas Explorer opened `README.md` in Source and Preview; Git correctly reported a working tree matching HEAD. The current panel does not expose the PWA's Git mutation buttons or Explorer upload/download controls.
 
+The isolated simulator run also registered the seeded `atlas-service` Repo, created `native-proof` from `main`, and opened the new workspace once setup reported completion. No production workspace was used.
+
 ### 4. Complete the everyday flows
 
 Add sidebar search and archive browsing/restore, chat actions and Edit/Fork, attachments using the existing upload contracts, and System/Effort creation. Keep Edit (rewind in place, subject to native ownership) separate from Fork (new chat); use the PWA's distinct confirmation dialogs and preserve drafts through identity changes. Mirror the Effort preview/confirmation and open the Effort root with the correct members. Add Activity and Jobs using the PWA's existing commands and live event paths; no placeholder tabs.
@@ -85,6 +87,24 @@ Add sidebar search and archive browsing/restore, chat actions and Edit/Fork, att
 **Compare:** [sidebar search](screenshots/baseline/31-search-results.png), [archive](screenshots/baseline/33-archived-sessions.png), [slash suggestions](screenshots/baseline/36-chat-slash-commands.png), [attachments](screenshots/baseline/37-chat-attachments.png), [chat actions](screenshots/baseline/40-chat-actions.png), [Create System](screenshots/baseline/41-create-system.png), [Effort preview](screenshots/baseline/46-effort-preview.png), [Edit](screenshots/baseline/53-edit-confirmation.png) and [Fork](screenshots/baseline/54-fork-confirmation.png).
 
 **Exit:** Run a paired walkthrough from launch through Repo/workspace selection, chat, file inspection, Settings and return. Also verify archive/restore, Edit/Fork and Effort creation against the same disposable data on local and linked hosts. Build and launch Release without Metro; check on a physical iPhone before release.
+
+**Milestone 4 progress.** Release built and launched without Metro. The simulator selected chat search results, forked a disposable conversation, and confirmed Edit: the later turn disappeared and the selected prompt returned to the composer. It previewed and created an Atlas Effort; Explorer showed the expected member checkout, `AGENTS.md` and `repomap.md`. Native captures are under `ios/screenshots/milestone-4/native/`. An independent runner fixture also verified the Edit leaf, Fork reply, archive-key restore, completed setup and upload completion proof.
+
+The simulator resent the edited prompt, received its new reply, then archived the disposable fork and restored it from Archived Sessions. Restore selected that host-qualified conversation and showed its saved transcript and original open tab.
+
+After returning Home and relaunching, the simulator reopened the Effort from its System, showed it Ready, and listed the same member and root files.
+
+The final search transport returned a transcript-only hit for `fixture` in **Long conversation for paging**. It consumes NDJSON as it arrives; Stop, changing query and closing the sidebar cancel the native request. The simulator search was on the real seeded endpoint, not a deliberately delayed stream.
+
+Baseline 31 keeps search results nested in the filtered sidebar hierarchy. The native capture shows a flat match list in the same drawer. Both open the same saved chat, but the grouping and per-message hit drill-down do not yet match.
+
+Compared with baseline 46, the native Effort preview keeps the same name, root, branch, base ref and checkout information, but uses a dimmed native modal and stacks the branch chooser above the override field. The simulator verified the Effort details chip, member checkout navigation, and return to the root, matching the flow in baseline 48.
+
+The iOS document picker opened and was cancelled in the simulator. Photos → Copy Photo → Attachments → Paste image required a second tap on the system Paste control, which grants clipboard access. The simulator showed the image chip, sent it with a prompt, and received the offline model's reply. The image was saved; the fixture does not test vision. A staged file upload and its completion proof were verified separately over HTTP.
+
+The Jobs tab uses explicit Refresh for status the server does not publish as events. Markdown handles common transcript formatting but not every PWA diagram, math, or link treatment. Slash suggestions omit commands that depend on PWA-only client handlers. These are visible parity gaps, not new interaction conventions.
+
+A separate controller and enrolled standalone daemon verified host-qualified workspace and session reads, archive/restore and System/Effort preview and setup through the web API. The simulator walkthrough used the controller's local host. Native linked-host and physical-iPhone acceptance remain open; no physical iPhone was connected.
 
 ## Explicit deferrals and planned differences
 

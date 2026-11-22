@@ -21,6 +21,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import type { operations } from "./generated/web-http";
+import { AuthenticatedMedia } from "./AuthenticatedMedia";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { theme } from "./theme";
 import type { SettingsPreferences } from "./SettingsScreen";
@@ -43,6 +44,7 @@ const lightPalette: NativeTranscriptPalette = {
 };
 const PaletteContext = createContext<{
   palette: NativeTranscriptPalette;
+  mediaHostId?: string;
   light: boolean;
 }>({ palette: theme, light: false });
 
@@ -80,10 +82,13 @@ export type ChatTranscriptProps = {
   onLoadOlder?: () => void | Promise<void>;
   onEdit?: MessageAction;
   onFork?: MessageAction;
+  canFork?: (index: number) => boolean;
   onCopy?: (text: string) => void;
   onRead?: (text: string) => void;
   /** Web-server origin for relative image URLs, never a host filesystem path. */
   mediaOrigin?: string;
+  /** Host that owns relative media in this session. */
+  mediaHostId?: string;
   /** Change when selecting another host-qualified session. */
   sessionKey?: string;
   preferences?: SettingsPreferences;
@@ -263,17 +268,16 @@ function makeRows(
   return { rows, results };
 }
 
-function imageUri(image: ImageBlock, origin?: string): string | undefined {
+function inlineImageUri(image: ImageBlock): string | undefined {
   const value = image.url ?? image.source?.url;
-  if (value) {
-    if (/^https?:\/\//i.test(value)) return value;
-    if (value.startsWith("/") && origin)
-      return `${origin.replace(/\/$/, "")}${value}`;
-    return undefined;
-  }
+  if (value)
+    return /^data:image\/[a-z0-9.+-]+;base64,/i.test(value) ? value : undefined;
   const data = image.data ?? image.source?.data;
   if (!data || data.startsWith("blob:")) return undefined;
-  return `data:${image.mimeType ?? image.source?.media_type ?? "image/png"};base64,${data}`;
+  const mimeType = image.mimeType ?? image.source?.media_type ?? "image/png";
+  return /^image\/[a-z0-9.+-]+$/i.test(mimeType)
+    ? `data:${mimeType};base64,${data}`
+    : undefined;
 }
 function Images({
   blocks,
@@ -283,10 +287,32 @@ function Images({
   origin?: string;
 }) {
   const styles = useTranscriptStyles();
+  const { mediaHostId } = useContext(PaletteContext);
   return (
     <>
       {blocks.map((block, index) => {
-        const uri = imageUri(block, origin);
+        const value = block.url ?? block.source?.url;
+        if (
+          value &&
+          /^\/api\/media\/[a-f0-9]{64}(?:\?[^#]*)?$/.test(value) &&
+          origin
+        ) {
+          const [base, query] = value.split("?", 2);
+          const params = new URLSearchParams(query ?? "");
+          if (mediaHostId) params.set("hostId", mediaHostId);
+          const path = `${base}${params.toString() ? `?${params}` : ""}`;
+          return (
+            <AuthenticatedMedia
+              key={index}
+              origin={origin}
+              path={path}
+              resizeMode="contain"
+              style={styles.image}
+              accessibilityLabel="Image attachment"
+            />
+          );
+        }
+        const uri = inlineImageUri(block);
         return uri ? (
           <Image
             key={index}
@@ -841,16 +867,21 @@ export function ChatTranscript({
   onLoadOlder,
   onEdit,
   onFork,
+  canFork,
   onCopy,
   onRead,
   mediaOrigin,
+  mediaHostId,
   sessionKey,
   preferences,
   palette,
 }: ChatTranscriptProps) {
   const light = useColorScheme() === "light";
   const colors = palette ?? (light ? lightPalette : theme);
-  const context = useMemo(() => ({ palette: colors, light }), [colors, light]);
+  const context = useMemo(
+    () => ({ palette: colors, light, mediaHostId }),
+    [colors, light, mediaHostId],
+  );
   const styles = useMemo(
     () => transcriptStyles(colors, light),
     [colors, light],
@@ -971,8 +1002,12 @@ export function ChatTranscript({
             item.kind === "message" ? (
               <MessageRow
                 row={item}
-                onEdit={onEdit}
-                onFork={onFork}
+                onEdit={
+                  item.ref.entryId.startsWith("live-user:") ? undefined : onEdit
+                }
+                onFork={
+                  canFork && !canFork(item.ref.index) ? undefined : onFork
+                }
                 onCopy={onCopy}
                 onRead={onRead}
                 mediaOrigin={mediaOrigin}

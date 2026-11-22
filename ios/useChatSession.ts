@@ -47,10 +47,10 @@ export type ChatDialogValue = Extract<
   BrowserCommand,
   { type: "ui_response" }
 >["value"];
-export type ChatAttachments = {
-  uploads: string[];
-  uploadProofs: Record<string, string>;
-};
+export type ChatAttachments = Pick<
+  Extract<BrowserCommand, { type: "prompt" }>,
+  "images" | "uploads" | "uploadProofs"
+>;
 
 export type PendingChatInput = {
   id: string;
@@ -330,9 +330,16 @@ export function useChatSession({
     function recoverHandoffs() {
       if (!current() || !wrapperConnected) return;
       for (const id of nativeSettled) {
-        if (!local.has(id) || handoffReads.has(id) || [...echoes.values()].some((message) => message.clientMessageId === id)) continue;
+        if (
+          !local.has(id) ||
+          handoffReads.has(id) ||
+          [...echoes.values()].some((message) => message.clientMessageId === id)
+        )
+          continue;
         handoffReads.add(id);
-        void Promise.resolve().then(() => reconcileIntent(id, false)).finally(() => handoffReads.delete(id));
+        void Promise.resolve()
+          .then(() => reconcileIntent(id, false))
+          .finally(() => handoffReads.delete(id));
       }
     }
     function releaseSaved() {
@@ -808,8 +815,12 @@ export function useChatSession({
             ? reply.data.data
             : null;
         if (!isRecord(data)) return;
-        const persisted = Array.isArray(data.persistedClientMessageIds) && data.persistedClientMessageIds.includes(id);
-        const resolved = Array.isArray(data.resolvedClientMessageIds) && data.resolvedClientMessageIds.includes(id);
+        const persisted =
+          Array.isArray(data.persistedClientMessageIds) &&
+          data.persistedClientMessageIds.includes(id);
+        const resolved =
+          Array.isArray(data.resolvedClientMessageIds) &&
+          data.resolvedClientMessageIds.includes(id);
         if (Array.isArray(data.messages)) {
           for (const item of data.messages) {
             if (isRecord(item) && item.clientMessageId === id)
@@ -824,7 +835,12 @@ export function useChatSession({
       }
     }
     async function sendFirst(message: string, attachments?: ChatAttachments) {
-      if (!message.trim() && !attachments?.uploads.length) return;
+      if (
+        !message.trim() &&
+        !attachments?.uploads?.length &&
+        !attachments?.images?.length
+      )
+        return;
       if (!view.ready) throw new Error("Session subscription is not ready.");
       if ([...local.values()].some((item) => item.message === message))
         throw new Error(
@@ -868,7 +884,12 @@ export function useChatSession({
       mode: "prompt" | "followUp" | "steer" = "prompt",
       attachments?: ChatAttachments,
     ) {
-      if (!message.trim() && !attachments?.uploads.length) return;
+      if (
+        !message.trim() &&
+        !attachments?.uploads?.length &&
+        !attachments?.images?.length
+      )
+        return;
       if (
         [...local.values()].some(
           (item) => item.message === message && item.state === "uncertain",

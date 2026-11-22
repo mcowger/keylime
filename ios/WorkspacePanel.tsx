@@ -31,6 +31,7 @@ const theme = {
   accent: DynamicColorIOS({ dark: darkTheme.accent, light: "#A4246D" }),
 };
 
+import { SessionActivity } from "./SessionActivity";
 export type WorkspacePanelProps = {
   origin: string;
   hostId: string;
@@ -110,6 +111,20 @@ function Panel(props: WorkspacePanelProps) {
             active={view === "git"}
             onPress={() => setView("git")}
           />
+          {props.sessionId && props.link && (
+            <>
+              <Tab
+                label="Activity"
+                active={view === "activity"}
+                onPress={() => setView("activity")}
+              />
+              <Tab
+                label="Jobs"
+                active={view === "jobs"}
+                onPress={() => setView("jobs")}
+              />
+            </>
+          )}
           {files.map((path) => (
             <View
               key={path}
@@ -160,6 +175,16 @@ function Panel(props: WorkspacePanelProps) {
           refresh={refresh}
           onRefresh={() => setRefresh((v) => v + 1)}
         />
+      ) : view === "activity" || view === "jobs" ? (
+        props.sessionId && props.link ? (
+          <SessionActivity
+            origin={props.origin}
+            hostId={props.hostId}
+            sessionId={props.sessionId}
+            link={props.link}
+            kind={view}
+          />
+        ) : null
       ) : (
         <WorkspaceFile
           origin={props.origin}

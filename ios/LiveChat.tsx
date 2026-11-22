@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ActionSheetIOS,
   Image,
   KeyboardAvoidingView,
   Pressable,
@@ -10,6 +11,15 @@ import {
 } from "react-native";
 import type { SettingsPreferences } from "./SettingsScreen";
 import type { BrowserLink } from "./browser-link";
+import {
+  ChatAttachmentChips,
+  useChatAttachments,
+  type ChatAttachmentsController,
+} from "./ChatAttachments";
+import { NativeSlashMenu, useNativeSlashMenu } from "./NativeSlashMenu";
+import { useNativeChatActions } from "./useNativeChatActions";
+import { copyText, readText } from "./native-network";
+import { validateOutgoingPrompt } from "../lib/image-attachments";
 import { ChatComposer, type ChatComposerProps } from "./ChatComposer";
 import { ChatDialog } from "./ChatDialog";
 import { ChatTranscript } from "./ChatTranscript";
@@ -30,6 +40,7 @@ export type ChatTarget = {
   path: string;
   workspace: string;
   project: string;
+  effort?: boolean;
   sessionId: string | null;
 };
 export type LiveChatProps = {
@@ -45,6 +56,7 @@ export type LiveChatProps = {
     hostId: string,
     cwd: string,
   ) => void;
+  onForked: (target: ChatTarget, sessionId: string) => string | undefined;
   onChooseProject: () => void;
   onChooseWorkspace: () => void;
 };
@@ -61,6 +73,7 @@ export function LiveChat({
   onUnauthorized,
   preferences,
   onCreated,
+  onForked,
   onChooseProject,
   onChooseWorkspace,
 }: LiveChatProps) {
@@ -72,12 +85,91 @@ export function LiveChat({
     onUnauthorized,
   });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const attachments = useChatAttachments(
+    origin,
+    target?.hostId,
+    target?.key ?? "",
+  );
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [forcedSelection, setForcedSelection] = useState<typeof selection>();
+  const latest = useRef(target);
+  latest.current = target;
+  const slash = useNativeSlashMenu({
+    link,
+    hostId: target?.hostId ?? "local",
+    sessionId: target?.sessionId ?? null,
+    ready: chat.ready,
+    running: chat.active,
+    draft: target ? (drafts[target.key] ?? "") : "",
+    selection,
+    onReplaceDraft(text, position) {
+      if (target) setDrafts((old) => ({ ...old, [target.key]: text }));
+      setForcedSelection(position);
+      setSelection(position);
+    },
+  });
+  const actions = useNativeChatActions({
+    session: {
+      origin,
+      hostId: target?.hostId ?? "local",
+      sessionId: target?.sessionId ?? "",
+    },
+    messages: chat.context?.messages ?? [],
+    entryIds: chat.context?.entryIds ?? [],
+    busy: !target?.sessionId || chat.active || !!chat.dialog,
+    issueCommand: chat.issueCommand,
+    async reloadEdited(result, expected) {
+      if (
+        !target ||
+        latest.current?.key !== target.key ||
+        latest.current.sessionId !== expected.sessionId
+      )
+        throw new Error("The selected chat changed.");
+      const path = `/api/sessions/${encodeURIComponent(result.sessionId)}/context?hostId=${encodeURIComponent(expected.hostId)}&sync=1&limit=1`;
+      const context = await requestJson<
+        operations["getSessionContext"]["responses"][200]["content"]["application/json"]
+      >(origin, path);
+      if (!("leafId" in context) || context.leafId !== result.leafId)
+        throw new Error("The edited conversation has not caught up.");
+      if (
+        latest.current?.key !== target.key ||
+        latest.current.sessionId !== expected.sessionId
+      )
+        throw new Error("The selected chat changed.");
+      if (result.sessionId !== expected.sessionId)
+        onCreated(target.key, result.sessionId, target.hostId, target.path);
+      else await chat.refresh();
+    },
+    setDraft(expected, _id, update) {
+      if (
+        target?.sessionId === expected.sessionId &&
+        latest.current?.key === target.key
+      )
+        setDrafts((old) => ({
+          ...old,
+          [target.key]: update(old[target.key] ?? ""),
+        }));
+    },
+    onForked(id, text) {
+      if (!target || latest.current?.key !== target.key) return;
+      const key = onForked(target, id);
+      if (key && text)
+        setDrafts((old) => (old[key] ? old : { ...old, [key]: text }));
+    },
+  });
   const [selections, setSelections] = useState<Record<string, Selection>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const locked = useRef(new Set<string>());
   const first = useRef(
-    new Map<string, { sessionId: string; message: string }>(),
+    new Map<
+      string,
+      {
+        sessionId: string;
+        message: string;
+        attachments: ChatAttachmentsController;
+      }
+    >(),
   );
   const [modelRefresh, setModelRefresh] = useState(0);
   const [catalog, setCatalog] = useState<{
@@ -153,9 +245,10 @@ export function LiveChat({
     first.current.delete(target.key);
     const { key } = target;
     void chat
-      .sendFirst(pending.message)
+      .sendFirst(pending.message, pending.attachments.payload)
       .then(
         () => {
+          pending.attachments.clear(true);
           setDrafts((old) =>
             old[key] === pending.message ? { ...old, [key]: "" } : old,
           );
@@ -171,15 +264,33 @@ export function LiveChat({
   async function send() {
     if (!target || locked.current.has(target.key)) return;
     const { key, sessionId } = target;
-    const message = drafts[key];
-    if (!message?.trim()) return;
+    const message = drafts[key] ?? "";
+    if (!attachments.canSend || (!message.trim() && !attachments.items.length))
+      return;
+    if (slash.shouldPreserveDraft) {
+      error(key, "This command is not available here.");
+      return;
+    }
+    const issue = validateOutgoingPrompt(
+      message,
+      attachments.payload.images ?? [],
+    );
+    if (issue) {
+      error(key, issue);
+      return;
+    }
     locked.current.add(key);
     setBusy((old) => ({ ...old, [key]: true }));
     setErrors((old) => ({ ...old, [key]: "" }));
     let handingOff = false;
     try {
       if (sessionId) {
-        await chat.send(message, chat.active ? "followUp" : "prompt");
+        await chat.send(
+          message,
+          chat.active ? "followUp" : "prompt",
+          attachments.payload,
+        );
+        attachments.clear(true);
         setDrafts((old) =>
           old[key] === message ? { ...old, [key]: "" } : old,
         );
@@ -203,7 +314,11 @@ export function LiveChat({
           throw new Error(
             "Server did not confirm the new session. Your prompt was not sent.",
           );
-        first.current.set(key, { sessionId: created.sessionId, message });
+        first.current.set(key, {
+          sessionId: created.sessionId,
+          message,
+          attachments,
+        });
         handingOff = true;
         onCreated(key, created.sessionId, target.hostId, target.path);
       }
@@ -258,11 +373,34 @@ export function LiveChat({
   const composer = (
     <ChatComposer
       draft={drafts[key] ?? ""}
+      canSendAttachment={attachments.items.length > 0 && attachments.canSend}
+      onAddAttachment={() =>
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ["Choose file", "Paste image", "Cancel"],
+            cancelButtonIndex: 2,
+          },
+          (index) => {
+            if (index === 0) void attachments.pick();
+            else if (index === 1) void attachments.paste();
+          },
+        )
+      }
+      selection={forcedSelection}
+      onSelectionChange={(position) => {
+        setSelection(position);
+        setForcedSelection(undefined);
+      }}
+      onComposerKey={(key) => slash.handleKey(key)}
       onDraftChange={(text) => setDrafts((old) => ({ ...old, [key]: text }))}
       onSend={() => void send()}
       onStop={() => void chat.stop().catch((cause) => error(key, cause))}
       running={chat.active}
-      disabled={!!busy[key] || (!!sessionId && !chat.state?.outboxScope)}
+      disabled={
+        !attachments.canSend ||
+        !!busy[key] ||
+        (!!sessionId && !chat.state?.outboxScope)
+      }
       catalog={data?.data ?? null}
       catalogLoading={!data}
       catalogError={data?.error}
@@ -276,10 +414,13 @@ export function LiveChat({
           choose(role.provider, role.modelId, role.id);
       }}
       onRefreshModels={() => setModelRefresh((old) => old + 1)}
-    />
+    >
+      <ChatAttachmentChips controller={attachments} />
+    </ChatComposer>
   );
   return (
     <KeyboardAvoidingView style={styles.root} behavior="padding">
+      {actions.confirmation}
       {sessionId ? (
         <>
           <View style={styles.root}>
@@ -289,6 +430,20 @@ export function LiveChat({
               <ChatTranscript
                 sessionKey={key}
                 mediaOrigin={origin}
+                mediaHostId={target.hostId}
+                onCopy={(text) =>
+                  void copyText(text).catch((cause) => error(key, cause))
+                }
+                onRead={(text) =>
+                  void readText(text).catch((cause) => error(key, cause))
+                }
+                onEdit={
+                  chat.active || chat.dialog || actions.uncertain
+                    ? undefined
+                    : actions.onEdit
+                }
+                onFork={actions.onFork}
+                canFork={actions.canFork}
                 preferences={preferences}
                 messages={[
                   ...(chat.context?.messages ?? []),
@@ -345,6 +500,15 @@ export function LiveChat({
               {messageError}
             </Text>
           )}
+          {actions.uncertain && (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.status, { color: colors.accent }]}
+            >
+              {actions.uncertain}
+            </Text>
+          )}
+          <NativeSlashMenu menu={slash} />
           {chat.dialog ? (
             <ChatDialog
               request={chat.dialog}
@@ -367,50 +531,52 @@ export function LiveChat({
               key lime
             </Text>
           </View>
-          <View
-            style={[
-              styles.picker,
-              { backgroundColor: colors.panel, borderColor: colors.border },
-            ]}
-          >
-            <View style={styles.options}>
-              <Pressable
-                style={styles.option}
-                accessibilityRole="button"
-                onPress={onChooseProject}
-              >
-                <Text style={{ color: colors.muted }}>Project</Text>
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.optionLabel,
-                    { color: colors.text, borderColor: colors.border },
-                  ]}
+          {!target.effort && (
+            <View
+              style={[
+                styles.picker,
+                { backgroundColor: colors.panel, borderColor: colors.border },
+              ]}
+            >
+              <View style={styles.options}>
+                <Pressable
+                  style={styles.option}
+                  accessibilityRole="button"
+                  onPress={onChooseProject}
                 >
-                  {target.project} ⌄
-                </Text>
-              </Pressable>
-              <Pressable
-                style={styles.option}
-                accessibilityRole="button"
-                onPress={onChooseWorkspace}
-              >
-                <Text style={{ color: colors.muted }}>Workspace</Text>
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.optionLabel,
-                    { color: colors.text, borderColor: colors.border },
-                  ]}
+                  <Text style={{ color: colors.muted }}>Project</Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.optionLabel,
+                      { color: colors.text, borderColor: colors.border },
+                    ]}
+                  >
+                    {target.project} ⌄
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.option}
+                  accessibilityRole="button"
+                  onPress={onChooseWorkspace}
                 >
-                  {target.workspace} ⌄
-                </Text>
-              </Pressable>
+                  <Text style={{ color: colors.muted }}>Workspace</Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.optionLabel,
+                      { color: colors.text, borderColor: colors.border },
+                    ]}
+                  >
+                    {target.workspace} ⌄
+                  </Text>
+                </Pressable>
+              </View>
+              <Text style={[styles.path, { color: colors.muted }]}>
+                {target.path}
+              </Text>
             </View>
-            <Text style={[styles.path, { color: colors.muted }]}>
-              {target.path}
-            </Text>
-          </View>
+          )}
           {messageError && (
             <Text
               accessibilityRole="alert"

@@ -12,7 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
-- `ios/` contains a standalone Expo and TypeScript Hello World app for iPhone simulator development. It does not connect to Keylime.
+- The native iPhone client connects to Keylime for live chat, saved history, Settings, and workspace browsing. It uses the PWA's Browser Link WebSocket; the workspace Browser viewer and terminals are not included.
 - From `ios/`, run `bun run api:types` to generate TypeScript types from the web server's OpenAPI and AsyncAPI documents.
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal.
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts.

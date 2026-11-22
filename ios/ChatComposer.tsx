@@ -22,6 +22,12 @@ type ChatRole =
 type ModelSelection = { provider: string; modelId: string };
 
 export type ChatComposerProps = {
+  children?: React.ReactNode;
+  canSendAttachment?: boolean;
+  onAddAttachment?: () => void;
+  selection?: { start: number; end: number };
+  onSelectionChange?: (selection: { start: number; end: number }) => void;
+  onComposerKey?: (key: string) => void;
   draft: string;
   onDraftChange: (draft: string) => void;
   onSend: () => void;
@@ -45,6 +51,12 @@ const roleNames: Record<string, string> = {
 };
 
 export function ChatComposer({
+  children,
+  canSendAttachment,
+  onAddAttachment,
+  selection,
+  onSelectionChange,
+  onComposerKey,
   draft,
   onDraftChange,
   onSend,
@@ -131,7 +143,8 @@ export function ChatComposer({
         ? "Select model"
         : "No models");
   const error = catalogError || catalog?.modelError;
-  const canSend = !disabled && draft.trim().length > 0;
+  const canSend =
+    !disabled && (draft.trim().length > 0 || canSendAttachment === true);
 
   const closePicker = () => {
     setPickerOpen(false);
@@ -183,6 +196,11 @@ export function ChatComposer({
           accessibilityLabel="Message"
           multiline
           value={draft}
+          selection={selection}
+          onSelectionChange={(event) =>
+            onSelectionChange?.(event.nativeEvent.selection)
+          }
+          onKeyPress={(event) => onComposerKey?.(event.nativeEvent.key)}
           onChangeText={onDraftChange}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -191,7 +209,18 @@ export function ChatComposer({
           style={[styles.input, { color: colors.text }]}
           textAlignVertical="top"
         />
+        {children}
         <View style={[styles.toolbar, { borderColor: colors.border }]}>
+          {onAddAttachment && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Attachments"
+              onPress={onAddAttachment}
+              style={styles.send}
+            >
+              <Text style={[styles.sendIcon, { color: colors.muted }]}>+</Text>
+            </Pressable>
+          )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Models: ${modelLabel}`}

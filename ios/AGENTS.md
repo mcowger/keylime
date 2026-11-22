@@ -8,9 +8,9 @@ The native client talks to the Keylime **web server**, like the PWA. The web ser
 
 | Contract | Use | Generated module |
 | --- | --- | --- |
-| [Web HTTP OpenAPI](../docs/api/web-http.openapi.json) | HTTP requests and responses, including auth and SSE entry points | `generated/web-http.ts` |
+| [Web HTTP OpenAPI](../docs/api/web-http.openapi.json) | Sign-in, saved data, mutations and event-triggered catch-up; the native client does not use SSE | `generated/web-http.ts` |
 | [Browser Link AsyncAPI](../docs/api/browser-link.asyncapi.json) | WebSocket commands, replies, events, and framing at `/api/events/link` | `generated/browser-link.ts` |
-| [Terminal Attach AsyncAPI](../docs/api/terminal-attach.asyncapi.json) | Dedicated terminal WebSocket at `/api/terminal/attach`, if using that endpoint | `generated/terminal-attach.ts` |
+| [Terminal Attach AsyncAPI](../docs/api/terminal-attach.asyncapi.json) | Reference only; terminal capability is deferred | `generated/terminal-attach.ts` |
 
 The checked-in documents come from [`lib/api-contracts/`](../lib/api-contracts/) and server route annotations. Update those sources and run `mise exec -- bun run api` from the repo root when changing a contract. Don't edit the documents or generated iOS types by hand.
 
@@ -58,9 +58,12 @@ This compiles for the generic iOS simulator and writes `dist/Keylime.app` withou
 
 ```sh
 mise exec -- bun check -p tsconfig.json
+mise exec -- bun check -p tools/tsconfig.json
 ```
 
 For a simulator smoke, launch Release and connect to an isolated Keylime server. From the repo root, run `mise exec -- bun --no-env-file ios/tools/native-fixture.ts`; set `KEYLIME_NATIVE_FIXTURE_PASSWORD` to a disposable password for a protected fixture. Enter the printed URL and verify that Home lists the seeded chats. If Expo leaves the simulator on its Home Screen after installing, tap Keylime or run `xcrun simctl launch <SIMULATOR_UDID> com.mcowger.keylime`.
+
+For live chat, build the checkout's runner (`mise exec -- bun runner/scripts/build-binary.ts` from the repository root), then add `--offline-model` to the fixture command. The app uses the real web server and runner; a loopback model endpoint provides a predictable reply and supports Stop without provider credentials. Select `Keylime offline fixture` when exercising the model picker.
 
 A cold simulator can take tens of seconds to boot, and app launch and accessibility can take several more seconds. Wait for `xcrun simctl bootstatus <SIMULATOR_UDID> -b` and then for the app's text before calling the smoke check failed. An accessibility timeout immediately after boot can be a readiness issue; allow about 20 more seconds and retry the snapshot if needed.
 

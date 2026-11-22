@@ -13,7 +13,12 @@ import {
   type ChatLocationChoice,
 } from "./ChatLocationPicker";
 import { HomeScreen, type HomeSessionInfo } from "./HomeScreen";
+import { SessionActions } from "./ChatActions";
+import { archiveChat, renameChat } from "./chat-mutations";
 import { LiveChat, type ChatTarget } from "./LiveChat";
+import { ArchiveBrowser, SearchInput, useSidebarSearch } from "./SearchArchive";
+import { SystemFlows, type SystemFlow } from "./SystemFlows";
+import { EffortDetails } from "./EffortDetails";
 import { RepoFlows, type RepoFlow } from "./RepoFlows";
 import { SidebarMenuIcon, WorkspacePanelIcon } from "./ShellIcons";
 import { SettingsScreen } from "./SettingsScreen";
@@ -24,7 +29,6 @@ import { useKeylimeConnection } from "./useKeylimeConnection";
 import { useNativePreferences } from "./useNativePreferences";
 import { WorkspacePanel } from "./WorkspacePanel";
 import {
-  isInWorkspace,
   locationForPath,
   useWorkspaceInventory,
 } from "./useWorkspaceInventory";
@@ -42,9 +46,20 @@ type OpenTab = WorkspaceTab & {
   sessionId?: string;
 };
 
-const sessionTitle = (session: HomeSessionInfo) =>
+type ChatLocation = Pick<
+  HomeSessionInfo,
+  "id" | "hostId" | "cwd" | "name" | "firstMessage"
+>;
+const sessionTitle = (session: Pick<ChatLocation, "name" | "firstMessage">) =>
   session.name || session.firstMessage || "New chat";
 const tabKey = (host: string, id: string) => JSON.stringify([host, id]);
+
+function sameWorkspace(a: WorkspaceLocation, b: WorkspaceLocation) {
+  return (
+    a.hostId === b.hostId &&
+    (a.effortId || b.effortId ? a.effortId === b.effortId : a.path === b.path)
+  );
+}
 
 export function NavigationShell({
   origin,
@@ -70,6 +85,9 @@ export function NavigationShell({
   const [panel, setPanel] = useState(false);
   const [repoFlow, setRepoFlow] = useState<RepoFlow | null>(null);
   const [choosingRepo, setChoosingRepo] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [systemFlow, setSystemFlow] = useState<SystemFlow | null>(null);
+  const [choosingEffort, setChoosingEffort] = useState(false);
   const [section, setSection] = useState<"home" | "workspace" | "settings">(
     "home",
   );
@@ -77,6 +95,7 @@ export function NavigationShell({
     "home",
   );
   const [sidebar, setSidebar] = useState(false);
+  const search = useSidebarSearch(origin, sessions, onUnauthorized, sidebar);
   const [menu, setMenu] = useState(false);
   const [location, setLocation] = useState<WorkspaceLocation | null>(null);
   const [tabs, setTabs] = useState<OpenTab[]>([]);
@@ -94,16 +113,22 @@ export function NavigationShell({
         muted: "#69635A",
         accent: "#B03E22",
       };
-  const selected = tabs.find((tab) => tab.key === activeKey);
+  const selected = location
+    ? tabs.find(
+        (tab) => tab.key === activeKey && sameWorkspace(tab.location, location),
+      )
+    : undefined;
   const target: ChatTarget | null = location
     ? {
         key:
           selected?.key ??
           JSON.stringify([location.hostId, location.path, "draft"]),
         hostId: location.hostId,
-        path: location.path,
-        workspace: location.title,
-        project: location.project ?? location.title,
+        path: selected?.location.path ?? location.path,
+        workspace: selected?.location.title ?? location.title,
+        project:
+          selected?.location.project ?? location.project ?? location.title,
+        effort: !!location.effortId,
         sessionId: selected?.sessionId ?? selected?.session?.id ?? null,
       }
     : null;
@@ -130,11 +155,7 @@ export function NavigationShell({
   );
   const workspaceTabs = location
     ? tabs
-        .filter(
-          (tab) =>
-            tab.location.hostId === location.hostId &&
-            tab.location.path === location.path,
-        )
+        .filter((tab) => sameWorkspace(tab.location, location))
         .map((tab) => {
           const session = sessions?.find(
             (item) =>
@@ -146,36 +167,42 @@ export function NavigationShell({
             : tab;
         })
     : [];
+  function sessionOwner(
+    hostId: string,
+    item: Pick<ChatLocation, "id" | "cwd">,
+  ) {
+    const host = byHost[hostId];
+    const effort = host?.systems?.efforts.find(
+      (entry) =>
+        entry.status !== "cleaned" && entry.sessionIds.includes(item.id),
+    );
+    if (effort) return { kind: "effort" as const, effort };
+    for (const project of host?.hierarchy?.projects ?? []) {
+      const workspace = project.workspaces.find((entry) =>
+        entry.sessionIds.includes(item.id),
+      );
+      if (workspace) return { kind: "workspace" as const, project, workspace };
+    }
+    return locationForPath(byHost, hostId, item.cwd);
+  }
   const savedSessions = location
     ? (sessions ?? []).filter((item) => {
         const host = item.hostId ?? "local";
-        if (location.effortId) {
-          const owner = locationForPath(byHost, host, item.cwd);
+        if (host !== location.hostId) return false;
+        const owner = sessionOwner(host, item);
+        if (location.effortId)
           return (
-            owner.kind === "effort" &&
-            host === location.hostId &&
-            owner.effort.id === location.effortId
+            owner.kind === "effort" && owner.effort.id === location.effortId
           );
-        }
-        return isInWorkspace(
-          byHost,
-          host,
-          item.cwd,
-          location.hostId,
-          location.path,
-        );
+        return owner.kind === "workspace"
+          ? owner.workspace.path === location.path
+          : owner.kind === "path" && item.cwd === location.path;
       })
     : [];
 
   function goWorkspace(next: WorkspaceLocation) {
     setLocation(next);
-    setActiveKey(
-      tabs.find(
-        (tab) =>
-          tab.location.hostId === next.hostId &&
-          tab.location.path === next.path,
-      )?.key,
-    );
+    setActiveKey(tabs.find((tab) => sameWorkspace(tab.location, next))?.key);
     setSection("workspace");
     setSidebar(false);
   }
@@ -225,6 +252,11 @@ export function NavigationShell({
   }
 
   const choices: ChatLocationChoice[] = [];
+  const selectedEffort = location?.effortId
+    ? byHost[location.hostId]?.systems?.efforts.find(
+        (effort) => effort.id === location.effortId,
+      )
+    : undefined;
   for (const host of hosts) {
     const inventory = byHost[host.id];
     if (!inventory || inventory.unavailable) continue;
@@ -258,9 +290,9 @@ export function NavigationShell({
     }
   }
 
-  function openSession(item: HomeSessionInfo) {
+  function openSession(item: ChatLocation) {
     const hostId = item.hostId ?? "local";
-    const owner = locationForPath(byHost, hostId, item.cwd);
+    const owner = sessionOwner(hostId, item);
     const belonging: WorkspaceLocation =
       owner.kind === "effort" && owner.effort.root
         ? {
@@ -282,24 +314,28 @@ export function NavigationShell({
               title: item.cwd.split("/").pop() || item.cwd,
             };
     const key = tabKey(hostId, item.id);
-    setTabs((old) =>
-      old.some(
+    setTabs((old) => {
+      const existing = old.find(
         (tab) =>
           tab.key === key ||
           (tab.location.hostId === hostId && tab.sessionId === item.id),
-      )
-        ? old
-        : [
-            ...old,
-            {
-              key,
-              location: belonging,
-              title: sessionTitle(item),
-              session: item,
-              sessionId: item.id,
-            },
-          ],
-    );
+      );
+      if (existing)
+        return sameWorkspace(existing.location, belonging)
+          ? old
+          : old.map((tab) =>
+              tab === existing ? { ...tab, location: belonging } : tab,
+            );
+      return [
+        ...old,
+        {
+          key,
+          location: belonging,
+          title: sessionTitle(item),
+          sessionId: item.id,
+        },
+      ];
+    });
     setLocation(belonging);
     setActiveKey(
       tabs.find(
@@ -348,6 +384,21 @@ export function NavigationShell({
             />
           ) : (
             <>
+              {section === "workspace" && selectedEffort && location && (
+                <EffortDetails
+                  effort={selectedEffort}
+                  unavailable={byHost[location.hostId]?.unavailable}
+                  onStartMemberChat={(member) => {
+                    if (member.status === "complete" && member.path)
+                      newChat({
+                        ...location,
+                        path: member.path,
+                        title: member.name,
+                        project: selectedEffort.name,
+                      });
+                  }}
+                />
+              )}
               <View
                 style={[
                   styles.header,
@@ -360,6 +411,16 @@ export function NavigationShell({
                   onPress={() => {
                     setMenu(false);
                     setSidebar(true);
+                    for (const host of hosts) {
+                      if (
+                        byHost[host.id]?.systems?.efforts.some(
+                          (effort) =>
+                            effort.status === "creating" ||
+                            effort.status === "cleaning",
+                        )
+                      )
+                        void refreshWorkspace(host.id);
+                    }
                   }}
                   style={styles.headerButton}
                 >
@@ -375,6 +436,40 @@ export function NavigationShell({
                     ⋯
                   </Text>
                 </Pressable>
+                {section === "workspace" && target?.sessionId && (
+                  <SessionActions
+                    session={{
+                      origin,
+                      hostId: target.hostId,
+                      sessionId: target.sessionId,
+                    }}
+                    name={
+                      workspaceTabs.find((item) => item.key === target.key)
+                        ?.title ?? "New chat"
+                    }
+                    hasChildren={
+                      sessions?.some(
+                        (item) =>
+                          (item.hostId ?? "local") === target.hostId &&
+                          item.parentSessionId === target.sessionId,
+                      ) ?? false
+                    }
+                    onRename={async (identity, name) => {
+                      await renameChat(identity, name);
+                      setTabs((old) =>
+                        old.map((tab) =>
+                          tab.key === target.key
+                            ? { ...tab, title: name }
+                            : tab,
+                        ),
+                      );
+                    }}
+                    onArchive={async (identity) => {
+                      await archiveChat(identity);
+                      if (selected) closeTab(selected);
+                    }}
+                  />
+                )}
                 <View style={styles.headerCenter}>
                   {section === "workspace" && location && (
                     <WorkspaceTabs
@@ -452,6 +547,7 @@ export function NavigationShell({
                     recent={recent}
                     onSelectSession={openSession}
                     onNewWorkspace={() => setChoosingRepo(true)}
+                    onNewEffort={() => setChoosingEffort(true)}
                   />
                 ) : (
                   <Text style={[styles.status, { color: colors.text }]}>
@@ -469,6 +565,20 @@ export function NavigationShell({
             preferences={preferences.preferences}
             onUnauthorized={onUnauthorized}
             onCreated={onCreated}
+            onForked={(source, id) => {
+              if (!location || source.key !== target?.key) return;
+              const key = tabKey(source.hostId, id);
+              setTabs((old) =>
+                old.some((item) => item.key === key)
+                  ? old
+                  : [
+                      ...old,
+                      { key, sessionId: id, title: "New chat", location },
+                    ],
+              );
+              setActiveKey(key);
+              return key;
+            }}
             onChooseProject={() => setPicker("project")}
             onChooseWorkspace={() => setPicker("workspace")}
           />
@@ -513,6 +623,23 @@ export function NavigationShell({
                 })),
             )}
           />
+          <ChatLocationPicker
+            kind={choosingEffort ? "project" : null}
+            onClose={() => setChoosingEffort(false)}
+            choices={hosts.flatMap((host) =>
+              (byHost[host.id]?.unavailable
+                ? []
+                : (byHost[host.id]?.systems?.systems ?? [])
+              )
+                .filter((system) => !system.archived)
+                .map((system) => ({
+                  key: JSON.stringify([host.id, system.id]),
+                  title: system.name,
+                  onSelect: () =>
+                    setSystemFlow({ kind: "effort", host, system }),
+                })),
+            )}
+          />
         </View>
         {sidebar && (
           <Sidebar
@@ -526,6 +653,127 @@ export function NavigationShell({
             }}
             onSettings={openSettings}
             onDismiss={() => setSidebar(false)}
+            search={<SearchInput {...search} />}
+            searchResults={
+              search.query.trim() ? (
+                <>
+                  {hosts.flatMap((host) => [
+                    ...(byHost[host.id]?.systems?.systems ?? [])
+                      .filter((system) =>
+                        system.name
+                          .toLowerCase()
+                          .includes(search.query.trim().toLowerCase()),
+                      )
+                      .map((system) => (
+                        <Text
+                          key={`system:${host.id}:${system.id}`}
+                          accessibilityRole="header"
+                          style={[styles.status, { color: colors.text }]}
+                        >
+                          {system.name}
+                        </Text>
+                      )),
+                    ...(byHost[host.id]?.hierarchy?.projects ?? []).flatMap(
+                      (repo) =>
+                        repo.workspaces
+                          .filter(
+                            (workspace) =>
+                              !workspace.unavailable &&
+                              `${repo.name} ${workspace.name}`
+                                .toLowerCase()
+                                .includes(search.query.trim().toLowerCase()),
+                          )
+                          .map((workspace) => (
+                            <Pressable
+                              key={`workspace:${host.id}:${workspace.id}`}
+                              style={styles.menuItem}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                search.setQuery("");
+                                goWorkspace({
+                                  hostId: host.id,
+                                  path: workspace.path,
+                                  title: workspace.name,
+                                  project: repo.name,
+                                });
+                              }}
+                            >
+                              <Text style={{ color: colors.text }}>
+                                {repo.name} · {workspace.name}
+                              </Text>
+                            </Pressable>
+                          )),
+                    ),
+                    ...(byHost[host.id]?.systems?.efforts ?? [])
+                      .filter(
+                        (effort) =>
+                          effort.root &&
+                          (effort.name
+                            .toLowerCase()
+                            .includes(search.query.trim().toLowerCase()) ||
+                            byHost[host.id]?.systems?.systems.some(
+                              (system) =>
+                                system.id === effort.systemId &&
+                                system.name
+                                  .toLowerCase()
+                                  .includes(search.query.trim().toLowerCase()),
+                            )),
+                      )
+                      .map((effort) => (
+                        <Pressable
+                          key={`effort:${host.id}:${effort.id}`}
+                          style={styles.menuItem}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            if (effort.root) {
+                              search.setQuery("");
+                              goWorkspace({
+                                hostId: host.id,
+                                path: effort.root,
+                                title: effort.name,
+                                effortId: effort.id,
+                              });
+                            }
+                          }}
+                        >
+                          <Text style={{ color: colors.text }}>
+                            {effort.name}
+                          </Text>
+                        </Pressable>
+                      )),
+                  ])}
+                  {search.matches.map((item) => (
+                    <Pressable
+                      key={tabKey(item.hostId ?? "local", item.id)}
+                      style={styles.menuItem}
+                      accessibilityRole="button"
+                      onPress={() => {
+                        search.setQuery("");
+                        openSession(item);
+                      }}
+                    >
+                      <Text style={{ color: colors.text }}>
+                        {sessionTitle(item)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </>
+              ) : undefined
+            }
+            onArchive={() => setArchiveOpen(true)}
+            onAddSystem={(hostId) => {
+              const host = hosts.find((item) => item.id === hostId);
+              if (host)
+                setSystemFlow({
+                  kind: "system",
+                  host,
+                  repos: byHost[hostId]?.hierarchy?.projects ?? [],
+                });
+            }}
+            onNewEffort={(hostId, system) => {
+              const host = hosts.find((item) => item.id === hostId);
+              if (host) setSystemFlow({ kind: "effort", host, system });
+            }}
             onAddRepo={(hostId) => {
               const host = hosts.find((item) => item.id === hostId);
               if (host) setRepoFlow({ kind: "addRepo", host });
@@ -577,6 +825,41 @@ export function NavigationShell({
                     : undefined,
               });
               setRepoFlow(null);
+            }}
+          />
+        )}
+        {archiveOpen && (
+          <ArchiveBrowser
+            origin={origin}
+            hosts={hosts}
+            onUnauthorized={onUnauthorized}
+            onClose={() => setArchiveOpen(false)}
+            onRestored={(id, hostId, archive) =>
+              openSession({
+                id,
+                hostId,
+                cwd: archive.cwd,
+                name: archive.name,
+                firstMessage: archive.firstMessage,
+              })
+            }
+          />
+        )}
+        {systemFlow && (
+          <SystemFlows
+            origin={origin}
+            flow={systemFlow}
+            onDismiss={() => setSystemFlow(null)}
+            onChanged={refreshWorkspace}
+            onEffortCreated={(hostId, effort) => {
+              if (effort.root)
+                goWorkspace({
+                  hostId,
+                  path: effort.root,
+                  title: effort.name,
+                  effortId: effort.id,
+                });
+              setSystemFlow(null);
             }}
           />
         )}
