@@ -338,6 +338,17 @@ export const HostReleaseListSchema = Type.Object(
 );
 export type HostReleaseList = Static<typeof HostReleaseListSchema>;
 
+export const BuildHostReleaseResultSchema = Type.Object(
+  { ok: Type.Literal(true) },
+  {
+    description:
+      "A matching daemon and runner build is available on the controller; it has not been deployed.",
+  },
+);
+export type BuildHostReleaseResult = Static<
+  typeof BuildHostReleaseResultSchema
+>;
+
 export const DeployHostReleaseArgsSchema = Type.Object(
   {
     releaseId: Type.String({

@@ -632,3 +632,246 @@ test("release catalog requests are aborted when the card unmounts", async (t) =>
   view.unmount();
   assert.equal(signals[0].aborted, true);
 });
+
+test("building an empty release catalog refreshes it without deploying", async (t) => {
+  const pending = Promise.withResolvers<Response>();
+  const methods: string[] = [];
+  mockHostRequests(t, async (url, init) => {
+    assert.equal(String(url), "/api/hosts/h1/releases");
+    const method = init?.method ?? "GET";
+    methods.push(method);
+    if (method === "PUT") return pending.promise;
+    return Response.json({
+      releases: methods.includes("PUT")
+        ? [
+            {
+              id: "built",
+              builtAt: "2026-11-20T00:00:00Z",
+              status: "different",
+            },
+          ]
+        : [],
+    });
+  });
+  const host = hostRow({
+    id: "h1",
+    label: "Laptop",
+    arch: "x64",
+    canActivateArtifact: true,
+    connectionId: "first",
+  });
+  await showHosts([host]);
+  const button = await screen.findByRole<HTMLButtonElement>("button", {
+    name: "Build release for Laptop",
+  });
+  fireEvent.click(button);
+  assert.equal(button.disabled, true);
+  assert.ok(screen.getByText(en["hostsConfig.buildReleaseBuilding"]));
+  fireEvent.click(button);
+  assert.deepEqual(methods, ["GET", "PUT"]);
+
+  const { id } = workers[0].posted.findLast(
+    (message) => message.op === "open" && message.channel.kind === "hosts",
+  )!;
+  act(() =>
+    workers[0].onmessage({
+      data: {
+        id,
+        type: "message",
+        data: JSON.stringify({
+          hosts: [{ ...host, lastSeenAt: "2026-11-21T02:00:00Z" }],
+        }),
+      },
+    }),
+  );
+  assert.equal(button.disabled, true);
+  await act(async () => pending.resolve(Response.json({ ok: true })));
+  await screen.findByText(en["hostsConfig.releaseComparisonDifferent"]);
+  assert.equal(
+    screen.queryByRole("button", { name: "Build release for Laptop" }),
+    null,
+  );
+  assert.equal(
+    screen.getByRole<HTMLButtonElement>("button", {
+      name: "Deploy release to Laptop",
+    }).disabled,
+    false,
+  );
+  assert.deepEqual(methods, ["GET", "PUT", "GET"]);
+});
+
+test("release build errors are shown and can be retried", async (t) => {
+  let builds = 0;
+  mockHostRequests(t, async (_url, init) => {
+    if (init?.method === "PUT") {
+      builds++;
+      return Response.json(
+        { error: "Install the source archive on the server." },
+        { status: 400 },
+      );
+    }
+    return Response.json({ releases: [] });
+  });
+  await showHosts([
+    hostRow({
+      id: "h1",
+      label: "Laptop",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+  ]);
+  const button = await screen.findByRole<HTMLButtonElement>("button", {
+    name: "Build release for Laptop",
+  });
+  fireEvent.click(button);
+  assert.equal(
+    (await screen.findByRole("alert")).textContent,
+    "Install the source archive on the server.",
+  );
+  assert.equal(button.disabled, false);
+  fireEvent.click(button);
+  await waitFor(() => assert.equal(builds, 2));
+});
+
+test("build progress and failures stay with their host", async (t) => {
+  const pending = Promise.withResolvers<Response>();
+  const requests: string[] = [];
+  mockHostRequests(t, async (url, init) => {
+    const path = String(url);
+    const method = init?.method ?? "GET";
+    requests.push(`${method} ${path}`);
+    if (method === "PUT") {
+      return path.includes("/h1/")
+        ? pending.promise
+        : Response.json({ ok: false });
+    }
+    return Response.json({ releases: [] });
+  });
+  await showHosts([
+    hostRow({
+      id: "h1",
+      label: "Laptop",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+    hostRow({
+      id: "h2",
+      label: "Server",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+  ]);
+  const laptop = await screen.findByRole<HTMLButtonElement>("button", {
+    name: "Build release for Laptop",
+  });
+  const server = await screen.findByRole<HTMLButtonElement>("button", {
+    name: "Build release for Server",
+  });
+  fireEvent.click(laptop);
+  assert.equal(laptop.disabled, true);
+  assert.equal(server.disabled, false);
+  fireEvent.click(server);
+  assert.equal(
+    (await screen.findByRole("alert")).textContent,
+    en["hostsConfig.buildReleaseFailed"],
+  );
+  assert.equal(laptop.disabled, true);
+  assert.equal(server.disabled, false);
+  await act(async () => pending.resolve(Response.json({ ok: true })));
+  await waitFor(() =>
+    assert.equal(
+      requests.filter((item) => item === "GET /api/hosts/h1/releases").length,
+      2,
+    ),
+  );
+  assert.equal(
+    requests.filter((item) => item === "GET /api/hosts/h2/releases").length,
+    1,
+  );
+});
+
+test("release builds abort on disconnect and ignore stale results", async (t) => {
+  const pending = Promise.withResolvers<Response>();
+  let signal: AbortSignal | undefined;
+  let catalogs = 0;
+  mockHostRequests(t, async (_url, init) => {
+    if (init?.method === "PUT") {
+      signal = init.signal ?? undefined;
+      return pending.promise;
+    }
+    catalogs++;
+    return Response.json({ releases: [] });
+  });
+  const host = hostRow({
+    id: "h1",
+    label: "Laptop",
+    arch: "x64",
+    canActivateArtifact: true,
+    connectionId: "first",
+  });
+  await showHosts([host]);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Build release for Laptop" }),
+  );
+  assert.ok(signal && !signal.aborted);
+  const { id } = workers[0].posted.findLast(
+    (message) => message.op === "open" && message.channel.kind === "hosts",
+  )!;
+  act(() =>
+    workers[0].onmessage({
+      data: {
+        id,
+        type: "message",
+        data: JSON.stringify({ hosts: [{ ...host, status: "offline" }] }),
+      },
+    }),
+  );
+  assert.equal(signal.aborted, true);
+  assert.equal(
+    screen.queryByRole("button", { name: "Build release for Laptop" }),
+    null,
+  );
+  await act(async () => pending.resolve(Response.json({ ok: true })));
+  assert.equal(catalogs, 1);
+  act(() =>
+    workers[0].onmessage({
+      data: {
+        id,
+        type: "message",
+        data: JSON.stringify({ hosts: [{ ...host, connectionId: "second" }] }),
+      },
+    }),
+  );
+  const button = await screen.findByRole<HTMLButtonElement>("button", {
+    name: "Build release for Laptop",
+  });
+  assert.equal(button.disabled, false);
+  assert.equal(catalogs, 2);
+});
+
+test("release builds abort when their host card unmounts", async (t) => {
+  const pending = Promise.withResolvers<Response>();
+  let signal: AbortSignal | undefined;
+  mockHostRequests(t, async (_url, init) => {
+    if (init?.method === "PUT") {
+      signal = init.signal ?? undefined;
+      return pending.promise;
+    }
+    return Response.json({ releases: [] });
+  });
+  const view = await showHosts([
+    hostRow({
+      id: "h1",
+      label: "Laptop",
+      arch: "x64",
+      canActivateArtifact: true,
+    }),
+  ]);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Build release for Laptop" }),
+  );
+  assert.ok(signal && !signal.aborted);
+  view.unmount();
+  assert.equal(signal.aborted, true);
+  await act(async () => pending.resolve(Response.json({ ok: true })));
+});

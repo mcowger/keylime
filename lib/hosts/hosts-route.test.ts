@@ -3,6 +3,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -42,6 +43,8 @@ const releases = await import("../../app/api/hosts/[id]/releases/route.ts");
 const hub = await import("./hub.ts");
 const { LinkDriver, upgradeSocket } =
   await import("./link-driver.test-helper.ts");
+// Load the builder after the hub's agent directory has been isolated.
+const { createHostReleaseBuilder } = await import("./host-release-build.ts");
 
 const hostsFile = join(agentDir, "keylime", "hosts.json");
 const BASE = "http://main.test/api/hosts";
@@ -349,6 +352,110 @@ test("release deployment refuses an installed pair even if an earlier check foun
     if (link.socket) link.drop();
     if (previous === undefined) delete process.env.KEYLIME_PACKAGE_DIR;
     else process.env.KEYLIME_PACKAGE_DIR = previous;
+  }
+});
+
+test("builds and lists a release beside an incomplete operator build", async () => {
+  const root = mkdtempSync(join(agentDir, "release-build-"));
+  const arch = process.arch === "arm64" ? "x64" : "arm64";
+  const name = `keylime-linux-${arch}`;
+  const original = join(root, "release", name);
+  const source = join(root, "source");
+  const bin = join(root, "bin");
+  mkdirSync(original, { recursive: true });
+  mkdirSync(source);
+  mkdirSync(bin);
+  writeFileSync(join(original, "keylime"), "operator binary", { mode: 0o755 });
+  const archive = Bun.spawnSync([
+    "tar",
+    "-cf",
+    join(root, "keylime-source.tar"),
+    "-C",
+    source,
+    ".",
+  ]);
+  assert.equal(archive.exitCode, 0);
+  const mise = join(bin, "mise");
+  writeFileSync(
+    mise,
+    `#!/bin/sh
+case "$*" in
+  *scripts/build-release-binaries.ts*)
+    mkdir -p "release/${name}"
+    printf 'generated daemon' > "release/${name}/keylime"
+    printf 'generated runner' > "release/${name}/keylime-omp"
+    chmod +x "release/${name}/keylime" "release/${name}/keylime-omp"
+    ;;
+esac
+`,
+    { mode: 0o755 },
+  );
+  const previous = process.env.KEYLIME_PACKAGE_DIR;
+  process.env.KEYLIME_PACKAGE_DIR = root;
+  const { host, token } = await (
+    await send("POST", { label: "Build host" })
+  ).json();
+  const link = new LinkDriver(host.id, token);
+  try {
+    await link.dial({
+      hello: { arch, canActivateArtifact: true, canReportBinaryDigests: true },
+    });
+    const operations: string[] = [];
+    void link.serve({
+      hostInstalledBinaryDigests() {
+        return { keylime: "a".repeat(64), runner: "b".repeat(64) };
+      },
+      uploadStart() {
+        operations.push("upload");
+        throw new Error("upload stopped by test");
+      },
+      uploadAbort() {
+        return null;
+      },
+    });
+    const url = `${BASE}/${host.id}/releases`;
+    const context = { params: Promise.resolve({ id: host.id }) };
+    const before = await (await releases.GET(new Request(url), context)).json();
+    assert.deepEqual(before.releases, []);
+    const build = createHostReleaseBuilder({
+      target: () => ({ platform: "linux", arch }),
+      packageDir: () => root,
+      environment: () => ({ PATH: `${bin}:${process.env.PATH}` }),
+    });
+    await build(host.id, new AbortController().signal);
+    assert.equal(
+      readFileSync(join(original, "keylime"), "utf8"),
+      "operator binary",
+    );
+    assert.deepEqual(readdirSync(original), ["keylime"]);
+    const after = await (await releases.GET(new Request(url), context)).json();
+    assert.deepEqual(
+      after.releases.map((release: { status: string }) => release.status),
+      ["different"],
+    );
+    const release = after.releases[0];
+    const response = await releases.POST(
+      new Request(url, {
+        method: "POST",
+        body: JSON.stringify({
+          releaseId: release.id,
+          operationId: crypto.randomUUID(),
+        }),
+        headers: { "content-type": "application/json" },
+      }),
+      { ...context, disableIdleTimeout() {} },
+    );
+    const frames = (await response.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(frames.at(-1).code, "host_op_failed");
+    assert.deepEqual(operations, ["upload"]);
+  } finally {
+    if (link.socket) link.drop();
+    if (previous === undefined) delete process.env.KEYLIME_PACKAGE_DIR;
+    else process.env.KEYLIME_PACKAGE_DIR = previous;
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

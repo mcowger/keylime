@@ -39,6 +39,9 @@ alone. Cleanup failures are logged without failing the deployment; failed and
 recovery deployments do not prune releases.
 If the active release has the same committed runner tree and pinned runtime, its
 runner binary is reused; otherwise the runner is built from the pinned packages.
+Full deployments also retain a committed source archive beside the binary.
+Settings → Hosts uses it to build missing cross-platform daemon and runner
+pairs on demand; it never builds from later checkout edits.
 Local builds skip the unused release tarball and smoke suite. Preflight still
 checks the candidate runner before activation, and activation verifies service
 readiness. Run `bun run smoke` separately when needed; deployment no longer checks

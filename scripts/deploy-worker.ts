@@ -247,6 +247,13 @@ try {
           { recursive: true },
         );
         writeFileSync(
+          path.join(candidate, "keylime-source.tar"),
+          archive.stdout,
+          {
+            mode: 0o600,
+          },
+        );
+        writeFileSync(
           path.join(candidate, "keylime-release.json"),
           JSON.stringify({
             sha,

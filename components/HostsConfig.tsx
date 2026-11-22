@@ -1099,6 +1099,17 @@ function HostCard({
     request: NonNullable<typeof request>;
     catalog: ReleaseCatalog;
   } | null>(null);
+  const [build, setBuild] = useState<{
+    request: NonNullable<typeof request>;
+    kind: "building" | "error";
+    message?: string;
+  } | null>(null);
+  const buildRequest = useRef<{
+    request: NonNullable<typeof request>;
+    controller: AbortController;
+  } | null>(null);
+  const currentRequest = useRef(request);
+  currentRequest.current = request;
   // A result belongs only to the request for this link and activation state.
   const catalog: ReleaseCatalog = !request
     ? { kind: "idle" }
@@ -1161,6 +1172,66 @@ function HostCard({
     })();
     return () => controller.abort();
   }, [request]);
+
+  useEffect(() => {
+    return () => {
+      const active = buildRequest.current;
+      if (active?.request === request) {
+        active.controller.abort();
+        buildRequest.current = null;
+      }
+    };
+  }, [request]);
+
+  const buildRelease = async () => {
+    if (
+      !request ||
+      buildRequest.current ||
+      catalog.kind !== "loaded" ||
+      catalog.releases.length !== 0
+    )
+      return;
+    const controller = new AbortController();
+    const active = { request, controller };
+    buildRequest.current = active;
+    setBuild({ request, kind: "building" });
+    try {
+      const response = await fetch(request.url, {
+        method: "PUT",
+        signal: controller.signal,
+      });
+      const data: unknown = await response.json();
+      if (controller.signal.aborted || currentRequest.current !== request)
+        return;
+      if (!response.ok || !isRecord(data) || data.ok !== true) {
+        setBuild({
+          request,
+          kind: "error",
+          message:
+            isRecord(data) && typeof data.error === "string"
+              ? data.error
+              : t("hostsConfig.buildReleaseFailed"),
+        });
+        return;
+      }
+      setBuild(null);
+      setActivationState((state) => ({
+        ...state,
+        generation: state.generation + 1,
+      }));
+    } catch {
+      if (!controller.signal.aborted && currentRequest.current === request) {
+        setBuild({
+          request,
+          kind: "error",
+          message: t("hostsConfig.buildReleaseFailed"),
+        });
+      }
+    } finally {
+      if (buildRequest.current === active) buildRequest.current = null;
+    }
+  };
+  const currentBuild = build?.request === request ? build : null;
 
   const newest = catalog.kind === "loaded" ? catalog.releases[0] : undefined;
   const releaseStatus = !linked
@@ -1259,6 +1330,15 @@ function HostCard({
               })}
             </div>
             <div role="status">{t(releaseStatus)}</div>
+            {catalog.kind === "loaded" && catalog.releases.length === 0 && (
+              <div>{t("hostsConfig.buildReleaseDescription")}</div>
+            )}
+            {currentBuild?.kind === "building" && (
+              <div role="status">{t("hostsConfig.buildReleaseBuilding")}</div>
+            )}
+            {currentBuild?.kind === "error" && (
+              <div role="alert">{currentBuild.message}</div>
+            )}
           </div>
         )}
         {isLocalRow(host) &&
@@ -1298,6 +1378,20 @@ function HostCard({
           maxWidth: "100%",
         }}
       >
+        {remote &&
+          catalog.kind === "loaded" &&
+          catalog.releases.length === 0 && (
+            <button
+              type="button"
+              className="ui-focus-ring"
+              style={primaryStyle}
+              aria-label={t("hostsConfig.buildReleaseTitle", { name })}
+              disabled={currentBuild?.kind === "building"}
+              onClick={() => void buildRelease()}
+            >
+              {t("hostsConfig.buildRelease")}
+            </button>
+          )}
         {remote && (
           <button
             type="button"

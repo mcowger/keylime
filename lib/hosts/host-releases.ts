@@ -120,6 +120,14 @@ async function catalog(hostId: string): Promise<Release[]> {
       name,
     ),
   });
+  candidates.push({
+    name: `${name}-built`,
+    directory: join(
+      process.env.KEYLIME_PACKAGE_DIR || process.cwd(),
+      "host-releases",
+      name,
+    ),
+  });
   const releases: Release[] = [];
   for (const { name, directory } of candidates) {
     try {
