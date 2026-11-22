@@ -17,7 +17,7 @@ import {
 } from "../lib/hosts/standalone-service";
 
 const USAGE =
-  "Usage: bun run deploy:host <[user@]ssh-host> [--release <directory>]";
+  "Usage: bun run deploy:host <[user@]ssh-host> [--release <directory>] [--host-token=<token>]";
 const BIN = `"$HOME/${INSTALL}/keylime"`;
 const FILES = [
   "keylime",
@@ -209,6 +209,7 @@ async function main(args: string[]) {
     allowPositionals: true,
     options: {
       release: { type: "string" },
+      "host-token": { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -224,6 +225,9 @@ async function main(args: string[]) {
     /\s/.test(host)
   )
     throw new Error(USAGE);
+  const suppliedToken = values["host-token"]?.trim();
+  if (suppliedToken !== undefined && !/^[A-Za-z0-9_-]{43}$/.test(suppliedToken))
+    throw new Error("Expected the 43-character host token shown in the FE.");
   if (!process.stdin.isTTY)
     throw new Error("Run this installer from an interactive terminal.");
 
@@ -293,12 +297,14 @@ async function main(args: string[]) {
   } finally {
     terminal.close();
   }
-  console.log(
-    "In the FE, go to Settings → Hosts → Add host and copy the host token.",
-  );
-  const token = (
-    await promptPassword({ label: "Host token (input hidden)" })
-  )?.trim();
+  if (suppliedToken === undefined) {
+    console.log(
+      "In the FE, go to Settings → Hosts → Add host and copy the host token.",
+    );
+  }
+  const token =
+    suppliedToken ??
+    (await promptPassword({ label: "Host token (input hidden)" }))?.trim();
   if (!token) return 130;
   if (!/^[A-Za-z0-9_-]{43}$/.test(token))
     throw new Error("Expected the 43-character host token shown in the FE.");

@@ -21,7 +21,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Auto Prewalk cycles through Off, Suggest, and On for the running session. Suggest reports the native judge's decision; On arms recommended handoffs without changing the model that starts a task. **Settings → Interface & Behavior** can hide the control.
 - The composer model picker lists workspace chat roles and applies them with OMP's role selection behavior without changing role settings.
 - Reopening the model picker shows cached workspace roles immediately while refreshing them in the background.
-- `bun run deploy:host` installs the daemon and runner over SSH, prompts for a host token, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
+- `bun run deploy:host` installs the daemon and runner over SSH, accepts `--host-token` or prompts for it, and offers user autostart with systemd or launchd. It doesn't deploy the FE.
 - **Settings → Hosts** shows each remote host's Keylime and omp versions and checks for a different compatible build. **Deploy release** skips builds already installed, even when version strings alone can't tell builds apart.
 - Deploying a matched release can restore a missing `keylime-omp` on a standalone host.
 - In **Settings → Hosts**, use **Stage artifact** on a linked host to transfer a binary without SSH. On supported standalone hosts you can then verify its SHA-256, choose **Install & restart**, and confirm the outcome after reconnect.

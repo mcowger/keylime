@@ -13,6 +13,15 @@ enable user autostart, and the host token from **Settings → Hosts → Add host
 Token input is hidden. The new host needs outbound HTTPS and WebSocket access
 to the FE, but no Bun, source checkout, or inbound Keylime port.
 
+To supply the enrollment token instead of entering it at the hidden prompt:
+
+```bash
+mise exec -- bun run deploy:host you@worker.example.com --host-token="$HOST_TOKEN"
+```
+
+Command-line tokens may be visible in process listings and shell history. The
+installer still prompts for the FE URL and autostart choice.
+
 On Linux, autostart uses a systemd user service. Boot startup and survival
 after logout require linger; an administrator may need to enable it. On macOS,
 autostart uses a launchd LaunchAgent. It starts immediately if the account is
