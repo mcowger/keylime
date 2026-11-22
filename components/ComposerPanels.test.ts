@@ -4,12 +4,52 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { BtwRecord } from "@/lib/btw";
 
-const { ActivityPanel, ComposerPanels } = await import("./ComposerPanels");
+import {
+  ActivityPanel,
+  ComposerPanels,
+  ContextDetailPanel,
+} from "./ComposerPanels";
 
 const noop = () => {};
 
 test("composer renders nothing without a side question", () => {
   assert.equal(renderToStaticMarkup(React.createElement(ComposerPanels)), "");
+});
+
+test("context cache hit rate distinguishes rounded near-perfect hits", () => {
+  const stats = {
+    sessionId: "session",
+    userMessages: 2,
+    assistantMessages: 33,
+    toolCalls: 50,
+    toolResults: 50,
+    totalMessages: 87,
+    tokens: {
+      input: 96,
+      output: 3223,
+      cacheRead: 2353679,
+      cacheWrite: 89142,
+      total: 2446140,
+    },
+    cost: 0.13,
+  };
+  const render = () =>
+    renderToStaticMarkup(
+      React.createElement(ContextDetailPanel, { sessionStats: stats }),
+    );
+
+  assert.match(render(), /99\.996%/);
+  stats.tokens.input = 0;
+  assert.match(render(), /100\.00%/);
+  stats.tokens.input = 100;
+  stats.tokens.cacheRead = 100;
+  assert.match(render(), /50\.00%/);
+  stats.tokens.input = 2353679;
+  stats.tokens.cacheRead = 96;
+  assert.match(render(), /0\.004%/);
+  stats.tokens.input = 0;
+  stats.tokens.cacheRead = 0;
+  assert.doesNotMatch(render(), /Cache Hit/);
 });
 
 test("attaches todo plan and subagent roster with live states", () => {
