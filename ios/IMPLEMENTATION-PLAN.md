@@ -74,6 +74,10 @@ Reuse the mobile workspace panel and horizontally scrollable tabs for Explorer a
 
 **Exit:** A changed preference persists and visibly affects its intended screen. Workspace selection changes the underlying files and Git status, registering a Repo and creating a workspace refresh the hierarchy, and host errors aren't reported as empty results or successful writes.
 
+**Milestone 3 progress.** The Release simulator build has the live workspace panel, Explorer, Git, Markdown Source/Preview and Settings. Native captures are under `ios/screenshots/milestone-3/native/`. Workspace setup status currently requires an explicit refresh or app foreground: the existing job API has no completion event, and the PWA polls it. This client does not poll. The file viewer keeps the Source/Preview switch but does not yet match the PWA's syntax highlighting, language picker or full toolbar. The device-local Settings file stores preferences and the selected server URL, not credentials.
+
+The simulator showed `Never fold tool activity` replacing a Process details group with its `read ideas.md` row. The switch stayed on after app relaunch. Atlas Explorer opened `README.md` in Source and Preview; Git correctly reported a working tree matching HEAD. The current panel does not expose the PWA's Git mutation buttons or Explorer upload/download controls.
+
 ### 4. Complete the everyday flows
 
 Add sidebar search and archive browsing/restore, chat actions and Edit/Fork, attachments using the existing upload contracts, and System/Effort creation. Keep Edit (rewind in place, subject to native ownership) separate from Fork (new chat); use the PWA's distinct confirmation dialogs and preserve drafts through identity changes. Mirror the Effort preview/confirmation and open the Effort root with the correct members. Add Activity and Jobs using the PWA's existing commands and live event paths; no placeholder tabs.

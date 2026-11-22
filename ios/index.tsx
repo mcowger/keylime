@@ -1,15 +1,32 @@
 import { registerRootComponent } from "expo";
+import { File, Paths } from "expo-file-system";
 import { useCallback, useState } from "react";
+import { normalizeOrigin } from "./keylime-http";
 import { ConnectionScreen } from "./ConnectionScreen";
 import { NavigationShell } from "./NavigationShell";
 
+const keylimeOriginFile = () => new File(Paths.document, "keylime-origin.txt");
+
+function loadOrigin() {
+  try {
+    const file = keylimeOriginFile();
+    if (file.exists) return normalizeOrigin(file.textSync());
+  } catch {
+    // An invalid or unreadable setting cannot identify a server.
+  }
+}
 function App() {
-  const [origin, setOrigin] = useState<string>();
+  const [origin, setOrigin] = useState(loadOrigin);
   const [expired, setExpired] = useState(false);
   const [choosing, setChoosing] = useState(false);
 
   const onUnauthorized = useCallback(() => setExpired(true), []);
   const onConnected = useCallback((value: string) => {
+    try {
+      keylimeOriginFile().writeSync(value);
+    } catch {
+      /* keep the current session in memory */
+    }
     setOrigin(value);
     setExpired(false);
     setChoosing(false);

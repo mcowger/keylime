@@ -849,6 +849,16 @@ export function SettingsScreen({
         <>
           <View style={styles.tabsBorder}>
             <ScrollView
+              key={tab}
+              contentOffset={{
+                x:
+                  153 *
+                  Math.max(
+                    0,
+                    categories.findIndex((item) => item.id === tab),
+                  ),
+                y: 0,
+              }}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.tabs}
@@ -1353,12 +1363,12 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     backgroundColor: theme.panel,
   },
-  tabs: { paddingHorizontal: 12, paddingVertical: 8, gap: 3 },
+  tabs: { paddingHorizontal: 12, paddingVertical: 7, gap: 3 },
   tab: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 7,
-    paddingVertical: 9,
+    paddingVertical: 7,
     paddingHorizontal: 10,
     borderRadius: 8,
     width: 150,
@@ -1369,7 +1379,7 @@ const styles = StyleSheet.create({
   tabDescription: {
     color: theme.muted,
     fontSize: 11,
-    marginTop: 4,
+    marginTop: 2,
     maxWidth: 120,
   },
   content: {
@@ -1380,14 +1390,14 @@ const styles = StyleSheet.create({
   },
   heading: { gap: 9, marginBottom: 14 },
   headingTitle: { color: theme.text, fontSize: 23, fontWeight: "700" },
-  subtitle: { color: theme.muted, fontSize: 14, lineHeight: 21 },
+  subtitle: { color: theme.muted, fontSize: 13, lineHeight: 19 },
   sectionTitle: { color: theme.text, fontSize: 16, fontWeight: "600" },
   card: {
     backgroundColor: theme.panel,
     borderColor: theme.border,
     borderWidth: 1,
     borderRadius: 12,
-    padding: 22,
+    padding: 20,
     gap: 10,
   },
   toggleCard: { flexDirection: "row", alignItems: "center", gap: 16 },
@@ -1397,7 +1407,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
-  cardTitle: { color: theme.text, fontSize: 15, fontWeight: "600" },
+  cardTitle: { color: theme.text, fontSize: 14, fontWeight: "600" },
   description: { color: theme.muted, fontSize: 13, lineHeight: 21 },
   scope: {
     color: theme.muted,

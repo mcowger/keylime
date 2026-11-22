@@ -14,11 +14,15 @@ import {
 } from "./ChatLocationPicker";
 import { HomeScreen, type HomeSessionInfo } from "./HomeScreen";
 import { LiveChat, type ChatTarget } from "./LiveChat";
+import { RepoFlows, type RepoFlow } from "./RepoFlows";
+import { SidebarMenuIcon, WorkspacePanelIcon } from "./ShellIcons";
 import { SettingsScreen } from "./SettingsScreen";
 import { Sidebar } from "./Sidebar";
 import { theme } from "./theme";
 import { useHomeInventory } from "./useHomeInventory";
 import { useKeylimeConnection } from "./useKeylimeConnection";
+import { useNativePreferences } from "./useNativePreferences";
+import { WorkspacePanel } from "./WorkspacePanel";
 import {
   isInWorkspace,
   locationForPath,
@@ -57,7 +61,15 @@ export function NavigationShell({
     link,
     onUnauthorized,
   );
-  const { byHost } = useWorkspaceInventory(origin, hosts, onUnauthorized);
+  const { byHost, refresh: refreshWorkspace } = useWorkspaceInventory(
+    origin,
+    hosts,
+    onUnauthorized,
+  );
+  const preferences = useNativePreferences();
+  const [panel, setPanel] = useState(false);
+  const [repoFlow, setRepoFlow] = useState<RepoFlow | null>(null);
+  const [choosingRepo, setChoosingRepo] = useState(false);
   const [section, setSection] = useState<"home" | "workspace" | "settings">(
     "home",
   );
@@ -327,6 +339,8 @@ export function NavigationShell({
         >
           {section === "settings" ? (
             <SettingsScreen
+              preferences={preferences.preferences}
+              onChangePreference={preferences.onChangePreference}
               origin={origin}
               hosts={hosts}
               onUnauthorized={onUnauthorized}
@@ -349,9 +363,7 @@ export function NavigationShell({
                   }}
                   style={styles.headerButton}
                 >
-                  <Text style={[styles.menuIcon, { color: colors.text }]}>
-                    ☰
-                  </Text>
+                  <SidebarMenuIcon color={colors.text} />
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -363,23 +375,38 @@ export function NavigationShell({
                     ⋯
                   </Text>
                 </Pressable>
+                <View style={styles.headerCenter}>
+                  {section === "workspace" && location && (
+                    <WorkspaceTabs
+                      openTabs={workspaceTabs}
+                      activeTabKey={activeKey}
+                      savedSessions={savedSessions}
+                      savedState={
+                        byHost[location.hostId]?.unavailable
+                          ? "unavailable"
+                          : sessions
+                            ? "ready"
+                            : "loading"
+                      }
+                      onSelectTab={(tab) => setActiveKey(tab.key)}
+                      onCloseTab={closeTab}
+                      onSelectSaved={openSession}
+                      onNewChat={() => newChat()}
+                    />
+                  )}
+                </View>
                 {section === "workspace" && location && (
-                  <WorkspaceTabs
-                    openTabs={workspaceTabs}
-                    activeTabKey={activeKey}
-                    savedSessions={savedSessions}
-                    savedState={
-                      byHost[location.hostId]?.unavailable
-                        ? "unavailable"
-                        : sessions
-                          ? "ready"
-                          : "loading"
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      panel ? "Close workspace panel" : "Open workspace panel"
                     }
-                    onSelectTab={(tab) => setActiveKey(tab.key)}
-                    onCloseTab={closeTab}
-                    onSelectSaved={openSession}
-                    onNewChat={() => newChat()}
-                  />
+                    accessibilityState={{ expanded: panel }}
+                    onPress={() => setPanel((open) => !open)}
+                    style={styles.headerButton}
+                  >
+                    <WorkspacePanelIcon color={colors.text} />
+                  </Pressable>
                 )}
               </View>
               {menu && (
@@ -424,6 +451,7 @@ export function NavigationShell({
                     active={active}
                     recent={recent}
                     onSelectSession={openSession}
+                    onNewWorkspace={() => setChoosingRepo(true)}
                   />
                 ) : (
                   <Text style={[styles.status, { color: colors.text }]}>
@@ -437,16 +465,53 @@ export function NavigationShell({
             origin={origin}
             link={link}
             target={target}
-            visible={section === "workspace"}
+            visible={section === "workspace" && !panel}
+            preferences={preferences.preferences}
             onUnauthorized={onUnauthorized}
             onCreated={onCreated}
             onChooseProject={() => setPicker("project")}
             onChooseWorkspace={() => setPicker("workspace")}
           />
+          {section === "workspace" && panel && location && (
+            <WorkspacePanel
+              origin={origin}
+              link={link}
+              hostId={location.hostId}
+              cwd={location.path}
+              sessionId={target?.sessionId}
+              onClose={() => setPanel(false)}
+            />
+          )}
+          {preferences.error && section === "settings" && (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.status, { color: colors.accent }]}
+            >
+              {preferences.error}
+            </Text>
+          )}
           <ChatLocationPicker
             kind={picker}
             choices={choices}
             onClose={() => setPicker(null)}
+          />
+          <ChatLocationPicker
+            kind={choosingRepo ? "project" : null}
+            onClose={() => setChoosingRepo(false)}
+            choices={hosts.flatMap((host) =>
+              (byHost[host.id]?.unavailable
+                ? []
+                : (byHost[host.id]?.hierarchy?.projects ?? [])
+              )
+                .filter((repo) => repo.kind === "git")
+                .map((repo) => ({
+                  key: JSON.stringify([host.id, repo.id]),
+                  title: repo.name,
+                  subtitle: repo.path,
+                  onSelect: () =>
+                    setRepoFlow({ kind: "workspace", host, repo }),
+                })),
+            )}
           />
         </View>
         {sidebar && (
@@ -461,6 +526,14 @@ export function NavigationShell({
             }}
             onSettings={openSettings}
             onDismiss={() => setSidebar(false)}
+            onAddRepo={(hostId) => {
+              const host = hosts.find((item) => item.id === hostId);
+              if (host) setRepoFlow({ kind: "addRepo", host });
+            }}
+            onNewWorkspace={(hostId, repo) => {
+              const host = hosts.find((item) => item.id === hostId);
+              if (host) setRepoFlow({ kind: "workspace", host, repo });
+            }}
             onNewSession={() => {
               setSidebar(false);
               newChat();
@@ -487,6 +560,26 @@ export function NavigationShell({
             }}
           />
         )}
+        {repoFlow && (
+          <RepoFlows
+            origin={origin}
+            flow={repoFlow}
+            onDismiss={() => setRepoFlow(null)}
+            onChanged={() => void refreshWorkspace(repoFlow.host.id)}
+            onWorkspaceCreated={(hostId, path) => {
+              goWorkspace({
+                hostId,
+                path,
+                title: path.split("/").pop() || path,
+                project:
+                  repoFlow.kind === "workspace"
+                    ? repoFlow.repo.name
+                    : undefined,
+              });
+              setRepoFlow(null);
+            }}
+          />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -494,6 +587,7 @@ export function NavigationShell({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  headerCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
   body: { flex: 1 },
   header: {
     minHeight: 64,
