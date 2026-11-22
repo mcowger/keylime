@@ -317,10 +317,20 @@ export function ShipDialog({
       } while (readAgain.current && jobId.current && alive.current);
       readBusy.current = false;
     }
-    const release = link.subscribe(
+    refreshJob.current = refresh;
+    return () => {
+      refreshJob.current = null;
+    };
+  }, [origin, target.hostId]);
+  const refreshJob = useRef<(() => Promise<void>) | null>(null);
+  const runningJobId = job?.status === "running" ? job.id : null;
+  useEffect(() => {
+    if (!runningJobId) return;
+    const refresh = () => void refreshJob.current?.();
+    return link.subscribe(
       { kind: "workspace-jobs", hostId: target.hostId } as BrowserChannel,
       {
-        onOpen: () => void refresh(),
+        onOpen: refresh,
         onEvent: (data) => {
           if (
             typeof data === "object" &&
@@ -330,7 +340,7 @@ export function ShipDialog({
             "scope" in data &&
             data.scope === "ship"
           )
-            void refresh();
+            refresh();
         },
         onEnd: (reason) => {
           if (alive.current && jobId.current)
@@ -338,13 +348,7 @@ export function ShipDialog({
         },
       },
     );
-    refreshJob.current = refresh;
-    return () => {
-      release();
-      refreshJob.current = null;
-    };
-  }, [origin, link, target.hostId]);
-  const refreshJob = useRef<(() => Promise<void>) | null>(null);
+  }, [link, target.hostId, runningJobId]);
   useEffect(() => {
     if (visible && jobId.current) void refreshJob.current?.();
   }, [visible]);

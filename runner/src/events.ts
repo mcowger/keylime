@@ -34,7 +34,11 @@ import { logger } from "@oh-my-pi/pi-utils";
 import type { CommandContext, CommandTable } from "./commands/types";
 import { onClientQueueChange, stampClientMessageId } from "./correlation";
 import { resetActivity, trackActivity } from "./activity";
-import { advisorReviewPending, resetAdvisorBoundary, subscribeAdvisorReview } from "./advisor";
+import {
+  advisorReviewPending,
+  resetAdvisorBoundary,
+  subscribeAdvisorReview,
+} from "./advisor";
 import { subscribeJobEvents } from "./job-events";
 
 type MessageUpdates = "full" | "delta";

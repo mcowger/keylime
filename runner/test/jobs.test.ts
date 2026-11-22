@@ -2,7 +2,11 @@ import { afterEach, beforeEach, expect, it } from "bun:test";
 import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { canonicalProjectDir, daemonClient, isolateDaemonForSmokeTest } from "@oh-my-pi/pi-coding-agent/daemon/client";
+import {
+  canonicalProjectDir,
+  daemonClient,
+  isolateDaemonForSmokeTest,
+} from "@oh-my-pi/pi-coding-agent/daemon/client";
 import { unitLogDir } from "@oh-my-pi/pi-coding-agent/daemon/paths";
 import { projectScope } from "@oh-my-pi/pi-coding-agent/daemon/protocol";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -217,7 +221,13 @@ it("does not stop a replacement service sharing the old name", async () => {
       kind: "proc",
       scope: projectScope(await canonicalProjectDir(cwd)),
       key: "jobs-test",
-      proc: { application: "/bin/sleep", args: ["60"], env: {}, cwd, pty: false },
+      proc: {
+        application: "/bin/sleep",
+        args: ["60"],
+        env: {},
+        cwd,
+        pty: false,
+      },
       awaitReady: false,
     };
     const first = await client.request(spec);
@@ -235,7 +245,10 @@ it("does not stop a replacement service sharing the old name", async () => {
         generation: snapshot.generation,
       }),
     ).rejects.toThrow();
-    const current = await client.request({ op: "describe", unit: replacement.unit.id });
+    const current = await client.request({
+      op: "describe",
+      unit: replacement.unit.id,
+    });
     expect(current.unit.generation).toBe(replacement.unit.generation);
     expect(
       await jobsCommands.cancel_job(ctx, {
@@ -434,7 +447,13 @@ it("reports service truncation from captured log windows, not raw byte counts", 
         kind: "proc",
         scope,
         key: name,
-        proc: { application: "/bin/sh", args: ["-c", command], env: {}, cwd, pty: false },
+        proc: {
+          application: "/bin/sh",
+          args: ["-c", command],
+          env: {},
+          cwd,
+          pty: false,
+        },
         awaitReady: false,
       });
       let cursor = 0;

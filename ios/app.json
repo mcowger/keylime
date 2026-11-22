@@ -4,12 +4,21 @@
     "slug": "keylime-ios",
     "version": "1.0.0",
     "userInterfaceStyle": "automatic",
-    "platforms": ["ios"],
+    "platforms": [
+      "ios"
+    ],
     "ios": {
       "bundleIdentifier": "com.mcowger.keylime",
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "Keylime connects to the server you choose, which may be on your local network."
+        "NSLocalNetworkUsageDescription": "Keylime connects to the server you choose, which may be on your local network.",
+        "ITSAppUsesNonExemptEncryption": false
       }
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ebd97b5a-8938-462b-b8b6-54106c9f9599"
+      }
+    },
+    "owner": "mcowgers-team"
   }
 }

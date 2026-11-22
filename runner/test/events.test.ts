@@ -36,14 +36,18 @@ async function bridged(responses: { content: string[] }[] = []) {
         : (frame.event as Event);
     events.push(event);
     const waiter = waiters.get(event.type);
-    if (waiter && events.filter((item) => item.type === event.type).length >= waiter.count) {
+    if (
+      waiter &&
+      events.filter((item) => item.type === event.type).length >= waiter.count
+    ) {
       waiters.delete(event.type);
       waiter.resolve();
     }
   };
   const waitFor = (type: string, count = 1) => {
     const { promise, resolve } = Promise.withResolvers<void>();
-    if (events.filter((event) => event.type === type).length >= count) resolve();
+    if (events.filter((event) => event.type === type).length >= count)
+      resolve();
     else waiters.set(type, { count, resolve });
     return promise;
   };
@@ -122,18 +126,32 @@ describe("host events bridge", () => {
   it("keeps review pending until advisor card delivery finishes and snapshots it on reconnect", async () => {
     const { session, events, waitFor } = await bridged();
     let advisors: AdvisorStatusOverviewEntry[] = [];
-    const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
-      () => ({ configured: true, advisors }),
-    );
+    const status = spyOn(
+      session,
+      "getAdvisorStatusOverview",
+    ).mockImplementation(() => ({ configured: true, advisors }));
     const delivery = Promise.withResolvers<boolean>();
-    const catchup = spyOn(session, "waitForAdvisorCatchup").mockReturnValue(delivery.promise);
-    const reviewEvents = () => events.filter((event) => event.type === "advisor_review");
+    const catchup = spyOn(session, "waitForAdvisorCatchup").mockReturnValue(
+      delivery.promise,
+    );
+    const reviewEvents = () =>
+      events.filter((event) => event.type === "advisor_review");
     try {
       expect(sessionState(session).advisorReviewPending).toBe(false);
-      advisors = [{ name: "reviewer", yielded: false, backlog: 1, status: "running", isPaused: false }];
+      advisors = [
+        {
+          name: "reviewer",
+          yielded: false,
+          backlog: 1,
+          status: "running",
+          isPaused: false,
+        },
+      ];
       expect(sessionState(session).advisorReviewPending).toBe(true);
       await waitFor("advisor_review");
-      expect(reviewEvents()).toEqual([{ type: "advisor_review", pending: true }]);
+      expect(reviewEvents()).toEqual([
+        { type: "advisor_review", pending: true },
+      ]);
 
       // OMP can finish the model review before its card event is delivered.
       advisors = [];
@@ -151,7 +169,10 @@ describe("host events bridge", () => {
       // Let the tracker's continuation publish the completed drain.
       await Promise.resolve();
       expect(sessionState(session).advisorReviewPending).toBe(false);
-      expect(reviewEvents().at(-1)).toEqual({ type: "advisor_review", pending: false });
+      expect(reviewEvents().at(-1)).toEqual({
+        type: "advisor_review",
+        pending: false,
+      });
     } finally {
       delivery.resolve(true);
       status.mockRestore();
@@ -162,25 +183,42 @@ describe("host events bridge", () => {
   it("covers the asynchronous turn-end hook before the advisor backlog exists", async () => {
     const { session, events, waitFor } = await bridged([{ content: ["done"] }]);
     let advisors: AdvisorStatusOverviewEntry[] = [
-      { name: "reviewer", yielded: false, backlog: 0, status: "running", isPaused: false },
+      {
+        name: "reviewer",
+        yielded: false,
+        backlog: 0,
+        status: "running",
+        isPaused: false,
+      },
     ];
-    const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
-      () => ({ configured: true, advisors }),
-    );
+    const status = spyOn(
+      session,
+      "getAdvisorStatusOverview",
+    ).mockImplementation(() => ({ configured: true, advisors }));
     const hook = Promise.withResolvers<void>();
     const delivery = Promise.withResolvers<boolean>();
-    const catchup = spyOn(session, "waitForAdvisorCatchup").mockReturnValue(delivery.promise);
+    const catchup = spyOn(session, "waitForAdvisorCatchup").mockReturnValue(
+      delivery.promise,
+    );
     session.agent.setOnTurnEnd(async () => {
       await hook.promise;
-      advisors = [{ name: "reviewer", yielded: false, backlog: 1, status: "running", isPaused: false }];
+      advisors = [
+        {
+          name: "reviewer",
+          yielded: false,
+          backlog: 1,
+          status: "running",
+          isPaused: false,
+        },
+      ];
     });
     try {
       const prompt = session.prompt("hello");
       await waitFor("turn_end");
       expect(sessionState(session).advisorReviewPending).toBe(true);
-      expect(events.filter((event) => event.type === "advisor_review")).toEqual([
-        { type: "advisor_review", pending: true },
-      ]);
+      expect(events.filter((event) => event.type === "advisor_review")).toEqual(
+        [{ type: "advisor_review", pending: true }],
+      );
       hook.resolve();
       await prompt;
       await waitFor("agent_end");
@@ -202,7 +240,15 @@ describe("host events bridge", () => {
     const { session, waitFor } = await bridged([{ content: ["done"] }]);
     const status = spyOn(session, "getAdvisorStatusOverview").mockReturnValue({
       configured: true,
-      advisors: [{ name: "reviewer", yielded: false, backlog: 0, status: "running", isPaused: false }],
+      advisors: [
+        {
+          name: "reviewer",
+          yielded: false,
+          backlog: 0,
+          status: "running",
+          isPaused: false,
+        },
+      ],
     });
     const hook = Promise.withResolvers<void>();
     session.agent.setOnTurnEnd(() => hook.promise);
@@ -223,18 +269,37 @@ describe("host events bridge", () => {
   it("does not clear after a failed catchup until card processing is idle", async () => {
     const { session, waitFor } = await bridged();
     let advisors: AdvisorStatusOverviewEntry[] = [
-      { name: "reviewer", yielded: false, backlog: 1, status: "running", isPaused: false },
+      {
+        name: "reviewer",
+        yielded: false,
+        backlog: 1,
+        status: "running",
+        isPaused: false,
+      },
     ];
-    const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
-      () => ({ configured: true, advisors }),
-    );
+    const status = spyOn(
+      session,
+      "getAdvisorStatusOverview",
+    ).mockImplementation(() => ({ configured: true, advisors }));
     const idle = Promise.withResolvers<void>();
-    const catchup = spyOn(session, "waitForAdvisorCatchup").mockResolvedValue(false);
-    const waitIdle = spyOn(session, "waitForIdle").mockReturnValue(idle.promise);
+    const catchup = spyOn(session, "waitForAdvisorCatchup").mockResolvedValue(
+      false,
+    );
+    const waitIdle = spyOn(session, "waitForIdle").mockReturnValue(
+      idle.promise,
+    );
     try {
       expect(sessionState(session).advisorReviewPending).toBe(true);
       await waitFor("advisor_review");
-      advisors = [{ name: "reviewer", yielded: true, backlog: 1, status: "error", isPaused: false }];
+      advisors = [
+        {
+          name: "reviewer",
+          yielded: true,
+          backlog: 1,
+          status: "error",
+          isPaused: false,
+        },
+      ];
       await Promise.resolve();
       expect(sessionState(session).advisorReviewPending).toBe(true);
       idle.resolve();
@@ -251,11 +316,18 @@ describe("host events bridge", () => {
   it("keeps queued work pending after an unsuccessful drain while the advisor can still recover", async () => {
     const { session, waitFor } = await bridged();
     let advisors: AdvisorStatusOverviewEntry[] = [
-      { name: "reviewer", yielded: false, backlog: 1, status: "error", isPaused: true },
+      {
+        name: "reviewer",
+        yielded: false,
+        backlog: 1,
+        status: "error",
+        isPaused: true,
+      },
     ];
-    const status = spyOn(session, "getAdvisorStatusOverview").mockImplementation(
-      () => ({ configured: true, advisors }),
-    );
+    const status = spyOn(
+      session,
+      "getAdvisorStatusOverview",
+    ).mockImplementation(() => ({ configured: true, advisors }));
     const retry = Promise.withResolvers<boolean>();
     const catchup = spyOn(session, "waitForAdvisorCatchup")
       .mockResolvedValueOnce(false)
@@ -283,5 +355,4 @@ describe("host events bridge", () => {
       waitIdle.mockRestore();
     }
   });
-
 });

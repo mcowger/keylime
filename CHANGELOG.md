@@ -17,6 +17,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - iPhone remembers protected sessions across launches using Keychain and supports the Git action row, Ship, and the PWA prompt shortcuts plus `/compact`, `/reload`, and `/name`.
 - iPhone workspace setup, Effort setup, Jobs, and Ship update over Browser Link without polling.
 - On iPhone, reopen Ship progress and logs from the workspace menu or **More actions → Ship progress**, even after cleanup removes the workspace or you cancel a new Ship form.
+- Finished iPhone Ship jobs keep their progress and logs without holding a live job subscription.
 - From `ios/`, run `bun run api:types` to generate TypeScript types from the web server's OpenAPI and AsyncAPI documents.
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal.
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts.
@@ -191,6 +192,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Reopening the model picker shows cached workspace roles immediately while refreshing them in the background
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal
+- Finished iPhone Ship jobs retain progress and logs without keeping a live job subscription
 
 ### Changed
 - Browser tabs show the active workspace name instead of its directory name.

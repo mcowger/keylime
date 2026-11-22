@@ -4,9 +4,15 @@ import type { FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { sanitizeText } from "@oh-my-pi/pi-utils";
 import { truncateTail } from "@oh-my-pi/pi-tui/tools/streaming-output";
-import { canonicalProjectDir, daemonClient } from "@oh-my-pi/pi-coding-agent/daemon/client";
+import {
+  canonicalProjectDir,
+  daemonClient,
+} from "@oh-my-pi/pi-coding-agent/daemon/client";
 import { unitLogDir } from "@oh-my-pi/pi-coding-agent/daemon/paths";
-import { projectScope, type UnitSnapshot } from "@oh-my-pi/pi-coding-agent/daemon/protocol";
+import {
+  projectScope,
+  type UnitSnapshot,
+} from "@oh-my-pi/pi-coding-agent/daemon/protocol";
 import type { AsyncJob } from "@oh-my-pi/pi-coding-agent/async/job-manager";
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
 import type {
@@ -203,7 +209,9 @@ function findJob(
 }
 
 async function services(ctx: CommandContext) {
-  const scope = projectScope(await canonicalProjectDir(ctx.session.sessionManager.getCwd()));
+  const scope = projectScope(
+    await canonicalProjectDir(ctx.session.sessionManager.getCwd()),
+  );
   const client = await daemonClient();
   const { units } = await client.request({ op: "list", scope, kind: "proc" });
   return { client, units };
@@ -248,7 +256,10 @@ export const jobsCommands: CommandTable = {
       const { output, truncated } = await serviceOutput(id);
       const { unit } = await client.request({ op: "describe", unit: id });
       if (unit.generation !== token)
-        throw new CommandError("Service generation changed", "stale_generation");
+        throw new CommandError(
+          "Service generation changed",
+          "stale_generation",
+        );
       return {
         id,
         incarnation: token,

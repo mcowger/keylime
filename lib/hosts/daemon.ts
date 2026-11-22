@@ -1411,22 +1411,71 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
         return getHostModels(args.refresh === true);
       case "chatRolesList": {
         if (typeof args.cwd !== "string" || !isAbsolute(args.cwd))
-          throw new HostOpError(400, "invalid_request", "An absolute workspace path is required");
-        if (args.thinkingLevel !== undefined && typeof args.thinkingLevel !== "string")
-          throw new HostOpError(400, "invalid_request", "thinkingLevel must be a string");
-        if ((args.currentProvider !== undefined || args.currentModelId !== undefined) &&
-            (typeof args.currentProvider !== "string" || !args.currentProvider.trim() || typeof args.currentModelId !== "string" || !args.currentModelId.trim()))
-          throw new HostOpError(400, "invalid_request", "currentProvider and currentModelId must be non-empty strings together");
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "An absolute workspace path is required",
+          );
+        if (
+          args.thinkingLevel !== undefined &&
+          typeof args.thinkingLevel !== "string"
+        )
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "thinkingLevel must be a string",
+          );
+        if (
+          (args.currentProvider !== undefined ||
+            args.currentModelId !== undefined) &&
+          (typeof args.currentProvider !== "string" ||
+            !args.currentProvider.trim() ||
+            typeof args.currentModelId !== "string" ||
+            !args.currentModelId.trim())
+        )
+          throw new HostOpError(
+            400,
+            "invalid_request",
+            "currentProvider and currentModelId must be non-empty strings together",
+          );
         const selected = await sessionOps.validateCwd(args.cwd);
-        if (!selected.ok) throw new HostOpError(selected.status, selected.code, selected.error);
+        if (!selected.ok)
+          throw new HostOpError(selected.status, selected.code, selected.error);
         let result: unknown;
         try {
-          result = await runIsolatedUtilityCommand({ type: "get_chat_roles", currentModelFallback: false, ...(args.thinkingLevel === undefined ? {} : { thinkingLevel: args.thinkingLevel }), ...(args.currentProvider === undefined ? {} : { currentProvider: args.currentProvider, currentModelId: args.currentModelId }) }, { cwd: selected.value.cwd, env: getAgentEnvOverrides(), timeoutMs: 120_000 });
+          result = await runIsolatedUtilityCommand(
+            {
+              type: "get_chat_roles",
+              currentModelFallback: false,
+              ...(args.thinkingLevel === undefined
+                ? {}
+                : { thinkingLevel: args.thinkingLevel }),
+              ...(args.currentProvider === undefined
+                ? {}
+                : {
+                    currentProvider: args.currentProvider,
+                    currentModelId: args.currentModelId,
+                  }),
+            },
+            {
+              cwd: selected.value.cwd,
+              env: getAgentEnvOverrides(),
+              timeoutMs: 120_000,
+            },
+          );
         } catch {
-          throw new HostOpError(503, "chat_roles_unavailable", "Chat roles are unavailable. Check the host runner and workspace configuration.");
+          throw new HostOpError(
+            503,
+            "chat_roles_unavailable",
+            "Chat roles are unavailable. Check the host runner and workspace configuration.",
+          );
         }
         if (!Value.Check(ChatRolesSchema, result))
-          throw new HostOpError(502, "invalid_runner_result", "Invalid chat roles response from runner");
+          throw new HostOpError(
+            502,
+            "invalid_runner_result",
+            "Invalid chat roles response from runner",
+          );
         return result;
       }
       case "usageReport":

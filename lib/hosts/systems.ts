@@ -1403,7 +1403,11 @@ async function result(runtime: SystemsRuntime): Promise<SystemsResult> {
         const current = fs.promises
           .stat(path.join(member.path, ".git"))
           .then(() =>
-            git(member.path, ["symbolic-ref", "--quiet", "--short", "HEAD"], 10_000),
+            git(
+              member.path,
+              ["symbolic-ref", "--quiet", "--short", "HEAD"],
+              10_000,
+            ),
           )
           .then((value) => value.trim() || undefined)
           .catch(() => undefined);
