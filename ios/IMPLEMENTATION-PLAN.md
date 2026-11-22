@@ -39,6 +39,8 @@ Use the link's `hosts` and `running` channels for live status and badges. Refres
 
 **Exit:** Open the same saved chat from Home and from a workspace, switch and close tabs, navigate to an Effort, and return using the same controls as the PWA. Host unavailable and genuinely empty are distinct states.
 
+**Milestone 1 progress.** Release simulator walkthrough opened the same seeded chat from Home and Saved chats, closed its tab without removing the saved chat, and switched workspaces without losing the original open tab. Native captures are under `ios/screenshots/milestone-1/native/` against references 01, 02, 03, 24 and 28. The initial capture identified a drawer safe-area mismatch and an empty local host name; the shell now insets the drawer and uses “This machine” when no custom name is set. The remaining creation and search affordances are wired in later milestones. The seeded run had no Effort, so the Effort route and return still need the System/Effort walkthrough.
+
 ### 2. Live chat and composer
 
 Start with saved transcripts: user and assistant rows, Markdown, folded Process details and in-place expansion, followed by the keyboard-safe composer. Page long history using `tail`/`before` and `historyRevision`; refresh the active view if the revision changes. Keep the scroll anchor when loading older entries; follow a reply only while the reader is at the bottom. Then add New Session with the same Project and Workspace selectors, model/role selection, Send and Stop in their PWA locations. Exercise both a working catalog and the captured unavailable-model state. Preserve drafts across navigation and failures.
