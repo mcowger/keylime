@@ -1,6 +1,28 @@
 # iOS development
 
-The Expo app is a standalone `Hello World` prototype. It doesn't need a Keylime server or an Expo account. Keep app source and dependencies under `ios/`. Expo generates the Xcode project and installs Pods under `ios/ios/` from the repository root. That directory is ignored; change `app.json`, not the generated Xcode files.
+The Expo app currently shows `Hello World` and doesn't need a Keylime server or an Expo account. Keep app source and dependencies under `ios/`. Expo generates the Xcode project and installs Pods under `ios/ios/`. That directory is ignored; change `app.json`, not the generated Xcode files.
+
+## Keylime API contracts
+
+The native client talks to the Keylime **web server**, like the PWA. The web server routes host operations to the correct daemon. Don't connect directly to daemon hosts or use the host-link or runner-channel contracts.
+
+| Contract | Use | Generated module |
+| --- | --- | --- |
+| [Web HTTP OpenAPI](../docs/api/web-http.openapi.json) | HTTP requests and responses, including auth and SSE entry points | `generated/web-http.ts` |
+| [Browser Link AsyncAPI](../docs/api/browser-link.asyncapi.json) | WebSocket commands, replies, events, and framing at `/api/events/link` | `generated/browser-link.ts` |
+| [Terminal Attach AsyncAPI](../docs/api/terminal-attach.asyncapi.json) | Dedicated terminal WebSocket at `/api/terminal/attach`, if using that endpoint | `generated/terminal-attach.ts` |
+
+The checked-in documents come from [`lib/api-contracts/`](../lib/api-contracts/) and server route annotations. Update those sources and run `mise exec -- bun run api` from the repo root when changing a contract. Don't edit the documents or generated iOS types by hand.
+
+From `ios/`, after dependency installation:
+
+```sh
+mise exec -- bun run api:types
+```
+
+Run this after a fresh checkout before checking or building code that imports generated types, and again when the API documents change. `generated/` is ignored. Use `import type`: HTTP types come from `paths` or `operations`, and WebSocket payloads from `components["schemas"]` in each module. Generation doesn't provide a transport or runtime validation. Read the contract's operation descriptions for auth, message direction, framing, and recovery.
+
+AsyncAPI directions are from the server's perspective: `receive` is client → server, and `send` is server → client. `BrowserUploadBinary` is an `ArrayBuffer` sent as a raw WebSocket frame, not a JSON or base64 string. Follow the schema's framing description when assembling its bytes.
 
 ## Bring up the app
 
