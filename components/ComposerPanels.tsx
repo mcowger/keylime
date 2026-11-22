@@ -524,6 +524,19 @@ export function ComposerPanels({ btw = null }: { btw?: BtwPanelProps | null }) {
   );
 }
 
+function formatCacheHitRate(rate: number): string {
+  let decimals = 2;
+  let formatted = rate.toFixed(decimals);
+  while (
+    decimals < 15 &&
+    ((rate > 0 && Number(formatted) === 0) ||
+      (rate < 100 && Number(formatted) === 100))
+  ) {
+    formatted = rate.toFixed(++decimals);
+  }
+  return `${formatted}%`;
+}
+
 /** Context detail for the composer ring popover: usage bar plus the full
  * session / messages / tokens grids. No chrome of its own — the popover
  * frame owns the title and the Compact action. Renders nothing until the
@@ -839,7 +852,7 @@ export function ContextDetailPanel({
             {cacheHitRate !== null
               ? statRow(
                   t("appShell.statCacheRate"),
-                  formatPercent(cacheHitRate),
+                  formatCacheHitRate(cacheHitRate),
                 )
               : null}
             {costStr ? statRow(t("appShell.statCost"), costStr) : null}
