@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "Keylime",
+    "slug": "keylime-ios",
+    "version": "1.0.0",
+    "platforms": ["ios"],
+    "ios": {
+      "bundleIdentifier": "com.mcowger.keylime"
+    }
+  }
+}

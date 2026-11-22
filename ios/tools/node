@@ -1,0 +1,3 @@
+#!/bin/sh
+# Invoke Bun by name so Expo's `node --eval` calls keep their argument list.
+exec bun "$@"

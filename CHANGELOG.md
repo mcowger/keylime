@@ -12,6 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
+- `ios/` contains a standalone Expo and TypeScript Hello World app for iPhone simulator development. It does not connect to Keylime.
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal.
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts.
 - Agents can inspect their workspace's linked PR, link an existing PR, and start PR feedback monitoring without a browser or confirmation.
