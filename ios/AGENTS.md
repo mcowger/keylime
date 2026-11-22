@@ -1,6 +1,6 @@
 # iOS development
 
-The Expo app currently shows `Hello World` and doesn't need a Keylime server or an Expo account. Keep app source and dependencies under `ios/`. Expo generates the Xcode project and installs Pods under `ios/ios/`. That directory is ignored; change `app.json`, not the generated Xcode files.
+Keep app source and dependencies under `ios/`. Expo generates the Xcode project and installs Pods under `ios/ios/`. That directory is ignored; change `app.json`, not the generated Xcode files. The local Expo module under `modules/keylime-network/` owns HTTP and WebSocket credentials for the app. Install Pods after adding it to an existing generated workspace.
 
 ## Keylime API contracts
 
@@ -34,6 +34,7 @@ From the repository root:
 mise trust && mise install
 cd ios
 mise exec -- bun install --frozen-lockfile
+mise exec -- bun run api:types
 mkdir -p "$HOME/.expo"
 ```
 
@@ -59,11 +60,11 @@ This compiles for the generic iOS simulator and writes `dist/Keylime.app` withou
 mise exec -- bun check -p tsconfig.json
 ```
 
-There is no automated iOS test suite yet. For smoke testing, build and install the Release app and verify that the simulator actually shows `Hello World`. If Expo leaves the simulator on its Home Screen after installing, tap Keylime or run `xcrun simctl launch <SIMULATOR_UDID> com.mcowger.keylime`.
+For a simulator smoke, launch Release and connect to an isolated Keylime server. From the repo root, run `mise exec -- bun --no-env-file ios/tools/native-fixture.ts`; set `KEYLIME_NATIVE_FIXTURE_PASSWORD` to a disposable password for a protected fixture. Enter the printed URL and verify that Home lists the seeded chats. If Expo leaves the simulator on its Home Screen after installing, tap Keylime or run `xcrun simctl launch <SIMULATOR_UDID> com.mcowger.keylime`.
 
 A cold simulator can take tens of seconds to boot, and app launch and accessibility can take several more seconds. Wait for `xcrun simctl bootstatus <SIMULATOR_UDID> -b` and then for the app's text before calling the smoke check failed. An accessibility timeout immediately after boot can be a readiness issue; allow about 20 more seconds and retry the snapshot if needed.
 
-For MobileBuildMCP, check session defaults first. Use the generated `ios/Keylime.xcworkspace` (relative to this directory), scheme `Keylime`, configuration `Release`, and the chosen simulator with `build_run_sim`. After launch, use `wait_for_ui` with `predicate: "textContains"` and `text: "Hello World"`.
+For MobileBuildMCP, check session defaults first. Use the generated `ios/Keylime.xcworkspace` (relative to this directory), scheme `Keylime`, configuration `Release`, and the chosen simulator with `build_run_sim`. After launch, use `wait_for_ui` with `predicate: "textContains"` and `text: "Connect to Keylime"`.
 
 ## Load the Keylime PWA in iOS Simulator
 

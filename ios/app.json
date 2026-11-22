@@ -3,6 +3,7 @@
     "name": "Keylime",
     "slug": "keylime-ios",
     "version": "1.0.0",
+    "userInterfaceStyle": "automatic",
     "platforms": ["ios"],
     "ios": {
       "bundleIdentifier": "com.mcowger.keylime"

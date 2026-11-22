@@ -10,12 +10,13 @@ const { values } = parseArgs({
     "browser-fixture": { type: "boolean" },
     "pr-monitor-fixture": { type: "boolean" },
     help: { type: "boolean", short: "h" },
+    "native-fixture": { type: "boolean" },
   },
   strict: true,
 });
 if (values.help) {
   console.log(
-    "Usage: bun run dev [--port <port>] [--browser-fixture] [--pr-monitor-fixture]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
+    "Usage: bun run dev [--port <port>] [--browser-fixture] [--pr-monitor-fixture] [--native-fixture]\nDefaults to a free loopback port. Each run keeps its temporary home/config after exit.",
   );
   process.exit(0);
 }
@@ -34,6 +35,10 @@ const home = path.join(directory, "home");
 const agent = path.join(home, ".omp", "agent");
 mkdirSync(agent, { recursive: true, mode: 0o700 });
 const env = { ...process.env };
+// Only the isolated native fixture wrapper may opt in to a fixture password hash.
+const fixturePasswordHash = values["native-fixture"]
+  ? process.env.KEYLIME_DEV_FIXTURE_PASSWORD_HASH
+  : undefined;
 // Never inherit a running installation's auth, package root, session, or broker connection.
 for (const name of Object.keys(env)) {
   if (
@@ -144,15 +149,18 @@ try {
       throw new Error("Could not seed isolated UI fixtures");
   }
   if (!stopping) {
-    spawn([
-      "--hot",
-      "--no-clear-screen",
-      "server/dev.ts",
-      "--hostname",
-      "127.0.0.1",
-      "--port",
-      String(port),
-    ]);
+    spawn(
+      [
+        "--hot",
+        "--no-clear-screen",
+        "server/dev.ts",
+        "--hostname",
+        "127.0.0.1",
+        "--port",
+        String(port),
+      ],
+      fixturePasswordHash ? { KEYLIME_PASSWORD_HASH: fixturePasswordHash } : {},
+    );
     spawn(["--hot", "--no-clear-screen", "bin/keylime-host.ts"], {
       ...(values["browser-fixture"]
         ? { KEYLIME_UI_FIXTURE_ROOT: directory, KEYLIME_BROWSER_FIXTURE: "1" }
