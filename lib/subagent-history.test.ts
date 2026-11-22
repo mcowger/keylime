@@ -3,6 +3,7 @@ import test from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { getSessionHistoryPage } from "./session-reader";
 
 const {
   extractSubagentHistory,
@@ -151,11 +152,162 @@ function makeSessionFixture() {
 
   return { dir, sessionFile, artifactsDir };
 }
+test("costs cover both full branches regardless of transcript page", () => {
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-costs-"));
+  const sessionFile = join(dir, "branches.jsonl");
+  try {
+    const timestamp = "2026-08-01T00:00:00.000Z";
+    const entries: object[] = [
+      { type: "session", version: 3, id: "parent", timestamp, cwd: "/work" },
+      {
+        type: "message",
+        id: "root",
+        parentId: null,
+        timestamp,
+        message: { role: "user", content: "Start" },
+      },
+    ];
+    for (const [branch, cost, taskCost] of [
+      ["a", 1, 0.5],
+      ["b", 2, 0.25],
+    ] as const) {
+      let parentId = "root";
+      for (let i = 0; i < 35; i++) {
+        const id = `${branch}${i}`;
+        entries.push({
+          type: "message",
+          id,
+          parentId,
+          timestamp,
+          message: {
+            role: "assistant",
+            content:
+              i === 0
+                ? [
+                    {
+                      type: "toolCall",
+                      id: `call-${branch}`,
+                      name: "task",
+                      arguments: {},
+                    },
+                  ]
+                : [{ type: "text", text: id }],
+            usage: { cost: { total: cost } },
+          },
+        });
+        parentId = id;
+      }
+      entries.push({
+        type: "message",
+        id: `result-${branch}`,
+        parentId,
+        timestamp,
+        message: {
+          role: "toolResult",
+          toolCallId: `call-${branch}`,
+          toolName: "task",
+          content: [],
+          details: {
+            progress: [
+              {
+                id: `Agent${branch}`,
+                agent: "worker",
+                status: "running",
+                cost: taskCost / 2,
+              },
+              ...(branch === "b"
+                ? [
+                    {
+                      id: "ProgressOnly",
+                      agent: "worker",
+                      status: "running",
+                      cost: 0.125,
+                    },
+                  ]
+                : []),
+            ],
+            results: [
+              {
+                id: `Agent${branch}`,
+                agent: "worker",
+                exitCode: 0,
+                usage: { cost: { total: taskCost } },
+              },
+            ],
+          },
+        },
+      });
+      // Duplicate persisted snapshots must not double-count the same agent.
+      entries.push({
+        type: "message",
+        id: `duplicate-${branch}`,
+        parentId: `result-${branch}`,
+        timestamp,
+        message: {
+          role: "toolResult",
+          toolCallId: `call-${branch}`,
+          toolName: "task",
+          content: [],
+          details: {
+            progress: [
+              {
+                id: `Agent${branch}`,
+                agent: "worker",
+                status: "running",
+                cost: 10,
+              },
+            ],
+          },
+        },
+      });
+    }
+    entries.push({
+      type: "message",
+      id: "negative",
+      parentId: "duplicate-b",
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [],
+        usage: { cost: { total: -99 } },
+      },
+    });
+    writeFileSync(
+      sessionFile,
+      entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+    );
+
+    for (const leaf of ["duplicate-a", "negative"]) {
+      const page = getSessionHistoryPage(sessionFile, null, 5, leaf, {
+        tail: { limit: 5 },
+      });
+      assert.equal(page.leafId, leaf);
+      assert.equal(page.history.context.entryIds.length, 5);
+      assert.ok(page.historyHasMore);
+      const snapshot = extractSubagentHistory(sessionFile);
+      assert.deepEqual(snapshot.costs, { agent: 105, subagents: 0.875 });
+      assert.equal(snapshot.subagents.length, 3);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unavailable session history does not report costs", () => {
+  const dir = mkdtempSync(join(tmpdir(), "keylime-subagent-missing-"));
+  try {
+    assert.deepEqual(extractSubagentHistory(join(dir, "missing.jsonl")), {
+      subagents: [],
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("extracts subagent roster from task toolResults with settled results winning", () => {
   const { dir, sessionFile } = makeSessionFixture();
   try {
-    const roster = extractSubagentHistory(sessionFile);
+    const { subagents: roster } = extractSubagentHistory(sessionFile);
     assert.equal(roster.length, 2);
 
     const scout = roster.find((entry) => entry.id === "ScoutAgent");
@@ -218,7 +370,7 @@ test("keeps async-only spawns (empty results) as started entries", () => {
       }),
     ];
     writeFileSync(sessionFile, lines.join("\n") + "\n");
-    const roster = extractSubagentHistory(sessionFile);
+    const { subagents: roster } = extractSubagentHistory(sessionFile);
     assert.equal(roster.length, 1);
     assert.equal(roster[0].id, "AsyncJob");
     assert.equal(roster[0].status, "started");
@@ -305,7 +457,7 @@ test("recovers model and effort from the subagent transcript when the task resul
         }),
       ].join("\n") + "\n",
     );
-    const [entry] = extractSubagentHistory(sessionFile);
+    const [entry] = extractSubagentHistory(sessionFile).subagents;
     assert.equal(entry.resolvedModel, "anthropic/claude-sonnet-5-5:high");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -568,7 +720,7 @@ test("separate task calls keep their agents apart instead of interleaving", () =
     // Both batches number their children 0,1, so ordering by `index` alone
     // would yield callA_scout0, callB_worker0, callA_scout1, callB_worker1.
     assert.deepEqual(
-      extractSubagentHistory(sessionFile).map((entry) => entry.id),
+      extractSubagentHistory(sessionFile).subagents.map((entry) => entry.id),
       ["callA_scout0", "callA_scout1", "callB_worker0", "callB_worker1"],
     );
   } finally {
@@ -602,7 +754,7 @@ test("parallel calls follow the order the assistant issued them, not the order t
       ].join("\n") + "\n",
     );
 
-    const roster = extractSubagentHistory(sessionFile);
+    const { subagents: roster } = extractSubagentHistory(sessionFile);
     assert.deepEqual(
       roster.map((entry) => entry.id),
       ["callSlow_worker0", "callFast_sonic0"],
@@ -660,7 +812,7 @@ test("an agent seen only in results keeps its own call's place", () => {
     // Ids are chosen so that the old `index` comparator, which tie-breaks
     // alphabetically, would put the later agent first.
     assert.deepEqual(
-      extractSubagentHistory(sessionFile).map((entry) => entry.id),
+      extractSubagentHistory(sessionFile).subagents.map((entry) => entry.id),
       ["zzFirst_scout0", "aaLateWorker"],
     );
   } finally {

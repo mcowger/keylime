@@ -9,16 +9,16 @@ import { getRpcSession } from "@/lib/rpc-manager";
 /**
  * GET /api/sessions/[id]/subagents
  *
- * On-disk subagent roster for a session, recovered from the parent file's task
- * toolResults (works without a live RPC process — survives page reloads).
+ * Persisted subagent roster and reported costs from the owning host's full
+ * session file, including all branches and independent of transcript paging.
  */
 /**
  * @apiContract listSessionSubagents
- * @apiUsage Recover the on-disk subagent roster from the parent session's task results.
+ * @apiUsage Recover the persisted subagent roster and reported USD costs from one full parent session file snapshot.
  * @apiInputs id identifies the parent session; optional hostId selects the host, defaulting to local.
- * @apiInvariants This is persisted history, not a live process roster. A live new session whose file has not appeared returns an empty roster.
+ * @apiInvariants The snapshot includes all branches, independent of the selected branch or transcript page, and is not a live process roster. Costs may be omitted by older daemons or when unavailable; a live new session whose file has not appeared returns an empty roster without costs.
  * @apiEffects Reads the owning host's session artifacts without starting a process; persisted results survive page reloads.
- * @apiRecovery Refresh after task results are committed; an empty roster before the session file lands does not prove no task is running.
+ * @apiRecovery Refresh after assistant usage or task results are committed; an empty roster before the session file lands does not prove no task is running.
  */
 export async function GET(
   req: Request,

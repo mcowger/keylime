@@ -12,6 +12,8 @@ import React, {
   KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import type { Static } from "@sinclair/typebox";
+import type { SubagentHistoryValueSchema } from "@/lib/api-contracts/host-session-operations";
 import type { ModelActivity } from "@/lib/model-activity";
 import type { AutoPrewalkMode } from "@/lib/api-contracts/runner-lifecycle";
 import { ModelActivityIndicator } from "./ModelActivityIndicator";
@@ -338,7 +340,11 @@ interface Props {
   onAutoPrewalkChange?: (mode: AutoPrewalkMode) => void;
   onRoleChange?: (
     role: string,
-    preview: { provider: string | null; modelId: string | null; effectiveThinkingLevel: string | null },
+    preview: {
+      provider: string | null;
+      modelId: string | null;
+      effectiveThinkingLevel: string | null;
+    },
   ) => Promise<boolean>;
   roleChangePending?: boolean;
   fastModeEnabled?: boolean;
@@ -383,6 +389,7 @@ interface Props {
   } | null;
   /** Session stats shown in the context ring popover. */
   sessionStats?: SessionStatsInfo | null;
+  sessionCosts?: Static<typeof SubagentHistoryValueSchema>["costs"];
   /** Mobile top-bar mount point for the session information control. */
   sessionInfoContainer?: HTMLDivElement | null;
   /** Model capacity shown in the context ring popover. */
@@ -586,6 +593,7 @@ export const ChatInput = memo(
       contextUsage,
       modelActivity,
       sessionStats,
+      sessionCosts,
       sessionInfoContainer,
       modelCapacity,
       generationSpeed,
@@ -3181,7 +3189,11 @@ export const ChatInput = memo(
               : "chatInput.autoPrewalkDefault",
     );
     const nextAutoPrewalk =
-      autoPrewalk === "off" ? "suggest" : autoPrewalk === "suggest" ? "on" : "off";
+      autoPrewalk === "off"
+        ? "suggest"
+        : autoPrewalk === "suggest"
+          ? "on"
+          : "off";
 
     const compactSavedTokens = compactResult
       ? Math.max(
@@ -5320,61 +5332,116 @@ export const ChatInput = memo(
                           }}
                           onClose={() => setModelDropdownOpen(false)}
                         />
-                        {(onPlanModeChange || (showPrewalkControl && onAutoPrewalkChange) || onThinkingLevelChange) && <div className="picker-effort-row">
-                          {(onPlanModeChange || (showPrewalkControl && onAutoPrewalkChange)) && (
-                            <div className="picker-mode-controls">
-                              {onPlanModeChange && (
-                                <button
-                                  type="button"
-                                  aria-label={t(planEnabled ? "chatInput.modePlanSwitch" : "chatInput.modeBuildSwitch")}
-                                  title={t(planEnabled ? "chatInput.modePlanSwitch" : "chatInput.modeBuildSwitch")}
-                                  disabled={planCommandPending}
-                                  onClick={() => onPlanModeChange(!planEnabled)}
-                                  style={{ color: planEnabled ? "var(--accent)" : "var(--text-muted)" }}
-                                >
-                                  {planEnabled ? <SquareChartGantt size={16} aria-hidden="true" /> : <Hammer size={16} aria-hidden="true" />}
-                                </button>
-                              )}
-                              {showPrewalkControl && onAutoPrewalkChange && (
-                                <button
-                                  type="button"
-                                  aria-label={`${t("chatInput.autoPrewalk")}: ${autoPrewalkLabel}`}
-                                  title={[
-                                    `${t("chatInput.autoPrewalk")}: ${autoPrewalkLabel}`,
-                                    t("chatInput.autoPrewalkCycle"),
-                                    autoPrewalk == null ? t("chatInput.autoPrewalkUnknownDescription") : "",
-                                    t("chatInput.autoPrewalkHostScope"),
-                                    autoPrewalkIsNew ? t("chatInput.autoPrewalkBeforeFirstPrompt") : "",
-                                    t("chatInput.autoPrewalkSuggestDescription"),
-                                    t("chatInput.autoPrewalkOnDescription"),
-                                  ].filter(Boolean).join(" ")}
-                                  disabled={isStreaming}
-                                  aria-disabled={autoPrewalkPending || undefined}
-                                  onClick={() => {
-                                    if (!isStreaming && !autoPrewalkPending)
-                                      onAutoPrewalkChange(nextAutoPrewalk);
-                                  }}
-                                  data-prewalk={autoPrewalk ?? "default"}
-                                >
-                                  <Footprints size={16} aria-hidden="true" />
-                                  <span className="prewalk-state" aria-hidden="true" />
-                                </button>
-                              )}
+                        {(onPlanModeChange ||
+                          (showPrewalkControl && onAutoPrewalkChange) ||
+                          onThinkingLevelChange) && (
+                          <div className="picker-effort-row">
+                            {(onPlanModeChange ||
+                              (showPrewalkControl && onAutoPrewalkChange)) && (
+                              <div className="picker-mode-controls">
+                                {onPlanModeChange && (
+                                  <button
+                                    type="button"
+                                    aria-label={t(
+                                      planEnabled
+                                        ? "chatInput.modePlanSwitch"
+                                        : "chatInput.modeBuildSwitch",
+                                    )}
+                                    title={t(
+                                      planEnabled
+                                        ? "chatInput.modePlanSwitch"
+                                        : "chatInput.modeBuildSwitch",
+                                    )}
+                                    disabled={planCommandPending}
+                                    onClick={() =>
+                                      onPlanModeChange(!planEnabled)
+                                    }
+                                    style={{
+                                      color: planEnabled
+                                        ? "var(--accent)"
+                                        : "var(--text-muted)",
+                                    }}
+                                  >
+                                    {planEnabled ? (
+                                      <SquareChartGantt
+                                        size={16}
+                                        aria-hidden="true"
+                                      />
+                                    ) : (
+                                      <Hammer size={16} aria-hidden="true" />
+                                    )}
+                                  </button>
+                                )}
+                                {showPrewalkControl && onAutoPrewalkChange && (
+                                  <button
+                                    type="button"
+                                    aria-label={`${t("chatInput.autoPrewalk")}: ${autoPrewalkLabel}`}
+                                    title={[
+                                      `${t("chatInput.autoPrewalk")}: ${autoPrewalkLabel}`,
+                                      t("chatInput.autoPrewalkCycle"),
+                                      autoPrewalk == null
+                                        ? t(
+                                            "chatInput.autoPrewalkUnknownDescription",
+                                          )
+                                        : "",
+                                      t("chatInput.autoPrewalkHostScope"),
+                                      autoPrewalkIsNew
+                                        ? t(
+                                            "chatInput.autoPrewalkBeforeFirstPrompt",
+                                          )
+                                        : "",
+                                      t(
+                                        "chatInput.autoPrewalkSuggestDescription",
+                                      ),
+                                      t("chatInput.autoPrewalkOnDescription"),
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" ")}
+                                    disabled={isStreaming}
+                                    aria-disabled={
+                                      autoPrewalkPending || undefined
+                                    }
+                                    onClick={() => {
+                                      if (!isStreaming && !autoPrewalkPending)
+                                        onAutoPrewalkChange(nextAutoPrewalk);
+                                    }}
+                                    data-prewalk={autoPrewalk ?? "default"}
+                                  >
+                                    <Footprints size={16} aria-hidden="true" />
+                                    <span
+                                      className="prewalk-state"
+                                      aria-hidden="true"
+                                    />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {onThinkingLevelChange && (
+                              <ReasoningEffortSlider
+                                levels={thinkingLevelOptions}
+                                value={thinkingLevel ?? "auto"}
+                                labels={thinkingLevelMap}
+                                disabled={isStreaming || roleChangePending}
+                                onChange={onThinkingLevelChange}
+                              />
+                            )}
+                          </div>
+                        )}
+                        {showPrewalkControl &&
+                          onAutoPrewalkChange &&
+                          autoPrewalkError && (
+                            <div
+                              role="alert"
+                              style={{
+                                color: "var(--status-error)",
+                                fontSize: "var(--text-xs)",
+                                padding: "0 12px 6px",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {autoPrewalkError}
                             </div>
                           )}
-                          {onThinkingLevelChange && (
-                            <ReasoningEffortSlider
-                              levels={thinkingLevelOptions}
-                              value={thinkingLevel ?? "auto"}
-                              labels={thinkingLevelMap}
-                              disabled={isStreaming || roleChangePending}
-                              onChange={onThinkingLevelChange}
-                            />
-                          )}
-                        </div>}
-                        {showPrewalkControl && onAutoPrewalkChange && autoPrewalkError && (
-                          <div role="alert" style={{ color: "var(--status-error)", fontSize: "var(--text-xs)", padding: "0 12px 6px", overflowWrap: "anywhere" }}>{autoPrewalkError}</div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -5664,6 +5731,7 @@ export const ChatInput = memo(
                           </div>
                           <ContextDetailPanel
                             sessionStats={sessionStats}
+                            sessionCosts={sessionCosts}
                             contextUsage={contextUsage}
                             modelCapacity={modelCapacity}
                             generationSpeed={generationSpeed}

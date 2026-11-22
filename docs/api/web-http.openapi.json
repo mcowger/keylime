@@ -82443,7 +82443,7 @@
     },
     "/api/sessions/{id}/subagents": {
       "get": {
-        "description": "### Usage\n\nRecover the on-disk subagent roster from the parent session's task results.\n\n### Inputs\n\nid identifies the parent session; optional hostId selects the host, defaulting to local.\n\n### Invariants\n\nThis is persisted history, not a live process roster. A live new session whose file has not appeared returns an empty roster.\n\n### Effects\n\nReads the owning host's session artifacts without starting a process; persisted results survive page reloads.\n\n### Recovery\n\nRefresh after task results are committed; an empty roster before the session file lands does not prove no task is running.",
+        "description": "### Usage\n\nRecover the persisted subagent roster and reported USD costs from one full parent session file snapshot.\n\n### Inputs\n\nid identifies the parent session; optional hostId selects the host, defaulting to local.\n\n### Invariants\n\nThe snapshot includes all branches, independent of the selected branch or transcript page, and is not a live process roster. Costs may be omitted by older daemons or when unavailable; a live new session whose file has not appeared returns an empty roster without costs.\n\n### Effects\n\nReads the owning host's session artifacts without starting a process; persisted results survive page reloads.\n\n### Recovery\n\nRefresh after assistant usage or task results are committed; an empty roster before the session file lands does not prove no task is running.",
         "operationId": "listSessionSubagents",
         "parameters": [
           {
@@ -82469,8 +82469,25 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "Subagent history extracted from the session's task results.",
+                  "description": "Subagent history and reported costs extracted from the owning host's full session file, independent of selected branch or transcript page.",
                   "properties": {
+                    "costs": {
+                      "description": "Persisted usage from the same full-file snapshot as the roster; omitted by older daemons or when unavailable.",
+                      "properties": {
+                        "agent": {
+                          "description": "USD reported by assistant messages across all branches.",
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "subagents": {
+                          "description": "USD reported by deduplicated task results or progress across all branches.",
+                          "minimum": 0,
+                          "type": "number"
+                        }
+                      },
+                      "required": ["agent", "subagents"],
+                      "type": "object"
+                    },
                     "subagents": {
                       "items": {
                         "description": "Retained subagent history entry; transcriptAvailable indicates whether its transcript can be read.",
@@ -83092,9 +83109,9 @@
         "x-client-semantics": {
           "Effects": "Reads the owning host's session artifacts without starting a process; persisted results survive page reloads.",
           "Inputs": "id identifies the parent session; optional hostId selects the host, defaulting to local.",
-          "Invariants": "This is persisted history, not a live process roster. A live new session whose file has not appeared returns an empty roster.",
-          "Recovery": "Refresh after task results are committed; an empty roster before the session file lands does not prove no task is running.",
-          "Usage": "Recover the on-disk subagent roster from the parent session's task results."
+          "Invariants": "The snapshot includes all branches, independent of the selected branch or transcript page, and is not a live process roster. Costs may be omitted by older daemons or when unavailable; a live new session whose file has not appeared returns an empty roster without costs.",
+          "Recovery": "Refresh after assistant usage or task results are committed; an empty roster before the session file lands does not prove no task is running.",
+          "Usage": "Recover the persisted subagent roster and reported USD costs from one full parent session file snapshot."
         }
       }
     },

@@ -207,6 +207,25 @@ for (const session of sessions) {
               : "This is a sample conversation for UI testing.",
           },
         ],
+        ...("advisor" in session && session.advisor
+          ? {
+              provider: "fixture",
+              model: "fixture-model",
+              usage: {
+                input: 1000,
+                output: 500,
+                cacheRead: 0,
+                cacheWrite: 0,
+                cost: {
+                  input: 3,
+                  output: 4.73,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 7.73,
+                },
+              },
+            }
+          : {}),
         timestamp: 1767225601000,
       },
     },
@@ -462,6 +481,108 @@ for (const session of sessions) {
               toolName: "write",
               content: [{ type: "text", text: "Delivered to SearchReview." }],
               timestamp: 1767225611000,
+            },
+          },
+        ]
+      : []),
+    ...("advisor" in session && session.advisor
+      ? [
+          {
+            type: "message",
+            id: "10000001",
+            parentId: "00000001",
+            timestamp,
+            message: {
+              role: "assistant",
+              provider: "fixture",
+              model: "fixture-model",
+              content: [
+                {
+                  type: "toolCall",
+                  id: "other-task-seed",
+                  name: "task",
+                  arguments: {},
+                },
+              ],
+              usage: {
+                input: 100,
+                output: 100,
+                cacheRead: 0,
+                cacheWrite: 0,
+                cost: {
+                  input: 0.5,
+                  output: 0.5,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 1,
+                },
+              },
+              timestamp: 1767225611500,
+            },
+          },
+          {
+            type: "message",
+            id: "10000002",
+            parentId: "10000001",
+            timestamp,
+            message: {
+              role: "toolResult",
+              toolCallId: "other-task-seed",
+              toolName: "task",
+              content: [
+                { type: "text", text: "Alternate branch review complete." },
+              ],
+              details: {
+                results: [
+                  {
+                    id: "OtherBranchReview",
+                    agent: "scout",
+                    exitCode: 0,
+                    cost: 20,
+                  },
+                ],
+              },
+              timestamp: 1767225611600,
+            },
+          },
+        ]
+      : []),
+    ...("advisor" in session && session.advisor
+      ? [
+          {
+            type: "message",
+            id: "0000000e",
+            parentId: "0000000d",
+            timestamp,
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "toolCall",
+                  id: "task-seed",
+                  name: "task",
+                  arguments: {},
+                },
+              ],
+              timestamp: 1767225612000,
+            },
+          },
+          {
+            type: "message",
+            id: "0000000f",
+            parentId: "0000000e",
+            timestamp,
+            message: {
+              role: "toolResult",
+              toolCallId: "task-seed",
+              toolName: "task",
+              content: [{ type: "text", text: "Review complete." }],
+              details: {
+                results: [
+                  { id: "CostReview", agent: "scout", exitCode: 0, cost: 2.11 },
+                ],
+              },
+              timestamp: 1767225613000,
             },
           },
         ]

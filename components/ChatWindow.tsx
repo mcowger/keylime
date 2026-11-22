@@ -725,6 +725,7 @@ function HostChatWindow({
     tokensPerSecond,
     displayModel: displayModelValue,
     sessionStats,
+    sessionCosts,
     slashCommands,
     slashCommandsLoading,
     queuedMessages,
@@ -1634,6 +1635,7 @@ function HostChatWindow({
       onCompact={handleCompact}
       contextUsage={contextUsage}
       sessionStats={sessionStats}
+      sessionCosts={sessionCosts}
       modelCapacity={modelCapacity}
       generationSpeed={generationSpeed}
       onRemoveQueuedMessage={removeQueuedMessage}

@@ -458,21 +458,44 @@ export const sessionOps: SessionOps = {
   listSessions: () => listAllSessions(),
   listSessionIdsForRestore: async () => listSessionIdsForRestore(),
 
-  async readSession(id, { deferThinking, deferMedia: deferToolResultImages, tail, before, historyRevision }) {
+  async readSession(
+    id,
+    {
+      deferThinking,
+      deferMedia: deferToolResultImages,
+      tail,
+      before,
+      historyRevision,
+    },
+  ) {
     const filePath = await resolveSessionPath(id);
     if (!filePath) return sessionNotFound();
     try {
-      if ((tail !== undefined && (!Number.isInteger(tail) || tail < 1 || tail > 200)) ||
-          (before !== undefined && (!tail || !historyRevision || before.length === 0 || before.length > 256)) ||
-          (historyRevision !== undefined && (!before || historyRevision.length > 256)))
-        return fail(400, "invalid_history_page", "Invalid session history page parameters");
+      if (
+        (tail !== undefined &&
+          (!Number.isInteger(tail) || tail < 1 || tail > 200)) ||
+        (before !== undefined &&
+          (!tail ||
+            !historyRevision ||
+            before.length === 0 ||
+            before.length > 256)) ||
+        (historyRevision !== undefined &&
+          (!before || historyRevision.length > 256))
+      )
+        return fail(
+          400,
+          "invalid_history_page",
+          "Invalid session history page parameters",
+        );
       let header = readSessionHeader(filePath);
       if (header === null) return unreadableSession(filePath);
-      const page = tail ? getSessionHistoryPage(filePath, null, tail, undefined, {
-        deferThinking,
-        deferToolResultImages,
-        tail: { limit: tail, before, revision: historyRevision },
-      }) : null;
+      const page = tail
+        ? getSessionHistoryPage(filePath, null, tail, undefined, {
+            deferThinking,
+            deferToolResultImages,
+            tail: { limit: tail, before, revision: historyRevision },
+          })
+        : null;
       if (page) {
         header = readSessionHeader(filePath);
         assertSessionHistoryRevision(filePath, page.historyRevision);
@@ -485,15 +508,21 @@ export const sessionOps: SessionOps = {
           historyRevision: page.historyRevision,
         });
       }
-      const displayEntries = page ? null : await getSessionEntriesForDisplayAsync(filePath, {
-        skipToolResultImages: deferToolResultImages,
-      });
+      const displayEntries = page
+        ? null
+        : await getSessionEntriesForDisplayAsync(filePath, {
+            skipToolResultImages: deferToolResultImages,
+          });
       const leafId = page ? page.leafId : getLeafEntryId(displayEntries!);
-      const tree = projectTreeForResponse(buildSessionTree(page ? page.treeEntries : displayEntries!));
-      const context = page ? page.history.context : buildSessionContext(displayEntries!, leafId, {
-        deferThinking,
-        deferToolResultImages,
-      });
+      const tree = projectTreeForResponse(
+        buildSessionTree(page ? page.treeEntries : displayEntries!),
+      );
+      const context = page
+        ? page.history.context
+        : buildSessionContext(displayEntries!, leafId, {
+            deferThinking,
+            deferToolResultImages,
+          });
 
       let modified = header.timestamp ?? new Date().toISOString();
       try {
@@ -513,26 +542,45 @@ export const sessionOps: SessionOps = {
         created: header.timestamp,
         modified,
         messageCount: page ? page.totalMessages : context.messages.length,
-        firstMessage: page ? page.firstMessage : firstUser
-          ? (() => {
-              const c = (firstUser as { content: unknown }).content;
-              return typeof c === "string"
-                ? c
-                : (Array.isArray(c)
-                    ? ((
-                        c.find((b: { type: string }) => b.type === "text") as
-                          { text: string } | undefined
-                      )?.text ?? "")
-                    : "") || "(no messages)";
-            })()
-          : "(no messages)",
+        firstMessage: page
+          ? page.firstMessage
+          : firstUser
+            ? (() => {
+                const c = (firstUser as { content: unknown }).content;
+                return typeof c === "string"
+                  ? c
+                  : (Array.isArray(c)
+                      ? ((
+                          c.find((b: { type: string }) => b.type === "text") as
+                            { text: string } | undefined
+                        )?.text ?? "")
+                      : "") || "(no messages)";
+              })()
+            : "(no messages)",
         parentSessionId,
       };
       if (page) assertSessionHistoryRevision(filePath, page.historyRevision);
-      return ok({ filePath, info, leafId, tree, context, ...(page ? { historyHasMore: page.historyHasMore, historyRevision: page.historyRevision } : {}) });
+      return ok({
+        filePath,
+        info,
+        leafId,
+        tree,
+        context,
+        ...(page
+          ? {
+              historyHasMore: page.historyHasMore,
+              historyRevision: page.historyRevision,
+            }
+          : {}),
+      });
     } catch (error) {
       if (error instanceof SessionFileTooLargeError) return sessionTooLarge();
-      if (error instanceof SessionHistoryChangedError) return fail(409, "session_history_changed", "Session history changed; reload before paging");
+      if (error instanceof SessionHistoryChangedError)
+        return fail(
+          409,
+          "session_history_changed",
+          "Session history changed; reload before paging",
+        );
       throw error;
     }
   },
@@ -555,7 +603,11 @@ export const sessionOps: SessionOps = {
       if (header === null) return unreadableSession(filePath);
       if (boundary) return ok(getSessionContextBoundary(filePath));
       if (sync) {
-        const { history, leafId: selectedLeaf, tipId } = getSessionHistoryPage(filePath, sync.cursor, sync.limit, leafId, {
+        const {
+          history,
+          leafId: selectedLeaf,
+          tipId,
+        } = getSessionHistoryPage(filePath, sync.cursor, sync.limit, leafId, {
           deferThinking,
           deferToolResultImages,
           includePreCompaction,
@@ -615,7 +667,7 @@ export const sessionOps: SessionOps = {
   async readSubagentHistory(id) {
     const filePath = await resolveSessionPath(id);
     if (!filePath) return sessionNotFound();
-    return ok({ subagents: extractSubagentHistory(filePath) });
+    return ok(extractSubagentHistory(filePath));
   },
 
   async readSubagentTranscript(id, subagentId, mode, fromByte) {

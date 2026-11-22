@@ -43000,8 +43000,25 @@
               "type": "boolean"
             },
             "value": {
-              "description": "Subagent history extracted from the session's task results.",
+              "description": "Subagent history and reported costs extracted from the owning host's full session file, independent of selected branch or transcript page.",
               "properties": {
+                "costs": {
+                  "description": "Persisted usage from the same full-file snapshot as the roster; omitted by older daemons or when unavailable.",
+                  "properties": {
+                    "agent": {
+                      "description": "USD reported by assistant messages across all branches.",
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "subagents": {
+                      "description": "USD reported by deduplicated task results or progress across all branches.",
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": ["agent", "subagents"],
+                  "type": "object"
+                },
                 "subagents": {
                   "items": {
                     "description": "Retained subagent history entry; transcriptAvailable indicates whether its transcript can be read.",
@@ -194097,8 +194114,25 @@
       "type": "object"
     },
     "session_SubagentHistoryValue": {
-      "description": "Subagent history extracted from the session's task results.",
+      "description": "Subagent history and reported costs extracted from the owning host's full session file, independent of selected branch or transcript page.",
       "properties": {
+        "costs": {
+          "description": "Persisted usage from the same full-file snapshot as the roster; omitted by older daemons or when unavailable.",
+          "properties": {
+            "agent": {
+              "description": "USD reported by assistant messages across all branches.",
+              "minimum": 0,
+              "type": "number"
+            },
+            "subagents": {
+              "description": "USD reported by deduplicated task results or progress across all branches.",
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": ["agent", "subagents"],
+          "type": "object"
+        },
         "subagents": {
           "items": {
             "description": "Retained subagent history entry; transcriptAvailable indicates whether its transcript can be read.",

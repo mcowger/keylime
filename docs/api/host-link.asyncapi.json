@@ -1598,7 +1598,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Reply to readSubagentHistory; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read subagent history from task results.\nInputs: Supply session ID.\nInvariants: The session must exist; this is a snapshot.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after task results change or resolve session_not_found.",
+        "description": "Reply to readSubagentHistory; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read persisted subagent history and reported USD costs.\nInputs: Supply session ID.\nInvariants: Roster and costs use one full-file snapshot across all branches, independent of transcript paging; costs may be omitted by older daemons or when unavailable. The session must exist.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after assistant usage or task results change, or resolve session_not_found.",
         "name": "HostReply_readSubagentHistory",
         "payload": {
           "$ref": "#/components/schemas/HostReply_readSubagentHistory"
@@ -2690,7 +2690,7 @@
         "correlationId": {
           "location": "$message.payload#/id"
         },
-        "description": "Usage: Read subagent history from task results.\nInputs: Supply session ID.\nInvariants: The session must exist; this is a snapshot.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after task results change or resolve session_not_found.",
+        "description": "Usage: Read persisted subagent history and reported USD costs.\nInputs: Supply session ID.\nInvariants: Roster and costs use one full-file snapshot across all branches, independent of transcript paging; costs may be omitted by older daemons or when unavailable. The session must exist.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after assistant usage or task results change, or resolve session_not_found.",
         "name": "HostRequest_readSubagentHistory",
         "payload": {
           "$ref": "#/components/schemas/HostRequest_readSubagentHistory"
@@ -68553,8 +68553,25 @@
                         "type": "boolean"
                       },
                       "value": {
-                        "description": "Subagent history extracted from the session's task results.",
+                        "description": "Subagent history and reported costs extracted from the owning host's full session file, independent of selected branch or transcript page.",
                         "properties": {
+                          "costs": {
+                            "description": "Persisted usage from the same full-file snapshot as the roster; omitted by older daemons or when unavailable.",
+                            "properties": {
+                              "agent": {
+                                "description": "USD reported by assistant messages across all branches.",
+                                "minimum": 0,
+                                "type": "number"
+                              },
+                              "subagents": {
+                                "description": "USD reported by deduplicated task results or progress across all branches.",
+                                "minimum": 0,
+                                "type": "number"
+                              }
+                            },
+                            "required": ["agent", "subagents"],
+                            "type": "object"
+                          },
                           "subagents": {
                             "items": {
                               "description": "Retained subagent history entry; transcriptAvailable indicates whether its transcript can be read.",
@@ -68834,8 +68851,25 @@
                       "type": "boolean"
                     },
                     "value": {
-                      "description": "Subagent history extracted from the session's task results.",
+                      "description": "Subagent history and reported costs extracted from the owning host's full session file, independent of selected branch or transcript page.",
                       "properties": {
+                        "costs": {
+                          "description": "Persisted usage from the same full-file snapshot as the roster; omitted by older daemons or when unavailable.",
+                          "properties": {
+                            "agent": {
+                              "description": "USD reported by assistant messages across all branches.",
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "subagents": {
+                              "description": "USD reported by deduplicated task results or progress across all branches.",
+                              "minimum": 0,
+                              "type": "number"
+                            }
+                          },
+                          "required": ["agent", "subagents"],
+                          "type": "object"
+                        },
                         "subagents": {
                           "items": {
                             "description": "Retained subagent history entry; transcriptAvailable indicates whether its transcript can be read.",
@@ -69100,7 +69134,7 @@
             "type": "object"
           }
         ],
-        "description": "Reply to readSubagentHistory; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read subagent history from task results.\nInputs: Supply session ID.\nInvariants: The session must exist; this is a snapshot.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after task results change or resolve session_not_found.",
+        "description": "Reply to readSubagentHistory; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read persisted subagent history and reported USD costs.\nInputs: Supply session ID.\nInvariants: Roster and costs use one full-file snapshot across all branches, independent of transcript paging; costs may be omitted by older daemons or when unavailable. The session must exist.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after assistant usage or task results change, or resolve session_not_found.",
         "title": "HostReply_readSubagentHistory"
       },
       "HostReply_readSubagentTranscript": {
@@ -86408,7 +86442,7 @@
         "type": "object"
       },
       "HostRequest_readSubagentHistory": {
-        "description": "Usage: Read subagent history from task results.\nInputs: Supply session ID.\nInvariants: The session must exist; this is a snapshot.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after task results change or resolve session_not_found.",
+        "description": "Usage: Read persisted subagent history and reported USD costs.\nInputs: Supply session ID.\nInvariants: Roster and costs use one full-file snapshot across all branches, independent of transcript paging; costs may be omitted by older daemons or when unavailable. The session must exist.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after assistant usage or task results change, or resolve session_not_found.",
         "properties": {
           "args": {
             "additionalProperties": false,
@@ -90011,7 +90045,7 @@
       "channel": {
         "$ref": "#/channels/link"
       },
-      "description": "Usage: Read subagent history from task results.\nInputs: Supply session ID.\nInvariants: The session must exist; this is a snapshot.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after task results change or resolve session_not_found.",
+      "description": "Usage: Read persisted subagent history and reported USD costs.\nInputs: Supply session ID.\nInvariants: Roster and costs use one full-file snapshot across all branches, independent of transcript paging; costs may be omitted by older daemons or when unavailable. The session must exist.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after assistant usage or task results change, or resolve session_not_found.",
       "messages": [
         {
           "$ref": "#/channels/link/messages/HostRequest_readSubagentHistory"

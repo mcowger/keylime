@@ -19,6 +19,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - On iPhone, reopen Ship progress and logs from the workspace menu or **More actions → Ship progress**, even after cleanup removes the workspace or you cancel a new Ship form.
 - Finished iPhone Ship jobs keep their progress and logs without holding a live job subscription.
 - From `ios/`, run `bun run api:types` to generate TypeScript types from the web server's OpenAPI and AsyncAPI documents.
+- The context popup separates reported agent and subagent costs across the session file, including other branches. Costs update as history is saved and may exclude unreported or nested usage.
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal.
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts.
 - Agents can inspect their workspace's linked PR, link an existing PR, and start PR feedback monitoring without a browser or confirmation.
@@ -193,6 +194,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal
 - Finished iPhone Ship jobs retain progress and logs without keeping a live job subscription
+- The context popup separates reported agent and subagent costs across the session file, including other branches. Costs update as history is saved and may exclude unreported or nested usage
 
 ### Changed
 - Browser tabs show the active workspace name instead of its directory name.
