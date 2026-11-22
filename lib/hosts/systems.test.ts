@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import type { PlanningOperation } from "../api-contracts/planning";
 import { ChannelTable } from "./daemon-channels";
 import { planningOperation } from "./planning";
@@ -22,6 +23,7 @@ import {
   stopWorkspaceCreation,
   workspaceCreationSettings,
 } from "./workspace-creation";
+import { subscribeWorkspaceJobChanges } from "./workspace-job-changes";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", ["-C", cwd, ...args], {
@@ -72,6 +74,41 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
     },
     sessionsChanged: () => {},
   };
+  const jobInvalidations: Array<{ scope: string; statuses: string[] }> = [];
+  const unsubscribe = subscribeWorkspaceJobChanges((scope) => {
+    if (scope === "effort") {
+      const file = path.join(dir, "agent", "keylime", "systems.json");
+      if (fs.existsSync(file)) {
+        const state = JSON.parse(fs.readFileSync(file, "utf8")) as {
+          efforts: Array<{ status: string }>;
+        };
+        jobInvalidations.push({
+          scope,
+          statuses: state.efforts.map((e) => e.status),
+        });
+      }
+    } else if (scope === "setup") {
+      const jobs = path.join(
+        dir,
+        "agent",
+        "keylime",
+        "workspace-creation",
+        "jobs",
+      );
+      if (fs.existsSync(jobs)) {
+        const statuses = fs
+          .readdirSync(jobs)
+          .filter((name) => name.endsWith(".json"))
+          .map((name) => {
+            const job = JSON.parse(
+              fs.readFileSync(path.join(jobs, name), "utf8"),
+            ) as { status: string };
+            return job.status;
+          });
+        jobInvalidations.push({ scope, statuses });
+      }
+    }
+  });
   try {
     const repos = ["app", "worker"].map((name) => {
       const repo = path.join(dir, name);
@@ -183,6 +220,19 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       return effort;
     }
     let effort = await settled();
+    await delay(75);
+    assert.ok(
+      jobInvalidations.some(
+        ({ scope, statuses }) =>
+          scope === "effort" && statuses.includes("failed"),
+      ),
+    );
+    assert.ok(
+      jobInvalidations.some(
+        ({ scope, statuses }) =>
+          scope === "setup" && statuses.includes("failed"),
+      ),
+    );
     assert.equal(effort.status, "failed", JSON.stringify(effort));
     assert.deepEqual(
       effort.members.map(({ status }) => status),
@@ -566,6 +616,7 @@ test("Effort retry preserves completed commands, pinned commits, and path owners
       }
     }
   } finally {
+    unsubscribe();
     await Promise.allSettled([
       stopSystems(),
       stopWorkspaceCreation(),

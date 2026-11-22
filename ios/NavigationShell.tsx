@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActionSheetIOS,
   Pressable,
   SafeAreaView,
   StatusBar,
@@ -15,6 +16,7 @@ import {
 import { HomeScreen, type HomeSessionInfo } from "./HomeScreen";
 import { SessionActions } from "./ChatActions";
 import { archiveChat, renameChat } from "./chat-mutations";
+import type { ShipJob } from "../lib/workspace-ship-types";
 import { LiveChat, type ChatTarget } from "./LiveChat";
 import { ArchiveBrowser, SearchInput, useSidebarSearch } from "./SearchArchive";
 import { SystemFlows, type SystemFlow } from "./SystemFlows";
@@ -22,10 +24,13 @@ import { EffortDetails } from "./EffortDetails";
 import { RepoFlows, type RepoFlow } from "./RepoFlows";
 import { SidebarMenuIcon, WorkspacePanelIcon } from "./ShellIcons";
 import { SettingsScreen } from "./SettingsScreen";
+import { FinishShipDialog, ShipDialog } from "./ShipDialog";
+import type { BrowserChannel } from "./browser-link";
 import { Sidebar } from "./Sidebar";
 import { theme } from "./theme";
 import { useHomeInventory } from "./useHomeInventory";
 import { useKeylimeConnection } from "./useKeylimeConnection";
+import { useShipSidebar } from "./useShipSidebar";
 import { useNativePreferences } from "./useNativePreferences";
 import { WorkspacePanel } from "./WorkspacePanel";
 import {
@@ -81,6 +86,14 @@ export function NavigationShell({
     hosts,
     onUnauthorized,
   );
+  const sidebarShip = useShipSidebar(
+    origin,
+    link,
+    hosts,
+    sessions,
+    active,
+    onUnauthorized,
+  );
   const preferences = useNativePreferences();
   const [panel, setPanel] = useState(false);
   const [repoFlow, setRepoFlow] = useState<RepoFlow | null>(null);
@@ -88,6 +101,46 @@ export function NavigationShell({
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [systemFlow, setSystemFlow] = useState<SystemFlow | null>(null);
   const [choosingEffort, setChoosingEffort] = useState(false);
+  type ShipTarget = {
+    hostId: string;
+    projectPath: string;
+    path: string;
+    sessionId: string;
+    workspaceId: string;
+  };
+  const [visibleShipKey, setVisibleShipKey] = useState<string | null>(null);
+  const [ships, setShips] = useState<
+    Record<
+      string,
+      {
+        target: ShipTarget;
+        job?: Pick<ShipJob, "id" | "status">;
+      }
+    >
+  >({});
+  const shipGeneration = useRef(0);
+  const admittedShips = Object.entries(ships).filter(([, flow]) => flow.job);
+  const findAdmittedShip = (hostId: string, workspaceId: string) =>
+    admittedShips.find(
+      ([, { target }]) =>
+        target.hostId === hostId && target.workspaceId === workspaceId,
+    );
+
+  function openShip(target: ShipTarget) {
+    const admitted = findAdmittedShip(target.hostId, target.workspaceId);
+    if (admitted?.[1].job?.status === "running") {
+      setVisibleShipKey(admitted[0]);
+      return;
+    }
+    const key = String(++shipGeneration.current);
+    setShips((old) => ({ ...old, [key]: { target } }));
+    setVisibleShipKey(key);
+  }
+  const [finishTarget, setFinishTarget] = useState<{
+    hostId: string;
+    projectPath: string;
+    path: string;
+  } | null>(null);
   const [section, setSection] = useState<"home" | "workspace" | "settings">(
     "home",
   );
@@ -113,6 +166,35 @@ export function NavigationShell({
         muted: "#69635A",
         accent: "#B03E22",
       };
+  const connectedHostIds = JSON.stringify(
+    hosts
+      .filter(
+        (host) => host.status === "online" || host.status === "omp-missing",
+      )
+      .map((host) => host.id)
+      .sort(),
+  );
+  useEffect(() => {
+    const releases = (JSON.parse(connectedHostIds) as string[]).map((hostId) =>
+      link.subscribe({ kind: "workspace-jobs", hostId } as BrowserChannel, {
+        onOpen: () => void refreshWorkspace(hostId),
+        onEvent: (event) => {
+          if (
+            typeof event === "object" &&
+            event !== null &&
+            "type" in event &&
+            event.type === "workspace_jobs_changed" &&
+            "scope" in event &&
+            event.scope === "effort"
+          )
+            void refreshWorkspace(hostId);
+        },
+      }),
+    );
+    return () => {
+      for (const release of releases) release();
+    };
+  }, [connectedHostIds, link, refreshWorkspace]);
   const selected = location
     ? tabs.find(
         (tab) => tab.key === activeKey && sameWorkspace(tab.location, location),
@@ -528,6 +610,34 @@ export function NavigationShell({
                   >
                     <Text style={{ color: colors.text }}>Change server</Text>
                   </Pressable>
+                  {admittedShips.length > 0 && (
+                    <Pressable
+                      accessibilityRole="button"
+                      style={styles.menuItem}
+                      onPress={() => {
+                        setMenu(false);
+                        ActionSheetIOS.showActionSheetWithOptions(
+                          {
+                            title: "Ship progress",
+                            options: [
+                              ...admittedShips.map(
+                                ([, { target }]) =>
+                                  `${target.path.split("/").pop() ?? target.path} · ${hosts.find((host) => host.id === target.hostId)?.label || target.hostId}`,
+                              ),
+                              "Cancel",
+                            ],
+                            cancelButtonIndex: admittedShips.length,
+                          },
+                          (index) => {
+                            if (admittedShips[index])
+                              setVisibleShipKey(admittedShips[index][0]);
+                          },
+                        );
+                      }}
+                    >
+                      <Text style={{ color: colors.text }}>Ship progress</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
               {status !== "open" && (
@@ -586,9 +696,51 @@ export function NavigationShell({
             <WorkspacePanel
               origin={origin}
               link={link}
+              linkStatus={status}
               hostId={location.hostId}
               cwd={location.path}
               sessionId={target?.sessionId}
+              onShip={(() => {
+                if (
+                  !target?.sessionId ||
+                  location.effortId ||
+                  active.some(
+                    (item) =>
+                      (item.session.hostId ?? "local") === location.hostId &&
+                      item.session.id === target.sessionId &&
+                      item.status === "Running",
+                  )
+                )
+                  return undefined;
+                const project = byHost[
+                  location.hostId
+                ]?.hierarchy?.projects.find(
+                  (item) =>
+                    item.kind === "git" &&
+                    item.workspaces.some(
+                      (workspace) =>
+                        workspace.path === location.path &&
+                        !workspace.isDefault &&
+                        !workspace.unavailable &&
+                        sidebarShip.states[
+                          JSON.stringify([location.hostId, workspace.id])
+                        ] === "ship",
+                    ),
+                );
+                const workspace = project?.workspaces.find(
+                  (item) => item.path === location.path,
+                );
+                return project && workspace
+                  ? () =>
+                      openShip({
+                        hostId: location.hostId,
+                        projectPath: project.path,
+                        path: location.path,
+                        sessionId: target.sessionId!,
+                        workspaceId: workspace.id,
+                      })
+                  : undefined;
+              })()}
               onClose={() => setPanel(false)}
             />
           )}
@@ -643,6 +795,33 @@ export function NavigationShell({
         </View>
         {sidebar && (
           <Sidebar
+            shipStateByWorkspace={sidebarShip.states}
+            hasShipProgress={(hostId, workspace) =>
+              !!findAdmittedShip(hostId, workspace.id)
+            }
+            onViewShipProgress={(hostId, workspace) => {
+              const admitted = findAdmittedShip(hostId, workspace.id);
+              if (!admitted) return;
+              setSidebar(false);
+              setVisibleShipKey(admitted[0]);
+            }}
+            onShipWorkspace={(hostId, workspace) => {
+              const project = byHost[hostId]?.hierarchy?.projects.find(
+                (item) => item.id === workspace.projectId,
+              );
+              const session =
+                sidebarShip.latest[JSON.stringify([hostId, workspace.id])];
+              if (project && session) {
+                openSession(session);
+                openShip({
+                  hostId,
+                  projectPath: project.path,
+                  path: workspace.path,
+                  sessionId: session.id,
+                  workspaceId: workspace.id,
+                });
+              }
+            }}
             hosts={hosts}
             hierarchyByHost={hierarchyByHost}
             systemsByHost={systemsByHost}
@@ -797,6 +976,17 @@ export function NavigationShell({
                 project: repo?.name,
               });
             }}
+            onFinishShip={(hostId, workspace) => {
+              const project = byHost[hostId]?.hierarchy?.projects.find(
+                (item) => item.id === workspace.projectId,
+              );
+              if (project)
+                setFinishTarget({
+                  hostId,
+                  projectPath: project.path,
+                  path: workspace.path,
+                });
+            }}
             onEffort={(hostId, effort) => {
               if (effort.root)
                 goWorkspace({
@@ -811,6 +1001,8 @@ export function NavigationShell({
         {repoFlow && (
           <RepoFlows
             origin={origin}
+            link={link}
+            linkStatus={status}
             flow={repoFlow}
             onDismiss={() => setRepoFlow(null)}
             onChanged={() => void refreshWorkspace(repoFlow.host.id)}
@@ -843,6 +1035,87 @@ export function NavigationShell({
                 firstMessage: archive.firstMessage,
               })
             }
+          />
+        )}
+        {Object.entries(ships).map(([key, { target, job }]) => (
+          <ShipDialog
+            key={key}
+            visible={visibleShipKey === key}
+            origin={origin}
+            link={link}
+            target={target}
+            onJob={(next) =>
+              setShips((old) => {
+                const flow = old[key];
+                if (
+                  !flow ||
+                  (flow.job?.id === next.id && flow.job.status === next.status)
+                )
+                  return old;
+                const updated = {
+                  ...old,
+                  [key]: { ...flow, job: { id: next.id, status: next.status } },
+                };
+                if (!flow.job) {
+                  for (const [previousKey, previous] of Object.entries(old)) {
+                    if (
+                      previous.job &&
+                      previous.target.hostId === target.hostId &&
+                      previous.target.workspaceId === target.workspaceId
+                    )
+                      delete updated[previousKey];
+                  }
+                }
+                return updated;
+              })
+            }
+            onClose={() => {
+              setVisibleShipKey(null);
+              if (!job)
+                setShips((old) => {
+                  if (old[key]?.job || !old[key]) return old;
+                  const next = { ...old };
+                  delete next[key];
+                  return next;
+                });
+            }}
+            onChanged={(removed) => {
+              void refreshWorkspace(target.hostId);
+              if (
+                removed &&
+                location?.hostId === target.hostId &&
+                location.path === target.path &&
+                byHost[target.hostId]?.hierarchy?.projects.some((project) =>
+                  project.workspaces.some(
+                    (workspace) => workspace.id === target.workspaceId,
+                  ),
+                )
+              ) {
+                setPanel(false);
+                setLocation(null);
+                setSection("home");
+              }
+            }}
+          />
+        ))}
+        {finishTarget && (
+          <FinishShipDialog
+            origin={origin}
+            link={link}
+            target={finishTarget}
+            onClose={() => setFinishTarget(null)}
+            onChanged={(removed) => {
+              void refreshWorkspace(finishTarget.hostId);
+              if (
+                removed &&
+                location?.hostId === finishTarget.hostId &&
+                location.path === finishTarget.path
+              ) {
+                setPanel(false);
+                setLocation(null);
+                setSection("home");
+              }
+            }}
           />
         )}
         {systemFlow && (

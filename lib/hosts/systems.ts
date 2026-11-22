@@ -43,6 +43,7 @@ import {
   type WorkspaceSetupPlan,
 } from "./workspace-creation";
 import { copyPaseoIncludes } from "./workspace-paseo";
+import { publishWorkspaceJobChange } from "./workspace-job-changes";
 
 export type SystemsRuntime = {
   terminals: TerminalManager;
@@ -123,6 +124,7 @@ function checkpoint(effort: Effort) {
   if (index < 0) state.efforts.push(effort);
   else state.efforts[index] = effort;
   save(state);
+  publishWorkspaceJobChange("effort");
 }
 function lstat(value: string) {
   try {
@@ -992,7 +994,10 @@ function recover(state: State) {
         "Daemon restarted during cleanup. Review what remains before resuming.";
     }
   }
-  if (changed) save(state);
+  if (changed) {
+    save(state);
+    publishWorkspaceJobChange("effort");
+  }
 }
 async function dirtyPaths(cwd: string) {
   const entries = (

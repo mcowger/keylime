@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import ExpoModulesCore
 import UIKit
 import AVFoundation
@@ -144,6 +145,11 @@ private struct Origin: Hashable {
     self.host = host
     self.port = port
   }
+
+  var keychainAccount: String {
+    // Length-prefixed components avoid ambiguities with IPv6 hosts and ports.
+    "\(scheme.utf8.count):\(scheme)\(host.utf8.count):\(host)\(port)"
+  }
 }
 
 private struct StoredCookie {
@@ -151,17 +157,82 @@ private struct StoredCookie {
   let expires: Date?
 }
 
+private struct PersistedCookie: Codable {
+  let value: String
+  let path: String
+  let secure: Bool
+  let expires: Date
+}
+
+private enum SessionKeychainError: Error {
+  case unavailable
+}
+
+private enum SessionKeychain {
+  private static let service = "ai.keylime.network.session.v1"
+
+  private static func query(_ origin: Origin) -> [String: Any] {
+    [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: origin.keychainAccount,
+      kSecAttrSynchronizable as String: false
+    ]
+  }
+
+  static func load(_ origin: Origin) throws -> [PersistedCookie] {
+    var attributes = query(origin)
+    attributes[kSecReturnData as String] = true
+    attributes[kSecMatchLimit as String] = kSecMatchLimitOne
+    var result: CFTypeRef?
+    let status = SecItemCopyMatching(attributes as CFDictionary, &result)
+    if status == errSecItemNotFound { return [] }
+    guard status == errSecSuccess, let data = result as? Data else { throw SessionKeychainError.unavailable }
+    guard let cookies = try? JSONDecoder().decode([PersistedCookie].self, from: data) else {
+      try remove(origin)
+      return []
+    }
+    return cookies
+  }
+
+  static func save(_ cookies: [PersistedCookie], origin: Origin) throws {
+    guard !cookies.isEmpty else { try remove(origin); return }
+    let data = try JSONEncoder().encode(cookies)
+    let base = query(origin)
+    let status = SecItemUpdate(base as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+    if status == errSecItemNotFound {
+      var attributes = base
+      attributes[kSecValueData as String] = data
+      attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+      guard SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess else { throw SessionKeychainError.unavailable }
+    } else if status != errSecSuccess {
+      throw SessionKeychainError.unavailable
+    }
+  }
+
+  static func remove(_ origin: Origin) throws {
+    let status = SecItemDelete(query(origin) as CFDictionary)
+    guard status == errSecSuccess || status == errSecItemNotFound else { throw SessionKeychainError.unavailable }
+  }
+}
+
 private final class SocketState {
   let id: String
   let task: URLSessionWebSocketTask
+  let origin: Origin
+  let httpURL: URL
+  let sentCookie: String?
   var open = false
   var closing = false
   var sending = false
   var pending: [(String, Promise)] = []
 
-  init(id: String, task: URLSessionWebSocketTask) {
+  init(id: String, task: URLSessionWebSocketTask, origin: Origin, httpURL: URL, sentCookie: String?) {
     self.id = id
     self.task = task
+    self.origin = origin
+    self.httpURL = httpURL
+    self.sentCookie = sentCookie
   }
 }
 
@@ -211,6 +282,7 @@ private final class MediaState {
 private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URLSessionDataDelegate {
   private let emit: ([String: Any?]) -> Void
   private var cookies: [Origin: [String: StoredCookie]] = [:]
+  private var loadedCookieOrigins: Set<Origin> = []
   private var sockets: [String: SocketState] = [:]
   private var socketTasks: [Int: SocketState] = [:]
   private var requests: [String: URLSessionDataTask] = [:]
@@ -275,7 +347,12 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
     var request = URLRequest(url: url)
     request.httpShouldHandleCookies = false
     request.httpMethod = "GET"
-    if let cookie = cookieHeader(for: url, origin: baseOrigin) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+    do {
+      if let cookie = try cookieHeader(for: url, origin: baseOrigin) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+    } catch {
+      fail(promise, "Session Keychain is unavailable")
+      return
+    }
     let task = session.dataTask(with: request)
     searchTasks[task.taskIdentifier] = SearchState(id: id, origin: baseOrigin, emit: emit)
     requests[id] = task
@@ -294,13 +371,13 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
       return
     }
     do {
-      try FileManager.default.createDirectory(at: mediaDirectory, withIntermediateDirectories: true)
-      guard FileManager.default.createFile(atPath: file.path, contents: nil) else { throw AttachmentError.invalidFile }
-      let handle = try FileHandle(forWritingTo: file)
       var request = URLRequest(url: url)
       request.httpShouldHandleCookies = false
       request.httpMethod = "GET"
-      if let cookie = cookieHeader(for: url, origin: baseOrigin) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+      if let cookie = try cookieHeader(for: url, origin: baseOrigin) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+      try FileManager.default.createDirectory(at: mediaDirectory, withIntermediateDirectories: true)
+      guard FileManager.default.createFile(atPath: file.path, contents: nil) else { throw AttachmentError.invalidFile }
+      let handle = try FileHandle(forWritingTo: file)
       let task = session.dataTask(with: request)
       mediaTasks[task.taskIdentifier] = MediaState(id: id, origin: baseOrigin, url: file, handle: handle, promise: promise)
       requests[id] = task
@@ -341,9 +418,13 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
     request.httpMethod = method
     request.httpBody = data
     for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
-    if let cookie = cookieHeader(for: url, origin: baseOrigin) {
-      request.setValue(cookie, forHTTPHeaderField: "Cookie")
+    do {
+      if let cookie = try cookieHeader(for: url, origin: baseOrigin) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+    } catch {
+      fail(promise, "Session Keychain is unavailable")
+      return
     }
+    let sentCookie = request.value(forHTTPHeaderField: "Cookie")
     let task = session.dataTask(with: request) { [weak self] data, response, error in
       guard let self = self else { return }
       if let id = id { self.requests[id] = nil }
@@ -352,7 +433,12 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
         self.fail(promise, "Request failed")
         return
       }
-      self.storeCookies(response, origin: baseOrigin)
+      do {
+        try self.processResponse(response, origin: baseOrigin, sentCookie: sentCookie)
+      } catch {
+        self.fail(promise, "Session Keychain is unavailable")
+        return
+      }
       var responseHeaders: [String: String] = [:]
       for (key, value) in response.allHeaderFields {
         let name = String(describing: key).lowercased()
@@ -372,12 +458,41 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
     task.resume()
   }
 
-  private func storeCookies(_ response: HTTPURLResponse, origin: Origin) {
+  private func loadCookies(origin: Origin) throws {
+    guard !loadedCookieOrigins.contains(origin) else { return }
+    let saved = try SessionKeychain.load(origin)
+    var jar: [String: StoredCookie] = [:]
+    for item in saved where item.expires > Date() {
+      var properties: [HTTPCookiePropertyKey: Any] = [
+        .name: "keylime_session", .value: item.value, .domain: origin.host,
+        .path: item.path, .expires: item.expires
+      ]
+      if item.secure { properties[.secure] = "TRUE" }
+      guard let cookie = HTTPCookie(properties: properties) else { continue }
+      jar[cookie.name + "\n" + cookie.path] = StoredCookie(cookie: cookie, expires: item.expires)
+    }
+    if jar.count != saved.count { try persistCookies(jar, origin: origin) }
+    cookies[origin] = jar
+    loadedCookieOrigins.insert(origin)
+  }
+
+  private func persistCookies(_ jar: [String: StoredCookie], origin: Origin) throws {
+    let saved = jar.values.compactMap { stored -> PersistedCookie? in
+      guard let expiry = stored.expires else { return nil }
+      return PersistedCookie(value: stored.cookie.value, path: stored.cookie.path, secure: stored.cookie.isSecure, expires: expiry)
+    }
+    try SessionKeychain.save(saved, origin: origin)
+  }
+
+  private func storeCookies(_ response: HTTPURLResponse, origin: Origin) throws {
     guard let url = response.url else { return }
+    try loadCookies(origin: origin)
     var fields: [String: String] = [:]
     for (key, value) in response.allHeaderFields {
       fields[String(describing: key)] = String(describing: value)
     }
+    var jar = cookies[origin] ?? [:]
+    var changed = false
     for cookie in HTTPCookie.cookies(withResponseHeaderFields: fields, for: url) where cookie.name == "keylime_session" {
       let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
       guard origin.host == domain || origin.host.hasSuffix("." + domain) else { continue }
@@ -387,18 +502,28 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
         expiry = Date().addingTimeInterval(seconds)
       }
       if let expiry = expiry, expiry <= Date() {
-        cookies[origin]?[key] = nil
+        jar[key] = nil
       } else {
-        cookies[origin, default: [:]][key] = StoredCookie(cookie: cookie, expires: expiry)
+        jar[key] = StoredCookie(cookie: cookie, expires: expiry)
       }
+      changed = true
+    }
+    if changed {
+      try persistCookies(jar, origin: origin)
+      cookies[origin] = jar
     }
   }
 
-  private func cookieHeader(for url: URL, origin: Origin) -> String? {
-    guard var jar = cookies[origin] else { return nil }
+  private func cookieHeader(for url: URL, origin: Origin) throws -> String? {
+    try loadCookies(origin: origin)
+    var jar = cookies[origin] ?? [:]
     let now = Date()
-    jar = jar.filter { $0.value.expires.map { $0 > now } ?? true }
-    cookies[origin] = jar
+    let valid = jar.filter { $0.value.expires.map { $0 > now } ?? true }
+    if valid.count != jar.count {
+      try persistCookies(valid, origin: origin)
+      jar = valid
+      cookies[origin] = jar
+    }
     let path = url.path.isEmpty ? "/" : url.path
     let matches = jar.values.filter { stored in
       let cookie = stored.cookie
@@ -408,6 +533,23 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
     }.sorted { $0.cookie.path.count > $1.cookie.path.count }
     guard !matches.isEmpty else { return nil }
     return matches.map { "\($0.cookie.name)=\($0.cookie.value)" }.joined(separator: "; ")
+  }
+
+  private func rejectCookies(status: Int, url: URL, origin: Origin, sentCookie: String?) throws {
+    // Login's 401 rejects the password, not necessarily the existing session.
+    guard status == 401, url.path != "/api/web-auth/session", let sentCookie = sentCookie,
+          try cookieHeader(for: url, origin: origin) == sentCookie else { return }
+    try SessionKeychain.remove(origin)
+    cookies[origin] = [:]
+  }
+
+  private func processResponse(_ response: HTTPURLResponse, origin: Origin, sentCookie: String?) throws {
+    guard let url = response.url else { return }
+    // A late rejection must not erase a session established by a newer login.
+    if response.statusCode == 401, url.path != "/api/web-auth/session",
+       try cookieHeader(for: url, origin: origin) != sentCookie { return }
+    try storeCookies(response, origin: origin)
+    try rejectCookies(status: response.statusCode, url: url, origin: origin, sentCookie: sentCookie)
   }
 
   func connectSocket(id: String, url: String, promise: Promise) {
@@ -426,11 +568,14 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
     }
     var request = URLRequest(url: socketURL)
     request.httpShouldHandleCookies = false
-    if let cookie = cookieHeader(for: httpURL, origin: origin) {
-      request.setValue(cookie, forHTTPHeaderField: "Cookie")
+    do {
+      if let cookie = try cookieHeader(for: httpURL, origin: origin) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+    } catch {
+      fail(promise, "Session Keychain is unavailable")
+      return
     }
     let task = session.webSocketTask(with: request)
-    let socket = SocketState(id: id, task: task)
+    let socket = SocketState(id: id, task: task, origin: origin, httpURL: httpURL, sentCookie: request.value(forHTTPHeaderField: "Cookie"))
     sockets[id] = socket
     socketTasks[task.taskIdentifier] = socket
     task.resume()
@@ -548,21 +693,36 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
         completionHandler(.cancel)
         return
       }
-      storeCookies(http, origin: search.origin)
+      do {
+        try processResponse(http, origin: search.origin, sentCookie: dataTask.originalRequest?.value(forHTTPHeaderField: "Cookie"))
+      } catch {
+        completionHandler(.cancel)
+        return
+      }
       search.accepted = true
       search.emit(["id": search.id, "type": "response", "status": http.statusCode])
       completionHandler(.allow)
       return
     }
     guard let media = mediaTasks[dataTask.taskIdentifier] else { completionHandler(.allow); return }
-    guard let http = response as? HTTPURLResponse, let url = http.url, Origin(url) == media.origin,
-          http.statusCode == 200, http.mimeType?.lowercased().hasPrefix("image/") == true,
+    guard let http = response as? HTTPURLResponse, let url = http.url, Origin(url) == media.origin else {
+      media.error = "Media request was refused or the image is too large"
+      completionHandler(.cancel)
+      return
+    }
+    do {
+      try processResponse(http, origin: media.origin, sentCookie: dataTask.originalRequest?.value(forHTTPHeaderField: "Cookie"))
+    } catch {
+      media.error = "Session Keychain is unavailable"
+      completionHandler(.cancel)
+      return
+    }
+    guard http.statusCode == 200, http.mimeType?.lowercased().hasPrefix("image/") == true,
           response.expectedContentLength <= Int64(mediaByteLimit) else {
       media.error = "Media request was refused or the image is too large"
       completionHandler(.cancel)
       return
     }
-    storeCookies(http, origin: media.origin)
     media.accepted = true
     completionHandler(.allow)
   }
@@ -606,9 +766,18 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
     receive(socket)
     sendNext(socket)
   }
+  private func handleSocketRejection(_ socket: SocketState) {
+    guard let response = socket.task.response as? HTTPURLResponse else { return }
+    do {
+      try rejectCookies(status: response.statusCode, url: socket.httpURL, origin: socket.origin, sentCookie: socket.sentCookie)
+    } catch {
+      emit(["id": socket.id, "type": "error"])
+    }
+  }
 
   func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
     guard let socket = socketTasks[webSocketTask.taskIdentifier] else { return }
+    handleSocketRejection(socket)
     finish(socket, code: closeCode.rawValue, reason: reason.flatMap { String(data: $0, encoding: .utf8) } ?? "")
   }
 
@@ -637,6 +806,7 @@ private final class KeylimeTransport: NSObject, URLSessionWebSocketDelegate, URL
       return
     }
     guard let socket = socketTasks[task.taskIdentifier] else { return }
+    handleSocketRejection(socket)
     if error != nil { emit(["id": socket.id, "type": "error"]) }
     finish(socket, code: 1006, reason: "")
   }

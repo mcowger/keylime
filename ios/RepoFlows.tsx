@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AppState,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -11,6 +10,8 @@ import {
   View,
   useColorScheme,
 } from "react-native";
+import { isRecord } from "../lib/type-guards";
+import type { BrowserLink, BrowserLinkStatus } from "./browser-link";
 import type { operations } from "./generated/web-http";
 import { normalizeOrigin, requestJson } from "./keylime-http";
 import { nativeRequest } from "./native-network";
@@ -39,6 +40,8 @@ export type RepoFlow =
   | { kind: "workspace"; host: Host; repo: SidebarRepo };
 export interface RepoFlowsProps {
   origin: string;
+  link: BrowserLink;
+  linkStatus: BrowserLinkStatus;
   flow: RepoFlow;
   onDismiss: () => void;
   onChanged: () => void;
@@ -109,7 +112,16 @@ export function RepoFlows(props: RepoFlowsProps) {
   return props.flow.kind === "addRepo" ? (
     <AddRepo {...props} host={props.flow.host} />
   ) : (
-    <WorkspaceFlow {...props} host={props.flow.host} repo={props.flow.repo} />
+    <WorkspaceFlow
+      key={JSON.stringify([
+        props.origin,
+        props.flow.host.id,
+        props.flow.repo.path,
+      ])}
+      {...props}
+      host={props.flow.host}
+      repo={props.flow.repo}
+    />
   );
 }
 
@@ -551,6 +563,8 @@ function AddRepo({
 
 function WorkspaceFlow({
   origin,
+  link,
+  linkStatus,
   host,
   repo,
   onDismiss,
@@ -573,34 +587,72 @@ function WorkspaceFlow({
   > | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
   const notified = useRef("");
+  const completed = useRef(false);
+  const statusRequest = useRef(0);
+  const statusReading = useRef(false);
+  const statusAgain = useRef(false);
+  const admitting = useRef(false);
+  const callbacks = useRef({ onChanged, onWorkspaceCreated });
+  callbacks.current = { onChanged, onWorkspaceCreated };
   const alive = useRef(true);
+  const applyJob = useCallback(
+    (result: Job) => {
+      setJob(result);
+      setError("");
+      if (result.workspaceId && notified.current !== result.workspaceId) {
+        notified.current = result.workspaceId;
+        callbacks.current.onChanged();
+      }
+      if (result.status === "running") return;
+      completed.current = true;
+      callbacks.current.onChanged();
+      if (result.status === "complete" && result.workspacePath)
+        callbacks.current.onWorkspaceCreated?.(host.id, result.workspacePath);
+    },
+    [host.id],
+  );
   const status = useCallback(
     async (id: string) => {
-      try {
-        const result = await requestJson<Worktrees>(
-          origin,
-          `/api/worktrees?${query({ hostId: host.id, action: "status", id })}`,
-        );
-        if (!("input" in result && "status" in result))
-          throw new Error("Invalid workspace job response");
-        if (!alive.current) return;
-        setJob(result);
-        setError("");
-        if (result.workspaceId && notified.current !== result.workspaceId) {
-          notified.current = result.workspaceId;
-          onChanged();
-        }
-        if (result.status !== "running") {
-          onChanged();
-          if (result.status === "complete" && result.workspacePath)
-            onWorkspaceCreated?.(host.id, result.workspacePath);
-        }
-      } catch (e) {
-        if (alive.current)
-          setError(`Couldn't check workspace setup: ${message(e)}`);
+      if (completed.current || admitting.current) return;
+      if (statusReading.current) {
+        statusAgain.current = true;
+        return;
       }
+      statusReading.current = true;
+      do {
+        statusAgain.current = false;
+        const request = ++statusRequest.current;
+        try {
+          const result = await requestJson<Worktrees>(
+            origin,
+            `/api/worktrees?${query({ hostId: host.id, action: "status", id })}`,
+          );
+          if (!("input" in result && "status" in result))
+            throw new Error("Invalid workspace job response");
+          if (
+            !alive.current ||
+            request !== statusRequest.current ||
+            completed.current
+          )
+            continue;
+          applyJob(result);
+        } catch (e) {
+          if (
+            alive.current &&
+            !completed.current &&
+            request === statusRequest.current
+          )
+            setError(`Couldn't check workspace setup: ${message(e)}`);
+        }
+      } while (
+        alive.current &&
+        statusAgain.current &&
+        !completed.current &&
+        !admitting.current
+      );
+      statusReading.current = false;
     },
-    [origin, host.id, onChanged, onWorkspaceCreated],
+    [origin, host.id, applyJob],
   );
   useEffect(() => {
     alive.current = true;
@@ -624,14 +676,28 @@ function WorkspaceFlow({
     };
   }, [origin, host.id, repo.path, repo.kind]);
   useEffect(() => {
-    if (!jobId || (job && job.status !== "running")) return;
-    const listener = AppState.addEventListener("change", (state) => {
-      if (state === "active") void status(jobId);
-    });
-    return () => listener.remove();
-  }, [jobId, job?.status, status]);
+    if (!jobId) return;
+    void status(jobId);
+    return link.subscribe(
+      { kind: "workspace-jobs", hostId: host.id },
+      {
+        onOpen: () => void status(jobId),
+        onEvent: (event) => {
+          if (
+            isRecord(event) &&
+            event.type === "workspace_jobs_changed" &&
+            event.scope === "setup"
+          )
+            void status(jobId);
+        },
+      },
+    );
+  }, [host.id, jobId, link, status]);
+  useEffect(() => {
+    if (jobId && linkStatus === "open") void status(jobId);
+  }, [jobId, linkStatus, status]);
   async function create(retry = false) {
-    if (busy || !branches || (jobId && !retry)) return;
+    if (admitting.current || busy || !branches || (jobId && !retry)) return;
     const normalized = mode === "local" ? branch : cleanBranch(branch);
     if (
       !retry &&
@@ -656,6 +722,9 @@ function WorkspaceFlow({
             },
           };
     creation.current = body;
+    admitting.current = true;
+    completed.current = false;
+    statusRequest.current++;
     setJobId(id);
     setBusy(true);
     setError("");
@@ -665,24 +734,21 @@ function WorkspaceFlow({
         "/api/worktrees",
         post(body),
       );
+      if (!alive.current) return;
       if (!("input" in result && "status" in result))
         throw new Error("Invalid workspace job response");
-      setJob(result);
-      if (result.workspaceId) {
-        notified.current = result.workspaceId;
-        onChanged();
-      }
-      if (result.status !== "running") {
-        onChanged();
-        if (result.status === "complete" && result.workspacePath)
-          onWorkspaceCreated?.(host.id, result.workspacePath);
-      } else void status(id);
+      applyJob(result);
     } catch (e) {
-      setError(
-        `Creation may have started. Check its status or retry the same request. ${message(e)}`,
-      );
+      if (alive.current && !completed.current)
+        setError(
+          `Creation may have started. Check its status or retry the same request. ${message(e)}`,
+        );
     } finally {
-      setBusy(false);
+      admitting.current = false;
+      if (alive.current) {
+        setBusy(false);
+        if (!completed.current) void status(id);
+      }
     }
   }
   async function discover() {
@@ -876,8 +942,7 @@ function WorkspaceFlow({
                 {jobId && (!job || job.status === "running") ? (
                   <>
                     <Note>
-                      Setup runs on the host. Check status to see its latest
-                      progress.
+                      Setup runs on the host. Progress updates automatically.
                     </Note>
                     <Button
                       title="Check setup status"

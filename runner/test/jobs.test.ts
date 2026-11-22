@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalProjectDir, daemonClient, isolateDaemonForSmokeTest } from "@oh-my-pi/pi-coding-agent/daemon/client";
+import { unitLogDir } from "@oh-my-pi/pi-coding-agent/daemon/paths";
 import { projectScope } from "@oh-my-pi/pi-coding-agent/daemon/protocol";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
@@ -13,6 +14,7 @@ import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-sessi
 import type { JobSnapshot, JobDetail } from "../../lib/jobs-types";
 import { jobsCommands } from "../src/commands/jobs";
 import type { CommandContext } from "../src/commands/types";
+import { subscribeJobEvents } from "../src/job-events";
 
 let restoreDaemon: () => Promise<void>;
 beforeEach(async () => {
@@ -322,6 +324,86 @@ it("rejects stale managed identities after a preferred id is reused", async () =
   } finally {
     manager.cancelAll();
     await manager.waitForAll();
+  }
+});
+
+it("invalidates on job lifecycle, progress, and service output without leaking content", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "keylime-job-events-"));
+  const manager = new AsyncJobManager({});
+  const session = {
+    asyncJobManager: manager,
+    getAgentId: () => "root",
+    sessionManager: { getCwd: () => cwd },
+  } as unknown as AgentSession;
+  const ctx = { session, send() {} } satisfies CommandContext;
+  let changed = Promise.withResolvers<void>();
+  const payloads: unknown[][] = [];
+  const unsubscribe = subscribeJobEvents(session, (...args: unknown[]) => {
+    payloads.push(args);
+    changed.resolve();
+  });
+  const completion = Promise.withResolvers<string>();
+  const progress = Promise.withResolvers<(text: string) => Promise<void>>();
+  try {
+    manager.register(
+      "task",
+      "private label",
+      async ({ reportProgress }) => {
+        progress.resolve(reportProgress);
+        return completion.promise;
+      },
+      { ownerId: "root" },
+    );
+    await changed.promise;
+    changed = Promise.withResolvers<void>();
+    await (
+      await progress.promise
+    )("private output");
+    await changed.promise;
+    changed = Promise.withResolvers<void>();
+    completion.resolve("finished");
+    await manager.waitForAll();
+    await changed.promise;
+
+    await jobsCommands.get_jobs(ctx, {});
+    const client = await daemonClient();
+    const scope = projectScope(await canonicalProjectDir(cwd));
+    const service = await client.request({
+      op: "open",
+      kind: "proc",
+      scope,
+      key: "service",
+      proc: {
+        application: "/bin/sh",
+        args: ["-c", "sleep 60"],
+        env: {},
+        cwd,
+        pty: false,
+      },
+      awaitReady: true,
+    });
+    await jobsCommands.get_jobs(ctx, {});
+    changed = Promise.withResolvers<void>();
+    await appendFile(
+      join(unitLogDir(service.unit.id), "output.log"),
+      "private service output\n",
+    );
+    await changed.promise;
+    changed = Promise.withResolvers<void>();
+    await client.request({
+      op: "stop",
+      unit: service.unit.id,
+      timeoutMs: 5000,
+    });
+    await changed.promise;
+    expect(payloads.every((args) => args.length === 0)).toBe(true);
+    unsubscribe();
+  } finally {
+    unsubscribe();
+    completion.resolve("finished");
+    manager.cancelAll();
+    await manager.waitForAll();
+    await rm(cwd, { recursive: true, force: true });
   }
 });
 

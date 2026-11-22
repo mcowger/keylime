@@ -7,6 +7,7 @@ import { NotificationEventSchema } from "./notification-models";
 import { TerminalEventSchema, WorkspaceFileEventSchema } from "./host-schemas";
 import { AgentEventSchema } from "./runner-messages";
 import { HostSnapshotSchema, MuxControlFrameSchema } from "./http-system";
+import { WorkspaceJobsChangedSchema } from "./workspace-job-events";
 
 export const RunningRpcSessionSchema = Type.Object(
   {
@@ -47,6 +48,7 @@ export const StreamPayloadSchema = Type.Union(
     }),
     TerminalEventSchema,
     WorkspaceFileEventSchema,
+    WorkspaceJobsChangedSchema,
     Type.Object({
       type: Type.Literal("connected"),
       filePath: Type.String(),

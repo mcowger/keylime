@@ -6,6 +6,7 @@ import {
 import { lstatSync, realpathSync, mkdirSync, watch } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import type { SpawnResult } from "./host";
+import { subscribeWorkspaceJobChanges } from "./workspace-job-changes";
 import { SessionPtyManager } from "./session-pty";
 import { Value } from "@sinclair/typebox/value";
 import { SystemsRequestSchema } from "../api-contracts/systems";
@@ -646,6 +647,14 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
     offerShipDigest,
     () => !drained && !stopped,
   );
+  const detachWorkspaceJobs = subscribeWorkspaceJobChanges((scope) => {
+    const link = controller;
+    if (!stopped && link?.isUp())
+      link.queue(
+        { type: "workspace_jobs_changed", scope },
+        `workspace-jobs:${scope}`,
+      );
+  });
 
   function offerShipDigest(owner: string, digest: ShipPrDigest): void {
     const link = shipOwners.get(owner);
@@ -1459,6 +1468,7 @@ export function runHostDaemon(options: DaemonOptions): HostDaemon {
   function shutdown(code: number): Promise<void> {
     if (stopping) return stopping;
     stopped = true;
+    detachWorkspaceJobs();
     watcher.close();
     clearTimeout(reloadTimer);
     clearInterval(sweepTimer);

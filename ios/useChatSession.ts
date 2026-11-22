@@ -137,17 +137,21 @@ export function useChatSession({
   sessionId,
   link,
   onUnauthorized,
+  advisor = false,
 }: {
   origin: string;
   hostId: string;
   sessionId: string | null;
   link: BrowserLink;
+  advisor?: boolean;
   onUnauthorized?: () => void;
 }) {
   const key = JSON.stringify([origin, hostId, sessionId]);
   const keyRef = useRef(key);
   keyRef.current = key;
   const unauthorizedRef = useRef(onUnauthorized);
+  const advisorRef = useRef(advisor);
+  advisorRef.current = advisor;
   unauthorizedRef.current = onUnauthorized;
   const [rendered, setRendered] = useState<{
     key: string;
@@ -749,7 +753,12 @@ export function useChatSession({
     }
     async function issue(command: BrowserCommand): Promise<BrowserReply> {
       if (!current()) throw new Error("Session changed");
-      const reply = await link.command(sessionId!, hostId, command);
+      const reply = await link.command(
+        sessionId!,
+        hostId,
+        command,
+        advisorRef.current,
+      );
       if (!current()) throw new Error("Session changed");
       if (!("success" in reply.data) || !reply.data.success) {
         const failure = reply.data as { error?: string; delivery?: string };

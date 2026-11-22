@@ -11,6 +11,7 @@ import {
   SHIP_DIGEST_ID_RE,
   ShipPrDigestFrame,
 } from "../api-contracts/host-schemas";
+import { DaemonWorkspaceJobScopeSchema } from "../api-contracts/workspace-job-events";
 export type { ShipPrDigest } from "../api-contracts/host-schemas";
 import { CREATION_ID_RE } from "./creation-identity";
 export { CREATION_ID_RE } from "./creation-identity";
@@ -27,8 +28,8 @@ import type {
 } from "../api-contracts/host-control-models";
 import { isWorkspaceOp, WORKSPACE_OP_PARAMS } from "../workspace-types";
 
-/** New daemons speak v14; the controller still accepts v13 for rolling upgrades. */
-export const LINK_PROTOCOL_VERSION = 14;
+/** v15 adds daemon workspace-job invalidations. */
+export const LINK_PROTOCOL_VERSION = 15;
 export const MIN_LINK_PROTOCOL_VERSION = 13;
 // CREATION_ID_RE is shared with the host-link schema.
 
@@ -344,6 +345,7 @@ const UP_TYPES: readonly string[] = [
   "exit",
   "resync",
   "sessions_changed",
+  "workspace_jobs_changed",
   "ship_pr_digest",
   "channels_changed",
   "stats",
@@ -686,6 +688,12 @@ export function decodeUp(line: string): UpMessage | UnknownMessage {
       return { type: "resync", seq: seqNum(o, "seq"), ch: str(o, "ch") };
     case "sessions_changed":
       return { type: "sessions_changed", seq: seqNum(o, "seq") };
+    case "workspace_jobs_changed": {
+      const scope = o.scope;
+      if (!Value.Check(DaemonWorkspaceJobScopeSchema, scope))
+        fail("invalid workspace job scope");
+      return { type: "workspace_jobs_changed", seq: seqNum(o, "seq"), scope };
+    }
     case "ship_pr_digest":
       if (
         !Value.Check(ShipPrDigestFrame, o) ||

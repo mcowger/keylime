@@ -97,6 +97,9 @@
         "HostLinkWorkspaceFile": {
           "$ref": "#/components/messages/HostLinkWorkspaceFile"
         },
+        "HostLinkWorkspaceJobsChanged": {
+          "$ref": "#/components/messages/HostLinkWorkspaceJobsChanged"
+        },
         "HostReply_activateHostArtifact": {
           "$ref": "#/components/messages/HostReply_activateHostArtifact"
         },
@@ -908,6 +911,15 @@
           "$ref": "#/components/schemas/HostLinkWorkspaceFile"
         },
         "title": "HostLinkWorkspaceFile"
+      },
+      "HostLinkWorkspaceJobsChanged": {
+        "contentType": "application/json",
+        "description": "Invalidates a persisted setup, Effort or Ship job snapshot on the sending host. Read authoritative state through the existing host operations.",
+        "name": "HostLinkWorkspaceJobsChanged",
+        "payload": {
+          "$ref": "#/components/schemas/HostLinkWorkspaceJobsChanged"
+        },
+        "title": "HostLinkWorkspaceJobsChanged"
       },
       "HostReply_activateHostArtifact": {
         "contentType": "application/json",
@@ -8113,6 +8125,16 @@
                     }
                   },
                   "required": ["t", "id", "ok", "error"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "t": {
+                      "const": "workspace_jobs_changed",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["t"],
                   "type": "object"
                 },
                 {
@@ -43213,6 +43235,40 @@
         },
         "required": ["type", "seq", "id", "epoch", "event"],
         "title": "HostLinkWorkspaceFile",
+        "type": "object"
+      },
+      "HostLinkWorkspaceJobsChanged": {
+        "description": "Invalidates a persisted setup, Effort or Ship job snapshot on the sending host. Read authoritative state through the existing host operations.",
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "const": "setup",
+                "type": "string"
+              },
+              {
+                "const": "effort",
+                "type": "string"
+              },
+              {
+                "const": "ship",
+                "type": "string"
+              }
+            ],
+            "description": "Which daemon-owned job snapshot to refresh: Repo workspace setup, System Effort setup, or Ship."
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "workspace_jobs_changed",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "scope"],
+        "title": "HostLinkWorkspaceJobsChanged",
         "type": "object"
       },
       "HostReply_activateHostArtifact": {
@@ -88657,9 +88713,9 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 14 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 14. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 91 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 15 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 15. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 91 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
-    "version": "14"
+    "version": "15"
   },
   "operations": {
     "operation_activateHostArtifact": {
@@ -90781,6 +90837,9 @@
         },
         {
           "$ref": "#/channels/link/messages/HostLinkSessionsChanged"
+        },
+        {
+          "$ref": "#/channels/link/messages/HostLinkWorkspaceJobsChanged"
         },
         {
           "$ref": "#/channels/link/messages/HostLinkShipPrDigest"

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { File, Paths } from "expo-file-system";
 import {
   ActionSheetIOS,
   Image,
@@ -10,7 +11,7 @@ import {
   View,
 } from "react-native";
 import type { SettingsPreferences } from "./SettingsScreen";
-import type { BrowserLink } from "./browser-link";
+import type { BrowserCommand, BrowserLink } from "./browser-link";
 import {
   ChatAttachmentChips,
   useChatAttachments,
@@ -20,16 +21,20 @@ import { NativeSlashMenu, useNativeSlashMenu } from "./NativeSlashMenu";
 import { useNativeChatActions } from "./useNativeChatActions";
 import { copyText, readText } from "./native-network";
 import { validateOutgoingPrompt } from "../lib/image-attachments";
+import { expandWebSlashCommand } from "../lib/web-slash-commands";
+import english from "../lib/i18n/locales/en.json";
 import { ChatComposer, type ChatComposerProps } from "./ChatComposer";
 import { ChatDialog } from "./ChatDialog";
 import { ChatTranscript } from "./ChatTranscript";
 import type { operations } from "./generated/web-http";
-import { KeylimeHttpError, requestJson } from "./keylime-http";
+import {
+  ensureChatSession,
+  KeylimeHttpError,
+  requestJson,
+} from "./keylime-http";
 import { theme } from "./theme";
 import { useChatSession } from "./useChatSession";
 
-type CreateRoute = operations["createAgentSession"];
-type Creation = CreateRoute["responses"][200]["content"]["application/json"];
 type ModelCatalog = NonNullable<ChatComposerProps["catalog"]>;
 type Roles =
   operations["getChatRoles"]["responses"][200]["content"]["application/json"];
@@ -64,6 +69,27 @@ export type LiveChatProps = {
 type Selection = NonNullable<ChatComposerProps["selectedModel"]> & {
   role?: string;
 };
+type SlashAction = Extract<
+  BrowserCommand,
+  { type: "compact" | "reload" | "set_session_name" }
+>;
+
+function advisorKey(origin: string, hostId: string, sessionId: string) {
+  return JSON.stringify([origin, hostId, sessionId]);
+}
+
+function loadAdvisorChoices(): Record<string, boolean> {
+  try {
+    const file = new File(Paths.document, "native-chat-advisor.json");
+    const value: unknown = file.exists ? JSON.parse(file.textSync()) : {};
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value).filter(([, enabled]) => enabled === true),
+    );
+  } catch {
+    return {};
+  }
+}
 
 export function LiveChat({
   origin,
@@ -77,11 +103,39 @@ export function LiveChat({
   onChooseProject,
   onChooseWorkspace,
 }: LiveChatProps) {
+  const [advisorChoices, setAdvisorChoices] = useState(loadAdvisorChoices);
+  const advisorChoicesRef = useRef(advisorChoices);
+  advisorChoicesRef.current = advisorChoices;
+  const [newAdvisorChoices, setNewAdvisorChoices] = useState<
+    Record<string, boolean>
+  >({});
+  const advisorEnabled = target
+    ? target.sessionId
+      ? advisorChoices[advisorKey(origin, target.hostId, target.sessionId)] ===
+        true
+      : newAdvisorChoices[target.key] === true
+    : false;
+  function persistAdvisor(hostId: string, sessionId: string, enabled: boolean) {
+    const next = { ...advisorChoicesRef.current };
+    const key = advisorKey(origin, hostId, sessionId);
+    if (enabled) next[key] = true;
+    else delete next[key];
+    advisorChoicesRef.current = next;
+    setAdvisorChoices(next);
+    try {
+      new File(Paths.document, "native-chat-advisor.json").writeSync(
+        JSON.stringify(next),
+      );
+    } catch {
+      // Match the web client's in-memory fallback when local storage is unavailable.
+    }
+  }
   const chat = useChatSession({
     origin,
     link,
     hostId: target?.hostId ?? "local",
     sessionId: target?.sessionId ?? null,
+    advisor: advisorEnabled,
     onUnauthorized,
   });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -95,6 +149,7 @@ export function LiveChat({
   const latest = useRef(target);
   latest.current = target;
   const slash = useNativeSlashMenu({
+    advisorEnabled,
     link,
     hostId: target?.hostId ?? "local",
     sessionId: target?.sessionId ?? null,
@@ -136,9 +191,10 @@ export function LiveChat({
         latest.current.sessionId !== expected.sessionId
       )
         throw new Error("The selected chat changed.");
-      if (result.sessionId !== expected.sessionId)
+      if (result.sessionId !== expected.sessionId) {
+        persistAdvisor(target.hostId, result.sessionId, advisorEnabled);
         onCreated(target.key, result.sessionId, target.hostId, target.path);
-      else await chat.refresh();
+      } else await chat.refresh();
     },
     setDraft(expected, _id, update) {
       if (
@@ -152,6 +208,7 @@ export function LiveChat({
     },
     onForked(id, text) {
       if (!target || latest.current?.key !== target.key) return;
+      persistAdvisor(target.hostId, id, advisorEnabled);
       const key = onForked(target, id);
       if (key && text)
         setDrafts((old) => (old[key] ? old : { ...old, [key]: text }));
@@ -167,11 +224,14 @@ export function LiveChat({
       {
         sessionId: string;
         message: string;
+        original: string;
+        command?: SlashAction;
         attachments: ChatAttachmentsController;
       }
     >(),
   );
   const [modelRefresh, setModelRefresh] = useState(0);
+  const [notices, setNotices] = useState<Record<string, string>>({});
   const [catalog, setCatalog] = useState<{
     host: string;
     data: ModelCatalog | null;
@@ -244,13 +304,15 @@ export function LiveChat({
     if (!pending || pending.sessionId !== target.sessionId) return;
     first.current.delete(target.key);
     const { key } = target;
-    void chat
-      .sendFirst(pending.message, pending.attachments.payload)
+    const operation = pending.command
+      ? runSlashAction(key, pending.command)
+      : chat.sendFirst(pending.message, pending.attachments.payload);
+    void operation
       .then(
         () => {
-          pending.attachments.clear(true);
+          if (!pending.command) pending.attachments.clear(true);
           setDrafts((old) =>
-            old[key] === pending.message ? { ...old, [key]: "" } : old,
+            old[key] === pending.original ? { ...old, [key]: "" } : old,
           );
         },
         (cause) => error(key, cause),
@@ -260,6 +322,21 @@ export function LiveChat({
         setBusy((old) => ({ ...old, [key]: false }));
       });
   }, [chat.ready, chat.sendFirst, target]);
+
+  async function runSlashAction(key: string, command: SlashAction) {
+    await chat.issueCommand(command);
+    if (command.type === "reload") setModelRefresh((old) => old + 1);
+    void chat.refresh().catch(() => {});
+    setNotices((old) => ({
+      ...old,
+      [key]:
+        command.type === "compact"
+          ? "Compacted context"
+          : command.type === "reload"
+            ? "Reloaded extensions, skills, prompts, and tools"
+            : `Session renamed to ${command.name}`,
+    }));
+  }
 
   async function send() {
     if (!target || locked.current.has(target.key)) return;
@@ -271,8 +348,45 @@ export function LiveChat({
       error(key, "This command is not available here.");
       return;
     }
+    const text = message.trim();
+    if (
+      /^\/advisor(?:\s|$)/.test(text) &&
+      !advisorEnabled &&
+      (chat.active || attachments.items.length === 0)
+    ) {
+      error(key, "Advisor is disabled — enable it in the composer’s + menu.");
+      return;
+    }
+    const expansion = expandWebSlashCommand(text);
+    const shouldExpand = chat.active || attachments.items.length === 0;
+    if (shouldExpand && expansion.kind === "usage-error") {
+      error(
+        key,
+        `${expansion.command} requires an argument: ${english[expansion.argumentHintKey as keyof typeof english]}`,
+      );
+      return;
+    }
+    const outgoing =
+      shouldExpand && expansion.kind === "expand" ? expansion.prompt : message;
+    const actionMatch =
+      !chat.active && attachments.items.length === 0
+        ? /^\/(compact|reload|name)(?:\s+([\s\S]*))?$/.exec(text)
+        : null;
+    const args = actionMatch?.[2]?.trim() ?? "";
+    if (actionMatch?.[1] === "name" && !args) {
+      error(key, "Usage: /name <name>");
+      return;
+    }
+    const command: SlashAction | undefined =
+      actionMatch?.[1] === "compact"
+        ? { type: "compact", ...(args ? { customInstructions: args } : {}) }
+        : actionMatch?.[1] === "reload"
+          ? { type: "reload" }
+          : actionMatch?.[1] === "name"
+            ? { type: "set_session_name", name: args }
+            : undefined;
     const issue = validateOutgoingPrompt(
-      message,
+      outgoing,
       attachments.payload.images ?? [],
     );
     if (issue) {
@@ -282,41 +396,59 @@ export function LiveChat({
     locked.current.add(key);
     setBusy((old) => ({ ...old, [key]: true }));
     setErrors((old) => ({ ...old, [key]: "" }));
+    setNotices((old) => ({ ...old, [key]: "" }));
     let handingOff = false;
     try {
       if (sessionId) {
-        await chat.send(
-          message,
-          chat.active ? "followUp" : "prompt",
-          attachments.payload,
-        );
+        if (command) await runSlashAction(key, command);
+        else
+          await chat.send(
+            outgoing,
+            chat.active ? "followUp" : "prompt",
+            attachments.payload,
+          );
         attachments.clear(true);
         setDrafts((old) =>
           old[key] === message ? { ...old, [key]: "" } : old,
         );
       } else {
         const selection = selections[key];
-        const created = await requestJson<Creation>(origin, "/api/agent/new", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "ensure_session",
-            hostId: target.hostId,
-            cwd: target.path,
-            ...(selection?.role
-              ? { chatRole: selection.role }
-              : selection
-                ? { provider: selection.provider, modelId: selection.modelId }
-                : {}),
-          }),
+        const created = await ensureChatSession(origin, {
+          type: "ensure_session",
+          hostId: target.hostId,
+          cwd: target.path,
+          ...(advisorEnabled ? { advisor: true } : {}),
+          ...(selection?.role
+            ? { chatRole: selection.role }
+            : selection
+              ? { provider: selection.provider, modelId: selection.modelId }
+              : {}),
         });
-        if (!created.sessionId)
-          throw new Error(
-            "Server did not confirm the new session. Your prompt was not sent.",
+        persistAdvisor(target.hostId, created.sessionId, advisorEnabled);
+        setNewAdvisorChoices((old) => {
+          const next = { ...old };
+          delete next[key];
+          return next;
+        });
+        if (created.kind === "initialization-interrupted") {
+          onCreated(key, created.sessionId, target.hostId, target.path);
+          setSelections((old) => {
+            if (old[key] !== selection) return old;
+            const next = { ...old };
+            delete next[key];
+            return next;
+          });
+          error(
+            key,
+            "The host disconnected during setup. This chat was created, but your message wasn't sent. Check the model before sending again.",
           );
+          return;
+        }
         first.current.set(key, {
           sessionId: created.sessionId,
-          message,
+          message: outgoing,
+          original: message,
+          command,
           attachments,
         });
         handingOff = true;
@@ -377,12 +509,40 @@ export function LiveChat({
       onAddAttachment={() =>
         ActionSheetIOS.showActionSheetWithOptions(
           {
-            options: ["Choose file", "Paste image", "Cancel"],
-            cancelButtonIndex: 2,
+            options: [
+              "Choose file",
+              "Paste image",
+              `Advisor: ${advisorEnabled ? "On" : "Off"}`,
+              "Cancel",
+            ],
+            cancelButtonIndex: 3,
           },
           (index) => {
             if (index === 0) void attachments.pick();
             else if (index === 1) void attachments.paste();
+            else if (index === 2) {
+              ActionSheetIOS.showActionSheetWithOptions(
+                {
+                  options: [
+                    advisorEnabled
+                      ? "Disable advisor for this chat"
+                      : "Enable advisor for this chat",
+                    "Cancel",
+                  ],
+                  cancelButtonIndex: 1,
+                },
+                (choice) => {
+                  if (choice !== 0) return;
+                  if (sessionId)
+                    persistAdvisor(target.hostId, sessionId, !advisorEnabled);
+                  else
+                    setNewAdvisorChoices((old) => ({
+                      ...old,
+                      [key]: !advisorEnabled,
+                    }));
+                },
+              );
+            }
           },
         )
       }
@@ -500,6 +660,14 @@ export function LiveChat({
               {messageError}
             </Text>
           )}
+          {!!notices[key] && (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.status, { color: colors.muted }]}
+            >
+              {notices[key]}
+            </Text>
+          )}
           {actions.uncertain && (
             <Text
               accessibilityRole="alert"
@@ -585,6 +753,7 @@ export function LiveChat({
               {messageError}
             </Text>
           )}
+          <NativeSlashMenu menu={slash} />
           {composer}
         </View>
       )}

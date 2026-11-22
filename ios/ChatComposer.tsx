@@ -214,7 +214,7 @@ export function ChatComposer({
           {onAddAttachment && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Attachments"
+              accessibilityLabel="Composer options"
               onPress={onAddAttachment}
               style={styles.send}
             >
@@ -237,7 +237,7 @@ export function ChatComposer({
             <Text style={[styles.chevron, { color: colors.dim }]}>⌄</Text>
           </Pressable>
           <View style={styles.spacer} />
-          {running ? (
+          {running && !canSend ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Stop"

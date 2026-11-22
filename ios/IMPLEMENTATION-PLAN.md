@@ -50,6 +50,8 @@ For a fresh chat, follow the PWA's two-step path:
 1. `POST /api/agent/new` with `type: "ensure_session"` and the selected host and workspace. Don't send the prompt, uploads or a caller-chosen session ID. The create route doesn't accept uploads, discards `sessionId`, and rejects caller-chosen creation identifiers. If the response is lost, session creation is unconfirmed but no prompt was sent. Keep the draft and check for the created session before offering another create attempt.
 2. Adopt the returned session ID, open the session subscription and send the first `prompt` to that ID via Browser Link. When attachments land in milestone 4, pass staged upload IDs and their proofs on the prompt, not on create. If the command result is lost, follow the link's replay and dedupe rules. If delivery remains uncertain, reconcile the known session's state and transcript; don't issue a fresh prompt or create another chat.
 
+If the host disconnects during initialization and create returns `503 host_offline` with a `sessionId`, keep the same tab and adopt that ID. Leave the text and attachments unsent. Tell the user to check the model before sending again; Send must address the adopted chat, not create a second one. An offline response without an ID cannot confirm creation.
+
 Keep subsequent sends on the web outbox path via Browser Link. A stored receipt isn't delivery to the agent; reconcile an uncertain outcome by client message ID before issuing any new command for it. Apply live message deltas, tool updates, queue/outbox updates and run lifecycle events as they arrive. Resume the socket after a gap when the server can replay it. If the link requires resync, use `/api/sessions/{id}/state` and `/api/sessions/{id}/context?sync=1` for catch-up, applying append/replace and cursor semantics before continuing with live events. Don't apply stale answers to a different chat, duplicate a streamed reply when its persisted entry arrives, or fall back to polling.
 
 Even on a healthy socket, `message_end` can arrive before the transcript is written. Follow the PWA and listen for persisted-session change notifications on the `running` channel. When a notification includes the open chat's host-qualified session ID, request `/api/sessions/{id}/context?sync=1` with the current durable history cursor. Coalesce overlapping invalidations and merge the returned append or replace page without duplicating the live message. The notification triggers the read, not a timer.
@@ -64,6 +66,8 @@ Exercise a reply whose `message_end` arrives before persistence. With the socket
 
 The Stop regression check retained both the new user prompt and interrupted assistant reply immediately, then reopened the saved chat after app restart without duplicate rows (`stopped-echo.png`).
 
+The initialization outage regression drops a linked host after the wrapper is registered, at model setup. The real create route returns the existing ID in its 503 response, the native response decoder recovers it, and no prompt reaches the runner. This is a route and client-decoder regression, not a simulator fault-injection run.
+
 ### 3. Settings and workspace tools
 
 Match the full-page Settings header, search, horizontal categories and setting cards. Start with Interface & Behavior controls that already have native behavior (appearance and transcript controls), host status, and model settings the chat consumes. Keep device-local display preferences separate from host policies and provider configuration. Bind settings to the same source and scope as the PWA; show an unavailable control only if that state exists in the reference. Don't ship inert switches. Provider or host secrets must not be exposed through the app.
@@ -74,9 +78,9 @@ Reuse the mobile workspace panel and horizontally scrollable tabs for Explorer a
 
 **Exit:** A changed preference persists and visibly affects its intended screen. Workspace selection changes the underlying files and Git status, registering a Repo and creating a workspace refresh the hierarchy, and host errors aren't reported as empty results or successful writes.
 
-**Milestone 3 progress.** The Release simulator build has the live workspace panel, Explorer, Git, Markdown Source/Preview and Settings. Native captures are under `ios/screenshots/milestone-3/native/`. Workspace setup status currently requires an explicit refresh or app foreground: the existing job API has no completion event, and the PWA polls it. This client does not poll. The file viewer keeps the Source/Preview switch but does not yet match the PWA's syntax highlighting, language picker or full toolbar. The device-local Settings file stores preferences and the selected server URL, not credentials.
+**Milestone 3 progress.** The Release simulator build has the live workspace panel, Explorer, Git, Markdown Source/Preview and Settings. Native captures are under `ios/screenshots/milestone-3/native/`. That build required explicit refresh for setup status; the release work below adds automatic updates. The file viewer keeps Source/Preview but does not match the PWA's syntax highlighting, language picker or full toolbar. The device-local Settings file stores preferences and the selected server URL, not credentials.
 
-The simulator showed `Never fold tool activity` replacing a Process details group with its `read ideas.md` row. The switch stayed on after app relaunch. Atlas Explorer opened `README.md` in Source and Preview; Git correctly reported a working tree matching HEAD. The current panel does not expose the PWA's Git mutation buttons or Explorer upload/download controls.
+The simulator showed `Never fold tool activity` replacing a Process details group with its `read ideas.md` row. The switch stayed on after app relaunch. Atlas Explorer opened `README.md` in Source and Preview; Git correctly reported a working tree matching HEAD. Explorer stays read-only; the release work below adds Git mutations.
 
 The isolated simulator run also registered the seeded `atlas-service` Repo, created `native-proof` from `main`, and opened the new workspace once setup reported completion. No production workspace was used.
 
@@ -102,7 +106,7 @@ Compared with baseline 46, the native Effort preview keeps the same name, root, 
 
 The iOS document picker opened and was cancelled in the simulator. Photos → Copy Photo → Attachments → Paste image required a second tap on the system Paste control, which grants clipboard access. The simulator showed the image chip, sent it with a prompt, and received the offline model's reply. The image was saved; the fixture does not test vision. A staged file upload and its completion proof were verified separately over HTTP.
 
-The Jobs tab uses explicit Refresh for status the server does not publish as events. Markdown handles common transcript formatting but not every PWA diagram, math, or link treatment. Slash suggestions omit commands that depend on PWA-only client handlers. These are visible parity gaps, not new interaction conventions.
+Markdown handles common transcript formatting but not every PWA diagram, math, or link treatment. The release slash command scope below lists the client actions added and deferred.
 
 A separate controller and enrolled standalone daemon verified host-qualified workspace and session reads, archive/restore and System/Effort preview and setup through the web API. The simulator walkthrough used the controller's local host. Native linked-host and physical-iPhone acceptance remain open; no physical iPhone was connected.
 
@@ -111,8 +115,30 @@ A separate controller and enrolled standalone daemon verified host-qualified wor
 | PWA behavior | Why not in the initial iPhone client | Native behavior for now |
 | --- | --- | --- |
 | The browser already knows the server origin. | A standalone app has no page origin. | Ask for the server URL before the familiar login or Home flow. Limit the new UI to connection setup; use the same Keylime sign-in flow once the origin is known. |
+| On a password-protected server, the PWA's session cookie lasts up to 30 days. | The initial native build kept the session cookie in memory. | The native app now stores the session token and expiry in device-only Keychain, scoped to the exact server origin. It honors server expiry and rejection, and never stores passwords. An upgrade from the in-memory build requires one sign-in. |
 | Workspace Browser tab live stream and remote control ([Browser captures](screenshots/baseline/58-browser-view.png)). | Explicitly deferred. | Omit Browser viewer and control. Browser Link remains required for live chat and other app events. |
 | xterm, terminal tabs, New terminal and terminal attach ([terminal](screenshots/baseline/29-terminal.png)). | Explicitly deferred, including a native terminal substitute. | Omit terminal actions and tabs. Keep the Workspace tabs sheet for chats and keep Explorer/Git in their existing locations. Don't hide terminal-backed operations behind a new UI. |
 | Browser keyboard, file picker and safe-area handling. | iOS owns these system surfaces. | Use the system keyboard, document/photo picker and safe-area insets. Keep the surrounding Keylime composer, attachment chips, labels and interaction order. Verify with keyboard and sheet open. |
 
-Push delivery, dictation, shipping and advanced settings aren't gates for the core milestones. Keep their existing PWA references for later coverage; don't present nonfunctional controls as parity. Add new entries above only when there's evidence that the reference flow can't be reproduced, including the rejected approach and the closest viable behavior.
+## Release decisions
+
+**Required before release:**
+
+- Match protected-session re-entry using Keychain as described above.
+- Add the workspace setup and Jobs status events needed for automatic updates over the existing Browser Link. No polling.
+- Port the PWA's Git action row and Ship workflow, keeping their existing controls and confirmation behavior.
+- Port the PWA's ten prompt shortcuts (`/goal`, `/plan`, `/review`, `/fix`, `/test`, `/explain`, `/simplify`, `/commit`, `/advisor`, `/loop`) and three client actions (`/compact`, `/reload`, `/name`). Defer `/btw`, `/copy`, and `/session`. Keep supported server-provided commands.
+
+The job channel sends host-scoped invalidations; runner invalidations also identify the session. Clients read authoritative state on open and after changes, with no timer-based status reads. For live updates, upgrade the controller first, then the owning host daemon (link v15) and runner. Older enrolled hosts remain connected but cannot publish the new daemon invalidations.
+
+**Release verification.** On the iPhone simulator, protected sign-in survived terminating and relaunching the Release app, and a protected saved transcript opened without another password entry. The Git action row and Fetch confirmation opened against the isolated Repo. Ship previewed its changes and landed into the fixture's local base; progress reached `fastForward: done` and `Ship complete` without refresh. No external PR was created. Host-routing, persisted-job, runner Jobs, and wire-codec tests cover the event path separately.
+
+The Release simulator also closed Ship during a delayed local fast-forward. Reopening showed the same running job, a successful result after workspace cleanup, and the failed step and Git hook logs from a separate rejected landing. **More actions → Ship progress** retains the latest admitted run per host and workspace while the app stays open. This is not a job history across app restarts.
+
+The simulator also opened a fresh Ship form for the failed workspace and cancelled without submitting. The previous failed step and hook logs still reopened, and the daemon recorded no new job.
+
+In a disposable simulator chat, `/plan` rejected a missing argument and expanded a valid command before the model received it; `/name` renamed the conversation. The composer showed the per-chat Advisor toggle. Changing to a second protected server on the same hostname but a different port prompted for its password instead of reusing the first server's session.
+
+On an enrolled standalone daemon, the simulator saw a three-second post-setup hook running, then opened the resulting workspace without tapping Refresh. The authenticated Browser Link also received setup invalidations through completion in a separate wire check. Release screenshots are in `ios/screenshots/release/native/`. Physical-iPhone acceptance and live GitHub PR operations were not exercised.
+
+**Accepted for release:** flat sidebar search without per-message hit navigation, read-only Explorer and file viewer, current Markdown rendering, the native Effort preview layout, and the native system adaptations above. Push notifications, dictation, and advanced Settings stay outside the release gate, as do the workspace Browser viewer and terminals. These decisions do not waive linked-host or physical-iPhone verification.

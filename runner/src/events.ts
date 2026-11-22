@@ -35,6 +35,7 @@ import type { CommandContext, CommandTable } from "./commands/types";
 import { onClientQueueChange, stampClientMessageId } from "./correlation";
 import { resetActivity, trackActivity } from "./activity";
 import { advisorReviewPending, resetAdvisorBoundary, subscribeAdvisorReview } from "./advisor";
+import { subscribeJobEvents } from "./job-events";
 
 type MessageUpdates = "full" | "delta";
 
@@ -268,7 +269,7 @@ const bridges = new WeakMap<AgentSession, HostEvents>();
 /** A host-scheduled turn not yet admitted (a goal continuation); set by the prompting commands, possibly before the bridge exists. */
 const scheduledTurns = new WeakMap<AgentSession, () => boolean>();
 
-/** @apiEvent session_settled @apiEvent available_commands_update @apiEvent model_activity @apiEvent advisor_review @apiEvent session_info_update @apiEvent notice */
+/** @apiEvent session_settled @apiEvent available_commands_update @apiEvent model_activity @apiEvent advisor_review @apiEvent session_info_update @apiEvent notice @apiEvent workspace_jobs_changed */
 export function subscribeHostEvents(
   session: AgentSession,
   send: CommandContext["send"],
@@ -292,6 +293,7 @@ export function subscribeHostEvents(
   bridges.set(session, { forwarder, settle, emitCommands });
 
   const unsubscribers = [
+    subscribeJobEvents(session, () => send({ t: "workspace_jobs_changed" })),
     trackActivity(session, (activity) =>
       event({ type: "model_activity", activity }),
     ),

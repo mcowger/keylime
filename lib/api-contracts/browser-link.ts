@@ -46,6 +46,12 @@ export const EventStreamChannelSchema = Type.Union(
     }),
     Type.Object({ kind: Type.Literal("host-tools") }),
     Type.Object({ kind: Type.Literal("hosts") }),
+    Type.Object({
+      kind: Type.Literal("workspace-jobs"),
+      hostId: Type.String({
+        description: "Owning host whose job snapshots can be invalidated.",
+      }),
+    }),
   ],
   {
     title: "EventStreamChannel",

@@ -44650,6 +44650,57 @@
                 "title": "WorkspaceFileEvent"
               },
               {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "scope": {
+                        "anyOf": [
+                          {
+                            "const": "setup",
+                            "type": "string"
+                          },
+                          {
+                            "const": "effort",
+                            "type": "string"
+                          },
+                          {
+                            "const": "ship",
+                            "type": "string"
+                          }
+                        ],
+                        "description": "Which daemon-owned job snapshot to refresh: Repo workspace setup, System Effort setup, or Ship."
+                      },
+                      "type": {
+                        "const": "workspace_jobs_changed",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type", "scope"],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "scope": {
+                        "const": "runner",
+                        "type": "string"
+                      },
+                      "sessionId": {
+                        "description": "Runner session on the subscribed host whose Jobs snapshot changed.",
+                        "type": "string"
+                      },
+                      "type": {
+                        "const": "workspace_jobs_changed",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type", "scope", "sessionId"],
+                    "type": "object"
+                  }
+                ],
+                "description": "Invalidates job state on the host named by the subscription. Runner events identify the owning session. Contains no job payload; read the current snapshot on subscription open and after invalidation.",
+                "title": "WorkspaceJobsChanged"
+              },
+              {
                 "properties": {
                   "filePath": {
                     "type": "string"
@@ -77246,6 +77297,20 @@
                   }
                 },
                 "required": ["kind"],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "hostId": {
+                    "description": "Owning host whose job snapshots can be invalidated.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "workspace-jobs",
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "hostId"],
                 "type": "object"
               }
             ],

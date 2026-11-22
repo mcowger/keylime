@@ -12388,6 +12388,20 @@
                   },
                   "required": ["kind"],
                   "type": "object"
+                },
+                {
+                  "properties": {
+                    "hostId": {
+                      "description": "Owning host whose job snapshots can be invalidated.",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "workspace-jobs",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind", "hostId"],
+                  "type": "object"
                 }
               ],
               "description": "Selector for a shared subscription consumed by browser tabs: running sessions, open chats, terminal, notifications, session events, noninteractive commit-plan progress, file watches, host tools or hosts. Session, open-chat, and commit-plan progress channels take a raw session ID and default an omitted hostId to local. The parser validates identifiers and paths. A file's null sessionId selects no session.",
@@ -12686,6 +12700,20 @@
             }
           },
           "required": ["kind"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "hostId": {
+              "description": "Owning host whose job snapshots can be invalidated.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "workspace-jobs",
+              "type": "string"
+            }
+          },
+          "required": ["kind", "hostId"],
           "type": "object"
         }
       ],
@@ -48432,6 +48460,40 @@
           },
           "required": ["type", "seq"],
           "title": "HostLinkSessionsChanged",
+          "type": "object"
+        },
+        {
+          "description": "Invalidates a persisted setup, Effort or Ship job snapshot on the sending host. Read authoritative state through the existing host operations.",
+          "properties": {
+            "scope": {
+              "anyOf": [
+                {
+                  "const": "setup",
+                  "type": "string"
+                },
+                {
+                  "const": "effort",
+                  "type": "string"
+                },
+                {
+                  "const": "ship",
+                  "type": "string"
+                }
+              ],
+              "description": "Which daemon-owned job snapshot to refresh: Repo workspace setup, System Effort setup, or Ship."
+            },
+            "seq": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "workspace_jobs_changed",
+              "type": "string"
+            }
+          },
+          "required": ["type", "seq", "scope"],
+          "title": "HostLinkWorkspaceJobsChanged",
           "type": "object"
         },
         {
@@ -133143,6 +133205,16 @@
         },
         {
           "properties": {
+            "t": {
+              "const": "workspace_jobs_changed",
+              "type": "string"
+            }
+          },
+          "required": ["t"],
+          "type": "object"
+        },
+        {
+          "properties": {
             "event": {
               "anyOf": [
                 {
@@ -195210,6 +195282,20 @@
                         }
                       },
                       "required": ["kind"],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "hostId": {
+                          "description": "Owning host whose job snapshots can be invalidated.",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "workspace-jobs",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "hostId"],
                       "type": "object"
                     }
                   ],

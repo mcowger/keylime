@@ -1,3 +1,4 @@
+import { publishWorkspaceJobChange } from "../workspace-job-events";
 import type { TerminalEvent } from "../terminal-types";
 import {
   TerminalAttachServerSchema,
@@ -1055,6 +1056,10 @@ function openLink(link: Link, ws: LinkSocket, hello: Hello): void {
   link.pingTimer.unref?.();
   setStatus(link, hello.ompVersion === null ? "omp-missing" : "online");
   reattach(link, hello.channels);
+  // A daemon may have advanced jobs while disconnected; reads remain authoritative.
+  publishWorkspaceJobChange(link.id, "setup");
+  publishWorkspaceJobChange(link.id, "effort");
+  publishWorkspaceJobChange(link.id, "ship");
   notify(hub().helloListeners, link.id, hello.channels);
 }
 
@@ -1321,6 +1326,9 @@ function applyUp(
         .then(({ notifyRunningChange }) =>
           notifyRunningChange({ refreshSessionList: true }),
         );
+      return;
+    case "workspace_jobs_changed":
+      publishWorkspaceJobChange(link.id, message.scope);
       return;
     case "ship_pr_digest":
       offerShipDigest(link, message);

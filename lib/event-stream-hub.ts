@@ -35,6 +35,7 @@ import {
 import { browserTransportState } from "./web-settings";
 import { isDeltaUpdate, mergeDeltaUpdates } from "./message-delta";
 import { isRecord } from "./type-guards";
+import { onWorkspaceJobChange } from "./workspace-job-events";
 
 // Server half of the multiplexed live-event stream (see event-stream-protocol).
 // One EventStreamConnection = one `/api/events` SSE response = one browser
@@ -488,6 +489,12 @@ async function openChannel(
       );
     case "host-tools":
       return openHostToolsChannel(handle);
+    case "workspace-jobs":
+      handle.setDetach(
+        onWorkspaceJobChange(channel.hostId, (event) => handle.send(event)),
+      );
+      handle.open();
+      return SUBSCRIBED;
     case "hosts":
       return openHostsChannel(handle);
   }

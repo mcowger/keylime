@@ -7,12 +7,16 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 ## [Unreleased]
 
 ### Breaking Changes
-- Removed host pools and shared project identities. New daemons use one controller and link protocol 14. Upgrade the controller first; it still accepts enrolled v13 daemons so you can upgrade them individually.
+- Removed host pools and shared project identities. New daemons use one controller and link protocol 15. Upgrade the controller first; it still accepts enrolled v13 and v14 daemons. Update the daemon and runner for live iPhone job status.
 - `bun run api` replaces `api:generate` and `api:check`, validating documents in parallel and caching successful AsyncAPI validation for unchanged, self-contained documents.
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
 - The native iPhone client connects to Keylime for live chat, saved history, Settings, and workspace browsing. It uses the PWA's Browser Link WebSocket; the workspace Browser viewer and terminals are not included.
+- If a host disconnects while setting up a new iPhone chat, Keylime keeps the chat the server already created and leaves the draft unsent.
+- iPhone remembers protected sessions across launches using Keychain and supports the Git action row, Ship, and the PWA prompt shortcuts plus `/compact`, `/reload`, and `/name`.
+- iPhone workspace setup, Effort setup, Jobs, and Ship update over Browser Link without polling.
+- On iPhone, reopen Ship progress and logs from the workspace menu or **More actions → Ship progress**, even after cleanup removes the workspace or you cancel a new Ship form.
 - From `ios/`, run `bun run api:types` to generate TypeScript types from the web server's OpenAPI and AsyncAPI documents.
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal.
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts.

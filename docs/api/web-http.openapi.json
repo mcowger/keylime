@@ -36212,6 +36212,20 @@
                                 },
                                 "required": ["kind"],
                                 "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "hostId": {
+                                    "description": "Owning host whose job snapshots can be invalidated.",
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "workspace-jobs",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "hostId"],
+                                "type": "object"
                               }
                             ],
                             "description": "Channel and parameters to subscribe to.",

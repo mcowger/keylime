@@ -16,7 +16,11 @@ import {
   parseSubagentSnapshot,
   type SubagentInfo,
 } from "../lib/subagent-types";
-import type { BrowserCommand, BrowserLink } from "./browser-link";
+import type {
+  BrowserCommand,
+  BrowserLink,
+  BrowserLinkStatus,
+} from "./browser-link";
 import { ChatMarkdown } from "./ChatMarkdown";
 import type { NativeTranscriptPalette } from "./ChatTranscript";
 import type { components } from "./generated/browser-link";
@@ -48,6 +52,7 @@ type Props = {
   hostId: string;
   sessionId: string | null;
   link: BrowserLink;
+  linkStatus?: BrowserLinkStatus;
   kind: "activity" | "jobs";
 };
 
@@ -92,7 +97,14 @@ export function SessionActivity(props: Props) {
   );
 }
 
-function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
+function ActivityContent({
+  origin,
+  hostId,
+  sessionId,
+  link,
+  linkStatus,
+  kind,
+}: Props) {
   const [view, setView] = useState<ViewState>(initial);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [completionRevision, setCompletionRevision] = useState(0);
@@ -122,6 +134,7 @@ function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
     }
     let alive = true;
     let opened = false;
+    let sessionEpoch = 0;
     let state = initial();
     let revision = 0;
     let agentRevision = 0;
@@ -228,6 +241,7 @@ function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
     }
     async function refreshOutput(job: Job, generation: string) {
       const selectedAt = selectionRevision;
+      const openedAt = sessionEpoch;
       const detail = await command<Detail>({
         type: "get_job_output",
         kind: job.kind,
@@ -238,6 +252,7 @@ function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
       });
       if (
         !alive ||
+        openedAt !== sessionEpoch ||
         selectedAt !== selectionRevision ||
         state.jobs?.generation !== generation ||
         !state.selected ||
@@ -270,8 +285,9 @@ function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
         publish();
         return;
       }
+      const openedAt = sessionEpoch;
       const snapshot = await command<Jobs>({ type: "get_jobs" });
-      if (!alive || !opened) return;
+      if (!alive || !opened || openedAt !== sessionEpoch) return;
       if (
         state.jobs?.available &&
         snapshot.generation !== state.jobs.generation
@@ -321,11 +337,13 @@ function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
       try {
         do {
           refreshAgain = false;
-          if (kind === "activity") await refreshActivity();
-          else await refreshJobs();
+          try {
+            if (kind === "activity") await refreshActivity();
+            else await refreshJobs();
+          } catch (cause) {
+            report(cause);
+          }
         } while (alive && refreshAgain);
-      } catch (cause) {
-        report(cause);
       } finally {
         refreshBusy = false;
       }
@@ -394,10 +412,12 @@ function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
         { kind: "session", hostId, sessionId: sessionId! },
         {
           onOpen() {
+            sessionEpoch++;
             opened = true;
             void refresh();
           },
           onEnd(reason, code) {
+            sessionEpoch++;
             opened = false;
             selectionRevision++;
             if (kind === "jobs") {
@@ -476,6 +496,29 @@ function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
       );
     }
     subscribeSession();
+    const releaseJobs =
+      kind === "jobs"
+        ? link.subscribe(
+            { kind: "workspace-jobs", hostId },
+            {
+              onOpen() {
+                if (opened) void refresh();
+              },
+              onEvent(event) {
+                if (
+                  alive &&
+                  opened &&
+                  isRecord(event) &&
+                  event.type === "workspace_jobs_changed" &&
+                  event.scope === "runner" &&
+                  (event.sessionId === undefined ||
+                    event.sessionId === sessionId)
+                )
+                  void refresh();
+              },
+            },
+          )
+        : undefined;
     const releaseRunning = link.subscribe(
       { kind: "running" },
       {
@@ -512,9 +555,13 @@ function ActivityContent({ origin, hostId, sessionId, link, kind }: Props) {
       alive = false;
       actions.current = null;
       releaseSession?.();
+      releaseJobs?.();
       releaseRunning();
     };
   }, [origin, hostId, sessionId, link, kind]);
+  useEffect(() => {
+    if (kind === "jobs" && linkStatus === "open") actions.current?.refresh();
+  }, [kind, linkStatus]);
 
   const button = (label: string, onPress: () => void, disabled = false) => (
     <Pressable

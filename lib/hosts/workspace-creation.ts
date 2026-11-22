@@ -35,6 +35,7 @@ import { HostOpError } from "./link-protocol";
 import { copyPaseoIncludes, readPaseo } from "./workspace-paseo";
 import { completePlanningWorkspace } from "./planning";
 import { isEffortPath } from "./systems";
+import { publishWorkspaceJobChange } from "./workspace-job-changes";
 
 /** The daemon must fence new starts until release, including starts from other servers. */
 export interface WorkspaceDeletionAdapter {
@@ -508,6 +509,7 @@ function jobFile(id: string) {
 }
 function persist(job: WorkspaceCreationJob) {
   save(jobFile(job.id), job);
+  publishWorkspaceJobChange("setup");
 }
 export function recoverWorkspaceCreation(): void {
   if (recovered) return;

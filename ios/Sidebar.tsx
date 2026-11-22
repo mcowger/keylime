@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  ActionSheetIOS,
   Image,
   Pressable,
   ScrollView,
@@ -41,6 +42,11 @@ export interface SidebarProps {
   onAddSystem?: (hostId: string) => void;
   onNewWorkspace?: (hostId: string, repo: SidebarRepo) => void;
   onNewEffort?: (hostId: string, system: SidebarSystem) => void;
+  onShipWorkspace?: (hostId: string, workspace: SidebarWorkspace) => void;
+  onFinishShip?: (hostId: string, workspace: SidebarWorkspace) => void;
+  shipStateByWorkspace?: Record<string, "ship" | "busy" | "finish" | undefined>;
+  hasShipProgress?: (hostId: string, workspace: SidebarWorkspace) => boolean;
+  onViewShipProgress?: (hostId: string, workspace: SidebarWorkspace) => void;
 }
 
 const statusLabels: Record<SidebarEffort["status"], string> = {
@@ -94,6 +100,11 @@ export function Sidebar({
   onAddRepo,
   onAddSystem,
   onNewWorkspace,
+  onShipWorkspace,
+  onFinishShip,
+  shipStateByWorkspace,
+  hasShipProgress,
+  onViewShipProgress,
   onNewEffort,
 }: SidebarProps) {
   const dark = useColorScheme() !== "light";
@@ -615,39 +626,127 @@ export function Sidebar({
                                         const active =
                                           selected?.hostId === host.id &&
                                           selected.path === workspace.path;
-                                        return (
-                                          <Pressable
-                                            key={workspace.id}
-                                            accessibilityRole="button"
-                                            accessibilityState={{
-                                              selected: !!active,
-                                              disabled: !!workspace.unavailable,
-                                            }}
-                                            disabled={workspace.unavailable}
-                                            onPress={() =>
-                                              onWorkspace(host.id, workspace)
-                                            }
-                                            style={[
-                                              styles.workspace,
-                                              active && {
-                                                backgroundColor: colors.hover,
-                                              },
-                                            ]}
-                                          >
-                                            <Text
-                                              numberOfLines={1}
-                                              style={[
-                                                styles.bodyText,
+                                        const shipState =
+                                          shipStateByWorkspace?.[
+                                            JSON.stringify([
+                                              host.id,
+                                              workspace.id,
+                                            ])
+                                          ];
+                                        const finish = shipState === "finish";
+                                        const action = finish
+                                          ? onFinishShip
+                                          : onShipWorkspace;
+                                        const viewProgress =
+                                          hasShipProgress?.(
+                                            host.id,
+                                            workspace,
+                                          ) && onViewShipProgress;
+                                        const actions = [
+                                          ...(viewProgress
+                                            ? [
                                                 {
-                                                  color: workspace.unavailable
-                                                    ? colors.muted
-                                                    : colors.text,
+                                                  label: "View Ship progress",
+                                                  run: viewProgress,
+                                                },
+                                              ]
+                                            : []),
+                                          ...(shipState &&
+                                          shipState !== "busy" &&
+                                          action
+                                            ? [
+                                                {
+                                                  label: finish
+                                                    ? "Clean up merged workspace"
+                                                    : "Ship",
+                                                  run: action,
+                                                },
+                                              ]
+                                            : []),
+                                        ];
+                                        return (
+                                          <View
+                                            key={workspace.id}
+                                            style={{
+                                              flexDirection: "row",
+                                              alignItems: "center",
+                                            }}
+                                          >
+                                            <Pressable
+                                              accessibilityRole="button"
+                                              accessibilityState={{
+                                                selected: !!active,
+                                                disabled:
+                                                  !!workspace.unavailable,
+                                              }}
+                                              disabled={workspace.unavailable}
+                                              onPress={() =>
+                                                onWorkspace(host.id, workspace)
+                                              }
+                                              style={[
+                                                styles.workspace,
+                                                { flex: 1 },
+                                                active && {
+                                                  backgroundColor: colors.hover,
                                                 },
                                               ]}
                                             >
-                                              {workspace.name}
-                                            </Text>
-                                          </Pressable>
+                                              <Text
+                                                numberOfLines={1}
+                                                style={[
+                                                  styles.bodyText,
+                                                  {
+                                                    color: workspace.unavailable
+                                                      ? colors.muted
+                                                      : colors.text,
+                                                  },
+                                                ]}
+                                              >
+                                                {workspace.name}
+                                              </Text>
+                                            </Pressable>
+                                            {actions.length > 0 &&
+                                              !workspace.unavailable && (
+                                                <Pressable
+                                                  accessibilityRole="button"
+                                                  accessibilityLabel={`Actions for ${workspace.name}`}
+                                                  style={{
+                                                    minWidth: 44,
+                                                    minHeight: 44,
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                  }}
+                                                  onPress={() =>
+                                                    ActionSheetIOS.showActionSheetWithOptions(
+                                                      {
+                                                        options: [
+                                                          ...actions.map(
+                                                            ({ label }) =>
+                                                              label,
+                                                          ),
+                                                          "Cancel",
+                                                        ],
+                                                        cancelButtonIndex:
+                                                          actions.length,
+                                                      },
+                                                      (index) =>
+                                                        actions[index]?.run(
+                                                          host.id,
+                                                          workspace,
+                                                        ),
+                                                    )
+                                                  }
+                                                >
+                                                  <Text
+                                                    style={{
+                                                      color: colors.muted,
+                                                    }}
+                                                  >
+                                                    ⋯
+                                                  </Text>
+                                                </Pressable>
+                                              )}
+                                          </View>
                                         );
                                       })}
                                     </View>

@@ -34,6 +34,7 @@ import { isRecord } from "./type-guards";
 import { isClientMessageId, readQueueSnapshot } from "./client-message-ids";
 import { createNotificationDetector } from "./notification-events";
 import { publishNotification } from "./notification-hub";
+import { publishWorkspaceJobChange } from "./workspace-job-events";
 import { eventWithToolResultImageUrls } from "./media-cache";
 import type {
   BashResultInfo,
@@ -1652,6 +1653,11 @@ export class AgentSessionWrapper {
   }
 
   private handleFrame(frame: RpcFrame): void {
+    if (frame.type === "workspace_jobs_changed") {
+      if (this._sessionId)
+        publishWorkspaceJobChange(this.host.id, "runner", this._sessionId);
+      return;
+    }
     this.resetIdleTimer();
     const event = frame;
     if (event.type === "peer_message_command") {

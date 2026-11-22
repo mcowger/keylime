@@ -44,6 +44,7 @@ type PendingCommand = {
   session: string;
   hostId: string;
   command: BrowserCommand;
+  advisor?: Schemas["BrowserCommand"]["advisor"];
   sentAt: number | null;
   timer?: ReturnType<typeof setTimeout>;
   resolve(reply: BrowserReply): void;
@@ -202,6 +203,7 @@ export class BrowserLink {
     session: string,
     hostId: string,
     command: BrowserCommand,
+    advisor?: Schemas["BrowserCommand"]["advisor"],
   ): Promise<BrowserReply> {
     const rid = `${this.clientId}-${this.nextCommand++}`;
     return new Promise((resolve, reject) => {
@@ -210,6 +212,7 @@ export class BrowserLink {
         session,
         hostId,
         command,
+        advisor,
         sentAt: null,
         resolve,
         reject,
@@ -554,6 +557,7 @@ export class BrowserLink {
         rid: command.rid,
         session: command.session,
         hostId: command.hostId,
+        ...(command.advisor === undefined ? {} : { advisor: command.advisor }),
         command: command.command,
       },
       command,

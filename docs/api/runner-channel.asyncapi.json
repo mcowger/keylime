@@ -3089,6 +3089,16 @@
           },
           {
             "properties": {
+              "t": {
+                "const": "workspace_jobs_changed",
+                "type": "string"
+              }
+            },
+            "required": ["t"],
+            "type": "object"
+          },
+          {
+            "properties": {
               "event": {
                 "anyOf": [
                   {

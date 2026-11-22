@@ -1,3 +1,4 @@
+import { DaemonWorkspaceJobScopeSchema } from "./workspace-job-events";
 import { Type, type Static } from "@sinclair/typebox";
 import { CREATION_ID_RE } from "../hosts/creation-identity";
 
@@ -450,6 +451,18 @@ export const UpMessageSchema = Type.Union(
       {
         title: "HostLinkSessionsChanged",
         description: "Host session list changed.",
+      },
+    ),
+    Type.Object(
+      {
+        type: Type.Literal("workspace_jobs_changed"),
+        seq: SafeCount,
+        scope: DaemonWorkspaceJobScopeSchema,
+      },
+      {
+        title: "HostLinkWorkspaceJobsChanged",
+        description:
+          "Invalidates a persisted setup, Effort or Ship job snapshot on the sending host. Read authoritative state through the existing host operations.",
       },
     ),
     ShipPrDigestFrame,

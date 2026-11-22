@@ -9,10 +9,11 @@ import {
   View,
 } from "react-native";
 import type { operations } from "./generated/web-http";
-import type { BrowserLink } from "./browser-link";
+import type { BrowserLink, BrowserLinkStatus } from "./browser-link";
 import { requestJson } from "./keylime-http";
 import { theme as darkTheme } from "./theme";
 import { WorkspaceFile, workspaceFileUrl } from "./WorkspaceFile";
+import { GitActions } from "./GitActions";
 
 type FileResponse =
   operations["workspaceFilesGet"]["responses"][200]["content"]["application/json"];
@@ -38,8 +39,10 @@ export type WorkspacePanelProps = {
   cwd: string;
   sessionId?: string | null;
   link?: BrowserLink | null;
+  linkStatus?: BrowserLinkStatus;
   onClose: () => void;
   onMention?: (path: string, isDirectory: boolean) => void;
+  onShip?: () => void;
 };
 
 type Scope = Pick<
@@ -182,6 +185,7 @@ function Panel(props: WorkspacePanelProps) {
             hostId={props.hostId}
             sessionId={props.sessionId}
             link={props.link}
+            linkStatus={props.linkStatus}
             kind={view}
           />
         ) : null
@@ -408,6 +412,7 @@ function Git({
   cwd,
   sessionId,
   link,
+  onShip,
   refresh,
   onRefresh,
 }: WorkspacePanelProps & { refresh: number; onRefresh: () => void }) {
@@ -440,17 +445,15 @@ function Git({
     ) ?? [];
   return (
     <View style={styles.body}>
-      <View style={styles.toolbar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Refresh Git status"
-          onPress={onRefresh}
-          style={styles.tool}
-        >
-          <Text style={styles.toolText}>↻</Text>
-        </Pressable>
-      </View>
-      <View style={styles.filterRow}>
+      <GitActions
+        origin={origin}
+        hostId={hostId}
+        cwd={cwd}
+        sessionId={sessionId}
+        disabled={!status?.isGitRepository}
+        onRefresh={onRefresh}
+        onShip={onShip}
+      >
         <Text style={styles.dim}>⌕</Text>
         <TextInput
           value={filter}
@@ -460,7 +463,7 @@ function Git({
           style={styles.filter}
           accessibilityLabel="Filter changed files"
         />
-      </View>
+      </GitActions>
       {error ? (
         <Text style={styles.hint}>{error}</Text>
       ) : !status ? (
@@ -686,13 +689,6 @@ const styles = StyleSheet.create({
   mentionText: { color: theme.muted, fontSize: 18 },
   dim: { color: theme.muted, fontSize: 16 },
   hint: { color: theme.muted, fontSize: 13, padding: 14 },
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    gap: 8,
-    paddingVertical: 6,
-  },
   filter: {
     flex: 1,
     borderWidth: 1,

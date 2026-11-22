@@ -9,6 +9,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { DownMessage, HelloChannel } from "./link-protocol.ts";
 import type { OpResult, SessionOps } from "./session-ops.ts";
 
+import { EventStreamConnection } from "../event-stream-hub.ts";
+import { parseEventStreamChannel } from "../event-stream-protocol.ts";
+
 // The hub keeps its links on globalThis; every test links its own host.
 const agentDir = mkdtempSync(join(tmpdir(), "keylime-hub-test-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -1066,6 +1069,44 @@ test("onHostHello reports the channels a daemon still runs", async () => {
     },
   ]);
   await down.cancel();
+});
+
+test("daemon job invalidations route only to browser subscribers for the sending host", async (t) => {
+  const sender = await linkHost("Job host");
+  const other = await linkHost("Other job host");
+  const frames: { name: string; data: unknown }[] = [];
+  const connection = new EventStreamConnection(undefined, {
+    write(name, _at, data) {
+      frames.push({ name, data: JSON.parse(data) });
+      return true;
+    },
+    backpressured: () => false,
+    heartbeat: () => true,
+    heartbeatMs: 30_000,
+    close: () => {},
+  });
+  t.after(() => {
+    connection.close();
+    sender.drop();
+    other.drop();
+  });
+  for (const [sub, hostId] of [
+    ["s1", sender.id],
+    ["s2", other.id],
+  ] as const) {
+    const channel = parseEventStreamChannel({ kind: "workspace-jobs", hostId });
+    assert.ok(channel);
+    assert.deepEqual(await connection.subscribe(sub, channel), { ok: true });
+  }
+  await sender.post({ type: "workspace_jobs_changed", scope: "setup" });
+  await other.post({ type: "workspace_jobs_changed", scope: "ship" });
+  assert.deepEqual(
+    frames.filter(({ name }) => name !== "mux"),
+    [
+      { name: "s1", data: { type: "workspace_jobs_changed", scope: "setup" } },
+      { name: "s2", data: { type: "workspace_jobs_changed", scope: "ship" } },
+    ],
+  );
 });
 
 test("on hello a spawned child the daemon no longer lists exits as lost; a spawn not yet applied is kept", async () => {

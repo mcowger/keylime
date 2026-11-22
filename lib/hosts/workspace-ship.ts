@@ -39,6 +39,7 @@ import {
   readShipPrStatus,
   type ShipFeedback,
 } from "./workspace-ship-github";
+import { publishWorkspaceJobChange } from "./workspace-job-changes";
 
 interface PrMonitor {
   id: string;
@@ -99,6 +100,7 @@ let recordsRevision = 0;
 function saveRecords(value: Record<string, RecordPr>) {
   save(prFile(), value);
   recordsRevision++;
+  publishWorkspaceJobChange("ship");
 }
 function sameRecord(
   current: RecordPr | undefined,
@@ -129,8 +131,10 @@ function publicPr(record: RecordPr): ShipPr {
       }
     : pr;
 }
-const persist = (job: ShipJob) =>
+const persist = (job: ShipJob) => {
   save(path.join(jobsDir(), `${job.id}.json`), job);
+  publishWorkspaceJobChange("ship");
+};
 
 function assertShipAllowed(workspacePath: string): void {
   if (isEffortPath(workspacePath))

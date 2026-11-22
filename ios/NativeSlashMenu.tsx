@@ -19,6 +19,7 @@ import {
   extractSlashQuery,
 } from "../lib/slash-autocomplete";
 import { WEB_SLASH_COMMANDS } from "../lib/web-slash-commands";
+import english from "../lib/i18n/locales/en.json";
 import type { BrowserLink } from "./browser-link";
 import type { components } from "./generated/browser-link";
 import { theme } from "./theme";
@@ -31,8 +32,7 @@ export type NativeSlashCommand = Pick<
 >;
 export type NativeTextSelection = { start: number; end: number };
 
-// The native composer does not implement the web client's command dispatcher.
-// Do not advertise those commands, even if an extension has the same name.
+// Client-owned names take precedence over identically named runner commands.
 const clientCommands = new Set([
   ...WEB_SLASH_COMMANDS.map((command) => command.name),
   "btw",
@@ -42,6 +42,28 @@ const clientCommands = new Set([
   "session",
   "copy",
 ]);
+
+const unsupportedCommands: Record<string, true> = {
+  btw: true,
+  copy: true,
+  session: true,
+};
+const builtinCommands: NativeSlashCommand[] = [
+  ...WEB_SLASH_COMMANDS.map((command) => ({
+    name: command.name,
+    source: "builtin" as const,
+    description: english[command.descriptionKey as keyof typeof english],
+    input: { hint: english[command.argumentHintKey as keyof typeof english] },
+  })),
+  ...(["compact", "reload", "name"] as const).map((name) => ({
+    name,
+    source: "builtin" as const,
+    description:
+      english[
+        `chatInput.cmd${name[0].toUpperCase()}${name.slice(1)}` as keyof typeof english
+      ],
+  })),
+];
 
 const sourceLabels: Record<NativeSlashCommand["source"], string> = {
   builtin: "Built-in",
@@ -119,6 +141,7 @@ function usableCommands(data: {
 }
 
 export type NativeSlashMenuOptions = {
+  advisorEnabled: boolean;
   link: BrowserLink;
   hostId: string;
   sessionId: string | null;
@@ -145,6 +168,7 @@ export type NativeSlashMenuModel = {
 type Loaded = { key: string; commands: NativeSlashCommand[] };
 /** The caller owns the TextInput and routes its hardware key and submit events here. */
 export function useNativeSlashMenu({
+  advisorEnabled,
   link,
   hostId,
   sessionId,
@@ -174,31 +198,40 @@ export function useNativeSlashMenu({
     let current = true;
     setLoadingKey(key);
     setLoaded(null);
-    void link.command(sessionId, hostId, { type: "get_commands" }).then(
-      (reply) => {
-        if (!current) return;
-        const data: unknown =
-          "success" in reply.data && reply.data.success
-            ? reply.data.data
-            : null;
-        setLoaded({
-          key,
-          commands: commandData(data) ? usableCommands(data) : [],
-        });
-        setLoadingKey(null);
-      },
-      () => {
-        if (!current) return;
-        setLoaded({ key, commands: [] });
-        setLoadingKey(null);
-      },
-    );
+    void link
+      .command(sessionId, hostId, { type: "get_commands" }, advisorEnabled)
+      .then(
+        (reply) => {
+          if (!current) return;
+          const data: unknown =
+            "success" in reply.data && reply.data.success
+              ? reply.data.data
+              : null;
+          setLoaded({
+            key,
+            commands: commandData(data) ? usableCommands(data) : [],
+          });
+          setLoadingKey(null);
+        },
+        () => {
+          if (!current) return;
+          setLoaded({ key, commands: [] });
+          setLoadingKey(null);
+        },
+      );
     return () => {
       current = false;
     };
-  }, [open, ready, sessionId, key, hostId, link]);
+  }, [open, ready, sessionId, key, hostId, link, advisorEnabled]);
 
-  const available = open && ready && loaded?.key === key ? loaded.commands : [];
+  const available = open
+    ? [
+        ...builtinCommands.filter(
+          (command) => command.name !== "advisor" || advisorEnabled,
+        ),
+        ...(ready && loaded?.key === key ? loaded.commands : []),
+      ]
+    : [];
   const items = useMemo(() => {
     if (!match) return [];
     const query = match.query;
@@ -246,9 +279,14 @@ export function useNativeSlashMenu({
   const leadingName = /^\s*\/([^\s/]+)/.exec(draft)?.[1]?.toLowerCase();
   const slashInput =
     !!match || /^\s*\//.test(draft) || /(?:^|\s)\/skill:[^\s/]*/i.test(draft);
-  const blockedReason =
-    leadingName && clientCommands.has(leadingName)
-      ? ("client-command" as const)
+  const unsupported =
+    !!leadingName && Object.hasOwn(unsupportedCommands, leadingName);
+  const supported =
+    !!leadingName && clientCommands.has(leadingName) && !unsupported;
+  const blockedReason = unsupported
+    ? ("client-command" as const)
+    : supported
+      ? null
       : slashInput && running
         ? ("session-running" as const)
         : slashInput &&

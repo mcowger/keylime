@@ -10,6 +10,7 @@ import { sessionKey } from "./session-identity.ts";
 import * as chatRolesRoute from "../app/api/chat-roles/route.ts";
 import { Value } from "@sinclair/typebox/value";
 import { SetChatRoleResultSchema } from "./api-contracts/runner-lifecycle";
+import { readChatCreation } from "../ios/chat-creation.ts";
 
 type Launch = OpenChannelRequest["launch"];
 type Command = Record<string, unknown> & { type: string };
@@ -22,6 +23,7 @@ import {
   linkLocalHost,
   linkHost,
   listedSession,
+  until,
 } from "./hosts/link-driver.test-helper.ts";
 
 const { runAgentCommand } = await import("./agent-command.ts");
@@ -33,7 +35,7 @@ const hub = await import("./hosts/hub.ts");
 const { MAX_AGENT_COMMAND_REQUEST_BYTES } =
   await import("./image-attachments.ts");
 const { RpcCommandError } = await import("./omp/rpc-process.ts");
-const { WebRpcError, getRpcSession } = await import("./rpc-manager.ts");
+const { AgentSessionWrapper, WebRpcError, getRpcSession } = await import("./rpc-manager.ts");
 const { invalidateHostSessionList } = await import("./hosts/session-index.ts");
 
 // A saved session on this machine whose daemon is driven by hand: a launching
@@ -787,6 +789,66 @@ test("fresh sessions apply a role before an explicit thinking override and promp
   assert.equal(selected[0].role, "smol");
   assert.equal(selected[1].level, "low");
   assert.equal(Object.hasOwn(selected[2], "chatRole"), false);
+});
+
+test("a host disconnect during native chat creation returns the initialized tab's identity without sending a prompt", async (t) => {
+  useRegistry(t);
+  const offlineMs = hub.linkTimings.offlineMs;
+  hub.linkTimings.offlineMs = 1_000;
+  t.after(() => {
+    hub.linkTimings.offlineMs = offlineMs;
+  });
+  const remote = await linkHost("Interrupted initialization host");
+  const remoteSpawns: Launch[] = [];
+  const send = AgentSessionWrapper.prototype.send;
+  t.mock.method(
+    AgentSessionWrapper.prototype,
+    "send",
+    async function (this: InstanceType<typeof AgentSessionWrapper>, ...args: Parameters<typeof send>) {
+      // Drop after spawn has returned, just as the route starts model setup.
+      if (this.host.id === remote.id && args[0].type === "set_model") {
+        remote.drop();
+        await until(() => this.host.status() === "offline", "host link outage");
+      }
+      return send.apply(this, args);
+    },
+  );
+  const serving = remote.serve(
+    {
+      open: openOp(remoteSpawns),
+      validateCwd: ({ path }) => ({
+        ok: true,
+        value: { cwd: path, projectRoot: path },
+      }),
+      invalidateSessionLists: () => null,
+      sessionFileExists: () => false,
+    },
+    (message) => respond(message, remote),
+  );
+  t.after(async () => {
+    remote.drop();
+    await serving;
+  });
+  const response = await newRoute.POST(
+    new Request("http://omp.test/api/agent/new", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "ensure_session",
+        hostId: remote.id,
+        cwd: "/w",
+        provider: "example",
+        modelId: "model",
+      }),
+    }),
+  );
+  assert.equal(response.status, 503, await response.clone().text());
+  const created = await readChatCreation(response.clone());
+  assert.equal(created?.kind, "initialization-interrupted", await response.text());
+  assert.ok(created?.sessionId);
+  assert.equal(getRpcSession(created.sessionId, remote.id)?.host.id, remote.id);
+  assert.equal(remoteSpawns.length, 1);
+  assert.equal(stdin.some(({ type }) => type === "set_model"), false);
+  assert.equal(stdin.some(({ type }) => type === "prompt"), false);
 });
 
 test("fresh sessions reject invalid role initialization before spawning", async (t) => {

@@ -29,8 +29,11 @@ async function bridged(responses: { content: string[] }[] = []) {
   const events: Event[] = [];
   const waiters = new Map<string, { count: number; resolve: () => void }>();
   const send = (frame: Frame) => {
-    expect(frame.t).toBe("event");
-    const event = frame.event as Event;
+    expect(["event", "workspace_jobs_changed"]).toContain(frame.t);
+    const event =
+      frame.t === "workspace_jobs_changed"
+        ? { type: frame.t }
+        : (frame.event as Event);
     events.push(event);
     const waiter = waiters.get(event.type);
     if (waiter && events.filter((item) => item.type === event.type).length >= waiter.count) {

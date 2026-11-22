@@ -108,6 +108,7 @@ export const runnerInboundFrameSchemas: readonly TSchema[] = [
     error: s(),
     code: opt(s()),
   }),
+  frame("workspace_jobs_changed"),
   frame("event", { event: Type.Union([...runnerEventSchemas]) }),
   ...uiFields,
   ...lifecycleRunnerEvents,

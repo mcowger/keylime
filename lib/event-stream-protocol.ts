@@ -158,6 +158,10 @@ export function parseEventStreamChannel(
       return { kind: "host-tools" };
     case "hosts":
       return { kind: "hosts" };
+    case "workspace-jobs":
+      return isBoundedString(channel.hostId, MAX_ID_LENGTH)
+        ? { kind: "workspace-jobs", hostId: channel.hostId }
+        : null;
     case "terminal":
       return isBoundedString(channel.hostId, MAX_ID_LENGTH) &&
         isBoundedString(channel.terminalId, MAX_ID_LENGTH)

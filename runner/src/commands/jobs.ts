@@ -15,6 +15,7 @@ import type {
   JobSnapshot,
 } from "../../../lib/jobs-types";
 import { CommandError, type CommandContext, type CommandTable } from "./types";
+import { observeJobServices } from "../job-events";
 
 // A runner's identities must never be accepted by a replacement process.
 const generation = randomUUID();
@@ -230,6 +231,7 @@ export const jobsCommands: CommandTable = {
       services: [],
     };
     try {
+      await observeJobServices(ctx.session);
       const { units } = await services(ctx);
       snapshot.services = units.map(serviceActivity);
     } catch (error) {

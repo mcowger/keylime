@@ -61,6 +61,7 @@ import {
   stopShipWatcher,
   workspaceShipState,
 } from "./workspace-ship.ts";
+import { subscribeWorkspaceJobChanges } from "./workspace-job-changes";
 
 interface Fixture {
   project: string;
@@ -269,6 +270,41 @@ async function assertPlanningStatus(
   );
   return board;
 }
+test("Ship changes publish committed running and completed job state", async (t) => {
+  const f = await fixture(t);
+  const gate = join(f.root, "hold-list");
+  writeFileSync(gate, "");
+  const statuses: string[] = [];
+  let id: string | undefined;
+  const unsubscribe = subscribeWorkspaceJobChanges((scope) => {
+    if (scope !== "ship" || !id) return;
+    const file = join(f.root, "agent", "keylime", "ship", "jobs", `${id}.json`);
+    if (existsSync(file)) {
+      const job = JSON.parse(readFileSync(file, "utf8")) as ShipJob;
+      statuses.push(job.status);
+    }
+  });
+  try {
+    const job = await startShip({
+      ...f.input,
+      mode: "pr",
+      rebase: false,
+      cleanup: false,
+      pr: { title: "Feature", body: "Details" },
+    });
+    id = job.id;
+    await delay(75);
+    assert.ok(statuses.includes("running"));
+    rmSync(gate);
+    assert.equal((await finished(job)).status, "complete");
+    await delay(75);
+    assert.ok(statuses.includes("complete"));
+  } finally {
+    unsubscribe();
+    rmSync(gate, { force: true });
+  }
+});
+
 test("local merge completes only its task even if cleanup fails", async (t) => {
   const f = await fixture(t);
   const planning = await planningFixture(f);

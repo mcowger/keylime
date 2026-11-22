@@ -1,5 +1,6 @@
 import type { operations } from "./generated/web-http";
 import { nativeRequest } from "./native-network";
+import { readChatCreation } from "./chat-creation";
 
 export type HostsResponse =
   operations["getHosts"]["responses"][200]["content"]["application/json"];
@@ -7,6 +8,11 @@ type LoginRequest =
   operations["postWebAuthSession"]["requestBody"]["content"]["application/json"];
 type LoginResponse =
   operations["postWebAuthSession"]["responses"][200]["content"]["application/json"];
+type CreateChatOperation = operations["createAgentSession"];
+type EnsureChatRequest = Extract<
+  CreateChatOperation["requestBody"]["content"]["application/json"],
+  { type: "ensure_session" }
+>;
 
 export type HttpErrorKind =
   "unauthorized" | "unreachable" | "http" | "invalid-response";
@@ -67,11 +73,11 @@ export function normalizeOrigin(input: string): string {
 }
 
 /** The native transport refuses redirects and confines cookies to the selected origin. */
-export async function requestJson<T>(
+async function request(
   origin: string,
   path: string,
   init?: RequestInit,
-): Promise<T> {
+): Promise<Response> {
   const server = normalizeOrigin(origin);
   if (
     !path.startsWith("/") ||
@@ -90,12 +96,38 @@ export async function requestJson<T>(
     throw new KeylimeHttpError("unreachable");
   }
   if (response.status === 401) throw new KeylimeHttpError("unauthorized", 401);
+  return response;
+}
+
+export async function requestJson<T>(
+  origin: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await request(origin, path, init);
   if (!response.ok) throw new KeylimeHttpError("http", response.status);
   try {
     return (await response.json()) as T;
   } catch {
     throw new KeylimeHttpError("invalid-response", response.status);
   }
+}
+
+export async function ensureChatSession(
+  origin: string,
+  body: EnsureChatRequest,
+) {
+  const response = await request(origin, "/api/agent/new", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = await readChatCreation(response);
+  if (result) return result;
+  throw new KeylimeHttpError(
+    response.ok ? "invalid-response" : "http",
+    response.status,
+  );
 }
 
 export async function getHosts(origin: string): Promise<HostsResponse> {
