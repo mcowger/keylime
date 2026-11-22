@@ -82,7 +82,7 @@ Session browsing and seeded UI checks work without it.
 
 ### iOS app development
 
-For the standalone Expo app, follow [`ios/AGENTS.md`](ios/AGENTS.md) for setup, compilation, and simulator testing. The root build and test commands don't cover the iOS app.
+Follow [`ios/AGENTS.md`](ios/AGENTS.md) for Expo setup, builds, and simulator testing, or to open the Keylime PWA in iOS Simulator and take screenshots. The root build and test commands don't cover the Expo app.
 
 ### Development and browser testing
 
