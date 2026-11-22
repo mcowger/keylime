@@ -27,8 +27,15 @@ export function WorkspaceTerminal({
   const container = useRef<HTMLDivElement>(null);
   const fitRef = useRef<(() => void) | null>(null);
   const sendKeyRef = useRef<((key: string) => void) | null>(null);
+  const pasteRef = useRef<((text: string) => boolean) | null>(null);
+  const selectRef = useRef<(() => void) | null>(null);
+  const activeRef = useRef(active);
+  const pasteRequestRef = useRef(0);
   const ctrlRef = useRef(false);
   const [ctrl, setCtrl] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [pasteField, setPasteField] = useState(false);
+  const [pasteText, setPasteText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -146,6 +153,28 @@ export function WorkspaceTerminal({
       attributeFilter: ["class", "style", "data-theme"],
     });
     let disposed = false;
+    let pasting = false;
+    let pasteAccepted = false;
+    const paste = (text: string) => {
+      if (disposed || !activeRef.current || !text) return false;
+      pasting = true;
+      pasteAccepted = false;
+      try {
+        term.paste(text);
+        return pasteAccepted;
+      } finally {
+        pasting = false;
+      }
+    };
+    pasteRef.current = paste;
+    selectRef.current = () => term.clearSelection();
+    const onPaste = (event: ClipboardEvent) => {
+      if (!event.clipboardData) return;
+      event.preventDefault();
+      event.stopPropagation();
+      paste(event.clipboardData.getData("text/plain"));
+    };
+    element.addEventListener("paste", onPaste, true);
     let ready = false;
     let replayingSnapshot = false;
     let generation = 0;
@@ -199,29 +228,31 @@ export function WorkspaceTerminal({
       term.focus();
     };
     const sendInput = (data: string) => {
-      if (replayingSnapshot) return;
+      if (replayingSnapshot) return false;
       if (!ready) {
         setError(
           "Terminal disconnected. Input is unavailable until reconnected.",
         );
-        return;
+        return false;
       }
       if (pendingInput.length + data.length > 1024 * 1024) {
         setError(
           "Terminal input buffer full; wait for the host before typing more.",
         );
-        return;
+        return false;
       }
       pendingInput += data;
       void flush();
+      return true;
     };
     const input = term.onData((data) => {
-      const encoded = applyTerminalControl(data, ctrlRef.current);
+      const encoded = applyTerminalControl(data, ctrlRef.current && !pasting);
       if (encoded.consumed) {
         ctrlRef.current = false;
         setCtrl(false);
       }
-      sendInput(encoded.data);
+      const accepted = sendInput(encoded.data);
+      if (pasting) pasteAccepted = accepted;
     });
     sendKeyRef.current = (key) => {
       const arrows: Record<string, string> = {
@@ -381,6 +412,7 @@ export function WorkspaceTerminal({
     return () => {
       disposed = true;
       clearInterval(focusHeartbeat);
+      element.removeEventListener("paste", onPaste, true);
       element.removeEventListener("focusin", onFocusIn);
       element.removeEventListener("focusout", onFocusOut);
       window.removeEventListener("focus", onWindowFocus);
@@ -390,6 +422,9 @@ export function WorkspaceTerminal({
       generation++;
       fitRef.current = null;
       sendKeyRef.current = null;
+      pasteRef.current = null;
+      selectRef.current = null;
+      pasteRequestRef.current++;
       ctrlRef.current = false;
       setCtrl(false);
       clearTimeout(retry);
@@ -403,8 +438,31 @@ export function WorkspaceTerminal({
   }, [hostId, terminal.id]);
 
   useEffect(() => {
+    activeRef.current = active;
     if (active) requestAnimationFrame(() => fitRef.current?.());
+    else {
+      pasteRequestRef.current++;
+      setSelecting(false);
+    }
   }, [active]);
+
+  const requestPaste = () => {
+    const request = ++pasteRequestRef.current;
+    if (!navigator.clipboard?.readText) {
+      setPasteField(true);
+      return;
+    }
+    void navigator.clipboard.readText().then(
+      (text) => {
+        if (request === pasteRequestRef.current && activeRef.current)
+          pasteRef.current?.(text);
+      },
+      () => {
+        if (request === pasteRequestRef.current && activeRef.current)
+          setPasteField(true);
+      },
+    );
+  };
   return (
     <div className="workspace-terminal" hidden={!active}>
       {error && (
@@ -414,17 +472,83 @@ export function WorkspaceTerminal({
       )}
       <div className="workspace-terminal-screen">
         <div
-          className="workspace-terminal-viewport"
+          className={`workspace-terminal-viewport${selecting ? " workspace-terminal-selecting" : ""}`}
           ref={container}
           onKeyDown={(event) => event.stopPropagation()}
+          onMouseDownCapture={(event) => {
+            if (selecting) event.stopPropagation();
+          }}
+          onTouchStartCapture={(event) => {
+            if (selecting) event.stopPropagation();
+          }}
+          onTouchMoveCapture={(event) => {
+            if (selecting) event.stopPropagation();
+          }}
+          onTouchEndCapture={(event) => {
+            if (selecting) event.stopPropagation();
+          }}
         />
       </div>
+      {pasteField && (
+        <div className="workspace-terminal-paste">
+          <label htmlFor={`terminal-paste-${terminal.id}`}>
+            Paste text here, then send it to the terminal
+          </label>
+          <textarea
+            id={`terminal-paste-${terminal.id}`}
+            value={pasteText}
+            onChange={(event) => setPasteText(event.target.value)}
+            onKeyDown={(event) => event.stopPropagation()}
+          />
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                if (pasteRef.current?.(pasteText)) {
+                  setPasteText("");
+                  setPasteField(false);
+                }
+              }}
+              disabled={!pasteText}
+            >
+              Send paste
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPasteText("");
+                setPasteField(false);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <div
         className="workspace-terminal-keys"
         role="toolbar"
         aria-label="Terminal keys"
         onKeyDown={(event) => event.stopPropagation()}
       >
+        <button
+          type="button"
+          aria-pressed={selecting}
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (!selecting) selectRef.current?.();
+            setSelecting(!selecting);
+          }}
+        >
+          Select
+        </button>
+        <button
+          type="button"
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={requestPaste}
+        >
+          Paste
+        </button>
         {["Esc", "Tab", "Ctrl", "Ctrl-C", "Left", "Down", "Up", "Right"].map(
           (key) => (
             <button

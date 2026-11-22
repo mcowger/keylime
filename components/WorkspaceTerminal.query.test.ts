@@ -8,7 +8,7 @@ import type { WorkspaceOps } from "../lib/workspace-types";
 import type { TerminalEvent } from "../lib/terminal-types";
 import type { RenderResult } from "@testing-library/react";
 
-const { render, cleanup, fireEvent } =
+const { render, cleanup, fireEvent, waitFor, within } =
   await import("@testing-library/react/pure.js");
 let host: {
   op: WorkspaceOps["terminals"];
@@ -141,10 +141,21 @@ test(
       }
       const script = `
 process.stdin.setRawMode(true); let data = Buffer.alloc(0);
-process.stdin.on('data', c => { data = Buffer.concat([data, c]); });
+let bracketed = false;
+process.stdin.on('data', c => {
+  data = Buffer.concat([data, c]);
+  if (!bracketed && data.includes(Buffer.from('hello'))) {
+    bracketed = true;
+    process.stdout.write('\\x1b[?2004hBRACKET_READY');
+  }
+  if (bracketed && data.includes(Buffer.from('\\x1b[201~'))) {
+    process.stdin.setRawMode(false);
+    console.log('MATRIX_${count}:' + data.toString('hex'));
+    process.exit(0);
+  }
+});
 process.stdout.write('\\x1b[c\\x1b[>c\\x1b[5n\\x1b[4$p\\x1b[?25$p\\x1bP$qm\\x1b\\\\\\x1b]4;1;?\\x07\\x1b]10;?\\x07\\x1b]11;?\\x07\\x1b]12;?\\x07READY_${count}');
-await Bun.sleep(1200); process.stdin.setRawMode(false);
-console.log('MATRIX_${count}:' + data.toString('hex')); process.exit(0);
+${count === 2 ? "" : "await Bun.sleep(1200); process.stdin.setRawMode(false); console.log('MATRIX_" + count + ":' + data.toString('hex')); process.exit(0);"}
 `;
       const command = `"${process.execPath}" -e "eval('(async()=>{'+atob('${Buffer.from(script).toString("base64")}')+'})()')"\n`;
       assert.equal(
@@ -172,12 +183,67 @@ console.log('MATRIX_${count}:' + data.toString('hex')); process.exit(0);
           ".xterm-helper-textarea",
         );
         assert.ok(textarea);
-        await act(async () => {
-          for (const value of [pastedColor, pastedFocus])
-            fireEvent.paste(textarea, {
-              clipboardData: { getData: () => value },
-            });
+        const terminalView = within(views[1].container);
+        for (const value of [pastedColor, pastedFocus])
+          fireEvent.paste(textarea, {
+            clipboardData: { getData: () => value },
+          });
+        fireEvent.click(terminalView.getByRole("button", { name: "Ctrl" }));
+        fireEvent.paste(textarea, {
+          clipboardData: { getData: () => "c" },
         });
+        assert.equal(
+          terminalView
+            .getByRole("button", { name: "Ctrl" })
+            .getAttribute("aria-pressed"),
+          "true",
+        );
+        fireEvent.input(textarea, { data: "d", inputType: "insertText" });
+        assert.equal(
+          terminalView
+            .getByRole("button", { name: "Ctrl" })
+            .getAttribute("aria-pressed"),
+          "false",
+        );
+        const previousClipboard = Object.getOwnPropertyDescriptor(
+          navigator,
+          "clipboard",
+        );
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: { readText: async () => "clipboard" },
+        });
+        await act(async () => {
+          fireEvent.click(terminalView.getByRole("button", { name: "Paste" }));
+        });
+        if (previousClipboard)
+          Object.defineProperty(navigator, "clipboard", previousClipboard);
+        else Reflect.deleteProperty(navigator, "clipboard");
+        fireEvent.click(terminalView.getByRole("button", { name: "Paste" }));
+        const field = terminalView.getByLabelText(
+          "Paste text here, then send it to the terminal",
+        );
+        fireEvent.change(field, { target: { value: "hello" } });
+        fireEvent.click(
+          terminalView.getByRole("button", { name: "Send paste" }),
+        );
+        fireEvent.click(terminalView.getByRole("button", { name: "Select" }));
+        assert.equal(
+          terminalView
+            .getByRole("button", { name: "Select" })
+            .getAttribute("aria-pressed"),
+          "true",
+        );
+        fireEvent.click(terminalView.getByRole("button", { name: "Select" }));
+        await waitFor(() => {
+          assert.ok(
+            views[1].container
+              .querySelector(".xterm-rows")
+              ?.textContent?.includes("BRACKET_READY"),
+            "bracketed paste mode did not reach the terminal",
+          );
+        });
+        fireEvent.paste(textarea, { clipboardData: { getData: () => "c" } });
       }
       let match;
       const until = Date.now() + 10000;
@@ -195,7 +261,11 @@ console.log('MATRIX_${count}:' + data.toString('hex')); process.exit(0);
       assert.equal(
         Buffer.from(match[1], "hex").toString(),
         "\x1b[?1;2c\x1b[>0;276;0c\x1b[0n\x1b[4;2$y\x1b[?25;1$y\x1bP1$r0m\x1b\\\x1b]4;1;rgb:cccc/0000/0000\x1b\\\x1b]10;rgb:ffff/ffff/ffff\x1b\\\x1b]11;rgb:0000/0000/0000\x1b\\\x1b]12;rgb:ffff/ffff/ffff\x1b\\" +
-          (count === 2 ? pastedColor + pastedFocus : ""),
+          (count === 2
+            ? pastedColor +
+              pastedFocus +
+              "c\x04clipboardhello\x1b[200~c\x1b[201~"
+            : ""),
       );
     }
     for (const view of views) view.unmount();

@@ -219,6 +219,48 @@
 .workspace-terminal-screen .xterm {
   height: 100%;
 }
+.workspace-terminal-selecting .xterm,
+.workspace-terminal-selecting .xterm-screen,
+.workspace-terminal-selecting .xterm-rows,
+.workspace-terminal-selecting .xterm-rows * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+.workspace-terminal-selecting .xterm-rows {
+  pointer-events: auto;
+}
+.workspace-terminal-selecting .xterm .xterm-rows span {
+  display: inline;
+}
+.workspace-terminal-paste {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.workspace-terminal-paste textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  background: var(--bg-subtle);
+  font-family: var(--font-mono);
+}
+.workspace-terminal-paste div {
+  display: flex;
+  gap: 6px;
+}
+.workspace-terminal-paste button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  background: var(--bg-subtle);
+}
 .workspace-terminal-error {
   padding: 6px 10px;
   color: var(--status-error);
