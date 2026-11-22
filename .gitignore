@@ -25,6 +25,9 @@ coverage/
 /output/
 *.png.png
 screenshots/
+!/ios/screenshots/
+/ios/screenshots/*
+!/ios/screenshots/baseline/
 /mockups/
 
 # misc

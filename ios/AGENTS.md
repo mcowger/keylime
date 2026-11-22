@@ -98,4 +98,4 @@ mkdir -p screenshots
 xcrun simctl io "$SIM" screenshot screenshots/keylime-pwa.png
 ```
 
-This saves a full-resolution PNG on the Mac. Use the explicit UDID when multiple simulators are booted. `screenshots/` is ignored by Git.
+This saves a full-resolution PNG on the Mac. Use the explicit UDID when multiple simulators are booted. `screenshots/` is ignored by Git except for `screenshots/baseline/`.
