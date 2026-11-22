@@ -17,6 +17,8 @@ import {
   statSync,
 } from "fs";
 import { basename, dirname, join } from "path";
+import type { Static } from "@sinclair/typebox";
+import type { SubagentHistoryValueSchema } from "./api-contracts/host-session-operations";
 import { getSessionEntries, entryToUiMessage } from "./session-reader";
 import { parseJsonlLenient } from "./omp/session-files";
 import {
@@ -115,19 +117,24 @@ function progressUpsertBlocked(existing: SubagentHistoryEntry): boolean {
 }
 
 /**
- * Recover the subagent roster from a parent session file. Walks task
- * toolResults, merging `progress` (live-snapshot fields) with `results`
- * (settled per-subagent telemetry), then resolves sibling transcript files.
+ * Recover the subagent roster and reported costs from one full parent session
+ * file snapshot, including every branch. Task results take precedence over
+ * progress snapshots when computing each deduplicated subagent's cost.
  */
 export function extractSubagentHistory(
   sessionFilePath: string,
-): SubagentHistoryEntry[] {
+): Static<typeof SubagentHistoryValueSchema> {
   let entries: SessionEntry[];
   try {
     entries = getSessionEntries(sessionFilePath);
   } catch {
-    return [];
+    return { subagents: [] };
   }
+  // The reader also returns an empty array for missing, unreadable, malformed,
+  // and oversized files. Do not report authoritative zeroes in those cases.
+  if (entries.length === 0) return { subagents: [] };
+
+  let agentCost = 0;
 
   const byId = new Map<string, SubagentHistoryEntry>();
   // Authoritative launch order: the assistant message that spawns a batch lists
@@ -142,6 +149,12 @@ export function extractSubagentHistory(
       entry.message.role !== "assistant"
     )
       continue;
+    const usage = isRecord(entry.message.usage)
+      ? entry.message.usage
+      : undefined;
+    const cost =
+      usage && isRecord(usage.cost) ? asNumber(usage.cost.total) : undefined;
+    if (cost !== undefined && cost >= 0) agentCost += cost;
     const content = entry.message.content;
     if (!Array.isArray(content)) continue;
     for (const block of content) {
@@ -363,12 +376,22 @@ export function extractSubagentHistory(
       entry.resolvedModel ??= transcriptModel(candidate);
     }
   }
-  return roster.sort(
+  roster.sort(
     (a, b) =>
       (batchSeqById.get(a.id) ?? 0) - (batchSeqById.get(b.id) ?? 0) ||
       a.index - b.index ||
       a.id.localeCompare(b.id),
   );
+  let subagentCost = 0;
+  for (const entry of roster) {
+    const cost = entry.result?.cost ?? entry.cost;
+    if (cost !== undefined && Number.isFinite(cost) && cost >= 0)
+      subagentCost += cost;
+  }
+  return {
+    subagents: roster,
+    costs: { agent: agentCost, subagents: subagentCost },
+  };
 }
 
 /** Bytes read from a transcript's head to find its model entries. */

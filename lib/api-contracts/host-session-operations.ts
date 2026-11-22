@@ -45,9 +45,29 @@ export const SessionReadOptionsSchema = Type.Object(
       description: "Defer loading assistant thinking blocks.",
     }),
     deferMedia: Type.Boolean({ description: "Defer loading embedded media." }),
-    tail: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, description: "Maximum number of newest display entries to return." })),
-    before: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: "Exclusive oldest entry ID of the previously received page." })),
-    historyRevision: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: "Opaque revision returned by the first tail page; required with before." })),
+    tail: Type.Optional(
+      Type.Integer({
+        minimum: 1,
+        maximum: 200,
+        description: "Maximum number of newest display entries to return.",
+      }),
+    ),
+    before: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 256,
+        description:
+          "Exclusive oldest entry ID of the previously received page.",
+      }),
+    ),
+    historyRevision: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 256,
+        description:
+          "Opaque revision returned by the first tail page; required with before.",
+      }),
+    ),
   },
   { description: "Controls deferred content in a file-only session snapshot." },
 );
@@ -76,14 +96,33 @@ export const ContextReadOptionsSchema = Type.Object(
   },
 );
 // Tree entries are navigation projections: their bodies are deliberately absent.
-const SessionNavigationTreeSchema = Type.Unsafe<Static<typeof SessionTreeNodeSchema>>(
-  Type.Recursive((This) => Type.Object({
-    entry: Type.Object({ id: str(), type: str(), parentId: Type.Optional(nullable(str())), timestamp: Type.Optional(str()) }, { additionalProperties: true }),
-    children: Type.Array(This),
-    label: Type.Optional(str()),
-    compressedEntryIds: Type.Optional(Type.Array(str())),
-    branchPreview: Type.Optional(Type.Object({ role: Type.Optional(Type.Union([Type.Literal("user"), Type.Literal("assistant")])), text: str() })),
-  })),
+const SessionNavigationTreeSchema = Type.Unsafe<
+  Static<typeof SessionTreeNodeSchema>
+>(
+  Type.Recursive((This) =>
+    Type.Object({
+      entry: Type.Object(
+        {
+          id: str(),
+          type: str(),
+          parentId: Type.Optional(nullable(str())),
+          timestamp: Type.Optional(str()),
+        },
+        { additionalProperties: true },
+      ),
+      children: Type.Array(This),
+      label: Type.Optional(str()),
+      compressedEntryIds: Type.Optional(Type.Array(str())),
+      branchPreview: Type.Optional(
+        Type.Object({
+          role: Type.Optional(
+            Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
+          ),
+          text: str(),
+        }),
+      ),
+    }),
+  ),
 );
 export const SessionReadValueSchema = Type.Object(
   {
@@ -95,10 +134,21 @@ export const SessionReadValueSchema = Type.Object(
       "worktreeBranch",
     ]),
     leafId: nullable(str()),
-    tree: Type.Array(Type.Union([SessionTreeNodeSchema, SessionNavigationTreeSchema])),
+    tree: Type.Array(
+      Type.Union([SessionTreeNodeSchema, SessionNavigationTreeSchema]),
+    ),
     context: SessionContextSchema,
-    historyHasMore: Type.Optional(Type.Boolean({ description: "Whether older display entries precede this tail page." })),
-    historyRevision: Type.Optional(Type.String({ description: "Opaque file generation; supply with before to prevent mixed histories." })),
+    historyHasMore: Type.Optional(
+      Type.Boolean({
+        description: "Whether older display entries precede this tail page.",
+      }),
+    ),
+    historyRevision: Type.Optional(
+      Type.String({
+        description:
+          "Opaque file generation; supply with before to prevent mixed histories.",
+      }),
+    ),
   },
   {
     description:
@@ -108,14 +158,24 @@ export const SessionReadValueSchema = Type.Object(
 export const SessionHistoryContinuationSchema = Type.Object(
   {
     context: SessionContextSchema,
-    historyHasMore: Type.Boolean({ description: "Whether older display entries precede this page." }),
-    historyRevision: Type.String({ description: "Opaque file generation used to fence continuation pages." }),
+    historyHasMore: Type.Boolean({
+      description: "Whether older display entries precede this page.",
+    }),
+    historyRevision: Type.String({
+      description: "Opaque file generation used to fence continuation pages.",
+    }),
   },
-  { description: "An older history page without session metadata or the navigation tree." },
+  {
+    description:
+      "An older history page without session metadata or the navigation tree.",
+  },
 );
 export const SessionReadResultSchema = Type.Union(
   [SessionReadValueSchema, SessionHistoryContinuationSchema],
-  { description: "A session snapshot or an older history-only continuation page." },
+  {
+    description:
+      "A session snapshot or an older history-only continuation page.",
+  },
 );
 export const ProjectUpdateSchema = Type.Object(
   {
@@ -216,9 +276,30 @@ const path = () => ({ path: str() });
 export const SubagentHistoryValueSchema = Type.Object(
   {
     subagents: Type.Array(SubagentHistoryEntrySchema),
+    costs: Type.Optional(
+      Type.Object(
+        {
+          agent: Type.Number({
+            minimum: 0,
+            description:
+              "USD reported by assistant messages across all branches.",
+          }),
+          subagents: Type.Number({
+            minimum: 0,
+            description:
+              "USD reported by deduplicated task results or progress across all branches.",
+          }),
+        },
+        {
+          description:
+            "Persisted usage from the same full-file snapshot as the roster; omitted by older daemons or when unavailable.",
+        },
+      ),
+    ),
   },
   {
-    description: "Subagent history extracted from the session's task results.",
+    description:
+      "Subagent history and reported costs extracted from the owning host's full session file, independent of selected branch or transcript page.",
   },
 );
 export const SubagentTranscriptValueSchema = transcript;
@@ -279,7 +360,7 @@ export const hostSessionOperations: readonly OperationContract[] = [
   ),
   wrapped(
     "readSubagentHistory",
-    "Usage: Read subagent history from task results.\nInputs: Supply session ID.\nInvariants: The session must exist; this is a snapshot.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after task results change or resolve session_not_found.",
+    "Usage: Read persisted subagent history and reported USD costs.\nInputs: Supply session ID.\nInvariants: Roster and costs use one full-file snapshot across all branches, independent of transcript paging; costs may be omitted by older daemons or when unavailable. The session must exist.\nEffects: Reads history without starting a runner.\nRecovery: Refresh after assistant usage or task results change, or resolve session_not_found.",
     args(id()),
     SubagentHistoryValueSchema,
   ),

@@ -12,6 +12,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Generated event-stream and runner API documents use AsyncAPI 3.1.
 
 ### Added
+- The context popup separates reported agent and subagent costs across the session file, including other branches. Costs update as history is saved and may exclude unreported or nested usage.
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal.
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts.
 - Agents can inspect their workspace's linked PR, link an existing PR, and start PR feedback monitoring without a browser or confirmation.
@@ -185,6 +186,7 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Reopening the model picker shows cached workspace roles immediately while refreshing them in the background
 - The home page lists active agents and recent chats by Effort or workspace, including the Repo name for default workspaces, and starts new workspaces or Efforts
 - Mobile terminals have Select and Paste controls. On plain HTTP or when clipboard access is denied, paste into the provided text field and send it to the terminal
+- The context popup separates reported agent and subagent costs across the session file, including other branches. Costs update as history is saved and may exclude unreported or nested usage
 
 ### Changed
 - Browser tabs show the active workspace name instead of its directory name.

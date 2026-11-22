@@ -52,6 +52,45 @@ test("context cache hit rate distinguishes rounded near-perfect hits", () => {
   assert.doesNotMatch(render(), /Cache Hit/);
 });
 
+test("context costs use one full-session snapshot rather than transcript stats", () => {
+  const sessionStats = {
+    sessionId: "session",
+    userMessages: 1,
+    assistantMessages: 1,
+    toolCalls: 1,
+    toolResults: 1,
+    totalMessages: 4,
+    tokens: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, total: 2 },
+    cost: 99,
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(ContextDetailPanel, {
+      sessionStats,
+      sessionCosts: { agent: 7.73, subagents: 2.11 },
+    }),
+  );
+  assert.match(html, /Agent Cost<\/span>[\s\S]*?\$7\.73/);
+  assert.match(html, /Sub Cost<\/span>[\s\S]*?\$2\.11/);
+  assert.match(html, /Total Cost<\/span>[\s\S]*?\$9\.84/);
+  assert.match(html, /full session file, including branches/);
+  assert.doesNotMatch(html, /\$99\.00/);
+
+  const missing = renderToStaticMarkup(
+    React.createElement(ContextDetailPanel, { sessionStats }),
+  );
+  assert.doesNotMatch(
+    missing,
+    /Agent Cost|Sub Cost|Total Cost|\$0\.00|\$99\.00/,
+  );
+
+  const zero = renderToStaticMarkup(
+    React.createElement(ContextDetailPanel, {
+      sessionCosts: { agent: 0, subagents: 0 },
+    }),
+  );
+  assert.match(zero, /Total Cost<\/span>[\s\S]*?\$0\.00/);
+});
+
 test("attaches todo plan and subagent roster with live states", () => {
   const html = renderToStaticMarkup(
     React.createElement(ActivityPanel, {
@@ -112,7 +151,8 @@ test("live chips show current tool, telemetry, and async marker", () => {
             cost: 0.0041,
             contextTokens: 8000,
             contextWindow: 32000,
-            resolvedModel: "openrouter/z-ai/glm-4.7@google-ai-studio/priority:high",
+            resolvedModel:
+              "openrouter/z-ai/glm-4.7@google-ai-studio/priority:high",
           },
         },
       ],

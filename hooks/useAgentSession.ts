@@ -3,6 +3,7 @@
 import type { Static } from "@sinclair/typebox";
 import type { PlanStateSchema } from "@/lib/api-contracts/runner-native-events";
 import type { AgentStateResponse as AgentHttpStateResponse } from "@/lib/api-contracts/http-sessions";
+import type { SubagentHistoryValueSchema } from "@/lib/api-contracts/host-session-operations";
 import {
   useState,
   useCallback,
@@ -133,7 +134,6 @@ import {
   parseSubagentProgress,
   parseSubagentSnapshot,
   type SubagentActivityEvent,
-  type SubagentHistoryEntry,
   type SubagentInfo,
   type SubagentSnapshotLike,
 } from "@/lib/subagent-types";
@@ -1051,6 +1051,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     setAdvisorReviewPending(false);
   }, [session?.id]);
   const [subagents, setSubagents] = useState<SubagentInfo[]>([]);
+  const [costSnapshot, setCostSnapshot] = useState<{
+    hostId: string;
+    sessionId: string;
+    epoch: number;
+    costs: NonNullable<Static<typeof SubagentHistoryValueSchema>["costs"]>;
+  } | null>(null);
   const [subagentEvents, setSubagentEvents] = useState<
     Record<string, SubagentActivityEvent[]>
   >({});
@@ -1075,6 +1081,23 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const reconnectTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const eventStreamRetryMsRef = useRef<number>(EVENT_STREAM_RETRY_MIN_MS);
   const sessionIdRef = useRef<string | null>(session?.id ?? null);
+  const costSessionId = session?.id ?? sessionIdRef.current;
+  const costIdentityRef = useRef({
+    hostId,
+    sessionId: costSessionId,
+    epoch: 0,
+  });
+  if (
+    costIdentityRef.current.hostId !== hostId ||
+    costIdentityRef.current.sessionId !== costSessionId
+  ) {
+    costIdentityRef.current = {
+      hostId,
+      sessionId: costSessionId,
+      epoch: costIdentityRef.current.epoch + 1,
+    };
+  }
+  const costRequestSeqRef = useRef(0);
   const createdOwnerRef = useRef<{ cwd: string; hostId?: string } | null>(null);
   const btw = useBtw(sessionIdRef, hostId);
   const {
@@ -1661,28 +1684,63 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const refreshSubagentHistory = useCallback(
     async (sid: string) => {
       const generation = subagentRosterGenerationRef.current;
+      if (
+        costIdentityRef.current.sessionId === null &&
+        sessionIdRef.current === sid
+      ) {
+        costIdentityRef.current = {
+          hostId,
+          sessionId: sid,
+          epoch: costIdentityRef.current.epoch + 1,
+        };
+      }
+      const identity = costIdentityRef.current;
+      const request = ++costRequestSeqRef.current;
+      const isCurrent = () =>
+        hookAliveRef.current &&
+        sessionIdRef.current === sid &&
+        identity.hostId === hostId &&
+        identity.sessionId === sid &&
+        costIdentityRef.current === identity &&
+        subagentRosterGenerationRef.current === generation &&
+        costRequestSeqRef.current === request;
       try {
         const res = await fetchForHost(
           `/api/sessions/${encodeURIComponent(sid)}/subagents`,
         );
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          subagents?: SubagentHistoryEntry[];
-        };
-        // Fence AFTER the awaited json: the session or roster generation may
-        // have changed while the response was in flight.
+        if (!res.ok) {
+          if (isCurrent()) setCostSnapshot(null);
+          return;
+        }
+        const data = (await res.json()) as Static<
+          typeof SubagentHistoryValueSchema
+        >;
         if (
+          !hookAliveRef.current ||
           sessionIdRef.current !== sid ||
           subagentRosterGenerationRef.current !== generation
         )
           return;
+        if (isCurrent()) {
+          setCostSnapshot(
+            data.costs
+              ? {
+                  hostId,
+                  sessionId: sid,
+                  epoch: identity.epoch,
+                  costs: data.costs,
+                }
+              : null,
+          );
+        }
         const entries = (data.subagents ?? []).map(historyEntryToSubagentInfo);
         mergeSubagents(entries);
       } catch {
+        if (isCurrent()) setCostSnapshot(null);
         // Best effort; live frames take precedence while a run is active.
       }
     },
-    [mergeSubagents],
+    [fetchForHost, hostId, mergeSubagents],
   );
 
   // Hydrate the LIVE roster from get_subagents. The registry only holds
@@ -8047,14 +8105,15 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // <ChatWindow> (setup → cleanup → setup), which made every session switch
   // fetch and commit the whole transcript twice — in dev, the doubled
   // transcript commit is the dominant cost of switching sessions. Latch on the
-  // session id so one mounted instance loads its session exactly once; the
+  // host and session id so one mounted instance loads its session exactly once; the
   // surviving first invocation still owns the async continuation (SSE attach,
   // roster hydration), which its cleanup does not tear down.
   const mountedSessionLoadRef = useRef<string | null>(null);
   useEffect(() => {
     if (session) {
-      if (mountedSessionLoadRef.current === session.id) return;
-      mountedSessionLoadRef.current = session.id;
+      const key = sessionKey(session.id, hostId);
+      if (mountedSessionLoadRef.current === key) return;
+      mountedSessionLoadRef.current = key;
       sessionIdRef.current = session.id;
       responseRunVersionRef.current += 1;
       runHadContentRef.current = false;
@@ -8101,7 +8160,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         runningRecheckRef.current?.();
       });
     }
-  }, [attachLiveRun]);
+  }, [attachLiveRun, hostId, session?.id]);
 
   useEffect(() => {
     if (!onBranchDataChange) return;
@@ -8402,6 +8461,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     displayModel,
     isAutoModelSelection: !displayModel,
     sessionStats,
+    sessionCosts:
+      costSnapshot?.hostId === hostId &&
+      costSnapshot.sessionId === (session?.id ?? sessionIdRef.current) &&
+      costSnapshot.epoch === costIdentityRef.current.epoch
+        ? costSnapshot.costs
+        : undefined,
     agentPhase,
     slashCommands,
     slashCommandsLoading,

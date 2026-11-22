@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { Static } from "@sinclair/typebox";
+import type { SubagentHistoryValueSchema } from "@/lib/api-contracts/host-session-operations";
 import {
   Activity,
   Bot,
@@ -546,11 +548,13 @@ function formatCacheHitRate(rate: number): string {
  * is no per-category breakdown on the wire, so none is shown here. */
 export function ContextDetailPanel({
   sessionStats,
+  sessionCosts,
   contextUsage,
   modelCapacity,
   generationSpeed,
 }: {
   sessionStats?: SessionStatsInfo | null;
+  sessionCosts?: Static<typeof SubagentHistoryValueSchema>["costs"];
   contextUsage?: {
     percent: number | null;
     contextWindow: number;
@@ -570,7 +574,7 @@ export function ContextDetailPanel({
   );
 
   const ctx = contextUsage ?? sessionStats?.contextUsage ?? null;
-  if (!sessionStats && !ctx) return null;
+  if (!sessionStats && !ctx && !sessionCosts) return null;
 
   const pct = ctx?.percent ?? null;
   const tone =
@@ -579,7 +583,6 @@ export function ContextDetailPanel({
       : pct !== null && pct > 70
         ? "var(--status-warning)"
         : "var(--text-muted)";
-  const costStr = sessionStats ? formatCost(sessionStats.cost) : null;
   const cacheHitRate = sessionStats
     ? getCacheHitRate(sessionStats.tokens.input, sessionStats.tokens.cacheRead)
     : null;
@@ -770,7 +773,7 @@ export function ContextDetailPanel({
           </div>
         </div>
       ) : null}
-      {sessionStats && (
+      {(sessionStats || sessionCosts) && (
         <div
           style={{
             display: "grid",
@@ -780,82 +783,111 @@ export function ContextDetailPanel({
             fontFamily: "var(--font-mono)",
           }}
         >
+          {sessionStats && (
+            <>
+              <div style={{ minWidth: 0 }}>
+                <h4 style={sectionTitleStyle}>
+                  {t("appShell.sectionSessionInfo")}
+                </h4>
+                {sessionStats.sessionName
+                  ? statRow(t("appShell.statName"), sessionStats.sessionName)
+                  : null}
+                {statRow(
+                  t("appShell.statFile"),
+                  sessionStats.sessionFile ?? t("appShell.inMemory"),
+                  "file",
+                  sessionStats.sessionFile,
+                )}
+                {statRow(
+                  t("appShell.statId"),
+                  sessionStats.sessionId,
+                  "id",
+                  sessionStats.sessionId,
+                )}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <h4 style={sectionTitleStyle}>
+                  {t("appShell.sectionMessages")}
+                </h4>
+                {statRow(
+                  t("appShell.statUser"),
+                  sessionStats.userMessages.toLocaleString(locale),
+                )}
+                {statRow(
+                  t("appShell.statAssistant"),
+                  sessionStats.assistantMessages.toLocaleString(locale),
+                )}
+                {statRow(
+                  t("appShell.statToolCalls"),
+                  sessionStats.toolCalls.toLocaleString(locale),
+                )}
+                {statRow(
+                  t("appShell.statToolResults"),
+                  sessionStats.toolResults.toLocaleString(locale),
+                )}
+                {statRow(
+                  t("appShell.statTotal"),
+                  sessionStats.totalMessages.toLocaleString(locale),
+                )}
+              </div>
+            </>
+          )}
           <div style={{ minWidth: 0 }}>
-            <h4 style={sectionTitleStyle}>
-              {t("appShell.sectionSessionInfo")}
-            </h4>
-            {sessionStats.sessionName
-              ? statRow(t("appShell.statName"), sessionStats.sessionName)
-              : null}
-            {statRow(
-              t("appShell.statFile"),
-              sessionStats.sessionFile ?? t("appShell.inMemory"),
-              "file",
-              sessionStats.sessionFile,
+            {sessionStats && (
+              <>
+                <h4 style={sectionTitleStyle}>{t("appShell.sectionTokens")}</h4>
+                {statRow(
+                  t("appShell.statInput"),
+                  sessionStats.tokens.input.toLocaleString(locale),
+                )}
+                {statRow(
+                  t("appShell.statOutput"),
+                  sessionStats.tokens.output.toLocaleString(locale),
+                )}
+                {sessionStats.tokens.cacheRead > 0
+                  ? statRow(
+                      t("appShell.statCacheRead"),
+                      sessionStats.tokens.cacheRead.toLocaleString(locale),
+                    )
+                  : null}
+                {sessionStats.tokens.cacheWrite > 0
+                  ? statRow(
+                      t("appShell.statCacheWrite"),
+                      sessionStats.tokens.cacheWrite.toLocaleString(locale),
+                    )
+                  : null}
+                {statRow(
+                  t("appShell.statTotal"),
+                  sessionStats.tokens.total.toLocaleString(locale),
+                )}
+                {cacheHitRate !== null
+                  ? statRow(
+                      t("appShell.statCacheRate"),
+                      formatCacheHitRate(cacheHitRate),
+                    )
+                  : null}
+              </>
             )}
-            {statRow(
-              t("appShell.statId"),
-              sessionStats.sessionId,
-              "id",
-              sessionStats.sessionId,
+            {sessionCosts && (
+              <>
+                {statRow(
+                  t("composerContext.agentCost"),
+                  formatCost(sessionCosts.agent) ?? "$0.00",
+                )}
+                {statRow(
+                  t("composerContext.subCost"),
+                  formatCost(sessionCosts.subagents) ?? "$0.00",
+                )}
+                {statRow(
+                  t("composerContext.totalCost"),
+                  formatCost(sessionCosts.agent + sessionCosts.subagents) ??
+                    "$0.00",
+                )}
+                <div style={{ color: "var(--text-dim)", marginTop: 4 }}>
+                  {t("composerContext.costNote")}
+                </div>
+              </>
             )}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <h4 style={sectionTitleStyle}>{t("appShell.sectionMessages")}</h4>
-            {statRow(
-              t("appShell.statUser"),
-              sessionStats.userMessages.toLocaleString(locale),
-            )}
-            {statRow(
-              t("appShell.statAssistant"),
-              sessionStats.assistantMessages.toLocaleString(locale),
-            )}
-            {statRow(
-              t("appShell.statToolCalls"),
-              sessionStats.toolCalls.toLocaleString(locale),
-            )}
-            {statRow(
-              t("appShell.statToolResults"),
-              sessionStats.toolResults.toLocaleString(locale),
-            )}
-            {statRow(
-              t("appShell.statTotal"),
-              sessionStats.totalMessages.toLocaleString(locale),
-            )}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <h4 style={sectionTitleStyle}>{t("appShell.sectionTokens")}</h4>
-            {statRow(
-              t("appShell.statInput"),
-              sessionStats.tokens.input.toLocaleString(locale),
-            )}
-            {statRow(
-              t("appShell.statOutput"),
-              sessionStats.tokens.output.toLocaleString(locale),
-            )}
-            {sessionStats.tokens.cacheRead > 0
-              ? statRow(
-                  t("appShell.statCacheRead"),
-                  sessionStats.tokens.cacheRead.toLocaleString(locale),
-                )
-              : null}
-            {sessionStats.tokens.cacheWrite > 0
-              ? statRow(
-                  t("appShell.statCacheWrite"),
-                  sessionStats.tokens.cacheWrite.toLocaleString(locale),
-                )
-              : null}
-            {statRow(
-              t("appShell.statTotal"),
-              sessionStats.tokens.total.toLocaleString(locale),
-            )}
-            {cacheHitRate !== null
-              ? statRow(
-                  t("appShell.statCacheRate"),
-                  formatCacheHitRate(cacheHitRate),
-                )
-              : null}
-            {costStr ? statRow(t("appShell.statCost"), costStr) : null}
           </div>
         </div>
       )}
