@@ -919,7 +919,8 @@ export function LiveChat({
       canSendAttachment={attachments.items.length > 0 && attachments.canSend}
       moreActions={
         <ComposerMoreMenu
-          onAttach={() => void attachments.pick()}
+          onAttachFiles={() => void attachments.pickFiles()}
+          onPhotoLibrary={() => void attachments.pickPhotos()}
           onPasteImage={() => void attachments.paste()}
           attachmentsDisabled={attachments.picking}
           toolPreset={toolPreset}

@@ -72,14 +72,18 @@ public final class KeylimeNetworkModule: Module {
       self.transport.cancelRequest(id: id)
     }.runOnQueue(networkQueue)
 
-    AsyncFunction("pickAttachments") { (maxPhotoSelection: Int, promise: Promise) in
+    AsyncFunction("pickAttachments") { (source: String, maxPhotoSelection: Int, promise: Promise) in
       guard self.picker == nil, let controller = self.appContext?.utilities?.currentViewController() else {
         promise.reject("ERR_KEYLIME_PICKER", "File picker is unavailable")
         return
       }
+      guard source == "files" || source == "photos" else {
+        promise.reject("ERR_KEYLIME_PICKER", "Invalid attachment source")
+        return
+      }
       let picker = AttachmentPicker(promise: promise, maxPhotoSelection: maxPhotoSelection) { [weak self] in self?.picker = nil }
       self.picker = picker
-      picker.present(from: controller)
+      picker.present(from: controller, photos: source == "photos")
     }.runOnQueue(.main)
     AsyncFunction("pasteAttachmentImage") { (promise: Promise) in
       guard self.pastePicker == nil, let controller = self.appContext?.utilities?.currentViewController() else {

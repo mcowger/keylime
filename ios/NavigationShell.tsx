@@ -713,6 +713,9 @@ export function NavigationShell({
                 {section === "workspace" && target?.sessionId && (
                   <ChatHeaderContext
                     key={target.key}
+                    origin={origin}
+                    linkStatus={status}
+                    modelIdentity={header?.state?.state?.model ?? null}
                     link={link}
                     hostId={target.hostId}
                     sessionId={target.sessionId}

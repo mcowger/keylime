@@ -8,6 +8,7 @@ import {
 } from "./domain";
 import {
   SessionReadValueSchema,
+  SessionContextStatisticsSchema,
   SessionHistoryContinuationSchema,
   SubagentHistoryValueSchema,
   SubagentTranscriptValueSchema,
@@ -247,6 +248,23 @@ export const sessionHttpOperations: readonly HttpOperation[] = [
         ...responses(BrowserListSchema),
         429: err(
           "A discovery request is already in progress for this session.",
+        ),
+      },
+    },
+  ),
+  op(
+    `${sid}/context-stats`,
+    "get",
+    "getSessionContextStats",
+    "Read active-branch context statistics",
+    {
+      description:
+        "Returns metadata-only counts, usage, model and recent timestamp-derived generation speeds for the selected session's current display branch. Does not return transcript bodies or start a runner.",
+      parameters: [id],
+      responses: {
+        ...responses(SessionContextStatisticsSchema),
+        501: err(
+          "The owning host daemon does not support this operation; upgrade it.",
         ),
       },
     },

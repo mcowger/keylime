@@ -25,6 +25,7 @@ import {
   linkLocalDaemon,
   listedSession,
 } from "./hosts/link-driver.test-helper.ts";
+import * as contextStatsRoute from "../app/api/sessions/[id]/context-stats/route.ts";
 
 const sessionRoute = await import("../app/api/sessions/[id]/route.ts");
 const contextRoute = await import("../app/api/sessions/[id]/context/route.ts");
@@ -106,6 +107,106 @@ async function withAgentDir(
     rmSync(agentDir, { recursive: true, force: true });
   }
 }
+test("context statistics use only the selected host and reject unsupported or malformed results", async () => {
+  await withAgentDir(async () => {
+    const id = "0a000000-0000-4000-8000-000000000088";
+    const owner = await linkHost("Statistics owner");
+    const other = await linkHost("Other statistics host");
+    let otherReads = 0;
+    let calls = 0;
+    let answer: unknown = {
+      stats: {
+        sessionFile: "/owner/session.jsonl",
+        sessionId: id,
+        sessionName: "Owner",
+        userMessages: 1,
+        assistantMessages: 1,
+        toolCalls: 0,
+        toolResults: 0,
+        totalMessages: 2,
+        tokens: { input: 4, output: 8, cacheRead: 0, cacheWrite: 0, total: 12 },
+        cost: 0.01,
+      },
+      model: { provider: "provider", modelId: "model" },
+      speedSamples: [4],
+    };
+    let unsupported = false;
+    try {
+      void owner.serve({
+        listSessions: () => [listedSession(id)],
+        readContextStats: (args) => {
+          calls++;
+          assert.deepEqual(args, { id });
+          if (unsupported)
+            throw new HostOpError(
+              501,
+              "unknown_op",
+              "Unknown host op: readContextStats",
+            );
+          return { ok: true, value: answer };
+        },
+      });
+      void other.serve({
+        listSessions: () => [listedSession(id)],
+        readContextStats: () => {
+          otherReads++;
+          return null;
+        },
+      });
+      const request = () =>
+        contextStatsRoute.GET(
+          new Request(
+            `http://localhost/api/sessions/${id}/context-stats?hostId=${owner.id}`,
+          ),
+          { params: Promise.resolve({ id }) },
+        );
+      const response = await request();
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.deepEqual(await response.json(), answer);
+      assert.equal(calls, 1);
+      assert.equal(otherReads, 0);
+
+      const valid = answer as {
+        stats: Record<string, unknown>;
+        model: unknown;
+        speedSamples: number[];
+      };
+      for (const bad of [
+        { ...valid, stats: { ...valid.stats, cost: Number.NaN } },
+        { ...valid, stats: { ...valid.stats, transcript: "secret" } },
+        { ...valid, messages: [{ role: "user", content: "secret" }] },
+        { ...valid, model: { provider: "p", modelId: 7 } },
+        { ...valid, stats: { ...valid.stats, cost: -1 } },
+        { ...valid, stats: { ...valid.stats, sessionId: "other" } },
+        { ...valid, stats: { ...valid.stats, tokens: { input: 1 } } },
+        { ...valid, speedSamples: [501] },
+        { ...valid, speedSamples: [0.5] },
+        { ...valid, speedSamples: Array(33).fill(1) },
+      ]) {
+        answer = bad;
+        const refused = await request();
+        assert.equal(refused.status, 502);
+        assert.equal((await refused.json()).code, "host_bad_result");
+      }
+      answer = { stats: null, model: null, speedSamples: [] };
+      const empty = await request();
+      assert.equal(empty.status, 200);
+      assert.deepEqual(await empty.json(), answer);
+      unsupported = true;
+      const old = await request();
+      assert.equal(old.status, 501);
+      const body = await old.json();
+      assert.equal(body.code, "host_context_stats_unsupported");
+      assert.match(body.error, /upgrade.*host daemon/i);
+      assert.equal(otherReads, 0);
+    } finally {
+      closeHostLink(owner.id);
+      closeHostLink(other.id);
+    }
+  });
+});
+
 test("state reports a retained exit before the session file exists", async (t) => {
   const id = "exited-before-file";
   const previousExited = globalThis.__ompExitedSessions;

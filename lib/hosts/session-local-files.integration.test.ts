@@ -3,7 +3,13 @@
 // agent dir holds a lookalike of every session, so an answer built from main's disk cannot pass for the daemon's.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import test, { before, after } from "node:test";
 import { workspaceHarness } from "./workspace-test-helper.ts";
@@ -35,8 +41,9 @@ function session(
   const dir = join(agentDir, "sessions", "-proj");
   const local = join(dir, name, "local");
   mkdirSync(local, { recursive: true });
+  const file = join(dir, `${name}.jsonl`);
   writeFileSync(
-    join(dir, `${name}.jsonl`),
+    file,
     [
       {
         type: "session",
@@ -58,7 +65,7 @@ function session(
   );
   for (const [file, bytes] of Object.entries(files))
     writeFileSync(join(local, file), bytes);
-  return { id, local };
+  return { id, local, file };
 }
 const mainAgentDir = () => join(h.root, "main-agent");
 /** The same session id on main's own disk, with a different `note.md`. */
@@ -73,6 +80,39 @@ const resolve = (hostId: string, id: string, uri: string) => {
 const json = async (response: Response) => ({
   status: response.status,
   ...(await response.json()),
+});
+
+test("context statistics are computed on the owning daemon without transcript bodies", async () => {
+  const id = randomUUID();
+  const mine = session(owner.agentDir, owner.project, id);
+  const decoy = lookalike(id);
+  appendFileSync(
+    mine.file,
+    `${JSON.stringify({
+      type: "message",
+      id: "u2",
+      parentId: "u1",
+      timestamp: "2026-11-03T00:00:03.000Z",
+      message: { role: "user", content: "owner-only secret" },
+    })}\n`,
+  );
+  await owner.host.invalidateSessionLists();
+  const response = await fetch(
+    `${h.url}/api/sessions/${id}/context-stats?hostId=${owner.id}`,
+  );
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  const result = JSON.parse(text);
+  assert.equal(result.stats.sessionId, id);
+  assert.equal(result.stats.sessionFile, mine.file);
+  assert.notEqual(result.stats.sessionFile, decoy.file);
+  assert.equal(result.stats.userMessages, 2);
+  assert.ok(!text.includes("owner-only secret"));
+  const wrong = await fetch(
+    `${h.url}/api/sessions/${id}/context-stats?hostId=${other.id}`,
+  );
+  assert.equal(wrong.status, 404);
+  assert.equal((await wrong.json()).code, "session_not_found");
 });
 
 test("a local:// file is resolved and read on the host that owns the session, not from main's disk", async () => {

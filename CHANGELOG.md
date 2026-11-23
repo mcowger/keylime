@@ -21,6 +21,8 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - Finished iPhone Ship jobs keep their progress and logs without holding a live job subscription.
 - Keep the native iPhone composer and toolbar above the software keyboard.
 - Keep iPhone composer focus when its outline changes, and offer Photo Library alongside Files when attaching items.
+- Put Photo Library directly in the iPhone composer menu, align the model chevron, and show complete context statistics in a compact popup.
+- Load iPhone context statistics in one metadata-only request to the owning host, even for long idle sessions.
 - Match the iPhone saved-chat header to the mobile PWA, including session context and Ship. Keep Ship visible but disabled while busy or when there is nothing to ship.
 - Show native composer model activity and keep failed tool output visible while saved history catches up.
 - Keep open iPhone Process details and tool output expanded when live calls merge into saved history.

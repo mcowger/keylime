@@ -2440,14 +2440,21 @@ test("history pages seek only new bodies even above the raw-cache budget", async
         const value = original.parse(...args);
         if (value?.type === "message" && entryIds.has(value.id)) {
           const content = value.message.content;
-          Object.defineProperty(value.message, "content", {
-            enumerable: true,
-            configurable: true,
-            get() {
-              touchedBodies.add(value.id);
-              return content;
-            },
-          });
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (!block || typeof block !== "object" || !("text" in block))
+                continue;
+              const text = block.text;
+              Object.defineProperty(block, "text", {
+                enumerable: true,
+                configurable: true,
+                get() {
+                  touchedBodies.add(value.id);
+                  return text;
+                },
+              });
+            }
+          }
         }
         return value;
       },
@@ -2463,10 +2470,18 @@ test("history pages seek only new bodies even above the raw-cache budget", async
       ),
       "positive control: index construction scanned the real fixture",
     );
+    const firstMessage = first.history.context.messages[0];
+    assert.equal(firstMessage.role, "assistant");
+    if (
+      firstMessage.role !== "assistant" ||
+      firstMessage.content[0]?.type !== "text"
+    )
+      throw new Error("Expected assistant text in first page");
+    assert.ok(firstMessage.content[0].text.startsWith("前文"));
     assert.deepEqual(
       [...touchedBodies],
       ["page-one"],
-      "indexing does not transform off-page bodies",
+      "indexing does not access off-page text payloads",
     );
     assert.equal(
       globalThis.__ompSessionEntriesCache?.has(sessionPathKey(filePath)) ??
@@ -2482,10 +2497,17 @@ test("history pages seek only new bodies even above the raw-cache budget", async
       const page = readPage(filePath, cursor, 1);
       assert.equal(page.history.mode, "append");
       assert.deepEqual(page.history.context.entryIds, [id]);
+      const message = page.history.context.messages[0];
+      if (message.role !== "assistant" || message.content[0]?.type !== "text")
+        throw new Error("Expected assistant text in history page");
+      assert.equal(
+        message.content[0].text,
+        id === "page-two" ? "second" : "third",
+      );
       assert.deepEqual(
         [...touchedBodies],
         [id],
-        "delivered bodies must not be converted again",
+        "only the delivered page exposes its text payload",
       );
       assert.ok(
         reads.length > 0,
@@ -2620,14 +2642,23 @@ test("active-context boundaries reuse the history index without reading or hydra
           entries.some((entry) => entry.id === value.id)
         ) {
           const content = value.message.content;
-          Object.defineProperty(value.message, "content", {
-            enumerable: true,
-            configurable: true,
-            get() {
-              touchedBodies.add(value.id);
-              return content;
-            },
-          });
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (!block || typeof block !== "object") continue;
+              for (const key of ["text", "data", "arguments", "input"]) {
+                if (!(key in block)) continue;
+                const payload = block[key];
+                Object.defineProperty(block, key, {
+                  enumerable: true,
+                  configurable: true,
+                  get() {
+                    touchedBodies.add(value.id);
+                    return payload;
+                  },
+                });
+              }
+            }
+          }
         }
         return value;
       },
@@ -2664,6 +2695,10 @@ test("active-context boundaries reuse the history index without reading or hydra
       page.history.context.messages[1].content[0].data,
       Buffer.from("boundary image").toString("base64"),
     );
+    const active = page.history.context.messages[2];
+    if (active.role !== "assistant" || active.content[0]?.type !== "text")
+      throw new Error("Expected active assistant text");
+    assert.equal(active.content[0].text, "current branch");
     assert.deepEqual(
       blobReads,
       [blobPath],

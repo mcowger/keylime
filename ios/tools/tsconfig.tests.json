@@ -3,6 +3,10 @@
   "compilerOptions": {
     "types": ["bun", "node"]
   },
-  "include": ["useNative*.test.tsx"],
+  "include": [
+    "useNative*.test.tsx",
+    "chat-header-context.test.tsx",
+    "../chat-context-stats.test.ts"
+  ],
   "exclude": ["../../node_modules", "../../dist"]
 }

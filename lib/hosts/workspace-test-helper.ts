@@ -62,6 +62,8 @@ export async function workspaceHarness(): Promise<WorkspaceHarness> {
   const uploadRoute = await import("../../app/api/uploads/[id]/route.ts");
   const localFileRoute =
     await import("../../app/api/sessions/[id]/local-file/route.ts");
+  const contextStatsRoute =
+    await import("../../app/api/sessions/[id]/context-stats/route.ts");
   const { createHost, rotateLocalHostToken } = await import("./registry.ts");
   const { closeOutboxStore } = await import("../message-outbox.ts");
   const children: ChildProcessByStdio<null, Readable, Readable>[] = [];
@@ -91,6 +93,13 @@ export async function workspaceHarness(): Promise<WorkspaceHarness> {
       if (localFile)
         return localFileRoute.GET(req, {
           params: Promise.resolve({ id: decodeURIComponent(localFile[1]) }),
+        });
+      const contextStats = /^\/api\/sessions\/([^/]+)\/context-stats$/.exec(
+        url.pathname,
+      );
+      if (contextStats)
+        return contextStatsRoute.GET(req, {
+          params: Promise.resolve({ id: decodeURIComponent(contextStats[1]) }),
         });
       if (url.pathname.startsWith("/api/files/")) {
         const params = Promise.resolve({

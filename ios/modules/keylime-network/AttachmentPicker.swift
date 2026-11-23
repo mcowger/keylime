@@ -189,12 +189,11 @@ final class AttachmentPastePicker: UIViewController, UIAdaptivePresentationContr
   }
 }
 
-final class AttachmentPicker: NSObject, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIPopoverPresentationControllerDelegate {
+final class AttachmentPicker: NSObject, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate {
   private let promise: Promise
   private let maxPhotoSelection: Int
   private let finish: () -> Void
   private var completed = false
-  private var sourceSheet: UIAlertController?
   private var presentedPicker: UIViewController?
   private var savedPhotos: [[String: Any]] = []
   private var photoErrors: [String] = []
@@ -205,68 +204,34 @@ final class AttachmentPicker: NSObject, UIDocumentPickerDelegate, PHPickerViewCo
     self.finish = finish
   }
 
-  func present(from controller: UIViewController) {
-    let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-    sourceSheet = sheet
-    sheet.addAction(UIAlertAction(title: "Photo Library", style: .default) { [weak self, weak controller] _ in
-      self?.chooseSource(from: controller, photos: true)
-    })
-    sheet.addAction(UIAlertAction(title: "Files", style: .default) { [weak self, weak controller] _ in
-      self?.chooseSource(from: controller, photos: false)
-    })
-    sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
-      self?.complete(results: [])
-    })
-    if let popover = sheet.popoverPresentationController {
-      popover.sourceView = controller.view
-      popover.sourceRect = CGRect(x: controller.view.bounds.midX, y: controller.view.bounds.maxY, width: 1, height: 1)
-      popover.permittedArrowDirections = []
-      popover.delegate = self
-    }
-    controller.present(sheet, animated: true) {
-      sheet.presentationController?.delegate = self
-    }
-  }
-
-  private func chooseSource(from controller: UIViewController?, photos: Bool) {
-    guard let controller = controller, let sheet = sourceSheet else {
-      complete(error: "The attachment picker is unavailable.")
-      return
-    }
-    sourceSheet = nil
-    sheet.dismiss(animated: true) {
-      if photos {
-        guard self.maxPhotoSelection > 0 else {
-          self.complete(error: "This message has no remaining attachment slots.")
-          return
-        }
-        var configuration = PHPickerConfiguration()
-        configuration.filter = .images
-        configuration.selectionLimit = self.maxPhotoSelection
-        configuration.selection = .ordered
-        configuration.preferredAssetRepresentationMode = .compatible
-        let picker = PHPickerViewController(configuration: configuration)
-        picker.delegate = self
-        self.presentedPicker = picker
-        controller.present(picker, animated: true) { picker.presentationController?.delegate = self }
-      } else {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
-        picker.allowsMultipleSelection = true
-        picker.delegate = self
-        self.presentedPicker = picker
-        controller.present(picker, animated: true) { picker.presentationController?.delegate = self }
+  func present(from controller: UIViewController, photos: Bool) {
+    if photos {
+      guard maxPhotoSelection > 0 else {
+        complete(error: "This message has no remaining attachment slots.")
+        return
       }
+      var configuration = PHPickerConfiguration()
+      configuration.filter = .images
+      configuration.selectionLimit = maxPhotoSelection
+      configuration.selection = .ordered
+      configuration.preferredAssetRepresentationMode = .compatible
+      let picker = PHPickerViewController(configuration: configuration)
+      picker.delegate = self
+      presentedPicker = picker
+      controller.present(picker, animated: true) { picker.presentationController?.delegate = self }
+    } else {
+      let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+      picker.allowsMultipleSelection = true
+      picker.delegate = self
+      presentedPicker = picker
+      controller.present(picker, animated: true) { picker.presentationController?.delegate = self }
     }
   }
 
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-    if presentationController.presentedViewController === sourceSheet || presentationController.presentedViewController === presentedPicker {
+    if presentationController.presentedViewController === presentedPicker {
       complete(results: [])
     }
-  }
-
-  func popoverPresentationControllerDidDismissPopover(_ popoverPresentationController: UIPopoverPresentationController) {
-    if popoverPresentationController.presentedViewController === sourceSheet { complete(results: []) }
   }
 
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
@@ -381,7 +346,6 @@ final class AttachmentPicker: NSObject, UIDocumentPickerDelegate, PHPickerViewCo
   private func complete(results: [[String: Any]] = [], errors: [String] = [], error: String? = nil) {
     guard !completed else { return }
     completed = true
-    sourceSheet = nil
     presentedPicker = nil
     savedPhotos.removeAll()
     photoErrors.removeAll()

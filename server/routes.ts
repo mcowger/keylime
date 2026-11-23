@@ -57,6 +57,7 @@ import * as sessionsIdBrowserControl from "@/app/api/sessions/[id]/browser/contr
 import * as sessionsIdBrowserFrame from "@/app/api/sessions/[id]/browser/frame/route";
 import * as sessionsIdBrowserVideo from "@/app/api/sessions/[id]/browser/video/route";
 import * as sessionsIdContext from "@/app/api/sessions/[id]/context/route";
+import * as sessionsIdContextStats from "@/app/api/sessions/[id]/context-stats/route";
 import * as sessionsIdEntriesEntryIdThinking from "@/app/api/sessions/[id]/entries/[entryId]/thinking/route";
 import * as sessionsIdExport from "@/app/api/sessions/[id]/export/route";
 import * as sessionsIdLocalFile from "@/app/api/sessions/[id]/local-file/route";
@@ -176,6 +177,7 @@ export const ROUTE_MODULES: Record<string, RouteModule> = {
   "sessions/[id]/browser/frame": sessionsIdBrowserFrame,
   "sessions/[id]/browser/video": sessionsIdBrowserVideo,
   "sessions/[id]/context": sessionsIdContext,
+  "sessions/[id]/context-stats": sessionsIdContextStats,
   "sessions/[id]/entries/[entryId]/thinking": sessionsIdEntriesEntryIdThinking,
   "sessions/[id]/export": sessionsIdExport,
   "sessions/[id]/local-file": sessionsIdLocalFile,

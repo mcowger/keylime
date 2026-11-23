@@ -10,6 +10,7 @@ import {
 // No `next/*` or `@/` imports.
 import { randomUUID } from "node:crypto";
 import { Value } from "@sinclair/typebox/value";
+import { SessionContextStatisticsSchema } from "../api-contracts/host-session-operations";
 import {
   HostModelsSchema,
   ChatRolesSchema,
@@ -1554,6 +1555,8 @@ function validResult(
   if (result.ok !== true || !("value" in result)) return false;
   const { value } = result;
   switch (op) {
+    case "readContextStats":
+      return validContextStats(value, args[0]);
     // Media bytes only ever arrive through the blob leg.
     case "readMedia":
       return value instanceof Uint8Array;
@@ -1627,6 +1630,77 @@ function validResult(
     default:
       return true;
   }
+}
+
+/** Refuse extra fields as well as bad values: a hostile host must not forward transcript bodies. */
+function validContextStats(value: unknown, sessionId: unknown): boolean {
+  if (!Value.Check(SessionContextStatisticsSchema, value) || !isRecord(value))
+    return false;
+  const only = (record: Record<string, unknown>, keys: string[]) =>
+    Object.keys(record).every((key) => keys.includes(key));
+  const finiteNonnegative = (node: unknown): boolean => {
+    if (typeof node === "number") return Number.isFinite(node) && node >= 0;
+    if (Array.isArray(node)) return node.every(finiteNonnegative);
+    if (isRecord(node)) return Object.values(node).every(finiteNonnegative);
+    return true;
+  };
+  if (!finiteNonnegative(value)) return false;
+  if (
+    value.model !== null &&
+    (!isRecord(value.model) || !only(value.model, ["provider", "modelId"]))
+  )
+    return false;
+  if (value.stats === null) return true;
+  const stats = value.stats;
+  if (
+    !isRecord(stats) ||
+    !only(stats, [
+      "sessionFile",
+      "sessionId",
+      "sessionName",
+      "userMessages",
+      "assistantMessages",
+      "toolCalls",
+      "toolResults",
+      "totalMessages",
+      "tokens",
+      "premiumRequests",
+      "cost",
+      "contextUsage",
+    ])
+  )
+    return false;
+  if (
+    typeof stats.sessionFile !== "string" ||
+    !stats.sessionFile ||
+    stats.sessionId !== sessionId
+  )
+    return false;
+  if (
+    !isRecord(stats.tokens) ||
+    !only(stats.tokens, [
+      "input",
+      "output",
+      "reasoning",
+      "cacheRead",
+      "cacheWrite",
+      "total",
+    ])
+  )
+    return false;
+  if (
+    stats.contextUsage !== undefined &&
+    (!isRecord(stats.contextUsage) ||
+      !only(stats.contextUsage, ["percent", "contextWindow", "tokens"]))
+  )
+    return false;
+  return [
+    stats.userMessages,
+    stats.assistantMessages,
+    stats.toolCalls,
+    stats.toolResults,
+    stats.totalMessages,
+  ].every(Number.isSafeInteger);
 }
 
 const optionalString = (value: unknown) =>
@@ -1799,12 +1873,40 @@ function remoteSessionOps(hostId: string): SessionOps {
         };
       }
       if (ORPHAN_SENSITIVE_OPS[op]) await orphanExit(hostId, String(args[0]));
-      const result = await request(
-        hostId,
-        op,
-        Object.fromEntries(params.map((name, i) => [name, args[i]])),
-        linkTimings.opTimeoutMs,
-      );
+      let result: unknown;
+      try {
+        result = await request(
+          hostId,
+          op,
+          Object.fromEntries(params.map((name, i) => [name, args[i]])),
+          linkTimings.opTimeoutMs,
+        );
+      } catch (error) {
+        if (
+          op === "readContextStats" &&
+          error instanceof HostOpError &&
+          error.status === 501 &&
+          error.code === "unknown_op"
+        )
+          throw new HostOpError(
+            501,
+            "host_context_stats_unsupported",
+            `${labelOf(hostId)} does not support context statistics; upgrade the host daemon`,
+          );
+        throw error;
+      }
+      if (
+        op === "readContextStats" &&
+        isRecord(result) &&
+        result.ok === false &&
+        result.status === 501 &&
+        result.code === "unknown_op"
+      )
+        throw new HostOpError(
+          501,
+          "host_context_stats_unsupported",
+          `${labelOf(hostId)} does not support context statistics; upgrade the host daemon`,
+        );
       if (op === "listSessionIdsForRestore") {
         if (
           Array.isArray(result) &&

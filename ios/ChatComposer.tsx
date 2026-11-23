@@ -383,7 +383,10 @@ export function ChatComposer({
             >
               {modelLabel}
             </Text>
-            <Text style={[styles.chevron, { color: colors.dim }]}>⌄</Text>
+            <View
+              accessibilityElementsHidden
+              style={[styles.chevron, { borderColor: colors.dim }]}
+            />
           </Pressable>
           <View style={styles.spacer} />
           <ComposerActivity
@@ -698,7 +701,14 @@ const styles = StyleSheet.create({
   },
   modelIcon: { fontSize: 16 },
   modelLabel: { fontSize: 12, flexShrink: 1 },
-  chevron: { fontSize: 15 },
+  chevron: {
+    width: 7,
+    height: 7,
+    borderRightWidth: 1.2,
+    borderBottomWidth: 1.2,
+    marginTop: -3,
+    transform: [{ rotate: "45deg" }],
+  },
   spacer: { flex: 1 },
   send: {
     width: 36,

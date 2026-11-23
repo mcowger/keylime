@@ -41,7 +41,8 @@ import {
   taskResultStructuredOutput,
   taskResultUsageCost,
 } from "./task-result-details";
-import type { TodoPhase } from "./pi-types";
+import type { SessionStatsInfo, TodoPhase } from "./pi-types";
+import type { SessionContextStatistics } from "./api-contracts/host-session-operations";
 import { projectIdentityKey, sessionPathKey } from "./paths";
 import { resolveProject, type ProjectInfo } from "./worktree";
 import {
@@ -651,6 +652,11 @@ interface SessionHistoryIndex {
   metadata: Omit<SessionContext, "messages" | "entryIds">;
   leafId: string | null;
   tipId: string | null;
+  contextStats: Omit<
+    SessionStatsInfo,
+    "sessionId" | "sessionFile" | "sessionName"
+  > | null;
+  speedSamples: number[];
 }
 
 declare global {
@@ -747,17 +753,153 @@ function historyEntryMetadata(entry: SessionEntry): SessionEntry {
 /** Navigation only needs a bounded text preview, never a transcript body. */
 function historyPreview(entry: SessionEntry): string {
   if (entry.type !== "message" || !isRecord(entry.message)) return "";
-  const content = "content" in entry.message ? entry.message.content : undefined;
+  const content =
+    "content" in entry.message ? entry.message.content : undefined;
   if (typeof content === "string") return content.slice(0, 500);
   if (!Array.isArray(content)) return "";
   let text = "";
   for (const part of content) {
-    if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") continue;
+    if (
+      !isRecord(part) ||
+      part.type !== "text" ||
+      typeof part.text !== "string"
+    )
+      continue;
     if (text) text += " ";
     text += part.text.slice(0, 500 - text.length);
     if (text.length >= 500) break;
   }
   return text;
+}
+
+interface HistoryEntryStatistics {
+  timestamp?: number;
+  toolCalls: number;
+  usage?: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    cost: number;
+  };
+}
+
+/** Project only numeric inputs; never retain message bodies or usage metadata. */
+function historyEntryStatistics(entry: SessionEntry): HistoryEntryStatistics {
+  if (entry.type !== "message" || !isRecord(entry.message)) {
+    return { timestamp: parseEntryTimestamp(entry.timestamp), toolCalls: 0 };
+  }
+  const message = entry.message;
+  const usage =
+    message.role === "assistant" && isRecord(message.usage)
+      ? message.usage
+      : undefined;
+  const numberOrZero = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0
+      ? value
+      : 0;
+  let toolCalls = 0;
+  if (message.role === "assistant") {
+    const content = message.content;
+    if (Array.isArray(content)) {
+      for (const part of content) {
+        if (isRecord(part) && part.type === "toolCall") toolCalls++;
+      }
+    }
+  }
+  return {
+    timestamp: normalizeMessageTimestamp(message.timestamp),
+    toolCalls,
+    ...(usage
+      ? {
+          usage: {
+            input: numberOrZero(usage.input),
+            output: numberOrZero(usage.output),
+            cacheRead: numberOrZero(usage.cacheRead),
+            cacheWrite: numberOrZero(usage.cacheWrite),
+            cost: numberOrZero(
+              isRecord(usage.cost) ? usage.cost.total : undefined,
+            ),
+          },
+        }
+      : {}),
+  };
+}
+
+function aggregateHistoryStatistics(
+  selected: SessionEntry[],
+  projected: WeakMap<SessionEntry, HistoryEntryStatistics>,
+): Pick<SessionHistoryIndex, "contextStats" | "speedSamples"> {
+  if (!selected.length) return { contextStats: null, speedSamples: [] };
+  const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
+  const contextStats = {
+    userMessages: 0,
+    assistantMessages: 0,
+    toolCalls: 0,
+    toolResults: 0,
+    totalMessages: selected.length,
+    tokens,
+    cost: 0,
+  };
+  const speedSamples: number[] = [];
+  let previousTimestamp: number | undefined;
+  for (const entry of selected) {
+    const summary = projected.get(entry)!;
+    const role =
+      entry.type === "branch_summary"
+        ? "user"
+        : entry.type === "message" && isRecord(entry.message)
+          ? entry.message.role
+          : "custom";
+    if (role === "user") contextStats.userMessages++;
+    if (role === "toolResult") contextStats.toolResults++;
+    if (role === "assistant") {
+      contextStats.assistantMessages++;
+      contextStats.toolCalls += summary.toolCalls;
+      const usage = summary.usage;
+      if (usage) {
+        tokens.input = Math.min(Number.MAX_VALUE, tokens.input + usage.input);
+        tokens.output = Math.min(
+          Number.MAX_VALUE,
+          tokens.output + usage.output,
+        );
+        tokens.cacheRead = Math.min(
+          Number.MAX_VALUE,
+          tokens.cacheRead + usage.cacheRead,
+        );
+        tokens.cacheWrite = Math.min(
+          Number.MAX_VALUE,
+          tokens.cacheWrite + usage.cacheWrite,
+        );
+        contextStats.cost = Math.min(
+          Number.MAX_VALUE,
+          contextStats.cost + usage.cost,
+        );
+        if (
+          summary.timestamp !== undefined &&
+          previousTimestamp !== undefined
+        ) {
+          const seconds = (summary.timestamp - previousTimestamp) / 1000;
+          const speed = usage.output / seconds;
+          if (
+            seconds > 1 &&
+            Number.isFinite(speed) &&
+            speed > 0.5 &&
+            speed <= 500
+          ) {
+            if (speedSamples.length === 32) speedSamples.shift();
+            speedSamples.push(speed);
+          }
+        }
+      }
+    }
+    if (summary.timestamp !== undefined) previousTimestamp = summary.timestamp;
+  }
+  tokens.total = Math.min(
+    Number.MAX_VALUE,
+    tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite,
+  );
+  return { contextStats, speedSamples };
 }
 
 function buildHistoryIndex(
@@ -770,9 +912,11 @@ function buildHistoryIndex(
     SessionEntry,
     { offset: number; length: number }
   >();
+  const statistics = new WeakMap<SessionEntry, HistoryEntryStatistics>();
   const loaded = loadSessionFile(filePath, {
     projectEntry(entry, offset, length) {
       const compact = historyEntryMetadata(entry);
+      statistics.set(compact, historyEntryStatistics(entry));
       ranges.set(compact, { offset, length });
       return compact;
     },
@@ -781,6 +925,7 @@ function buildHistoryIndex(
     throw new SessionFileTooLargeError(filePath);
   const { selected, compactionId, entryClientIds, ...metadata } =
     selectSessionContext(loaded.entries, leafId, { includePreCompaction });
+  const aggregate = aggregateHistoryStatistics(selected, statistics);
   const rows = selected.map((entry): HistoryEntryRange => ({
     id: entry.id,
     ...ranges.get(entry)!,
@@ -801,6 +946,7 @@ function buildHistoryIndex(
     rows,
     compactionId,
     metadata,
+    ...aggregate,
     tipId,
     treeEntries: loaded.entries,
     leafId:
@@ -810,7 +956,14 @@ function buildHistoryIndex(
   });
   const detached = JSON.parse(serialized) as Pick<
     SessionHistoryIndex,
-    "rows" | "compactionId" | "metadata" | "tipId" | "leafId" | "treeEntries"
+    | "rows"
+    | "compactionId"
+    | "metadata"
+    | "tipId"
+    | "leafId"
+    | "treeEntries"
+    | "contextStats"
+    | "speedSamples"
   >;
   const entryIds = detached.rows.map((row) => row.id);
   const positions = new Map(entryIds.map((id, position) => [id, position]));
@@ -851,6 +1004,11 @@ function getSessionHistoryIndex(
       cache.delete(cachedKey);
   }
   let index = cache.get(key);
+  // Hot reload can leave indexes built before statistics were added.
+  if (index && !("contextStats" in index)) {
+    cache.delete(key);
+    index = undefined;
+  }
   if (!index) {
     index = buildHistoryIndex(filePath, version, leafId, includePreCompaction);
     if (stat) {
@@ -859,6 +1017,14 @@ function getSessionHistoryIndex(
           throw new SessionHistoryChangedError();
       } catch {
         throw new SessionHistoryChangedError();
+      }
+    } else {
+      // A file created after the initial stat is a different generation too.
+      try {
+        statSync(filePath);
+        throw new SessionHistoryChangedError();
+      } catch (error) {
+        if (error instanceof SessionHistoryChangedError) throw error;
       }
     }
     // An unusually metadata-heavy file still opens, but cannot evict every
@@ -890,6 +1056,28 @@ export function getSessionContextBoundary(filePath: string): {
   return { entryIds: index.entryIds };
 }
 
+/** Aggregate the current active branch without reading message bodies again. */
+export function getSessionContextStats(
+  filePath: string,
+  sessionId: string,
+  sessionName?: string,
+): SessionContextStatistics {
+  const { index } = getSessionHistoryIndex(filePath);
+  return {
+    stats: index.contextStats
+      ? {
+          ...index.contextStats,
+          tokens: { ...index.contextStats.tokens },
+          sessionId,
+          sessionFile: filePath,
+          ...(sessionName !== undefined ? { sessionName } : {}),
+        }
+      : null,
+    model: index.metadata.model ? { ...index.metadata.model } : null,
+    speedSamples: [...index.speedSamples],
+  };
+}
+
 /** A backfill belongs to a different file generation or active branch. */
 export class SessionHistoryChangedError extends Error {
   constructor() {
@@ -898,9 +1086,16 @@ export class SessionHistoryChangedError extends Error {
   }
 }
 
-export function assertSessionHistoryRevision(filePath: string, revision: string): void {
+export function assertSessionHistoryRevision(
+  filePath: string,
+  revision: string,
+): void {
   try {
-    const actual = createHash("sha256").update(sessionPathKey(filePath)).update("\0").update(historyFileVersion(statSync(filePath))).digest("base64url");
+    const actual = createHash("sha256")
+      .update(sessionPathKey(filePath))
+      .update("\0")
+      .update(historyFileVersion(statSync(filePath)))
+      .digest("base64url");
     if (actual === revision) return;
   } catch {
     // Missing or replaced files invalidate the snapshot too.
@@ -937,14 +1132,35 @@ export function getSessionHistoryPage(
   );
   const version = index.version;
 
-  const historyRevision = createHash("sha256").update(index.pathKey).update("\0").update(version).digest("base64url");
+  const historyRevision = createHash("sha256")
+    .update(index.pathKey)
+    .update("\0")
+    .update(version)
+    .digest("base64url");
   const tail = options.tail;
-  if (tail?.before && (tail.revision !== historyRevision || !index.positions.has(tail.before)))
+  if (
+    tail?.before &&
+    (tail.revision !== historyRevision || !index.positions.has(tail.before))
+  )
     throw new SessionHistoryChangedError();
-  const end = tail ? (tail.before ? index.positions.get(tail.before)! : index.entryIds.length) : undefined;
+  const end = tail
+    ? tail.before
+      ? index.positions.get(tail.before)!
+      : index.entryIds.length
+    : undefined;
   const start = tail ? Math.max(0, end! - tail.limit) : undefined;
   const range = tail
-    ? { start: start!, end: end!, mode: "replace" as const, baseEntryId: null, cursor: { firstEntryId: index.entryIds[0] ?? null, lastEntryId: index.entryIds[end! - 1] ?? null }, hasMore: start! > 0 }
+    ? {
+        start: start!,
+        end: end!,
+        mode: "replace" as const,
+        baseEntryId: null,
+        cursor: {
+          firstEntryId: index.entryIds[0] ?? null,
+          lastEntryId: index.entryIds[end! - 1] ?? null,
+        },
+        hasMore: start! > 0,
+      }
     : selectHistoryRange(index.entryIds, cursor, limit, index.positions);
   const { start: pageStart, end: pageEnd, ...page } = range;
   const rawEntries: SessionEntry[] = [];
@@ -1022,15 +1238,38 @@ export function getSessionHistoryPage(
       if (entry.type !== "message" || !isRecord(entry.message)) continue;
       const preview = historyPreview(entry);
       previews.set(entry.id, preview);
-      if (firstMessage === "(no messages)" && entry.message.role === "user" && preview)
+      if (
+        firstMessage === "(no messages)" &&
+        entry.message.role === "user" &&
+        preview
+      )
         firstMessage = preview;
     }
   }
-  const treeEntries = previews.size ? index.treeEntries.map((entry: SessionEntry) => {
-    if (entry.type !== "message" || !previews.has(entry.id) || !isRecord(entry.message)) return entry;
-    return { ...entry, message: { ...entry.message, content: previews.get(entry.id)! } } as SessionEntry;
-  }) : index.treeEntries;
-  return { history, leafId: index.leafId, tipId: index.tipId, treeEntries, firstMessage, totalMessages: index.entryIds.length, historyRevision, historyHasMore: pageStart > 0 };
+  const treeEntries = previews.size
+    ? index.treeEntries.map((entry: SessionEntry) => {
+        if (
+          entry.type !== "message" ||
+          !previews.has(entry.id) ||
+          !isRecord(entry.message)
+        )
+          return entry;
+        return {
+          ...entry,
+          message: { ...entry.message, content: previews.get(entry.id)! },
+        } as SessionEntry;
+      })
+    : index.treeEntries;
+  return {
+    history,
+    leafId: index.leafId,
+    tipId: index.tipId,
+    treeEntries,
+    firstMessage,
+    totalMessages: index.entryIds.length,
+    historyRevision,
+    historyHasMore: pageStart > 0,
+  };
 }
 
 function parseTodoPhases(value: unknown): TodoPhase[] | null {

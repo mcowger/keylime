@@ -13,6 +13,7 @@ import {
   ManagedProjectSchema,
   ProjectLaunchConfigSchema,
   SessionContextSchema,
+  SessionStatsInfoSchema,
   SessionInfoSchema,
   SessionTreeNodeSchema,
   SessionTitleSourceSchema,
@@ -234,6 +235,28 @@ export const ContextReadValueSchema = Type.Union(
       "Selected context response: active IDs, paged history, or complete context.",
   },
 );
+/** Metadata-only statistics for the active display branch, never transcript bodies. */
+export const SessionContextStatisticsSchema = Type.Object(
+  {
+    stats: nullable(SessionStatsInfoSchema),
+    model: SessionContextSchema.properties.model,
+    speedSamples: Type.Array(
+      Type.Number({ exclusiveMinimum: 0.5, maximum: 500 }),
+      {
+        maxItems: 32,
+        description:
+          "Most recent plausible timestamp-derived output tokens per second.",
+      },
+    ),
+  },
+  {
+    additionalProperties: false,
+    description: "Active-branch usage metadata without transcript content.",
+  },
+);
+export type SessionContextStatistics = Static<
+  typeof SessionContextStatisticsSchema
+>;
 export const ThinkingReadValueSchema = Type.Object(
   { thinking: str() },
   { description: "Text of the requested assistant thinking block." },
@@ -345,6 +368,12 @@ export const hostSessionOperations: readonly OperationContract[] = [
       options: ContextReadOptionsSchema,
     }),
     ContextReadValueSchema,
+  ),
+  wrapped(
+    "readContextStats",
+    "Usage: Read active-branch context statistics without transcript bodies.\nInputs: Supply the session ID on its owning host.\nInvariants: Counts, usage and model follow the current display branch and compaction boundary; speed samples are the most recent 32 plausible timestamp-derived rates. A changed file generation fails rather than combining snapshots.\nEffects: Reads metadata from the session file without starting a runner.\nRecovery: Retry after session_history_changed; upgrade an older host that does not support this operation.",
+    args(id()),
+    SessionContextStatisticsSchema,
   ),
   wrapped(
     "readThinking",

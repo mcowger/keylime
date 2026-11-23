@@ -28,6 +28,7 @@ import type {
   OperationResult,
   ProjectUpdateSchema,
   SessionReadOptionsSchema,
+  SessionContextStatistics,
   SessionReadResultSchema,
   SessionStateValueSchema,
   SubagentHistoryValueSchema,
@@ -70,6 +71,7 @@ import {
   assertSessionHistoryRevision,
   buildSessionContext,
   getSessionContextBoundary,
+  getSessionContextStats,
   getSessionEntries,
   getSessionEntriesForDisplayAsync,
   getSessionHistoryPage,
@@ -125,6 +127,8 @@ export interface SessionOps {
     leafId: string | undefined,
     options: ContextReadOptions,
   ): Promise<OpResult<Static<typeof ContextReadValueSchema>>>;
+  /** Read only aggregated metadata for the current display branch. */
+  readContextStats(id: string): Promise<OpResult<SessionContextStatistics>>;
   /** Resolve a deferred thinking block from an assistant message. */
   readThinking(
     id: string,
@@ -628,6 +632,46 @@ export const sessionOps: SessionOps = {
       // Past the load ceiling: the same 413 as the null-header path, not a
       // 500, so the frontend does not treat history as gone.
       if (error instanceof SessionFileTooLargeError) return sessionTooLarge();
+      throw error;
+    }
+  },
+
+  async readContextStats(id) {
+    const filePath = await resolveSessionPath(id);
+    if (!filePath) return sessionNotFound();
+    try {
+      let before: Stats;
+      try {
+        before = statSync(filePath);
+      } catch {
+        return unreadableSession(filePath);
+      }
+      const header = readSessionHeader(filePath);
+      if (header === null) return unreadableSession(filePath);
+      const value = getSessionContextStats(filePath, id, header.title);
+      let after: Stats;
+      try {
+        after = statSync(filePath);
+      } catch {
+        throw new SessionHistoryChangedError();
+      }
+      if (
+        before.dev !== after.dev ||
+        before.ino !== after.ino ||
+        before.size !== after.size ||
+        before.mtimeMs !== after.mtimeMs ||
+        before.ctimeMs !== after.ctimeMs
+      )
+        throw new SessionHistoryChangedError();
+      return ok(value);
+    } catch (error) {
+      if (error instanceof SessionFileTooLargeError) return sessionTooLarge();
+      if (error instanceof SessionHistoryChangedError)
+        return fail(
+          409,
+          "session_history_changed",
+          "Session history changed; retry the statistics read",
+        );
       throw error;
     }
   },

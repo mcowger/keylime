@@ -256,6 +256,9 @@
         "HostReply_readContext": {
           "$ref": "#/components/messages/HostReply_readContext"
         },
+        "HostReply_readContextStats": {
+          "$ref": "#/components/messages/HostReply_readContextStats"
+        },
         "HostReply_readFileChunk": {
           "$ref": "#/components/messages/HostReply_readFileChunk"
         },
@@ -528,6 +531,9 @@
         },
         "HostRequest_readContext": {
           "$ref": "#/components/messages/HostRequest_readContext"
+        },
+        "HostRequest_readContextStats": {
+          "$ref": "#/components/messages/HostRequest_readContextStats"
         },
         "HostRequest_readFileChunk": {
           "$ref": "#/components/messages/HostRequest_readFileChunk"
@@ -1544,6 +1550,18 @@
           "$ref": "#/components/schemas/HostReply_readContext"
         },
         "title": "HostReply_readContext"
+      },
+      "HostReply_readContextStats": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Reply to readContextStats; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read active-branch context statistics without transcript bodies.\nInputs: Supply the session ID on its owning host.\nInvariants: Counts, usage and model follow the current display branch and compaction boundary; speed samples are the most recent 32 plausible timestamp-derived rates. A changed file generation fails rather than combining snapshots.\nEffects: Reads metadata from the session file without starting a runner.\nRecovery: Retry after session_history_changed; upgrade an older host that does not support this operation.",
+        "name": "HostReply_readContextStats",
+        "payload": {
+          "$ref": "#/components/schemas/HostReply_readContextStats"
+        },
+        "title": "HostReply_readContextStats"
       },
       "HostReply_readFileChunk": {
         "contentType": "application/json",
@@ -2636,6 +2654,18 @@
           "$ref": "#/components/schemas/HostRequest_readContext"
         },
         "title": "HostRequest_readContext"
+      },
+      "HostRequest_readContextStats": {
+        "contentType": "application/json",
+        "correlationId": {
+          "location": "$message.payload#/id"
+        },
+        "description": "Usage: Read active-branch context statistics without transcript bodies.\nInputs: Supply the session ID on its owning host.\nInvariants: Counts, usage and model follow the current display branch and compaction boundary; speed samples are the most recent 32 plausible timestamp-derived rates. A changed file generation fails rather than combining snapshots.\nEffects: Reads metadata from the session file without starting a runner.\nRecovery: Retry after session_history_changed; upgrade an older host that does not support this operation.",
+        "name": "HostRequest_readContextStats",
+        "payload": {
+          "$ref": "#/components/schemas/HostRequest_readContextStats"
+        },
+        "title": "HostRequest_readContextStats"
       },
       "HostRequest_readFileChunk": {
         "contentType": "application/json",
@@ -60193,6 +60223,486 @@
         "description": "Reply to readContext; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read active context, entry boundary or paged history.\nInputs: Supply ID, optional leaf and context options including sync cursor and limit.\nInvariants: The active branch and pre-compaction selection determine the snapshot; malformed, missing or oversized files fail.\nEffects: Reads session data without starting a process.\nRecovery: Refresh the cursor or correct the file before retrying; check the logical result separately from link success.",
         "title": "HostReply_readContext"
       },
+      "HostReply_readContextStats": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "ok": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "value": {
+                        "additionalProperties": false,
+                        "description": "Active-branch usage metadata without transcript content.",
+                        "properties": {
+                          "model": {
+                            "anyOf": [
+                              {
+                                "properties": {
+                                  "modelId": {
+                                    "type": "string"
+                                  },
+                                  "provider": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["provider", "modelId"],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "speedSamples": {
+                            "description": "Most recent plausible timestamp-derived output tokens per second.",
+                            "items": {
+                              "exclusiveMinimum": 0.5,
+                              "maximum": 500,
+                              "type": "number"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          },
+                          "stats": {
+                            "anyOf": [
+                              {
+                                "description": "Session statistics snapshot including message counts, token usage, cost and optional context estimate.",
+                                "properties": {
+                                  "assistantMessages": {
+                                    "type": "number"
+                                  },
+                                  "contextUsage": {
+                                    "description": "Context occupancy estimate, not a billable provider usage total.",
+                                    "properties": {
+                                      "contextWindow": {
+                                        "description": "Model context window capacity in tokens.",
+                                        "type": "number"
+                                      },
+                                      "percent": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Estimated occupied percentage, or null when unknown."
+                                      },
+                                      "tokens": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Estimated context tokens, or null when unknown."
+                                      }
+                                    },
+                                    "required": [
+                                      "percent",
+                                      "contextWindow",
+                                      "tokens"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "cost": {
+                                    "type": "number"
+                                  },
+                                  "premiumRequests": {
+                                    "type": "number"
+                                  },
+                                  "sessionFile": {
+                                    "type": "string"
+                                  },
+                                  "sessionId": {
+                                    "type": "string"
+                                  },
+                                  "sessionName": {
+                                    "type": "string"
+                                  },
+                                  "tokens": {
+                                    "properties": {
+                                      "cacheRead": {
+                                        "type": "number"
+                                      },
+                                      "cacheWrite": {
+                                        "type": "number"
+                                      },
+                                      "input": {
+                                        "type": "number"
+                                      },
+                                      "output": {
+                                        "type": "number"
+                                      },
+                                      "reasoning": {
+                                        "type": "number"
+                                      },
+                                      "total": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "input",
+                                      "output",
+                                      "cacheRead",
+                                      "cacheWrite",
+                                      "total"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "toolCalls": {
+                                    "type": "number"
+                                  },
+                                  "toolResults": {
+                                    "type": "number"
+                                  },
+                                  "totalMessages": {
+                                    "type": "number"
+                                  },
+                                  "userMessages": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "sessionId",
+                                  "userMessages",
+                                  "assistantMessages",
+                                  "toolCalls",
+                                  "toolResults",
+                                  "totalMessages",
+                                  "tokens",
+                                  "cost"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["stats", "model", "speedSamples"],
+                        "type": "object"
+                      }
+                    },
+                    "required": ["ok", "value"],
+                    "type": "object"
+                  },
+                  {
+                    "description": "Operation failure; status and code identify the expected error.",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "ok": {
+                        "const": false,
+                        "type": "boolean"
+                      },
+                      "status": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["ok", "status", "code", "error"],
+                    "type": "object"
+                  }
+                ]
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "result"],
+            "type": "object"
+          },
+          {
+            "description": "Result bytes precede this envelope in binary frames. Media/file chunks are raw bytes; other operations carry a UTF-8 JSON encoding of their logical result.",
+            "properties": {
+              "blob": {
+                "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": ["bytes"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "blob"],
+            "type": "object",
+            "x-decoded-result": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "ok": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "value": {
+                      "additionalProperties": false,
+                      "description": "Active-branch usage metadata without transcript content.",
+                      "properties": {
+                        "model": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "modelId": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["provider", "modelId"],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "speedSamples": {
+                          "description": "Most recent plausible timestamp-derived output tokens per second.",
+                          "items": {
+                            "exclusiveMinimum": 0.5,
+                            "maximum": 500,
+                            "type": "number"
+                          },
+                          "maxItems": 32,
+                          "type": "array"
+                        },
+                        "stats": {
+                          "anyOf": [
+                            {
+                              "description": "Session statistics snapshot including message counts, token usage, cost and optional context estimate.",
+                              "properties": {
+                                "assistantMessages": {
+                                  "type": "number"
+                                },
+                                "contextUsage": {
+                                  "description": "Context occupancy estimate, not a billable provider usage total.",
+                                  "properties": {
+                                    "contextWindow": {
+                                      "description": "Model context window capacity in tokens.",
+                                      "type": "number"
+                                    },
+                                    "percent": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ],
+                                      "description": "Estimated occupied percentage, or null when unknown."
+                                    },
+                                    "tokens": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ],
+                                      "description": "Estimated context tokens, or null when unknown."
+                                    }
+                                  },
+                                  "required": [
+                                    "percent",
+                                    "contextWindow",
+                                    "tokens"
+                                  ],
+                                  "type": "object"
+                                },
+                                "cost": {
+                                  "type": "number"
+                                },
+                                "premiumRequests": {
+                                  "type": "number"
+                                },
+                                "sessionFile": {
+                                  "type": "string"
+                                },
+                                "sessionId": {
+                                  "type": "string"
+                                },
+                                "sessionName": {
+                                  "type": "string"
+                                },
+                                "tokens": {
+                                  "properties": {
+                                    "cacheRead": {
+                                      "type": "number"
+                                    },
+                                    "cacheWrite": {
+                                      "type": "number"
+                                    },
+                                    "input": {
+                                      "type": "number"
+                                    },
+                                    "output": {
+                                      "type": "number"
+                                    },
+                                    "reasoning": {
+                                      "type": "number"
+                                    },
+                                    "total": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "input",
+                                    "output",
+                                    "cacheRead",
+                                    "cacheWrite",
+                                    "total"
+                                  ],
+                                  "type": "object"
+                                },
+                                "toolCalls": {
+                                  "type": "number"
+                                },
+                                "toolResults": {
+                                  "type": "number"
+                                },
+                                "totalMessages": {
+                                  "type": "number"
+                                },
+                                "userMessages": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "sessionId",
+                                "userMessages",
+                                "assistantMessages",
+                                "toolCalls",
+                                "toolResults",
+                                "totalMessages",
+                                "tokens",
+                                "cost"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["stats", "model", "speedSamples"],
+                      "type": "object"
+                    }
+                  },
+                  "required": ["ok", "value"],
+                  "type": "object"
+                },
+                {
+                  "description": "Operation failure; status and code identify the expected error.",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["ok", "status", "code", "error"],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "error": {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number"
+                  }
+                },
+                "required": ["status", "code", "message"],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "const": "res",
+                "type": "string"
+              }
+            },
+            "required": ["type", "seq", "id", "ok", "error"],
+            "type": "object"
+          }
+        ],
+        "description": "Reply to readContextStats; match the request id. Outer ok:false reports a transport or dispatch error; outer ok:true can contain an inline logical operation failure (result.ok:false). Successful media and file chunks use binary frames, not inline JSON bytes. Usage: Read active-branch context statistics without transcript bodies.\nInputs: Supply the session ID on its owning host.\nInvariants: Counts, usage and model follow the current display branch and compaction boundary; speed samples are the most recent 32 plausible timestamp-derived rates. A changed file generation fails rather than combining snapshots.\nEffects: Reads metadata from the session file without starting a runner.\nRecovery: Retry after session_history_changed; upgrade an older host that does not support this operation.",
+        "title": "HostReply_readContextStats"
+      },
       "HostReply_readFileChunk": {
         "anyOf": [
           {
@@ -86266,6 +86776,40 @@
         "title": "HostRequest_readContext",
         "type": "object"
       },
+      "HostRequest_readContextStats": {
+        "description": "Usage: Read active-branch context statistics without transcript bodies.\nInputs: Supply the session ID on its owning host.\nInvariants: Counts, usage and model follow the current display branch and compaction boundary; speed samples are the most recent 32 plausible timestamp-derived rates. A changed file generation fails rather than combining snapshots.\nEffects: Reads metadata from the session file without starting a runner.\nRecovery: Retry after session_history_changed; upgrade an older host that does not support this operation.",
+        "properties": {
+          "args": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "const": "readContextStats",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "const": "req",
+            "type": "string"
+          }
+        },
+        "required": ["type", "seq", "id", "op", "args"],
+        "title": "HostRequest_readContextStats",
+        "type": "object"
+      },
       "HostRequest_readFileChunk": {
         "description": "Usage: Read a chunk from an open file reader.\nInputs: id is the reader handle; offset and length are byte counts.\nInvariants: Successful bytes travel in a binary host-link media frame, not a JSON Uint8Array.\nEffects: Reads the open file without mutating it.\nRecovery: If the file changed or the handle was lost, reopen and restart the read.",
         "properties": {
@@ -88747,7 +89291,7 @@
   "defaultContentType": "application/json",
   "id": "urn:keylime:host-link",
   "info": {
-    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 15 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 15. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 91 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
+    "description": "Generated from canonical TypeBox schemas, source descriptions and handler annotations. Do not edit; run bun run api.\n\nAuthenticated daemon WebSocket; the daemon sends hello first and the server replies welcome. The controller accepts protocol 13 through 15 and welcomes each daemon at its offered version. Upgrade the controller first: new daemons require protocol 15. Older accepted daemons can still use existing operations, including managed deployment; hostSettingsGet, hostSettingsSet and modelsList require v14. Incompatible versions close 4426. Text frames are newline-delimited JSON, with daemon frames allowed to batch lines. stdin/stdout line strings contain runner-channel frames described by x-content-schema and runner-channel.asyncapi.json. All 92 operation exchanges define their arguments and correlated replies; unknown future operations still receive 501 unknown_op. Sequenced messages are cumulatively acknowledged and retained until acked, replayed after reconnect and deduplicated by sequence. Unknown or wrong-direction types are skipped but acknowledged. Ping/pong/ack are unsequenced controls. Long lines use part messages with UTF-16 offsets, joined before parsing. Binary frames contain one length byte, that many UTF-8 ID bytes (1..255), then payload. Upload headers carry the plain upload ID; up:<id> is only an internal scheduling key and is not encoded on the wire. Result headers carry the request ID; result bytes arrive before the res envelope naming their total length. Control messages bypass fair per-key queues and the unacked window. Limits: 262144 bytes per part/binary payload, 524288 unacked bytes, 8388608 bytes per joined JSON line, 67108864 bytes per result blob. Invalid or excess stats samples are discarded and counted by the receiver; invalid is decoder-only. Invalid data/policy/size failures close 1007/1008/1009; a replaced link closes 4409. A failed op is never replayed after its caller was told it failed; link loss after dispatch can leave delivery uncertain.",
     "title": "Host daemon link",
     "version": "15"
   },
@@ -89947,6 +90491,29 @@
         ]
       },
       "summary": "readContext"
+    },
+    "operation_readContextStats": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/link"
+      },
+      "description": "Usage: Read active-branch context statistics without transcript bodies.\nInputs: Supply the session ID on its owning host.\nInvariants: Counts, usage and model follow the current display branch and compaction boundary; speed samples are the most recent 32 plausible timestamp-derived rates. A changed file generation fails rather than combining snapshots.\nEffects: Reads metadata from the session file without starting a runner.\nRecovery: Retry after session_history_changed; upgrade an older host that does not support this operation.",
+      "messages": [
+        {
+          "$ref": "#/channels/link/messages/HostRequest_readContextStats"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/link"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/link/messages/HostReply_readContextStats"
+          }
+        ]
+      },
+      "summary": "readContextStats"
     },
     "operation_readFileChunk": {
       "action": "send",

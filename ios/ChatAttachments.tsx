@@ -22,7 +22,8 @@ import {
   nativeRequest,
   newUploadId,
   pasteNativeAttachment,
-  pickNativeAttachments,
+  pickNativeFiles,
+  pickNativePhotos,
   readNativeAttachment,
   removeNativeAttachment,
   type NativeAttachmentSelection,
@@ -190,7 +191,8 @@ export type ChatAttachmentsController = {
   picking: boolean;
   canSend: boolean;
   payload: AttachmentPayload;
-  pick: () => Promise<void>;
+  pickFiles: () => Promise<void>;
+  pickPhotos: () => Promise<void>;
   paste: () => Promise<void>;
   remove: (id: string) => void;
   retry: (id: string) => void;
@@ -533,13 +535,14 @@ export function useChatAttachments(
     picking: active.picking,
     canSend,
     payload,
-    pick: () =>
+    pickFiles: () => select(pickNativeFiles),
+    pickPhotos: () =>
       select(() => {
         const inline = active.items.filter(
           (item) => item.mode === "inline",
         ).length;
         const files = active.items.length - inline;
-        return pickNativeAttachments(
+        return pickNativePhotos(
           Math.max(0, MAX_IMAGES - inline) + Math.max(0, MAX_FILES - files),
         );
       }),

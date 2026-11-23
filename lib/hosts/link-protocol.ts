@@ -147,6 +147,7 @@ export const SESSION_OP_PARAMS: {
   updateProject: ["updates"],
   hideProject: ["path"],
   validateCwd: ["path"],
+  readContextStats: ["id"],
 };
 
 /** Unknown additions are answered with 501. */

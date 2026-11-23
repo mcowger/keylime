@@ -39008,6 +39008,203 @@
         }
       ]
     },
+    "host_readContextStats_args": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "host_readContextStats_result": {
+      "anyOf": [
+        {
+          "properties": {
+            "ok": {
+              "const": true,
+              "type": "boolean"
+            },
+            "value": {
+              "additionalProperties": false,
+              "description": "Active-branch usage metadata without transcript content.",
+              "properties": {
+                "model": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "modelId": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["provider", "modelId"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "speedSamples": {
+                  "description": "Most recent plausible timestamp-derived output tokens per second.",
+                  "items": {
+                    "exclusiveMinimum": 0.5,
+                    "maximum": 500,
+                    "type": "number"
+                  },
+                  "maxItems": 32,
+                  "type": "array"
+                },
+                "stats": {
+                  "anyOf": [
+                    {
+                      "description": "Session statistics snapshot including message counts, token usage, cost and optional context estimate.",
+                      "properties": {
+                        "assistantMessages": {
+                          "type": "number"
+                        },
+                        "contextUsage": {
+                          "description": "Context occupancy estimate, not a billable provider usage total.",
+                          "properties": {
+                            "contextWindow": {
+                              "description": "Model context window capacity in tokens.",
+                              "type": "number"
+                            },
+                            "percent": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Estimated occupied percentage, or null when unknown."
+                            },
+                            "tokens": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Estimated context tokens, or null when unknown."
+                            }
+                          },
+                          "required": ["percent", "contextWindow", "tokens"],
+                          "type": "object"
+                        },
+                        "cost": {
+                          "type": "number"
+                        },
+                        "premiumRequests": {
+                          "type": "number"
+                        },
+                        "sessionFile": {
+                          "type": "string"
+                        },
+                        "sessionId": {
+                          "type": "string"
+                        },
+                        "sessionName": {
+                          "type": "string"
+                        },
+                        "tokens": {
+                          "properties": {
+                            "cacheRead": {
+                              "type": "number"
+                            },
+                            "cacheWrite": {
+                              "type": "number"
+                            },
+                            "input": {
+                              "type": "number"
+                            },
+                            "output": {
+                              "type": "number"
+                            },
+                            "reasoning": {
+                              "type": "number"
+                            },
+                            "total": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "input",
+                            "output",
+                            "cacheRead",
+                            "cacheWrite",
+                            "total"
+                          ],
+                          "type": "object"
+                        },
+                        "toolCalls": {
+                          "type": "number"
+                        },
+                        "toolResults": {
+                          "type": "number"
+                        },
+                        "totalMessages": {
+                          "type": "number"
+                        },
+                        "userMessages": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "sessionId",
+                        "userMessages",
+                        "assistantMessages",
+                        "toolCalls",
+                        "toolResults",
+                        "totalMessages",
+                        "tokens",
+                        "cost"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["stats", "model", "speedSamples"],
+              "type": "object"
+            }
+          },
+          "required": ["ok", "value"],
+          "type": "object"
+        },
+        {
+          "description": "Operation failure; status and code identify the expected error.",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "ok": {
+              "const": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "number"
+            }
+          },
+          "required": ["ok", "status", "code", "error"],
+          "type": "object"
+        }
+      ]
+    },
     "host_readFileChunk_args": {
       "properties": {
         "id": {
@@ -186741,6 +186938,159 @@
         }
       },
       "required": ["cwd"],
+      "type": "object"
+    },
+    "session_SessionContextStatistics": {
+      "additionalProperties": false,
+      "description": "Active-branch usage metadata without transcript content.",
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "properties": {
+                "modelId": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                }
+              },
+              "required": ["provider", "modelId"],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "speedSamples": {
+          "description": "Most recent plausible timestamp-derived output tokens per second.",
+          "items": {
+            "exclusiveMinimum": 0.5,
+            "maximum": 500,
+            "type": "number"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "stats": {
+          "anyOf": [
+            {
+              "description": "Session statistics snapshot including message counts, token usage, cost and optional context estimate.",
+              "properties": {
+                "assistantMessages": {
+                  "type": "number"
+                },
+                "contextUsage": {
+                  "description": "Context occupancy estimate, not a billable provider usage total.",
+                  "properties": {
+                    "contextWindow": {
+                      "description": "Model context window capacity in tokens.",
+                      "type": "number"
+                    },
+                    "percent": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Estimated occupied percentage, or null when unknown."
+                    },
+                    "tokens": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Estimated context tokens, or null when unknown."
+                    }
+                  },
+                  "required": ["percent", "contextWindow", "tokens"],
+                  "type": "object"
+                },
+                "cost": {
+                  "type": "number"
+                },
+                "premiumRequests": {
+                  "type": "number"
+                },
+                "sessionFile": {
+                  "type": "string"
+                },
+                "sessionId": {
+                  "type": "string"
+                },
+                "sessionName": {
+                  "type": "string"
+                },
+                "tokens": {
+                  "properties": {
+                    "cacheRead": {
+                      "type": "number"
+                    },
+                    "cacheWrite": {
+                      "type": "number"
+                    },
+                    "input": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "number"
+                    },
+                    "reasoning": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "input",
+                    "output",
+                    "cacheRead",
+                    "cacheWrite",
+                    "total"
+                  ],
+                  "type": "object"
+                },
+                "toolCalls": {
+                  "type": "number"
+                },
+                "toolResults": {
+                  "type": "number"
+                },
+                "totalMessages": {
+                  "type": "number"
+                },
+                "userMessages": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "sessionId",
+                "userMessages",
+                "assistantMessages",
+                "toolCalls",
+                "toolResults",
+                "totalMessages",
+                "tokens",
+                "cost"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["stats", "model", "speedSamples"],
       "type": "object"
     },
     "session_SessionHistoryContinuation": {

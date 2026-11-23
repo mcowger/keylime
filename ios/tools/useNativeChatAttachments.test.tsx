@@ -3,7 +3,11 @@ import { expect, mock, test } from "bun:test";
 import { createRequire } from "node:module";
 import type * as ReactTypes from "react";
 import type { NativeAttachmentSelection } from "../native-network";
-import { MAX_UPLOAD_BYTES } from "../../lib/upload-limits";
+import { MAX_ATTACHED_IMAGES } from "../../lib/image-attachments";
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOADS_PER_MESSAGE,
+} from "../../lib/upload-limits";
 
 const React = createRequire(new URL("../../package.json", import.meta.url))(
   "react",
@@ -26,10 +30,18 @@ let selection: () => Promise<NativeAttachmentSelection> = async () => ({
   files: [],
   errors: [],
 });
+const pickerCalls: { source: "files" | "photos"; limit?: number }[] = [];
 let nextId = 0;
 const removed: string[] = [];
 mock.module("../native-network", () => ({
-  pickNativeAttachments: () => selection(),
+  pickNativeFiles: () => {
+    pickerCalls.push({ source: "files" });
+    return selection();
+  },
+  pickNativePhotos: (limit: number) => {
+    pickerCalls.push({ source: "photos", limit });
+    return selection();
+  },
   pasteNativeAttachment: async () => null,
   readNativeAttachment: async () => "AQID",
   removeNativeAttachment: async (file: string) => {
@@ -67,7 +79,7 @@ test("supported photos go inline and unsupported photos retain their original fi
   );
   try {
     await act(async () => {
-      await view.result.current.pick();
+      await view.result.current.pickPhotos();
     });
     await waitFor(() => expect(view.result.current.canSend).toBe(true));
     expect(view.result.current.payload.images).toEqual([
@@ -111,7 +123,7 @@ test("a failed or oversized photo does not discard the successful selection", as
   );
   try {
     await act(async () => {
-      await view.result.current.pick();
+      await view.result.current.pickPhotos();
     });
     await waitFor(() => expect(view.result.current.canSend).toBe(true));
     expect(view.result.current.payload.images).toEqual([
@@ -136,7 +148,7 @@ test("a completed picker cannot attach a photo to a different chat", async () =>
   try {
     let picking!: Promise<void>;
     act(() => {
-      picking = view.result.current.pick();
+      picking = view.result.current.pickPhotos();
     });
     view.rerender({ chat: "second" });
     await act(async () => {
@@ -155,6 +167,64 @@ test("a completed picker cannot attach a photo to a different chat", async () =>
     });
     expect(view.result.current.items).toEqual([]);
     expect(removed).toContain("late-photo");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("files and photos open their respective pickers and share attachment limits", async () => {
+  pickerCalls.length = 0;
+  selection = async () => ({
+    files: [{ file: "doc", name: "doc.txt", size: 3, mimeType: "text/plain" }],
+    errors: [],
+  });
+  const view = renderHook(() =>
+    useChatAttachments("https://example.test", "local", "chat"),
+  );
+  try {
+    await act(async () => {
+      await view.result.current.pickFiles();
+    });
+    selection = async () => ({ files: [], errors: [] });
+    await act(async () => {
+      await view.result.current.pickPhotos();
+    });
+    expect(pickerCalls).toEqual([
+      { source: "files" },
+      {
+        source: "photos",
+        limit: MAX_ATTACHED_IMAGES + MAX_UPLOADS_PER_MESSAGE - 1,
+      },
+    ]);
+    expect(view.result.current.items.map((item) => item.name)).toEqual([
+      "doc.txt",
+    ]);
+    expect(view.result.current.error).toBeNull();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("picker failures and cancellations leave the draft usable", async () => {
+  selection = async () => {
+    throw new Error("Picker unavailable");
+  };
+  const view = renderHook(() =>
+    useChatAttachments("https://example.test", "local", "chat"),
+  );
+  try {
+    await act(async () => {
+      await view.result.current.pickFiles();
+    });
+    expect(view.result.current.error).toBe("Picker unavailable");
+    expect(view.result.current.picking).toBe(false);
+    selection = async () => ({ files: [], errors: [] });
+    await act(async () => {
+      await view.result.current.pickPhotos();
+    });
+    expect(view.result.current.error).toBeNull();
+    expect(view.result.current.items).toEqual([]);
+    expect(view.result.current.canSend).toBe(true);
   } finally {
     view.unmount();
   }

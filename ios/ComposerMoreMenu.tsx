@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import type { ToolPreset } from "../lib/tool-presets";
 export type ComposerMoreMenuProps = {
-  onAttach: () => void;
+  onAttachFiles: () => void;
+  onPhotoLibrary: () => void;
   onPasteImage: () => void;
   attachmentsDisabled?: boolean;
   toolPreset: ToolPreset;
@@ -24,7 +25,7 @@ export type ComposerMoreMenuProps = {
 };
 
 type Anchor = { x: number; y: number; height: number };
-type IconName = "plus" | "attach" | "paste" | "tools" | "advisor";
+type IconName = "plus" | "attach" | "photo" | "paste" | "tools" | "advisor";
 
 function MenuIcon({ name, color }: { name: IconName; color: string }) {
   if (name === "advisor")
@@ -44,6 +45,12 @@ function MenuIcon({ name, color }: { name: IconName; color: string }) {
         <>
           <View style={[styles.clipOuter, { borderColor: color }]} />
           <View style={[styles.clipInner, { borderColor: color }]} />
+        </>
+      ) : name === "photo" ? (
+        <>
+          <View style={[styles.photoFrame, { borderColor: color }]} />
+          <View style={[styles.photoSun, { backgroundColor: color }]} />
+          <View style={[styles.photoMountain, { borderColor: color }]} />
         </>
       ) : name === "paste" ? (
         <>
@@ -69,7 +76,8 @@ const presets: { value: ToolPreset; description: string }[] = [
 
 /** An anchored composer menu. Callbacks own persistence and session changes. */
 export function ComposerMoreMenu({
-  onAttach,
+  onAttachFiles,
+  onPhotoLibrary,
   onPasteImage,
   attachmentsDisabled = false,
   toolPreset,
@@ -213,12 +221,25 @@ export function ComposerMoreMenu({
                   accessibilityLabel="Attach files"
                   accessibilityState={{ disabled: attachmentsDisabled }}
                   disabled={attachmentsDisabled}
-                  onPress={() => close(onAttach)}
+                  onPress={() => close(onAttachFiles)}
                   style={[styles.row, attachmentsDisabled && styles.disabled]}
                 >
                   <MenuIcon name="attach" color={colors.muted} />
                   <Text style={[styles.rowText, { color: colors.muted }]}>
                     Attach files
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Photo Library"
+                  accessibilityState={{ disabled: attachmentsDisabled }}
+                  disabled={attachmentsDisabled}
+                  onPress={() => close(onPhotoLibrary)}
+                  style={[styles.row, attachmentsDisabled && styles.disabled]}
+                >
+                  <MenuIcon name="photo" color={colors.muted} />
+                  <Text style={[styles.rowText, { color: colors.muted }]}>
+                    Photo Library
                   </Text>
                 </Pressable>
                 <Pressable
@@ -445,6 +466,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 3,
     transform: [{ rotate: "40deg" }],
+  },
+  photoFrame: {
+    position: "absolute",
+    left: 1,
+    top: 1,
+    width: 12,
+    height: 12,
+    borderWidth: 1.2,
+    borderRadius: 2,
+  },
+  photoSun: {
+    position: "absolute",
+    left: 4,
+    top: 4,
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+  },
+  photoMountain: {
+    position: "absolute",
+    left: 4,
+    bottom: 2,
+    width: 7,
+    height: 5,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    transform: [{ rotate: "45deg" }],
   },
   clipboard: {
     position: "absolute",
