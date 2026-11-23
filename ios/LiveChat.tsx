@@ -78,10 +78,11 @@ export type ChatTarget = {
   sessionId: string | null;
 };
 type ChatView = ReturnType<typeof useChatSession>;
-export type ChatHeaderState = Pick<
-  ChatView,
-  "active" | "state"
-> & { key: string; sessionId: string; hostId: string };
+export type ChatHeaderState = Pick<ChatView, "active" | "state"> & {
+  key: string;
+  sessionId: string;
+  hostId: string;
+};
 
 export type LiveChatProps = {
   origin: string;
@@ -192,14 +193,7 @@ export function LiveChat({
           }
         : null,
     );
-  }, [
-    onHeaderState,
-    headerKey,
-    headerHost,
-    headerSession,
-    active,
-    state,
-  ]);
+  }, [onHeaderState, headerKey, headerHost, headerSession, active, state]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const attachments = useChatAttachments(
     origin,
