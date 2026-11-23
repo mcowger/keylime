@@ -14,20 +14,22 @@ import {
   type ChatLocationChoice,
 } from "./ChatLocationPicker";
 import { HomeScreen, type HomeSessionInfo } from "./HomeScreen";
+import { ChatHeaderContext } from "./ChatHeaderContext";
 import { SessionActions } from "./ChatActions";
 import { archiveChat, renameChat } from "./chat-mutations";
-import type { ShipJob } from "../lib/workspace-ship-types";
-import { LiveChat, type ChatTarget } from "./LiveChat";
+import type { ShipJob, ShipPreview } from "../lib/workspace-ship-types";
+import { LiveChat, type ChatHeaderState, type ChatTarget } from "./LiveChat";
 import { ArchiveBrowser, SearchInput, useSidebarSearch } from "./SearchArchive";
 import { SystemFlows, type SystemFlow } from "./SystemFlows";
 import { EffortDetails } from "./EffortDetails";
 import { RepoFlows, type RepoFlow } from "./RepoFlows";
-import { SidebarMenuIcon, WorkspacePanelIcon } from "./ShellIcons";
+import { ShipIcon, SidebarMenuIcon, WorkspacePanelIcon } from "./ShellIcons";
 import { SettingsScreen } from "./SettingsScreen";
 import { FinishShipDialog, ShipDialog } from "./ShipDialog";
 import type { BrowserChannel } from "./browser-link";
 import { Sidebar } from "./Sidebar";
 import { theme } from "./theme";
+import { KeylimeHttpError, requestJson } from "./keylime-http";
 import { useHomeInventory } from "./useHomeInventory";
 import { useKeylimeConnection } from "./useKeylimeConnection";
 import { useShipSidebar } from "./useShipSidebar";
@@ -35,6 +37,7 @@ import { useNativePreferences } from "./useNativePreferences";
 import { WorkspacePanel } from "./WorkspacePanel";
 import {
   locationForPath,
+  workspaceForPath,
   useWorkspaceInventory,
 } from "./useWorkspaceInventory";
 import { WorkspaceTabs, type WorkspaceTab } from "./WorkspaceTabs";
@@ -155,6 +158,8 @@ export function NavigationShell({
   const [activeKey, setActiveKey] = useState<string>();
   const [picker, setPicker] = useState<"project" | "workspace" | null>(null);
   const draftSeq = useRef(0);
+  const [headerState, setHeaderState] = useState<ChatHeaderState | null>(null);
+  const [shipAvailability, setShipAvailability] = useState<{ key: string; empty: boolean } | null>(null);
   const dark = useColorScheme() !== "light";
   const colors = dark
     ? theme
@@ -214,6 +219,40 @@ export function NavigationShell({
         sessionId: selected?.sessionId ?? selected?.session?.id ?? null,
       }
     : null;
+  const header = headerState && target && headerState.key === target.key && headerState.hostId === target.hostId && headerState.sessionId === target.sessionId ? headerState : null;
+  const owner = target?.sessionId ? workspaceForPath(byHost, target.hostId, target.path) : undefined;
+  const shipTarget = target?.sessionId && owner && owner.project.kind === "git" && !owner.workspace.isDefault
+    ? { hostId: target.hostId, projectPath: owner.project.path, path: owner.workspace.path, sessionId: target.sessionId, workspaceId: owner.workspace.id }
+    : null;
+  const shipKey = shipTarget ? JSON.stringify([origin, shipTarget.hostId, shipTarget.projectPath, shipTarget.path]) : null;
+  useEffect(() => {
+    if (!shipKey) return;
+    const [, host, projectPath, path] = JSON.parse(shipKey) as [string, string, string, string];
+    let disposed = false;
+    let pending = false;
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const query = `host=${encodeURIComponent(host)}&projectPath=${encodeURIComponent(projectPath)}&path=${encodeURIComponent(path)}`;
+        const preview = await requestJson<ShipPreview>(origin, `/api/ship?${query}`);
+        if (!disposed) setShipAvailability({ key: shipKey, empty: !preview.dirty && preview.ahead === 0 && preview.issues.length === 0 && preview.pr?.state !== "open" });
+      } catch (cause) {
+        if (!disposed) {
+          setShipAvailability(null);
+          if (cause instanceof KeylimeHttpError && cause.kind === "unauthorized") onUnauthorized();
+        }
+      } finally {
+        pending = false;
+      }
+    };
+    void refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [origin, shipKey, onUnauthorized]);
+  const shipBusy = !!header?.active || !!header?.state?.state?.isStreaming || !!header?.state?.state?.isPromptRunning || !!header?.state?.state?.isBashRunning || active.some((item) => (item.session.hostId ?? "local") === target?.hostId && item.session.id === target?.sessionId && item.status === "Running");
+  const nothingToShip = shipAvailability?.key === shipKey && shipAvailability.empty;
+  useEffect(() => { setMenu(false); }, [section, target?.key, target?.sessionId]);
 
   const hierarchyByHost = useMemo(
     () =>
@@ -441,11 +480,30 @@ export function NavigationShell({
     setSection("settings");
   }
 
+  function openShipProgress() {
+    setMenu(false);
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: "Ship progress",
+        options: [
+          ...admittedShips.map(([, { target }]) =>
+            `${target.path.split("/").pop() ?? target.path} · ${hosts.find((host) => host.id === target.hostId)?.label || target.hostId}`,
+          ),
+          "Cancel",
+        ],
+        cancelButtonIndex: admittedShips.length,
+      },
+      (index) => {
+        if (admittedShips[index]) setVisibleShipKey(admittedShips[index][0]);
+      },
+    );
+  }
+
   return (
     <SafeAreaView
       style={[
         styles.root,
-        { backgroundColor: sidebar ? colors.panel : colors.background },
+        { backgroundColor: section === "settings" && !sidebar ? colors.background : colors.panel },
       ]}
     >
       <StatusBar barStyle={dark ? "light-content" : "dark-content"} />
@@ -508,6 +566,7 @@ export function NavigationShell({
                 >
                   <SidebarMenuIcon color={colors.text} />
                 </Pressable>
+                {!(section === "workspace" && target?.sessionId) && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="More actions"
@@ -518,6 +577,7 @@ export function NavigationShell({
                     ⋯
                   </Text>
                 </Pressable>
+                )}
                 {section === "workspace" && target?.sessionId && (
                   <SessionActions
                     session={{
@@ -550,6 +610,9 @@ export function NavigationShell({
                       await archiveChat(identity);
                       if (selected) closeTab(selected);
                     }}
+                    onSettings={openSettings}
+                    onChangeServer={onChangeServer}
+                    onShipProgress={admittedShips.length ? openShipProgress : undefined}
                   />
                 )}
                 <View style={styles.headerCenter}>
@@ -557,6 +620,8 @@ export function NavigationShell({
                     <WorkspaceTabs
                       openTabs={workspaceTabs}
                       activeTabKey={activeKey}
+                      projectName={target?.project}
+                      workspaceName={target?.workspace}
                       savedSessions={savedSessions}
                       savedState={
                         byHost[location.hostId]?.unavailable
@@ -572,6 +637,31 @@ export function NavigationShell({
                     />
                   )}
                 </View>
+                {section === "workspace" && target?.sessionId && (
+                  <ChatHeaderContext
+                    key={target.key}
+                    link={link}
+                    hostId={target.hostId}
+                    sessionId={target.sessionId}
+                    usage={header?.state?.state?.contextUsage ?? null}
+                    model={header?.state?.state?.model?.name ?? header?.state?.state?.model?.id}
+                    busy={shipBusy || status !== "open"}
+                    running={!!header?.state?.running}
+                    colors={colors}
+                  />
+                )}
+                {section === "workspace" && shipTarget && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={shipBusy ? "Ship unavailable while chat is busy" : nothingToShip ? "Nothing to ship" : "Ship workspace"}
+                    accessibilityState={{ disabled: shipBusy || nothingToShip || !owner?.available || status !== "open" }}
+                    disabled={shipBusy || nothingToShip || !owner?.available || status !== "open"}
+                    onPress={() => openShip(shipTarget)}
+                    style={[styles.headerButton, (shipBusy || nothingToShip || !owner?.available || status !== "open") && styles.disabled]}
+                  >
+                    <ShipIcon color={colors.text} />
+                  </Pressable>
+                )}
                 {section === "workspace" && location && (
                   <Pressable
                     accessibilityRole="button"
@@ -614,26 +704,7 @@ export function NavigationShell({
                     <Pressable
                       accessibilityRole="button"
                       style={styles.menuItem}
-                      onPress={() => {
-                        setMenu(false);
-                        ActionSheetIOS.showActionSheetWithOptions(
-                          {
-                            title: "Ship progress",
-                            options: [
-                              ...admittedShips.map(
-                                ([, { target }]) =>
-                                  `${target.path.split("/").pop() ?? target.path} · ${hosts.find((host) => host.id === target.hostId)?.label || target.hostId}`,
-                              ),
-                              "Cancel",
-                            ],
-                            cancelButtonIndex: admittedShips.length,
-                          },
-                          (index) => {
-                            if (admittedShips[index])
-                              setVisibleShipKey(admittedShips[index][0]);
-                          },
-                        );
-                      }}
+                      onPress={openShipProgress}
                     >
                       <Text style={{ color: colors.text }}>Ship progress</Text>
                     </Pressable>
@@ -674,6 +745,7 @@ export function NavigationShell({
             visible={section === "workspace" && !panel}
             preferences={preferences.preferences}
             onUnauthorized={onUnauthorized}
+            onHeaderState={setHeaderState}
             onCreated={onCreated}
             onForked={(source, id) => {
               if (!location || source.key !== target?.key) return;
@@ -1143,10 +1215,10 @@ export function NavigationShell({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  headerCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+  headerCenter: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center" },
   body: { flex: 1 },
   header: {
-    minHeight: 64,
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1157,6 +1229,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  disabled: { opacity: 0.4 },
   menuIcon: { fontSize: 20, fontWeight: "600" },
   status: { paddingVertical: 10, paddingHorizontal: 16 },
   menu: {

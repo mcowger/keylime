@@ -77,6 +77,12 @@ export type ChatTarget = {
   effort?: boolean;
   sessionId: string | null;
 };
+type ChatView = ReturnType<typeof useChatSession>;
+export type ChatHeaderState = Pick<
+  ChatView,
+  "active" | "context" | "state" | "liveMessage"
+> & { key: string; sessionId: string; hostId: string };
+
 export type LiveChatProps = {
   origin: string;
   link: BrowserLink;
@@ -93,6 +99,7 @@ export type LiveChatProps = {
   onForked: (target: ChatTarget, sessionId: string) => string | undefined;
   onChooseProject: () => void;
   onChooseWorkspace: () => void;
+  onHeaderState?: (state: ChatHeaderState | null) => void;
 };
 
 type Selection = NonNullable<ChatComposerProps["selectedModel"]> & {
@@ -131,6 +138,7 @@ export function LiveChat({
   onForked,
   onChooseProject,
   onChooseWorkspace,
+  onHeaderState,
 }: LiveChatProps) {
   const [advisorChoices, setAdvisorChoices] = useState(loadAdvisorChoices);
   const advisorChoicesRef = useRef(advisorChoices);
@@ -167,6 +175,26 @@ export function LiveChat({
     advisor: advisorEnabled,
     onUnauthorized,
   });
+  const headerKey = target?.key;
+  const headerHost = target?.hostId;
+  const headerSession = target?.sessionId;
+  const { active, context, state, liveMessage } = chat;
+  useEffect(() => () => onHeaderState?.(null), [onHeaderState]);
+  useEffect(() => {
+    onHeaderState?.(
+      headerKey && headerHost && headerSession
+        ? {
+            key: headerKey,
+            hostId: headerHost,
+            sessionId: headerSession,
+            active,
+            context,
+            state,
+            liveMessage,
+          }
+        : null,
+    );
+  }, [onHeaderState, headerKey, headerHost, headerSession, active, context, state, liveMessage]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const attachments = useChatAttachments(
     origin,

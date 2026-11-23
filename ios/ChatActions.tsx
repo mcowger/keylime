@@ -341,12 +341,18 @@ export function SessionActions({
   hasChildren,
   onRename,
   onArchive,
+  onSettings,
+  onChangeServer,
+  onShipProgress,
 }: {
   session: ChatIdentity;
   name: string;
   hasChildren: boolean;
   onRename: (session: ChatIdentity, name: string) => void | Promise<void>;
   onArchive: (session: ChatIdentity) => void | Promise<void>;
+  onSettings?: () => void;
+  onChangeServer?: () => void;
+  onShipProgress?: () => void;
 }) {
   const colors = useColors();
   const key = identityKey(session);
@@ -357,6 +363,7 @@ export function SessionActions({
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const afterClose = useRef<(() => void) | null>(null);
   const inFlight = useRef(false);
   useEffect(() => {
     setMenuKey(null);
@@ -405,6 +412,11 @@ export function SessionActions({
         <Text style={[styles.triggerText, { color: colors.text }]}>⋯</Text>
       </Pressable>
       <Modal
+        onDismiss={() => {
+          const callback = afterClose.current;
+          afterClose.current = null;
+          callback?.();
+        }}
         transparent
         visible={menu || rename}
         animationType="fade"
@@ -511,6 +523,27 @@ export function SessionActions({
                     Rename
                   </Text>
                 </Pressable>
+                {[
+                  ["Settings", onSettings],
+                  ["Change server", onChangeServer],
+                  ["Ship progress", onShipProgress],
+                ].map(([label, callback]) =>
+                  typeof callback === "function" ? (
+                    <Pressable
+                      key={label as string}
+                      accessibilityRole="button"
+                      style={styles.menuRow}
+                      onPress={() => {
+                        afterClose.current = callback;
+                        setMenuKey(null);
+                      }}
+                    >
+                      <Text style={[styles.menuText, { color: colors.text }]}>
+                        {label as string}
+                      </Text>
+                    </Pressable>
+                  ) : null,
+                )}
                 {!!error && (
                   <Text accessibilityRole="alert" style={styles.error}>
                     {error}

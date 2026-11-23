@@ -27,6 +27,8 @@ export type WorkspaceTab = {
 export type WorkspaceTabsProps = {
   openTabs: readonly WorkspaceTab[];
   activeTabKey?: string;
+  projectName?: string;
+  workspaceName?: string;
   // The caller supplies only sessions belonging to this host and workspace.
   savedSessions: readonly WorkspaceSessionInfo[];
   savedState?: "loading" | "ready" | "unavailable";
@@ -91,6 +93,8 @@ function savedTitle(session: WorkspaceSessionInfo): string {
 export function WorkspaceTabs({
   openTabs,
   activeTabKey,
+  projectName,
+  workspaceName,
   savedSessions,
   savedState = "ready",
   onSelectTab,
@@ -157,7 +161,12 @@ export function WorkspaceTabs({
           numberOfLines={1}
           style={[styles.triggerText, { color: colors.text }]}
         >
-          {active?.title || "Workspace"} · {openTabs.length} tabs
+          {[active?.title || "Workspace", projectName, workspaceName]
+            .filter(Boolean)
+            .join(" · ")}
+        </Text>
+        <Text style={[styles.triggerCount, { color: colors.text }]}>
+          {` · ${openTabs.length} tabs`}
         </Text>
       </Pressable>
       <Modal
@@ -347,10 +356,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     minHeight: 38,
+    width: "100%",
     maxWidth: 220,
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
   },
-  triggerText: { fontSize: 14 },
+  triggerText: { fontSize: 14, flexShrink: 1 },
+  triggerCount: { fontSize: 14, flexShrink: 0 },
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
