@@ -40,6 +40,8 @@ export type WorkspacePanelProps = {
   sessionId?: string | null;
   link?: BrowserLink | null;
   linkStatus?: BrowserLinkStatus;
+  initialFile?: string;
+  initialAgent?: string[];
   onClose: () => void;
   onMention?: (path: string, isDirectory: boolean) => void;
   onShip?: () => void;
@@ -138,8 +140,16 @@ function PanelGlyph({
 }
 
 function Panel(props: WorkspacePanelProps) {
-  const [view, setView] = useState("explorer");
-  const [files, setFiles] = useState<string[]>([]);
+  const [view, setView] = useState(
+    props.initialFile
+      ? `file:${props.initialFile}`
+      : props.initialAgent?.length
+        ? "activity"
+        : "explorer",
+  );
+  const [files, setFiles] = useState<string[]>(
+    props.initialFile ? [props.initialFile] : [],
+  );
   const [refresh, setRefresh] = useState(0);
   const open = (path: string) => {
     setFiles((old) => (old.includes(path) ? old : [...old, path]));
@@ -241,6 +251,7 @@ function Panel(props: WorkspacePanelProps) {
             sessionId={props.sessionId}
             link={props.link}
             linkStatus={props.linkStatus}
+            initialAgent={props.initialAgent}
             kind={view}
           />
         ) : null

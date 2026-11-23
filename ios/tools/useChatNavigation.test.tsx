@@ -44,6 +44,7 @@ mock.module("../node_modules/react-native/index.js", () => ({
   Image: () => null,
   ActivityIndicator: () => null,
   Modal: () => null,
+  Linking: { openURL: async () => {} },
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
   useColorScheme: () => "dark",
   Pressable: ({

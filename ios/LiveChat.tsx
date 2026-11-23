@@ -58,6 +58,7 @@ export type ChatTarget = {
   key: string;
   hostId: string;
   path: string;
+  sessionCwd: string;
   workspace: string;
   project: string;
   effort?: boolean;
@@ -99,6 +100,11 @@ export type LiveChatProps = {
   onChooseProject: () => void;
   onChooseWorkspace: () => void;
   onHeaderState?: (state: ChatHeaderState | null) => void;
+  onOpenActivityTarget?: (
+    owner: string,
+    kind: "file" | "agent",
+    value: string | string[],
+  ) => void;
 };
 
 type Selection = {
@@ -168,6 +174,7 @@ export function LiveChat({
   onChooseProject,
   onChooseWorkspace,
   onHeaderState,
+  onOpenActivityTarget,
 }: LiveChatProps) {
   const [advisorChoices, setAdvisorChoices] = useState(loadAdvisorChoices);
   const [toolPreset, setToolPreset] = useState(loadToolPreset);
@@ -291,7 +298,12 @@ export function LiveChat({
         throw new Error("The selected chat changed.");
       if (result.sessionId !== expected.sessionId) {
         persistAdvisor(target.hostId, result.sessionId, advisorEnabled);
-        onCreated(target.key, result.sessionId, target.hostId, target.path);
+        onCreated(
+          target.key,
+          result.sessionId,
+          target.hostId,
+          target.sessionCwd,
+        );
       } else await chat.refresh();
     },
     setDraft(expected, _id, update) {
@@ -1089,6 +1101,10 @@ export function LiveChat({
           sessionKey={transcriptOwner}
           mediaOrigin={origin}
           mediaHostId={target.hostId}
+          onOpenActivityTarget={(kind, value) =>
+            onOpenActivityTarget?.(target.key, kind, value)
+          }
+          cwd={target.sessionCwd}
           onCopy={(text) =>
             void copyText(text).catch((cause) => error(key, cause))
           }

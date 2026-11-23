@@ -52,6 +52,7 @@ export type WorkspaceLocation = {
 type OpenTab = WorkspaceTab & {
   location: WorkspaceLocation;
   sessionId?: string;
+  sessionCwd?: string;
 };
 
 type ChatLocation = Pick<
@@ -99,6 +100,11 @@ export function NavigationShell({
   );
   const preferences = useNativePreferences();
   const [panel, setPanel] = useState(false);
+  const [activityTarget, setActivityTarget] = useState<{
+    owner: string;
+    kind: "file" | "agent";
+    value: string | string[];
+  } | null>(null);
   const [repoFlow, setRepoFlow] = useState<RepoFlow | null>(null);
   const [choosingRepo, setChoosingRepo] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -215,6 +221,8 @@ export function NavigationShell({
           JSON.stringify([location.hostId, location.path, "draft"]),
         hostId: location.hostId,
         path: selected?.location.path ?? location.path,
+        sessionCwd:
+          selected?.sessionCwd ?? selected?.location.path ?? location.path,
         workspace: selected?.location.title ?? location.title,
         project:
           selected?.location.project ?? location.project ?? location.title,
@@ -430,7 +438,9 @@ export function NavigationShell({
       const existing = old.find((tab) => tab.key === key);
       if (existing)
         return old.map((tab) =>
-          tab.key === key ? { ...tab, sessionId } : tab,
+          tab.key === key
+            ? { ...tab, sessionId, sessionCwd: tab.sessionCwd ?? path }
+            : tab,
         );
       return [
         ...old,
@@ -438,6 +448,7 @@ export function NavigationShell({
           key,
           title: "New chat",
           sessionId,
+          sessionCwd: path,
           location: { ...location, hostId, path },
         },
       ];
@@ -515,10 +526,13 @@ export function NavigationShell({
           (tab.location.hostId === hostId && tab.sessionId === item.id),
       );
       if (existing)
-        return sameWorkspace(existing.location, belonging)
+        return sameWorkspace(existing.location, belonging) &&
+          existing.sessionCwd === item.cwd
           ? old
           : old.map((tab) =>
-              tab === existing ? { ...tab, location: belonging } : tab,
+              tab === existing
+                ? { ...tab, location: belonging, sessionCwd: item.cwd }
+                : tab,
             );
       return [
         ...old,
@@ -527,6 +541,7 @@ export function NavigationShell({
           location: belonging,
           title: sessionTitle(item),
           sessionId: item.id,
+          sessionCwd: item.cwd,
         },
       ];
     });
@@ -780,7 +795,10 @@ export function NavigationShell({
                       panel ? "Close workspace panel" : "Open workspace panel"
                     }
                     accessibilityState={{ expanded: panel }}
-                    onPress={() => setPanel((open) => !open)}
+                    onPress={() => {
+                      setPanel((open) => !open);
+                      setActivityTarget(null);
+                    }}
                     style={styles.headerButton}
                   >
                     <WorkspacePanelIcon color={colors.text} />
@@ -858,6 +876,11 @@ export function NavigationShell({
             preferences={preferences.preferences}
             onUnauthorized={onUnauthorized}
             onHeaderState={setHeaderState}
+            onOpenActivityTarget={(owner, kind, value) => {
+              if (owner !== target?.key) return;
+              setActivityTarget({ owner, kind, value });
+              setPanel(true);
+            }}
             onCreated={onCreated}
             onForked={(source, id) => {
               if (!location || source.key !== target?.key) return;
@@ -867,7 +890,13 @@ export function NavigationShell({
                   ? old
                   : [
                       ...old,
-                      { key, sessionId: id, title: "New chat", location },
+                      {
+                        key,
+                        sessionId: id,
+                        sessionCwd: source.sessionCwd,
+                        title: "New chat",
+                        location,
+                      },
                     ],
               );
               setActiveKey(key);
@@ -883,6 +912,22 @@ export function NavigationShell({
               linkStatus={status}
               hostId={location.hostId}
               cwd={location.path}
+              initialFile={
+                activityTarget &&
+                activityTarget.owner === target?.key &&
+                activityTarget.kind === "file" &&
+                typeof activityTarget.value === "string"
+                  ? activityTarget.value
+                  : undefined
+              }
+              initialAgent={
+                activityTarget &&
+                activityTarget.owner === target?.key &&
+                activityTarget.kind === "agent" &&
+                Array.isArray(activityTarget.value)
+                  ? activityTarget.value
+                  : undefined
+              }
               sessionId={target?.sessionId}
               onShip={(() => {
                 if (
@@ -925,7 +970,10 @@ export function NavigationShell({
                       })
                   : undefined;
               })()}
-              onClose={() => setPanel(false)}
+              onClose={() => {
+                setPanel(false);
+                setActivityTarget(null);
+              }}
             />
           )}
           {preferences.error && section === "settings" && (

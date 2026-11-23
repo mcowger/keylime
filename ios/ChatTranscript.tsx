@@ -10,6 +10,7 @@ import {
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Image,
   Modal,
   Pressable,
@@ -21,9 +22,17 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import { isRecord } from "../lib/type-guards";
 import type { operations } from "./generated/web-http";
 import { AuthenticatedMedia } from "./AuthenticatedMedia";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { ActivityIcon, type ActivityIconName } from "./ActivityIcons";
+import { ToolCallDetails } from "./ToolCallDetails";
+import {
+  getNativeToolDuration,
+  getNativeToolPresentation,
+} from "./tool-presentation";
+import { nativeToolTarget } from "./tool-targets";
 import { TranscriptIcon, type TranscriptIconName } from "./TranscriptIcons";
 import { theme } from "./theme";
 import type { SettingsPreferences } from "./SettingsScreen";
@@ -48,6 +57,8 @@ const PaletteContext = createContext<{
   palette: NativeTranscriptPalette;
   mediaHostId?: string;
   light: boolean;
+  cwd?: string;
+  onOpenActivityTarget?: ChatTranscriptProps["onOpenActivityTarget"];
 }>({ palette: theme, light: false });
 
 function useTranscriptStyles() {
@@ -100,6 +111,11 @@ export type ChatTranscriptProps = {
   mediaOrigin?: string;
   /** Host that owns relative media in this session. */
   mediaHostId?: string;
+  cwd?: string;
+  onOpenActivityTarget?: (
+    kind: "file" | "agent",
+    value: string | string[],
+  ) => void;
   /** Change when selecting another host-qualified session. */
   sessionKey?: string;
   /** Hidden retained lists must not interpret layout changes as user scrolling. */
@@ -139,6 +155,22 @@ function textOf(
       .join("\n") ?? ""
   );
 }
+const HIDDEN_ACTIVITY_LABELS: Record<string, string> = {
+  "mid-run-todo-nudge": "Todo reminder",
+  "todo-error-reminder": "Todo reminder",
+  "resolve-reminder": "Pending preview",
+  "interrupted-thinking": "Interrupted",
+  "autoresearch-resume": "Resume hint",
+  "plan-mode-context": "Plan context",
+  "plan-mode-reference": "Plan reference",
+  "goal-mode-context": "Goal context",
+  "goal-continuation": "Goal continuation",
+  "goal-budget-limit": "Budget limit",
+  "thinking-loop-redirect": "Loop guard",
+  "image-attachment-description": "Image note",
+  extension_debug: "Extension",
+  "lsp-late-diagnostic": "Diagnostics",
+};
 
 function makeRows(
   messages: readonly TranscriptMessage[],
@@ -634,7 +666,8 @@ function ActivityEntry({
   onToolOpen: (id: string, open: boolean) => void;
 }) {
   const styles = useTranscriptStyles();
-  const { palette } = useContext(PaletteContext);
+  const { palette, light, cwd, onOpenActivityTarget } =
+    useContext(PaletteContext);
   const [override, setOverride] = useState<boolean>();
   const msg = piece.ref.message;
   const blocks = piece.blocks;
@@ -668,70 +701,56 @@ function ActivityEntry({
     (thinkingDefault || toolDefault);
   let title = "Activity";
   let body = "";
-  if (tool) {
-    const input = tool.input;
-    const recipient =
-      typeof input.to === "string"
-        ? input.to
-        : Array.isArray(input.to)
-          ? input.to
-              .filter((value): value is string => typeof value === "string")
-              .join(", ")
-          : "";
-    if (tool.toolName === "hub" && input.op === "send" && recipient) {
-      const value = results.get(tool.toolCallId);
-      let outcome = "";
-      if (
-        value?.details &&
-        typeof value.details === "object" &&
-        "receipts" in value.details &&
-        Array.isArray(value.details.receipts)
-      ) {
-        const receipt = value.details.receipts[0];
-        if (
-          receipt &&
-          typeof receipt === "object" &&
-          "outcome" in receipt &&
-          typeof receipt.outcome === "string"
-        )
-          outcome = ` ${receipt.outcome}`;
-      }
-      title = `IRC → ${recipient}${outcome}`;
-      body =
-        typeof input.message === "string" ? input.message : safeJson(input);
-    } else {
-      title =
-        tool.intent || (typeof input.i === "string" ? input.i : tool.toolName);
-      body = typeof input.path === "string" ? input.path : safeJson(input);
-    }
+  const value = tool ? results.get(tool.toolCallId) : undefined;
+  const presentation = tool
+    ? getNativeToolPresentation(tool, value)
+    : undefined;
+  if (tool && presentation) {
+    title =
+      presentation.hubTitle ??
+      (presentation.iconOnly &&
+      (presentation.intent || presentation.preview || presentation.language)
+        ? ""
+        : presentation.displayName);
+    body = presentation.preview;
   } else if (thinking) {
     title = "Thinking";
-    body = thinking;
+    body = "";
   } else if (msg.role === "custom") {
     body = textOf(msg.content);
-    const wrapper = body.match(
-      /^\s*<(system-notice|system-reminder)([^>]*)>\s*([\s\S]*?)\s*<\/\1>\s*$/,
-    );
-    if (wrapper) {
-      body = wrapper[3];
-      const attributes = [...wrapper[2].matchAll(/([\w-]+)="([^"]+)"/g)].map(
-        (match) => `${match[1]}=${match[2]}`,
+    if (msg.display === false) {
+      title = `${HIDDEN_ACTIVITY_LABELS[msg.customType] ?? (msg.customType ? msg.customType.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Extension")} · hidden`;
+      body = body
+        .trim()
+        .replace(/^<!--[\s\S]*?-->\s*/, "")
+        .trim();
+      const hiddenWrapper = body.match(
+        /^<([a-zA-Z0-9_-]+)(?:\s(?:[^>"]|"[^"]*")*)?>([\s\S]*)<\/\1>$/,
       );
-      title =
-        msg.customType === "developer"
-          ? [wrapper[1], ...attributes].join(" · ")
-          : msg.customType;
-    } else title = msg.customType;
-    const irc = body.match(
-      /^\s*<irc>\s*Incoming IRC message from agent `([^`]+)`:\s*([\s\S]*)$/,
-    );
-    if (irc) {
-      title = `IRC ← ${irc[1]}`;
-      body = irc[2];
-    }
-    if (msg.customType === "async-result" || msg.customType === "job-result") {
-      title = body.split("\n")[0];
-      body = body.split("\n").slice(1).join("\n");
+      if (hiddenWrapper) body = hiddenWrapper[2].trim();
+    } else {
+      const wrapper = body.match(
+        /^\s*<(system-notice|system-reminder)([^>]*)>\s*([\s\S]*?)\s*<\/\1>\s*$/,
+      );
+      if (wrapper) {
+        body = wrapper[3];
+        const attributes = [...wrapper[2].matchAll(/([\w-]+)="([^"]+)"/g)].map(
+          (match) => `${match[1]}=${match[2]}`,
+        );
+        title =
+          msg.customType === "developer"
+            ? [wrapper[1], ...attributes].join(" · ")
+            : msg.customType;
+      } else title = msg.customType;
+      const irc = body.match(
+        /^\s*<irc>\s*Incoming IRC message from agent `([^`]+)`:\s*([\s\S]*)$/,
+      );
+      if (irc) {
+        title = `IRC ← ${irc[1]}`;
+        body = irc[2];
+      }
+      if (msg.customType === "async-result" || msg.customType === "job-result")
+        title = "";
     }
   } else if (msg.role === "developer") {
     title = "Developer";
@@ -749,6 +768,78 @@ function ActivityEntry({
     title = "Files";
     body = msg.files.map((file) => file.path).join("\n");
   }
+  const failedJob =
+    msg.role === "custom" &&
+    msg.customType === "job-result" &&
+    isRecord(msg.details) &&
+    Array.isArray(msg.details.jobs) &&
+    msg.details.jobs.some(
+      (job) =>
+        isRecord(job) &&
+        (job.status === "failed" || job.status === "cancelled"),
+    );
+  const category: ActivityIconName =
+    presentation?.category ??
+    (thinking
+      ? "thinking"
+      : msg.role === "bashExecution"
+        ? "terminal"
+        : msg.role === "pythonExecution"
+          ? "code"
+          : failedJob
+            ? "notice"
+            : msg.role === "custom" && msg.display === false
+              ? "hidden"
+              : msg.role === "custom" &&
+                  (msg.customType === "async-result" ||
+                    msg.customType === "job-result")
+                ? "job"
+                : msg.role === "custom" &&
+                    /notice|diagnostic|error/i.test(msg.customType)
+                  ? "notice"
+                  : "developer");
+  const iconColors: Record<ActivityIconName, string> = {
+    read: light ? "#2563EB" : "#7CA8FF",
+    search: palette.accent,
+    edit: light ? "#A87B1F" : "#E0B24D",
+    terminal: light ? "#18794E" : "#7DD8A8",
+    todo: palette.accent,
+    task: light ? "#26777D" : "#7DD7E8",
+    code: palette.accent,
+    web: light ? "#26777D" : "#7DD7E8",
+    hub: light ? "#26777D" : "#7DD7E8",
+    "agent-message": light ? "#26777D" : "#7DD7E8",
+    other: palette.muted,
+    thinking: light ? "#18794E" : "#7DD8A8",
+    hidden: palette.muted,
+    notice: light ? "#B42318" : "#FF9B92",
+    job: palette.muted,
+    developer: palette.muted,
+    chevron: palette.muted,
+  };
+  const iconColor = value?.isError
+    ? light
+      ? "#B42318"
+      : "#FF9B92"
+    : iconColors[category];
+  const duration =
+    tool && msg.role === "assistant"
+      ? getNativeToolDuration(msg.timestamp, value)
+      : undefined;
+  const running = !!tool && (value?.partial || (!value && piece.streaming));
+  const target = tool ? nativeToolTarget(tool, cwd) : null;
+  const linkTarget =
+    target && (target.kind === "web" || onOpenActivityTarget) ? target : null;
+  const openTarget = () => {
+    if (!linkTarget) return;
+    if (linkTarget.kind === "web")
+      void Linking.openURL(linkTarget.value).catch(() => {});
+    else onOpenActivityTarget?.(linkTarget.kind, linkTarget.value);
+  };
+  const imageBlocks =
+    value?.content.filter(
+      (item): item is ImageBlock => item.type === "image",
+    ) ?? [];
   return (
     <View>
       <Pressable
@@ -757,24 +848,126 @@ function ActivityEntry({
           else setOverride(!expanded);
         }}
         accessibilityRole="button"
+        accessibilityLabel={
+          tool
+            ? [
+                presentation?.displayName,
+                presentation?.intent,
+                body,
+                value?.isError ? "failed" : running ? "running" : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
+        }
         accessibilityState={{ expanded }}
+        accessibilityActions={
+          linkTarget
+            ? [
+                {
+                  name: "openTarget",
+                  label:
+                    linkTarget.kind === "agent"
+                      ? "Open agent"
+                      : linkTarget.kind === "file"
+                        ? "Open file"
+                        : "Open link",
+                },
+              ]
+            : undefined
+        }
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === "openTarget") openTarget();
+        }}
         style={styles.activityRow}
       >
-        <Text style={styles.activityGlyph}>
-          {tool ? "◇" : thinking ? "◌" : "◯"}
-        </Text>
+        {tool &&
+          !value?.isError &&
+          (running || !value) &&
+          (running ? (
+            <ActivityIndicator
+              size="small"
+              color={light ? "#18794E" : "#7DD8A8"}
+              style={styles.activityIndicator}
+            />
+          ) : (
+            <ActivityIcon name="notice" color={palette.muted} />
+          ))}
+        <ActivityIcon name={category} color={iconColor} />
+        {!!title && (
+          <Text numberOfLines={1} style={styles.activityTitle}>
+            {title}
+          </Text>
+        )}
+        {!!presentation?.language && (
+          <Text style={styles.activityLanguage}>
+            {presentation.language === "py"
+              ? "Py"
+              : presentation.language === "js"
+                ? "JS"
+                : presentation.language}
+          </Text>
+        )}
         <Text numberOfLines={1} style={styles.activityLine}>
-          <Text style={styles.activityTitle}>{title}</Text>
-          {body ? `  ${body.replace(/\s+/g, " ")}` : ""}
+          {presentation?.intent && presentation.intent !== body
+            ? `${presentation.intent}${body ? " · " : ""}`
+            : ""}
+          {linkTarget ? (
+            <Text
+              accessibilityRole="link"
+              style={styles.activityLink}
+              onPress={(event) => {
+                event.stopPropagation();
+                openTarget();
+              }}
+            >
+              {body}
+            </Text>
+          ) : (
+            (tool ? body : (body.split("\n").find((line) => line.trim()) ?? ""))
+              .replace(/\s+/g, " ")
+              .trim()
+          )}
         </Text>
-        <Text style={styles.activityArrow}>{expanded ? "⌄" : "›"}</Text>
+        {duration !== undefined && (
+          <Text style={styles.activityDuration}>{duration}s</Text>
+        )}
+        <ActivityIcon
+          name="chevron"
+          color={palette.muted}
+          size={12}
+          expanded={expanded}
+        />
       </Pressable>
-      {expanded && (
-        <View style={styles.activityBody}>
-          {!blocks && !!body && <TranscriptMarkdown text={body} />}
-          {blocks?.map((block, index) => {
-            if (block.type === "thinking")
-              return (
+      {!!presentation?.resultMeta && (
+        <Text numberOfLines={1} style={styles.activitySecondary}>
+          {presentation.resultMeta}
+        </Text>
+      )}
+      {!!value?.passiveContext && !expanded && (
+        <Text
+          numberOfLines={1}
+          style={styles.activitySecondary}
+        >{`↳ ${value.passiveContext}`}</Text>
+      )}
+      {expanded &&
+        (tool ? (
+          <ToolCallDetails
+            block={tool}
+            result={value}
+            colors={palette}
+            light={light}
+            images={
+              imageBlocks.length ? (
+                <Images blocks={imageBlocks} origin={mediaOrigin} />
+              ) : undefined
+            }
+          />
+        ) : (
+          <View style={styles.activityBody}>
+            {!blocks && !!body && <TranscriptMarkdown text={body} />}
+            {blocks?.map((block, index) =>
+              block.type === "thinking" ? (
                 <View key={index}>
                   <Text style={styles.dim}>Thinking</Text>
                   <TranscriptMarkdown
@@ -786,48 +979,10 @@ function ActivityEntry({
                     }
                   />
                 </View>
-              );
-            if (block.type !== "toolCall") return null;
-            const value = results.get(block.toolCallId);
-            return (
-              <View key={block.toolCallId || index}>
-                <Text style={styles.activityTitle}>
-                  {block.intent || block.toolName}
-                </Text>
-                <Text selectable style={styles.code}>
-                  {safeJson(block.input)}
-                </Text>
-                {value && (
-                  <>
-                    <Text
-                      style={value.isError ? styles.errorTitle : styles.dim}
-                    >
-                      {value.partial
-                        ? "Running"
-                        : value.isError
-                          ? "Error"
-                          : "Result"}
-                    </Text>
-                    <TranscriptMarkdown text={textOf(value.content)} />
-                    <Images
-                      blocks={value.content.filter(
-                        (item): item is ImageBlock => item.type === "image",
-                      )}
-                      origin={mediaOrigin}
-                    />
-                    {!!value.passiveContext && (
-                      <Text style={styles.dim}>{value.passiveContext}</Text>
-                    )}
-                    {value.partial && (
-                      <ActivityIndicator color={palette.accent} />
-                    )}
-                  </>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      )}
+              ) : null,
+            )}
+          </View>
+        ))}
     </View>
   );
 }
@@ -943,6 +1098,8 @@ export function ChatTranscript({
   onRead,
   mediaOrigin,
   mediaHostId,
+  cwd,
+  onOpenActivityTarget,
   sessionKey,
   visible = true,
   preferences,
@@ -951,8 +1108,8 @@ export function ChatTranscript({
   const light = useColorScheme() === "light";
   const colors = palette ?? (light ? lightPalette : theme);
   const context = useMemo(
-    () => ({ palette: colors, light, mediaHostId }),
-    [colors, light, mediaHostId],
+    () => ({ palette: colors, light, mediaHostId, cwd, onOpenActivityTarget }),
+    [colors, light, mediaHostId, cwd, onOpenActivityTarget],
   );
   const styles = useMemo(
     () => transcriptStyles(colors, light),
@@ -1368,17 +1525,32 @@ const transcriptStyles = (colors: NativeTranscriptPalette, light: boolean) =>
     activityRow: {
       flexDirection: "row",
       alignItems: "center",
-      minHeight: 28,
-      gap: 8,
+      minHeight: 22,
+      gap: 7,
     },
-    activityGlyph: {
-      color: light ? "#26777D" : "#86d9e1",
-      fontSize: 15,
-      width: 13,
+    activityIndicator: { width: 14, height: 14, transform: [{ scale: 0.7 }] },
+    activityLanguage: {
+      color: colors.muted,
+      fontFamily: "Menlo",
+      fontSize: 10,
+    },
+    activityLink: { textDecorationLine: "underline" },
+    activityDuration: {
+      color: light ? "#6A6458" : "#8E8E96",
+      fontFamily: "Menlo",
+      fontSize: 10,
+      minWidth: 42,
+      textAlign: "right",
+    },
+    activitySecondary: {
+      color: light ? "#6A6458" : "#8E8E96",
+      fontFamily: "Menlo",
+      fontSize: 10,
+      marginLeft: 21,
     },
     activityLine: {
       flex: 1,
-      color: colors.muted,
+      color: light ? "#6A6458" : "#8E8E96",
       fontFamily: "Menlo",
       fontSize: 11,
     },
@@ -1388,7 +1560,6 @@ const transcriptStyles = (colors: NativeTranscriptPalette, light: boolean) =>
       fontSize: 11,
       fontWeight: "600",
     },
-    activityArrow: { color: colors.muted, fontSize: 18 },
     activityBody: {
       marginLeft: 20,
       padding: 8,

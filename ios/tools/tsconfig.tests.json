@@ -7,6 +7,7 @@
     "useNative*.test.tsx",
     "useChatNavigation.test.tsx",
     "chat-header-context.test.tsx",
+    "tool-session-cwd.test.tsx",
     "../chat-context-stats.test.ts"
   ],
   "exclude": ["../../node_modules", "../../dist"]

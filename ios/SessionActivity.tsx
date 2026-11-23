@@ -54,6 +54,7 @@ type Props = {
   link: BrowserLink;
   linkStatus?: BrowserLinkStatus;
   kind: "activity" | "jobs";
+  initialAgent?: string[];
 };
 
 type ViewState = {
@@ -104,9 +105,12 @@ function ActivityContent({
   link,
   linkStatus,
   kind,
+  initialAgent,
 }: Props) {
   const [view, setView] = useState<ViewState>(initial);
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<string | string[] | null>(
+    initialAgent ?? null,
+  );
   const [completionRevision, setCompletionRevision] = useState(0);
   const actions = useRef<{
     refresh(): void;
@@ -586,7 +590,24 @@ function ActivityContent({
       </Text>
     );
   const selected = view.selected;
-  const agent = view.subagents.find((item) => item.id === selectedAgent);
+  const candidates = Array.isArray(selectedAgent)
+    ? selectedAgent
+    : selectedAgent
+      ? [selectedAgent]
+      : [];
+  const agent: SubagentInfo | undefined =
+    candidates
+      .map((id) => view.subagents.find((item) => item.id === id))
+      .find((item) => item !== undefined) ??
+    (candidates.length
+      ? {
+          id: candidates[candidates.length - 1],
+          agent: candidates[candidates.length - 1],
+          status: "completed",
+          index: 0,
+          source: "history",
+        }
+      : undefined);
   const cleanOutput = stripAnsi(view.output).replace(
     /[\x00-\x08\x0B-\x1F\x7F-\x9F\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g,
     "",
