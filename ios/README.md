@@ -5,3 +5,5 @@ This Expo and TypeScript app connects to the Keylime web server using the same B
 See [iOS development instructions](AGENTS.md) for setup, compilation, and simulator testing.
 
 See the [native iOS implementation plan](IMPLEMENTATION-PLAN.md) for milestones and PWA screenshot comparisons.
+
+See the [iPhone UI parity inventory](UI-PARITY-INVENTORY.md) for visual and interaction gaps against the PWA.
