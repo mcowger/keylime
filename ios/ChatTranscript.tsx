@@ -23,6 +23,7 @@ import {
 import type { operations } from "./generated/web-http";
 import { AuthenticatedMedia } from "./AuthenticatedMedia";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { TranscriptIcon, type TranscriptIconName } from "./TranscriptIcons";
 import { theme } from "./theme";
 import type { SettingsPreferences } from "./SettingsScreen";
 
@@ -344,14 +345,17 @@ function timestamp(value?: number) {
 }
 function Action({
   label,
+  icon,
   symbol,
   onPress,
 }: {
   label: string;
-  symbol: string;
+  icon?: TranscriptIconName;
+  symbol?: string;
   onPress: () => void;
 }) {
   const styles = useTranscriptStyles();
+  const { palette } = useContext(PaletteContext);
   return (
     <Pressable
       accessibilityRole="button"
@@ -359,9 +363,12 @@ function Action({
       onPress={onPress}
       style={styles.action}
     >
-      <Text style={styles.actionText}>
-        <Text style={styles.actionIcon}>{symbol}</Text> {label}
-      </Text>
+      {icon ? (
+        <TranscriptIcon name={icon} color={palette.muted} />
+      ) : (
+        <Text style={styles.actionIcon}>{symbol}</Text>
+      )}
+      <Text style={styles.actionText}>{label}</Text>
     </Pressable>
   );
 }
@@ -435,29 +442,29 @@ function MessageRow({
       {showActions && (
         <View style={[styles.actions, user && styles.userActions]}>
           {!!text && onCopy && (
-            <Action label="Copy" symbol="▢" onPress={() => onCopy(text)} />
+            <Action label="Copy" icon="copy" onPress={() => onCopy(text)} />
           )}
           {!!text && (
             <Action
               label="Markdown"
-              symbol="▤"
+              icon="markdown"
               onPress={() => setShowMarkdown(true)}
             />
           )}
           {!!text && !user && onRead && (
-            <Action label="Read" symbol="◖" onPress={() => onRead(text)} />
+            <Action label="Read" icon="read" onPress={() => onRead(text)} />
           )}
           {user && onEdit && !msg.branchSummary && (
             <Action
               label="Edit"
-              symbol="↶"
+              icon="edit"
               onPress={() => onEdit(msg, ref.entryId, ref.index)}
             />
           )}
           {onFork && !(user && msg.branchSummary) && (
             <Action
               label="Fork"
-              symbol="⑂"
+              icon="fork"
               onPress={() => onFork(msg, ref.entryId, ref.index)}
             />
           )}
@@ -568,7 +575,7 @@ function AdvisorOrSummary({
           {onCopy && (
             <Action
               label="Copy"
-              symbol="▢"
+              icon="copy"
               onPress={() => onCopy(text || safeJson(details))}
             />
           )}
@@ -810,6 +817,7 @@ function ProcessRow({
   latestThinking?: Piece;
 }) {
   const styles = useTranscriptStyles();
+  const { palette } = useContext(PaletteContext);
   const [override, setOverride] = useState<boolean>();
   const containsThinking = row.pieces.some(
     (piece) =>
@@ -833,8 +841,8 @@ function ProcessRow({
           onPress={() => setOverride(!open)}
           style={styles.processToggle}
         >
-          <Text style={styles.processIcon}>◇</Text>
-          <Text style={styles.processChevron}>{open ? "⌃" : "⌄"}</Text>
+          <TranscriptIcon name="layers" color={palette.accent} />
+          <TranscriptIcon name="chevron" color={palette.muted} expanded={!!open} />
           <Text style={styles.processLabel}>
             Process details · {count} {count === 1 ? "message" : "messages"}
             {row.toolCount
@@ -1109,9 +1117,9 @@ const transcriptStyles = (colors: NativeTranscriptPalette, light: boolean) =>
       marginTop: 7,
     },
     userActions: { justifyContent: "flex-end" },
-    action: { paddingVertical: 2 },
+    action: { paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 4 },
     actionText: { color: colors.muted, fontSize: 11 },
-    actionIcon: { fontSize: 14 },
+    actionIcon: { color: colors.muted, fontSize: 14 },
     time: {
       color: colors.muted,
       fontSize: 10,
@@ -1161,8 +1169,6 @@ const transcriptStyles = (colors: NativeTranscriptPalette, light: boolean) =>
       gap: 9,
       paddingVertical: 4,
     },
-    processIcon: { color: colors.accent, fontSize: 17 },
-    processChevron: { color: colors.muted, fontSize: 13 },
     processLabel: {
       color: colors.muted,
       fontSize: 12,
