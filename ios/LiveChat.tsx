@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+} from "react";
 import { File, Paths } from "expo-file-system";
 import {
   ActionSheetIOS,
@@ -34,6 +41,28 @@ import {
 } from "./keylime-http";
 import { theme } from "./theme";
 import { useChatSession } from "./useChatSession";
+
+function ChatKeyboardArea({ children }: { children: ReactNode }) {
+  const host = useRef<ComponentRef<typeof View>>(null);
+  const [windowTop, setWindowTop] = useState(0);
+  const measure = useCallback(() => {
+    host.current?.measureInWindow((_x, y) => setWindowTop(y));
+  }, []);
+
+  // The keyboard reports a window-space top, while the avoiding view's
+  // frame is local to this host below the safe area and workspace header.
+  return (
+    <View ref={host} collapsable={false} onLayout={measure} style={styles.root}>
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior="padding"
+        keyboardVerticalOffset={windowTop}
+      >
+        {children}
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
 
 type ModelCatalog = NonNullable<ChatComposerProps["catalog"]>;
 type Roles =
@@ -579,7 +608,7 @@ export function LiveChat({
     </ChatComposer>
   );
   return (
-    <KeyboardAvoidingView style={styles.root} behavior="padding">
+    <ChatKeyboardArea>
       {actions.confirmation}
       {sessionId ? (
         <>
@@ -757,7 +786,7 @@ export function LiveChat({
           {composer}
         </View>
       )}
-    </KeyboardAvoidingView>
+    </ChatKeyboardArea>
   );
 }
 
