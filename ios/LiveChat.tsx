@@ -613,6 +613,7 @@ export function LiveChat({
       onSend={() => void send()}
       onStop={() => void chat.stop().catch((cause) => error(key, cause))}
       running={chat.active}
+      modelActivity={chat.modelActivity}
       disabled={
         !attachments.canSend ||
         !!busy[key] ||
@@ -671,6 +672,7 @@ export function LiveChat({
                   ...chat.echoedUserMessages.map(({ id }) => `live-user:${id}`),
                 ]}
                 liveMessage={chat.liveMessage}
+                toolResults={chat.toolResults}
                 historyHasMore={chat.hasOlder}
                 loadingHistory={chat.loadingHistory}
                 onLoadOlder={() => void chat.loadOlder()}

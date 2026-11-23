@@ -10,9 +10,56 @@ const fragments = [
   "always ", "receives ", "the ", "same ", "fixture ", "text.",
 ];
 const text = fragments.join("");
-const usage = { prompt_tokens: 1, completion_tokens: fragments.length, total_tokens: fragments.length + 1 };
+const usage = {
+  prompt_tokens: 1,
+  completion_tokens: fragments.length,
+  total_tokens: fragments.length + 1,
+};
+const command =
+  "printf 'Fixture tool started\\n'; sleep 6; printf 'Fixture tool failed\\n'; exit 1";
 
-export function startOfflineModel(delayMs: number) {
+function shouldCallBash(body: object): boolean {
+  if (!("messages" in body) || !Array.isArray(body.messages)) return false;
+  const messages: unknown[] = body.messages;
+  const lastUser = messages.findLastIndex(
+    (message) =>
+      !!message &&
+      typeof message === "object" &&
+      "role" in message &&
+      message.role === "user",
+  );
+  if (lastUser < 0) return false;
+  return !messages
+    .slice(lastUser + 1)
+    .some(
+      (message) =>
+        !!message &&
+        typeof message === "object" &&
+        "role" in message &&
+        (message.role === "assistant" || message.role === "tool"),
+    );
+}
+
+function hasBashTool(body: object): boolean {
+  return (
+    "tools" in body &&
+    Array.isArray(body.tools) &&
+    body.tools.some(
+      (tool: unknown) =>
+        !!tool &&
+        typeof tool === "object" &&
+        "type" in tool &&
+        tool.type === "function" &&
+        "function" in tool &&
+        !!tool.function &&
+        typeof tool.function === "object" &&
+        "name" in tool.function &&
+        tool.function.name === "bash",
+    )
+  );
+}
+
+export function startOfflineModel(delayMs: number, failedBash = false) {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -27,14 +74,44 @@ export function startOfflineModel(delayMs: number) {
       } catch {
         return Response.json({ error: { message: "Invalid JSON" } }, { status: 400 });
       }
-      if (!body || typeof body !== "object" || !("model" in body) || body.model !== model)
-        return Response.json({ error: { message: "Unknown fixture model" } }, { status: 400 });
+      if (
+        !body ||
+        typeof body !== "object" ||
+        !("model" in body) ||
+        body.model !== model
+      )
+        return Response.json(
+          { error: { message: "Unknown fixture model" } },
+          { status: 400 },
+        );
+
+      const callBash = failedBash && shouldCallBash(body);
+      if (callBash && !hasBashTool(body))
+        return Response.json(
+          { error: { message: "Fixture requires the bash tool" } },
+          { status: 400 },
+        );
+      const toolCall = callBash
+        ? {
+            id: `call_fixture_${crypto.randomUUID().replaceAll("-", "")}`,
+            type: "function" as const,
+            function: { name: "bash", arguments: JSON.stringify({ command }) },
+          }
+        : undefined;
 
       const base = { id: "chatcmpl-keylime-fixture", object: "chat.completion", created: 0, model };
       if (!("stream" in body) || body.stream !== true) {
         return Response.json({
           ...base,
-          choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }],
+          choices: [
+            {
+              index: 0,
+              message: toolCall
+                ? { role: "assistant", content: null, tool_calls: [toolCall] }
+                : { role: "assistant", content: text },
+              finish_reason: toolCall ? "tool_calls" : "stop",
+            },
+          ],
           usage,
         });
       }
@@ -59,15 +136,31 @@ export function startOfflineModel(delayMs: number) {
           };
           request.signal.addEventListener("abort", abort, { once: true });
           if (request.signal.aborted) return abort();
-          const send = (delta: Record<string, string>, finishReason: string | null) => {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-              ...base,
-              object: "chat.completion.chunk",
-              choices: [{ index: 0, delta, finish_reason: finishReason }],
-              ...(finishReason ? { usage } : {}),
-            })}\n\n`));
+          const send = (
+            delta: Record<string, unknown>,
+            finishReason: string | null,
+          ) => {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  ...base,
+                  object: "chat.completion.chunk",
+                  choices: [{ index: 0, delta, finish_reason: finishReason }],
+                  ...(finishReason ? { usage } : {}),
+                })}\n\n`,
+              ),
+            );
           };
           send({ role: "assistant" }, null);
+          if (toolCall) {
+            send({ tool_calls: [{ index: 0, ...toolCall }] }, null);
+            send({}, "tool_calls");
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            finished = true;
+            cleanup();
+            controller.close();
+            return;
+          }
           const next = () => {
             if (finished) return;
             if (index < fragments.length) {

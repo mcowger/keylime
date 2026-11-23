@@ -11,6 +11,7 @@ const { values } = parseArgs({
   options: {
     port: { type: "string" },
     "offline-model": { type: "boolean" },
+    "failed-bash": { type: "boolean" },
     "stream-delay-ms": { type: "string" },
     help: { type: "boolean", short: "h" },
   },
@@ -18,9 +19,10 @@ const { values } = parseArgs({
 });
 if (values.help) {
   console.log(
-    "Usage: bun --no-env-file ios/tools/native-fixture.ts [--port <port>] [--offline-model [--stream-delay-ms <ms>]]\n" +
+    "Usage: bun --no-env-file ios/tools/native-fixture.ts [--port <port>] [--offline-model [--stream-delay-ms <ms>] [--failed-bash]]\n" +
       "Build the real runner first: mise exec -- bun runner/scripts/build-binary.ts\n" +
       "--offline-model enables keylime-fixture/offline on loopback, with a deterministic slowly streamed response. Select it in a new chat and use Stop to abort. Default delay: 350 ms per fragment.\n" +
+      "--failed-bash makes each turn run a harmless six-second Bash command that prints twice and exits 1 before the response. Requires --offline-model and the runner's bash tool.\n" +
       "Set KEYLIME_NATIVE_FIXTURE_PASSWORD to enable fixture-only password authentication. Leave it unset for an open fixture.",
   );
   process.exit(0);
@@ -31,10 +33,14 @@ if (password === "")
   throw new Error("KEYLIME_NATIVE_FIXTURE_PASSWORD must be non-empty or unset");
 if (values["stream-delay-ms"] !== undefined && !values["offline-model"])
   throw new Error("--stream-delay-ms requires --offline-model");
+if (values["failed-bash"] && !values["offline-model"])
+  throw new Error("--failed-bash requires --offline-model");
 const delayMs = values["stream-delay-ms"] === undefined ? 350 : Number(values["stream-delay-ms"]);
 if (!Number.isInteger(delayMs) || delayMs < 25 || delayMs > 2000)
   throw new Error("--stream-delay-ms must be an integer from 25 to 2000");
-const offlineModel = values["offline-model"] ? startOfflineModel(delayMs) : undefined;
+const offlineModel = values["offline-model"]
+  ? startOfflineModel(delayMs, values["failed-bash"])
+  : undefined;
 if (offlineModel)
   console.log(`[offline-model] keylime-fixture/offline at http://127.0.0.1:${offlineModel.port}/v1; ${delayMs} ms per fragment`);
 

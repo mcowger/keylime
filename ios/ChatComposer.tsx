@@ -13,6 +13,8 @@ import {
   useColorScheme,
 } from "react-native";
 import type { operations } from "./generated/web-http";
+import type { ModelActivity } from "../lib/model-activity";
+import { ComposerActivity } from "./ComposerActivity";
 
 type ModelCatalog =
   operations["getModels"]["responses"][200]["content"]["application/json"];
@@ -33,6 +35,7 @@ export type ChatComposerProps = {
   onSend: () => void;
   onStop: () => void;
   running: boolean;
+  modelActivity?: ModelActivity;
   disabled?: boolean;
   catalog: ModelCatalog | null;
   catalogLoading?: boolean;
@@ -62,6 +65,7 @@ export function ChatComposer({
   onSend,
   onStop,
   running,
+  modelActivity,
   disabled = false,
   catalog,
   catalogLoading = false,
@@ -237,6 +241,11 @@ export function ChatComposer({
             <Text style={[styles.chevron, { color: colors.dim }]}>⌄</Text>
           </Pressable>
           <View style={styles.spacer} />
+          <ComposerActivity
+            activity={modelActivity}
+            color={colors.muted}
+            accent={dark ? "#EC5BAB" : "#A62972"}
+          />
           {running && !canSend ? (
             <Pressable
               accessibilityRole="button"

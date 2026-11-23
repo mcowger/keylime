@@ -5,6 +5,7 @@ import {
   isDeltaUpdate,
 } from "../lib/message-delta";
 import { isRecord } from "../lib/type-guards";
+import { readModelActivity, type ModelActivity } from "../lib/model-activity";
 import { normalizeToolCalls } from "../lib/normalize";
 import type { AgentMessage } from "../lib/types";
 import {
@@ -16,6 +17,14 @@ import {
 import type { components as BrowserComponents } from "./generated/browser-link";
 import type { operations } from "./generated/web-http";
 import { KeylimeHttpError, requestJson } from "./keylime-http";
+import {
+  applyCoveredToolEvent,
+  applyToolEvent,
+  reconcileToolSnapshot,
+  retainEndedTools,
+  type ChatToolResults,
+} from "./chat-tool-state";
+export type { ChatToolResult } from "./chat-tool-state";
 
 type JsonResponse<
   K extends "getSession" | "getSessionContext" | "getSessionState",
@@ -62,7 +71,8 @@ export type ChatSessionView = {
   context: ChatContext | null;
   state: StateResponse | null;
   liveMessage: LiveMessage | null;
-  toolEvents: Record<string, Event>;
+  modelActivity?: ModelActivity;
+  toolResults: ChatToolResults;
   queue: Queue;
   outbox: OutboxEntry[];
   pendingInput: PendingChatInput[];
@@ -83,7 +93,7 @@ const initial = (): ChatSessionView => ({
   context: null,
   state: null,
   liveMessage: null,
-  toolEvents: {},
+  toolResults: {},
   queue: emptyQueue,
   outbox: [],
   pendingInput: [],
@@ -202,6 +212,7 @@ export function useChatSession({
     let wrapperConnected = false;
     const handoffReads = new Set<string>();
     let buffered: Event[] = [];
+    let historyGeneration = 0;
     let releaseSession: (() => void) | undefined;
     let subscribed = false;
     let outboxGeneration = 0;
@@ -379,7 +390,11 @@ export function useChatSession({
       ) {
         if (stream && stream.streamId !== mark.streamId) {
           stream = null;
-          view = { ...view, liveMessage: null, toolEvents: {} };
+          view = {
+            ...view,
+            liveMessage: null,
+            toolResults: retainEndedTools(view.toolResults),
+          };
           liveId = null;
           void Promise.resolve().then(() => refresh(true));
         }
@@ -456,17 +471,44 @@ export function useChatSession({
         case "disconnected":
         case "process_exit":
           wrapperConnected = false;
-          view = { ...view, ready: false, active: false };
+          view = {
+            ...view,
+            ready: false,
+            active: false,
+            modelActivity: undefined,
+          };
           break;
         case "agent_start":
-          view = { ...view, active: true, liveMessage: null, toolEvents: {} };
+          view = {
+            ...view,
+            active: true,
+            liveMessage: null,
+            toolResults: retainEndedTools(view.toolResults),
+          };
           liveId = null;
           break;
+        case "model_activity": {
+          const activity = readModelActivity(event.activity);
+          const previous = view.modelActivity;
+          if (
+            activity &&
+            (!previous ||
+              activity.epoch > previous.epoch ||
+              (activity.epoch === previous.epoch &&
+                activity.version > previous.version))
+          )
+            view = { ...view, modelActivity: activity };
+          break;
+        }
         case "agent_end":
         case "prompt_result":
         case "prompt_error":
-          view = { ...view, active: false };
-          void Promise.resolve().then(() => refresh(false));
+          view = { ...view, active: false, modelActivity: undefined };
+          void Promise.resolve().then(() => refresh(true));
+          break;
+        case "auto_compaction_end":
+        case "compaction_end":
+          void Promise.resolve().then(() => refresh(true));
           break;
         case "queue_update":
           if (Array.isArray(event.steering) && Array.isArray(event.followUp))
@@ -524,11 +566,14 @@ export function useChatSession({
         case "tool_execution_start":
         case "tool_execution_update":
         case "tool_execution_end":
-          if (typeof event.toolCallId === "string")
-            view = {
-              ...view,
-              toolEvents: { ...view.toolEvents, [event.toolCallId]: event },
-            };
+          view = {
+            ...view,
+            toolResults: applyToolEvent(
+              view.toolResults,
+              event,
+              view.context?.messages ?? [],
+            ),
+          };
           break;
         case "session_history_changed":
           void Promise.resolve().then(() => refresh(false));
@@ -540,6 +585,16 @@ export function useChatSession({
       if (!current() || !isRecord(data) || typeof data.type !== "string")
         return;
       const event = data as Event;
+      if (event.type === "session_history_changed") {
+        historyGeneration += 1;
+        cursor = null;
+        rootKnown = false;
+        buffered = buffered.filter(
+          (item) => !item.type.startsWith("tool_execution_"),
+        );
+        view = { ...view, toolResults: {} };
+        publish();
+      }
       if (event.type === "ui_request" || event.type === "ui_end") {
         applyEvent(event);
         return;
@@ -558,7 +613,19 @@ export function useChatSession({
             /^(agent_start|agent_end|prompt_result|prompt_error|message_start|message_update|message_end|tool_execution_start|tool_execution_update|tool_execution_end)$/.test(
               event.type,
             ) && !(isRecord(event.message) && event.message.role === "user");
-          if (covered && mark.sequence <= snapshot.cursor.sequence) continue;
+          if (covered && mark.sequence <= snapshot.cursor.sequence) {
+            // Ended calls are deliberately absent from the live snapshot, even
+            // when its cursor covers their buffered end frame.
+            view = {
+              ...view,
+              toolResults: applyCoveredToolEvent(
+                view.toolResults,
+                event,
+                view.context?.messages ?? [],
+              ),
+            };
+            continue;
+          }
           if (
             isDeltaUpdate(event) &&
             (mark.first ?? mark.sequence) <= snapshot.cursor.sequence
@@ -574,6 +641,8 @@ export function useChatSession({
       }
     }
     async function sync() {
+      const generation = historyGeneration;
+      let replacedHistory = false;
       let next = view.context;
       let position = cursor;
       let nextHasOlder = view.hasOlder;
@@ -614,6 +683,7 @@ export function useChatSession({
         )
           throw new Error("Session history cursor changed");
         if (result.mode === "replace") {
+          if (position?.lastEntryId) replacedHistory = true;
           next = result.context;
           nextHasOlder = false;
         } else {
@@ -640,9 +710,29 @@ export function useChatSession({
           throw new Error("Session sync cursor did not advance");
       }
       if (!current() || !last || !next) return null;
+      if (generation !== historyGeneration) {
+        requested = true;
+        return null;
+      }
+      if (replacedHistory) {
+        view = { ...view, toolResults: {} };
+        buffered = buffered.filter(
+          (event) => !event.type.startsWith("tool_execution_"),
+        );
+      }
       cursor = position;
       rootKnown = true;
-      view = { ...view, context: next, hasOlder: nextHasOlder, error: null };
+      view = {
+        ...view,
+        context: next,
+        hasOlder: nextHasOlder,
+        error: null,
+        toolResults: reconcileToolSnapshot(
+          view.toolResults,
+          last.live?.toolEvents ?? [],
+          next.messages,
+        ),
+      };
       releaseSaved();
       if (last.live) {
         stream = last.live.cursor;
@@ -657,12 +747,6 @@ export function useChatSession({
           liveMessage:
             last.live.streamingMessage ??
             (saved?.role === "assistant" ? saved : null),
-          toolEvents: Object.fromEntries(
-            last.live.toolEvents.map((event) => [
-              event.toolCallId,
-              event as Event,
-            ]),
-          ),
         };
         releaseSaved();
       }
@@ -717,6 +801,7 @@ export function useChatSession({
               view = {
                 ...view,
                 state,
+                modelActivity: state.state?.modelActivity,
                 queue: state.state?.queuedMessages ?? emptyQueue,
               };
               applyOutbox(
@@ -983,6 +1068,7 @@ export function useChatSession({
       paging = true;
       const before = view.context.entryIds[0];
       const generation = revision;
+      const historyAtStart = historyGeneration;
       view = { ...view, loadingHistory: true };
       publish();
       try {
@@ -998,6 +1084,7 @@ export function useChatSession({
         );
         if (!current()) return;
         if (
+          historyAtStart !== historyGeneration ||
           page.historyRevision !== generation ||
           page.context.entryIds.length !== page.context.messages.length ||
           view.context?.entryIds[0] !== before
@@ -1020,6 +1107,7 @@ export function useChatSession({
         };
       } catch (cause) {
         if (current()) {
+          view = { ...view, toolResults: {} };
           cursor = null;
           requested = true;
           report(cause);
@@ -1124,12 +1212,18 @@ export function useChatSession({
     );
     void (async () => {
       try {
+        const historyAtStart = historyGeneration;
         const params = new URLSearchParams({ tail: "30", hostId });
         const page = await requestJson<JsonResponse<"getSession">>(
           origin,
           `${sessionPath}?${params}`,
         );
         if (!current()) return;
+        if (historyAtStart !== historyGeneration) {
+          initialized = true;
+          await refresh(true);
+          return;
+        }
         if (page.context.messages.length !== page.context.entryIds.length)
           throw new Error("Invalid session history");
         revision = page.historyRevision ?? null;

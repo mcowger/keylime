@@ -78,6 +78,7 @@ export type ChatTranscriptProps = {
   entryIds: readonly string[];
   /** The owner reconciles this transient message with persisted history. */
   liveMessage?: Partial<TranscriptMessage> | null;
+  toolResults?: Readonly<Record<string, ToolResult>>;
   historyHasMore?: boolean;
   loadingHistory?: boolean;
   onLoadOlder?: () => void | Promise<void>;
@@ -174,6 +175,10 @@ function makeRows(
       rows.push(activity);
     }
     activity.pieces.push(piece);
+    if (activity.toolCount === 0) {
+      const first = piece.blocks?.find((block) => block.type === "toolCall");
+      if (first) activity.key = `activity-tool-${first.toolCallId}`;
+    }
     activity.toolCount +=
       piece.blocks?.filter((block) => block.type === "toolCall").length ?? 0;
   };
@@ -854,7 +859,10 @@ function ProcessRow({
       {open &&
         row.pieces.map((piece, index) => (
           <ActivityEntry
-            key={`${piece.ref.entryId}-${index}`}
+            key={
+              piece.blocks?.find((block) => block.type === "toolCall")
+                ?.toolCallId ?? `${piece.ref.entryId}-${index}`
+            }
             piece={piece}
             results={results}
             mediaOrigin={mediaOrigin}
@@ -867,6 +875,7 @@ function ProcessRow({
 }
 
 export function ChatTranscript({
+  toolResults,
   messages,
   entryIds,
   liveMessage,
@@ -894,10 +903,18 @@ export function ChatTranscript({
     () => transcriptStyles(colors, light),
     [colors, light],
   );
-  const { rows, results } = useMemo(
+  const { rows, results: savedResults } = useMemo(
     () => makeRows(messages, entryIds, liveMessage),
     [messages, entryIds, liveMessage],
   );
+  // Only call rows already present in the transcript consume transient results.
+  const results = useMemo(() => {
+    if (!toolResults || Object.keys(toolResults).length === 0)
+      return savedResults;
+    const combined = new Map(Object.entries(toolResults));
+    for (const [id, saved] of savedResults) combined.set(id, saved);
+    return combined;
+  }, [savedResults, toolResults]);
   const displayRows = useMemo(() => {
     if (
       !preferences?.neverFoldToolActivity &&
