@@ -509,7 +509,7 @@ export function NavigationShell({
       <StatusBar barStyle={dark ? "light-content" : "dark-content"} />
       <View style={styles.body}>
         <View
-          style={styles.body}
+          style={[styles.body, { backgroundColor: colors.background }]}
           accessibilityElementsHidden={sidebar}
           importantForAccessibility={sidebar ? "no-hide-descendants" : "auto"}
         >

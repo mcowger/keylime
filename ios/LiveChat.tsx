@@ -80,7 +80,7 @@ export type ChatTarget = {
 type ChatView = ReturnType<typeof useChatSession>;
 export type ChatHeaderState = Pick<
   ChatView,
-  "active" | "context" | "state" | "liveMessage"
+  "active" | "state"
 > & { key: string; sessionId: string; hostId: string };
 
 export type LiveChatProps = {
@@ -178,7 +178,7 @@ export function LiveChat({
   const headerKey = target?.key;
   const headerHost = target?.hostId;
   const headerSession = target?.sessionId;
-  const { active, context, state, liveMessage } = chat;
+  const { active, state } = chat;
   useEffect(() => () => onHeaderState?.(null), [onHeaderState]);
   useEffect(() => {
     onHeaderState?.(
@@ -188,13 +188,18 @@ export function LiveChat({
             hostId: headerHost,
             sessionId: headerSession,
             active,
-            context,
             state,
-            liveMessage,
           }
         : null,
     );
-  }, [onHeaderState, headerKey, headerHost, headerSession, active, context, state, liveMessage]);
+  }, [
+    onHeaderState,
+    headerKey,
+    headerHost,
+    headerSession,
+    active,
+    state,
+  ]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const attachments = useChatAttachments(
     origin,

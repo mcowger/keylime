@@ -19,6 +19,9 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 - On iPhone, reopen Ship progress and logs from the workspace menu or **More actions → Ship progress**, even after cleanup removes the workspace or you cancel a new Ship form.
 - Finished iPhone Ship jobs keep their progress and logs without holding a live job subscription.
 - Keep the native iPhone composer and toolbar above the software keyboard.
+- Match the iPhone saved-chat header to the mobile PWA, including session context and Ship. Keep Ship visible but disabled while busy or when there is nothing to ship.
+- Show native composer model activity and keep failed tool output visible while saved history catches up.
+- Refine native transcript, sidebar, Git and Explorer icons and tighten Interface & Behavior spacing.
 - From `ios/`, run `bun run api:types` to generate TypeScript types from the web server's OpenAPI and AsyncAPI documents.
 - The context popup separates reported agent and subagent costs across the session file, including other branches. Costs update as history is saved and may exclude unreported or nested usage.
 - **Settings → Hosts** can build a missing compatible release from the controller's deployed source before deploying it to a standalone host. An incomplete existing build is left untouched.
