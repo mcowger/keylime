@@ -3,11 +3,13 @@ import {
   memo,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   FlatList,
   Linking,
@@ -120,6 +122,9 @@ export type ChatTranscriptProps = {
   sessionKey?: string;
   /** Hidden retained lists must not interpret layout changes as user scrolling. */
   visible?: boolean;
+  /** Increment after an accepted send to reveal it, even from history. */
+  followRequest?: number;
+  onUserGesture?: () => void;
   preferences?: SettingsPreferences;
   palette?: NativeTranscriptPalette;
 };
@@ -176,7 +181,12 @@ function makeRows(
   messages: readonly TranscriptMessage[],
   entryIds: readonly string[],
   liveMessage: Partial<TranscriptMessage> | null | undefined,
-): { rows: Row[]; results: Map<string, ToolResult> } {
+  liveIndex = messages.length,
+): {
+  rows: Row[];
+  results: Map<string, ToolResult>;
+  orphanResults: Set<string>;
+} {
   const refs: ItemRef[] = messages.map((message, index) => ({
     message,
     index,
@@ -194,11 +204,12 @@ function makeRows(
         errorMessage: live.errorMessage,
         stopReason: live.stopReason,
       },
-      index: messages.length,
+      index: liveIndex,
       entryId: "live",
     });
   }
   const results = new Map<string, ToolResult>();
+  const orphanResults = new Set<string>();
   for (const { message } of refs)
     if (message.role === "toolResult") results.set(message.toolCallId, message);
   const rows: Row[] = [];
@@ -251,7 +262,10 @@ function makeRows(
     const msg = ref.message;
     if (msg.role === "toolResult") {
       // A page can begin after its corresponding call; don't hide that result.
-      if (!calls.has(msg.toolCallId)) addActivity({ ref }, "result");
+      if (!calls.has(msg.toolCallId)) {
+        orphanResults.add(msg.toolCallId);
+        addActivity({ ref }, "result");
+      }
       continue;
     }
     if (msg.role === "user") {
@@ -315,7 +329,50 @@ function makeRows(
     if (assistantError(msg)?.trim() && !finalIsText)
       addMessage(ref, "error", [], true);
   }
-  return { rows, results };
+  return { rows, results, orphanResults };
+}
+
+function displayProjection(
+  rows: Row[],
+  neverFold: boolean | undefined,
+  showCalls: boolean | undefined,
+): Row[] {
+  if (!neverFold && !showCalls) return rows;
+  return rows.flatMap((row): Row[] => {
+    if (row.kind !== "activity") return [row];
+    const groups: Extract<Row, { kind: "activity" }>[] = [];
+    row.pieces.forEach((piece, index) => {
+      const toolCount =
+        piece.blocks?.filter((block) => block.type === "toolCall").length ?? 0;
+      const unfolded = !!neverFold || (!!showCalls && toolCount > 0);
+      const previous = groups[groups.length - 1];
+      if (!unfolded && previous && !previous.unfolded) {
+        previous.pieces.push(piece);
+        previous.toolCount += toolCount;
+      } else {
+        groups.push({
+          kind: "activity",
+          key: `${row.key}-${index}`,
+          pieces: [piece],
+          toolCount,
+          streaming: row.streaming,
+          unfolded,
+        });
+      }
+    });
+    return groups;
+  });
+}
+
+function findLatestThinking(rows: Row[]): Piece | undefined {
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (row.kind !== "activity") continue;
+    for (let j = row.pieces.length - 1; j >= 0; j--)
+      if (row.pieces[j].blocks?.some((block) => block.type === "thinking"))
+        return row.pieces[j];
+  }
+  return undefined;
 }
 
 function inlineImageUri(image: ImageBlock): string | undefined {
@@ -655,6 +712,7 @@ function ActivityEntry({
   preferences,
   latestThinking,
   toolOpen,
+  onInspect,
   onToolOpen,
 }: {
   piece: Piece;
@@ -663,6 +721,7 @@ function ActivityEntry({
   preferences?: SettingsPreferences;
   latestThinking?: Piece;
   toolOpen: ReadonlyMap<string, boolean>;
+  onInspect: (open: boolean) => void;
   onToolOpen: (id: string, open: boolean) => void;
 }) {
   const styles = useTranscriptStyles();
@@ -844,6 +903,7 @@ function ActivityEntry({
     <View>
       <Pressable
         onPress={() => {
+          onInspect(!expanded);
           if (tool) onToolOpen(tool.toolCallId, !expanded);
           else setOverride(!expanded);
         }}
@@ -996,6 +1056,7 @@ function ProcessRow({
   onGroupOpen,
   toolOpen,
   onToolOpen,
+  onInspect,
 }: {
   row: Extract<Row, { kind: "activity" }>;
   results: Map<string, ToolResult>;
@@ -1006,6 +1067,7 @@ function ProcessRow({
   onGroupOpen: (ids: readonly string[], open: boolean) => void;
   toolOpen: ReadonlyMap<string, boolean>;
   onToolOpen: (id: string, open: boolean) => void;
+  onInspect: (open: boolean) => void;
 }) {
   const styles = useTranscriptStyles();
   const { palette } = useContext(PaletteContext);
@@ -1041,6 +1103,7 @@ function ProcessRow({
           accessibilityRole="button"
           accessibilityState={{ expanded: !!open }}
           onPress={() => {
+            onInspect(!open);
             if (ids.length) onGroupOpen(ids, !open);
             else setOverride(!open);
           }}
@@ -1074,6 +1137,7 @@ function ProcessRow({
             latestThinking={latestThinking}
             toolOpen={toolOpen}
             onToolOpen={onToolOpen}
+            onInspect={onInspect}
           />
         ))}
     </View>
@@ -1082,6 +1146,10 @@ function ProcessRow({
 
 const MemoMessageRow = memo(MessageRow);
 const MemoProcessRow = memo(ProcessRow);
+
+function TranscriptEndPadding() {
+  return <View style={{ height: 12 }} />;
+}
 
 export function ChatTranscript({
   toolResults,
@@ -1094,6 +1162,8 @@ export function ChatTranscript({
   onEdit,
   onFork,
   canFork,
+  followRequest = 0,
+  onUserGesture,
   onCopy,
   onRead,
   mediaOrigin,
@@ -1115,10 +1185,30 @@ export function ChatTranscript({
     () => transcriptStyles(colors, light),
     [colors, light],
   );
-  const { rows, results: savedResults } = useMemo(
-    () => makeRows(messages, entryIds, liveMessage),
-    [messages, entryIds, liveMessage],
+  // Durable history is immutable between syncs. Streaming updates should only
+  // project the live head, not rebuild every historical row on each delta.
+  const saved = useMemo(
+    () => makeRows(messages, entryIds, null),
+    [messages, entryIds],
   );
+  const live = useMemo(
+    () => makeRows([], [], liveMessage, messages.length),
+    [liveMessage, messages.length],
+  );
+  // A tool result can reach history before its live call is reconciled. In that
+  // rare case the full projection must join the result to the live call.
+  const crossBoundaryCall =
+    liveMessage?.role === "assistant" &&
+    (liveMessage as Partial<Assistant>).content?.some(
+      (block) =>
+        block.type === "toolCall" && saved.orphanResults.has(block.toolCallId),
+    );
+  const crossProjection = useMemo(
+    () =>
+      crossBoundaryCall ? makeRows(messages, entryIds, liveMessage) : null,
+    [crossBoundaryCall, messages, entryIds, liveMessage],
+  );
+  const savedResults = crossProjection?.results ?? saved.results;
   // Only call rows already present in the transcript consume transient results.
   const results = useMemo(() => {
     if (!toolResults || Object.keys(toolResults).length === 0)
@@ -1127,62 +1217,64 @@ export function ChatTranscript({
     for (const [id, saved] of savedResults) combined.set(id, saved);
     return combined;
   }, [savedResults, toolResults]);
-  const displayRows = useMemo(() => {
-    if (
-      !preferences?.neverFoldToolActivity &&
-      !preferences?.showToolCallsOutsideProcessDetails
-    )
-      return rows;
-    return rows.flatMap((row): Row[] => {
-      if (row.kind !== "activity") return [row];
-      const groups: Extract<Row, { kind: "activity" }>[] = [];
-      row.pieces.forEach((piece, index) => {
-        const toolCount =
-          piece.blocks?.filter((block) => block.type === "toolCall").length ??
-          0;
-        const unfolded =
-          !!preferences?.neverFoldToolActivity ||
-          (!!preferences?.showToolCallsOutsideProcessDetails && toolCount > 0);
-        const previous = groups[groups.length - 1];
-        if (!unfolded && previous && !previous.unfolded) {
-          previous.pieces.push(piece);
-          previous.toolCount += toolCount;
-        } else
-          groups.push({
-            kind: "activity",
-            key: `${row.key}-${index}`,
-            pieces: [piece],
-            toolCount,
-            streaming: row.streaming,
-            unfolded,
-          });
-      });
-      return groups;
-    });
-  }, [
-    rows,
-    preferences?.neverFoldToolActivity,
-    preferences?.showToolCallsOutsideProcessDetails,
-  ]);
-  const latestThinking = useMemo(() => {
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const row = rows[i];
-      if (row.kind !== "activity") continue;
-      for (let j = row.pieces.length - 1; j >= 0; j--)
-        if (row.pieces[j].blocks?.some((block) => block.type === "thinking"))
-          return row.pieces[j];
-    }
-    return undefined;
-  }, [rows]);
+  const neverFold = preferences?.neverFoldToolActivity;
+  const showCalls = preferences?.showToolCallsOutsideProcessDetails;
+  const savedDisplay = useMemo(
+    () => displayProjection(saved.rows, neverFold, showCalls),
+    [saved.rows, neverFold, showCalls],
+  );
+  const liveDisplay = useMemo(
+    () => displayProjection(live.rows, neverFold, showCalls),
+    [live.rows, neverFold, showCalls],
+  );
+  const displayRows = useMemo(
+    () =>
+      crossProjection
+        ? displayProjection(crossProjection.rows, neverFold, showCalls)
+        : liveDisplay.length === 0
+          ? savedDisplay
+          : [...savedDisplay, ...liveDisplay],
+    [crossProjection, savedDisplay, liveDisplay, neverFold, showCalls],
+  );
+  const savedThinking = useMemo(
+    () => findLatestThinking(saved.rows),
+    [saved.rows],
+  );
+  const latestThinking = useMemo(
+    () =>
+      crossProjection
+        ? findLatestThinking(crossProjection.rows)
+        : (findLatestThinking(live.rows) ?? savedThinking),
+    [crossProjection, live.rows, savedThinking],
+  );
   const list = useRef<FlatList<Row>>(null);
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const following = useRef(true);
-  const interacted = useRef(false);
+  const gesture = useRef(false);
+  const momentum = useRef(false);
+  const gestureAtBottom = useRef(false);
+  const settleFrame = useRef<number | null>(null);
+  const pendingFollow = useRef(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const followFrame = useRef<number | null>(null);
   const requested = useRef<string | undefined>(undefined);
   const positioned = useRef(false);
   const viewportHeight = useRef(0);
-  const correctingViewport = useRef(false);
+  const contentHeight = useRef(0);
+  const scrollOffset = useRef<number | null>(null);
+  const disclosureRelease = useRef(false);
+  const disclosureFrame = useRef<number | null>(null);
+  const screenReader = useRef(false);
+  const previousScroll = useRef<{
+    offset: number;
+    height: number;
+    viewport: number;
+  } | null>(null);
+  const userGestureRef = useRef(onUserGesture);
+  userGestureRef.current = onUserGesture;
   const [showLatest, setShowLatest] = useState(false);
   const [groupOpen, setGroupOpen] = useState<ReadonlyMap<string, boolean>>(
     () => new Map(),
@@ -1190,6 +1282,120 @@ export function ChatTranscript({
   const [toolOpen, setToolOpen] = useState<ReadonlyMap<string, boolean>>(
     () => new Map(),
   );
+  const cancelFollow = useCallback(() => {
+    if (followFrame.current !== null) cancelAnimationFrame(followFrame.current);
+    followFrame.current = null;
+  }, []);
+  const cancelSettle = useCallback(() => {
+    clearTimeout(settleTimer.current);
+    settleTimer.current = undefined;
+    if (settleFrame.current !== null) cancelAnimationFrame(settleFrame.current);
+    settleFrame.current = null;
+  }, []);
+  const scheduleFollow = useCallback(() => {
+    if (
+      !visibleRef.current ||
+      !following.current ||
+      gesture.current ||
+      followFrame.current !== null
+    )
+      return;
+    followFrame.current = requestAnimationFrame(() => {
+      followFrame.current = null;
+      if (visibleRef.current && following.current && !gesture.current)
+        list.current?.scrollToEnd({ animated: false });
+    });
+  }, []);
+  const detach = useCallback(() => {
+    cancelFollow();
+    following.current = false;
+    pendingFollow.current = false;
+    setShowLatest(true);
+  }, [cancelFollow]);
+  const inspect = useCallback(
+    (open: boolean) => {
+      userGestureRef.current?.();
+      detach();
+      if (disclosureFrame.current !== null)
+        cancelAnimationFrame(disclosureFrame.current);
+      disclosureFrame.current = null;
+      disclosureRelease.current = !open;
+    },
+    [detach],
+  );
+  const releaseDisclosure = useCallback(() => {
+    if (!disclosureRelease.current || disclosureFrame.current !== null) return;
+    disclosureFrame.current = requestAnimationFrame(() => {
+      disclosureFrame.current = null;
+      if (!disclosureRelease.current || !visibleRef.current || gesture.current)
+        return;
+      if (
+        scrollOffset.current === null ||
+        contentHeight.current <= 0 ||
+        viewportHeight.current <= 0
+      )
+        return;
+      const end = Math.max(0, contentHeight.current - viewportHeight.current);
+      if (Math.abs(end - scrollOffset.current) <= 1) {
+        disclosureRelease.current = false;
+        following.current = true;
+        setShowLatest(false);
+      }
+    });
+  }, []);
+  useEffect(() => {
+    let active = true;
+    let changed = false;
+    const subscription = AccessibilityInfo?.addEventListener(
+      "screenReaderChanged",
+      (enabled) => {
+        changed = true;
+        screenReader.current = enabled;
+      },
+    );
+    void AccessibilityInfo?.isScreenReaderEnabled()
+      .then((enabled) => {
+        if (active && !changed) screenReader.current = enabled;
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, []);
+  const requestFollow = useCallback(() => {
+    if (gesture.current) {
+      pendingFollow.current = true;
+      return;
+    }
+    pendingFollow.current = false;
+    following.current = true;
+    setShowLatest(false);
+    scheduleFollow();
+  }, [scheduleFollow]);
+  const lastFollowRequest = useRef(followRequest);
+  useEffect(() => {
+    if (lastFollowRequest.current !== followRequest) {
+      lastFollowRequest.current = followRequest;
+      requestFollow();
+    }
+  }, [followRequest, requestFollow]);
+  useEffect(() => {
+    if (visible && pendingFollow.current) requestFollow();
+    if (visible && positioned.current) scheduleFollow();
+    return () => {
+      cancelFollow();
+      pendingFollow.current = false;
+      disclosureRelease.current = false;
+      if (disclosureFrame.current !== null)
+        cancelAnimationFrame(disclosureFrame.current);
+      disclosureFrame.current = null;
+      previousScroll.current = null;
+      cancelSettle();
+      gesture.current = false;
+      momentum.current = false;
+    };
+  }, [visible, requestFollow, scheduleFollow, cancelFollow, cancelSettle]);
   const actionRef = useRef({ onEdit, onFork, onCopy, onRead });
   actionRef.current = { onEdit, onFork, onCopy, onRead };
   const editMessage = useCallback<MessageAction>(
@@ -1223,13 +1429,25 @@ export function ChatTranscript({
   }, []);
   const lastSession = useRef(sessionKey);
   if (lastSession.current !== sessionKey) {
+    pendingFollow.current = false;
+    lastFollowRequest.current = followRequest;
     lastSession.current = sessionKey;
     following.current = true;
-    interacted.current = false;
+    cancelFollow();
+    cancelSettle();
+    gesture.current = false;
+    momentum.current = false;
     requested.current = undefined;
     positioned.current = false;
     viewportHeight.current = 0;
-    correctingViewport.current = false;
+    contentHeight.current = 0;
+    scrollOffset.current = null;
+    previousScroll.current = null;
+    disclosureRelease.current = false;
+    if (disclosureFrame.current !== null)
+      cancelAnimationFrame(disclosureFrame.current);
+    disclosureFrame.current = null;
+    setShowLatest(false);
     setGroupOpen(new Map());
     setToolOpen(new Map());
   }
@@ -1257,39 +1475,83 @@ export function ChatTranscript({
     },
     [firstId, historyHasMore, loadingHistory, onLoadOlder],
   );
-  const onScroll = useCallback(
+  const gestureScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!visibleRef.current || !positioned.current) return;
       const { contentOffset, contentSize, layoutMeasurement } =
         event.nativeEvent;
-      if (!visibleRef.current || !positioned.current) return;
-      // Retained native lists can emit stale or impossible metrics while relayout settles.
       if (layoutMeasurement.height <= 0 || contentSize.height <= 0) return;
       const maxOffset = Math.max(
         0,
         contentSize.height - layoutMeasurement.height,
       );
+      // Hidden or relayout events can report impossible retained-list offsets.
       if (contentOffset.y > maxOffset + 48) return;
-      if (correctingViewport.current) return;
-      if (viewportHeight.current !== layoutMeasurement.height) {
-        viewportHeight.current = layoutMeasurement.height;
-        if (following.current) {
-          correctingViewport.current = true;
-          requestAnimationFrame(() => {
-            if (visibleRef.current && following.current)
-              list.current?.scrollToEnd({ animated: false });
-            correctingViewport.current = false;
-          });
-          return;
+      const previous = previousScroll.current;
+      const atBottom = maxOffset - contentOffset.y <= 1;
+      previousScroll.current = {
+        offset: contentOffset.y,
+        height: contentSize.height,
+        viewport: layoutMeasurement.height,
+      };
+      scrollOffset.current = contentOffset.y;
+      contentHeight.current = contentSize.height;
+      viewportHeight.current = layoutMeasurement.height;
+      if (
+        screenReader.current &&
+        disclosureRelease.current &&
+        !atBottom &&
+        previous &&
+        previous.height === contentSize.height &&
+        previous.viewport === layoutMeasurement.height &&
+        Math.abs(previous.offset - contentOffset.y) > 1
+      )
+        disclosureRelease.current = false;
+      if (disclosureRelease.current) releaseDisclosure();
+      if (
+        previous &&
+        (previous.viewport !== layoutMeasurement.height ||
+          previous.height !== contentSize.height)
+      )
+        scheduleFollow();
+      if (gesture.current) {
+        gestureAtBottom.current = atBottom;
+        if (contentOffset.y < 40 && !atBottom) loadOlder();
+      } else if (
+        screenReader.current &&
+        !disclosureRelease.current &&
+        previous &&
+        previous.height === contentSize.height &&
+        previous.viewport === layoutMeasurement.height &&
+        Math.abs(previous.offset - contentOffset.y) > 1 &&
+        (!atBottom || !following.current)
+      ) {
+        // VoiceOver can scroll the native list without a drag callback. Only
+        // unchanged geometry counts; layout changes alone are not intent.
+        userGestureRef.current?.();
+        if (atBottom) {
+          following.current = true;
+          setShowLatest(false);
+        } else {
+          detach();
+          if (contentOffset.y < 40) loadOlder();
         }
       }
-      const atBottom =
-        contentSize.height - layoutMeasurement.height - contentOffset.y < 48;
-      following.current = atBottom;
-      setShowLatest(!atBottom);
-      if (interacted.current && contentOffset.y < 40 && !atBottom) loadOlder();
     },
-    [loadOlder],
+    [loadOlder, detach, scheduleFollow, releaseDisclosure],
   );
+  const finishGesture = useCallback(() => {
+    cancelSettle();
+    if (!gesture.current) return;
+    gesture.current = false;
+    momentum.current = false;
+    if (gestureAtBottom.current || pendingFollow.current) {
+      pendingFollow.current = false;
+      following.current = true;
+      setShowLatest(false);
+      scheduleFollow();
+    }
+  }, [cancelSettle, scheduleFollow]);
   const hasEdit = !!onEdit;
   const hasFork = !!onFork;
   const hasCopy = !!onCopy;
@@ -1319,9 +1581,12 @@ export function ChatTranscript({
           results={results}
           mediaOrigin={mediaOrigin}
           preferences={preferences}
-          latestThinking={latestThinking}
+          latestThinking={
+            item.pieces.includes(latestThinking!) ? latestThinking : undefined
+          }
           groupOpen={groupOpen}
           onGroupOpen={changeGroupOpen}
+          onInspect={inspect}
           toolOpen={toolOpen}
           onToolOpen={changeToolOpen}
         />
@@ -1344,6 +1609,7 @@ export function ChatTranscript({
       changeGroupOpen,
       toolOpen,
       changeToolOpen,
+      inspect,
     ],
   );
   return (
@@ -1354,6 +1620,7 @@ export function ChatTranscript({
           ref={list}
           style={styles.list}
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={TranscriptEndPadding}
           data={displayRows}
           keyExtractor={(item) => item.key}
           renderItem={renderItem}
@@ -1362,7 +1629,10 @@ export function ChatTranscript({
               <Pressable
                 accessibilityRole="button"
                 disabled={loadingHistory || !onLoadOlder}
-                onPress={() => loadOlder(true)}
+                onPress={() => {
+                  detach();
+                  loadOlder(true);
+                }}
                 style={styles.loadOlder}
               >
                 {loadingHistory ? (
@@ -1375,33 +1645,63 @@ export function ChatTranscript({
           }
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           onScrollBeginDrag={() => {
-            interacted.current = true;
+            if (!visibleRef.current || !positioned.current) return;
+            onUserGesture?.();
+            disclosureRelease.current = false;
+            if (disclosureFrame.current !== null)
+              cancelAnimationFrame(disclosureFrame.current);
+            disclosureFrame.current = null;
+            cancelSettle();
+            gesture.current = true;
+            pendingFollow.current = false;
+            momentum.current = false;
+            gestureAtBottom.current = false;
+            detach();
           }}
-          onScroll={onScroll}
+          onScroll={gestureScroll}
+          onScrollEndDrag={(event) => {
+            if (!gesture.current) return;
+            gestureScroll(event);
+            cancelSettle();
+            // A moving flick can report momentum after the drag ends. Wait for
+            // it; a stationary release can settle in the next layout frame.
+            if (Math.abs(event.nativeEvent.velocity?.y ?? 0) > 0.01) {
+              settleTimer.current = setTimeout(() => {
+                if (!momentum.current) finishGesture();
+              }, 150);
+            } else {
+              settleFrame.current = requestAnimationFrame(() => {
+                settleFrame.current = null;
+                if (!momentum.current) finishGesture();
+              });
+            }
+          }}
+          onMomentumScrollBegin={() => {
+            if (!gesture.current) return;
+            momentum.current = true;
+            cancelSettle();
+          }}
+          onMomentumScrollEnd={(event) => {
+            if (!gesture.current) return;
+            gestureScroll(event);
+            finishGesture();
+          }}
           scrollEventThrottle={16}
           onLayout={(event) => {
             if (!visibleRef.current) return;
             const height = event.nativeEvent.layout.height;
-            if (height === viewportHeight.current) return;
+            if (height <= 0 || height === viewportHeight.current) return;
             viewportHeight.current = height;
-            if (positioned.current && following.current) {
-              correctingViewport.current = true;
-              requestAnimationFrame(() => {
-                if (visibleRef.current && following.current)
-                  list.current?.scrollToEnd({ animated: false });
-                correctingViewport.current = false;
-              });
-            }
+            positioned.current = true;
+            scheduleFollow();
+            releaseDisclosure();
           }}
-          onContentSizeChange={() => {
+          onContentSizeChange={(_width, height) => {
             if (!visibleRef.current) return;
-            if (!positioned.current || following.current) {
-              positioned.current = true;
-              requestAnimationFrame(() => {
-                if (visibleRef.current && following.current)
-                  list.current?.scrollToEnd({ animated: false });
-              });
-            }
+            if (height > 0) contentHeight.current = height;
+            positioned.current = true;
+            releaseDisclosure();
+            scheduleFollow();
           }}
           keyboardShouldPersistTaps="handled"
         />
@@ -1410,6 +1710,11 @@ export function ChatTranscript({
             accessibilityRole="button"
             accessibilityLabel="Jump to latest message"
             onPress={() => {
+              if (gesture.current) {
+                pendingFollow.current = true;
+                return;
+              }
+              cancelFollow();
               following.current = true;
               setShowLatest(false);
               list.current?.scrollToEnd({ animated: true });
@@ -1438,7 +1743,7 @@ const transcriptStyles = (colors: NativeTranscriptPalette, light: boolean) =>
     },
     jumpText: { color: colors.muted, fontSize: 17 },
     list: { flex: 1, backgroundColor: colors.background },
-    listContent: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12 },
+    listContent: { paddingHorizontal: 16, paddingTop: 20 },
     message: { marginBottom: 18 },
     userAlign: { alignItems: "flex-end" },
     userBubble: {

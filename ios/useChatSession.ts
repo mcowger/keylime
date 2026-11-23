@@ -341,6 +341,13 @@ export function useChatSession({
     const settled = new Set<string>();
     const nativeSettled = new Set<string>();
     const seenOutbox = new Set<string>();
+    let representedMessages: ChatContext["messages"] | undefined;
+    let representedResolved:
+      ChatContext["resolvedClientMessageIds"] | undefined;
+    let savedClientIds = new Set<string>();
+    let echoVersion = 0;
+    let reconciledEchoVersion = -1;
+    let reconciledMessages: ChatContext["messages"] | undefined;
     const hostQuery = `hostId=${encodeURIComponent(hostId)}`;
     const sessionPath = `/api/sessions/${encodeURIComponent(sessionId)}`;
     const report = (cause: unknown) => {
@@ -373,20 +380,29 @@ export function useChatSession({
           sameSavedUser(previous, message)
         ) {
           echoes.set(id, message);
+          echoVersion++;
           return;
         }
       }
       echoes.set(`echo:${messageId()}`, message);
+      echoVersion++;
     }
     function publish() {
       if (!current()) return;
-      for (const [id, echo] of echoes) {
-        if (
-          view.context?.messages.some(
-            (saved) => saved.role === "user" && sameSavedUser(saved, echo),
+      if (
+        reconciledEchoVersion !== echoVersion ||
+        reconciledMessages !== view.context?.messages
+      ) {
+        reconciledMessages = view.context?.messages;
+        reconciledEchoVersion = echoVersion;
+        for (const [id, echo] of echoes) {
+          if (
+            view.context?.messages.some(
+              (saved) => saved.role === "user" && sameSavedUser(saved, echo),
+            )
           )
-        )
-          echoes.delete(id);
+            echoes.delete(id);
+        }
       }
       const previousEchoes = view.echoedUserMessages;
       const unchangedEchoes =
@@ -395,24 +411,33 @@ export function useChatSession({
       const echoedUserMessages = unchangedEchoes
         ? previousEchoes
         : [...echoes].map(([id, message]) => ({ id, message }));
-      const represented = new Set<string>();
-      for (const id of view.context?.resolvedClientMessageIds ?? [])
-        represented.add(id);
-      for (const message of view.context?.messages ?? [])
-        if (message.role === "user" && message.clientMessageId)
-          represented.add(message.clientMessageId);
+      const messages = view.context?.messages;
+      const resolved = view.context?.resolvedClientMessageIds;
+      if (
+        messages !== representedMessages ||
+        resolved !== representedResolved
+      ) {
+        representedMessages = messages;
+        representedResolved = resolved;
+        savedClientIds = new Set(resolved ?? []);
+        for (const message of messages ?? [])
+          if (message.role === "user" && message.clientMessageId)
+            savedClientIds.add(message.clientMessageId);
+      }
+      const transientIds = new Set<string>();
       for (const { message } of echoedUserMessages)
-        if (message.clientMessageId) represented.add(message.clientMessageId);
-      // A queue slot only hides the pending row while it is queued; it does
-      // not prove the native message has appeared in durable history.
-      for (const id of represented) local.delete(id);
+        if (message.clientMessageId) transientIds.add(message.clientMessageId);
+      // Queue membership hides a pending row, but does not prove delivery.
+      for (const id of local.keys())
+        if (savedClientIds.has(id) || transientIds.has(id)) local.delete(id);
       for (const id of view.queue.clientMessageIds?.steering ?? [])
-        if (id) represented.add(id);
+        if (id) transientIds.add(id);
       for (const id of view.queue.clientMessageIds?.followUp ?? [])
-        if (id) represented.add(id);
+        if (id) transientIds.add(id);
       const entries = view.outbox.filter(
         (entry) =>
-          !represented.has(entry.id) &&
+          !savedClientIds.has(entry.id) &&
+          !transientIds.has(entry.id) &&
           !settled.has(entry.id) &&
           entry.state !== "delivered",
       );
@@ -421,7 +446,8 @@ export function useChatSession({
       );
       for (const entry of local.values())
         if (
-          !represented.has(entry.id) &&
+          !savedClientIds.has(entry.id) &&
+          !transientIds.has(entry.id) &&
           (!settled.has(entry.id) || nativeSettled.has(entry.id)) &&
           !entries.some((item) => item.id === entry.id)
         )

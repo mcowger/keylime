@@ -72,6 +72,12 @@ A cold simulator can take tens of seconds to boot, and app launch and accessibil
 
 For MobileBuildMCP, check session defaults first. Use the generated `ios/Keylime.xcworkspace` (relative to this directory), scheme `Keylime`, configuration `Release`, and the chosen simulator with `build_run_sim`. After launch, use `wait_for_ui` with `predicate: "textContains"` and `text: "Connect to Keylime"`.
 
+## Chat scroll following
+
+`ChatTranscript` projects saved history separately from the live assistant. It coalesces end scrolling while following; a reading gesture detaches, and only a genuine return to the end, Jump, or an accepted send resumes it. Accepted sends are fenced against later gestures and navigation. Pagination, keyboard/composer resize, retained tabs, and disclosure toggles preserve the reader's position and draft.
+
+Keep the end spacing as a measured FlatList footer: `scrollToEnd` doesn't include `contentContainerStyle.paddingBottom`, which otherwise makes the true end look detached. Native uses a coalesced JS scroll, not Paseo's native end pin. VoiceOver scroll detection is heuristic because React Native doesn't identify non-drag scroll provenance; verify it on a device.
+
 ## Load the Keylime PWA in iOS Simulator
 
 This is the Keylime web app, not the Expo app. From the repository root, after the root dependency install, start the seeded web server and leave it running:

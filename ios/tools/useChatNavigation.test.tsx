@@ -5,6 +5,7 @@ import type * as ReactTypes from "react";
 import type { BrowserLink, BrowserLinkHandlers } from "../browser-link";
 import type { ChatTranscriptProps } from "../ChatTranscript";
 import type { ChatContext } from "../useChatSession";
+import { TranscriptFollowIntents } from "../transcript-follow-intents";
 
 const React = createRequire(new URL("../../package.json", import.meta.url))(
   "react",
@@ -15,24 +16,49 @@ mock.module(
   ),
   () => React,
 );
+type ScrollEvent = {
+  nativeEvent: {
+    contentOffset: { y: number };
+    contentSize: { height: number };
+    layoutMeasurement: { height: number };
+    velocity?: { x: number; y: number };
+  };
+};
 let listEvents: {
-  onContentSizeChange?: () => void;
+  data?: unknown[];
+  onContentSizeChange?: (width?: number, height?: number) => void;
   onLayout?: (event: { nativeEvent: { layout: { height: number } } }) => void;
-  onScroll?: (event: {
-    nativeEvent: {
-      contentOffset: { y: number };
-      contentSize: { height: number };
-      layoutMeasurement: { height: number };
-    };
-  }) => void;
+  onScroll?: (event: ScrollEvent) => void;
+  onScrollBeginDrag?: () => void;
+  onScrollEndDrag?: (event: ScrollEvent) => void;
+  onMomentumScrollBegin?: () => void;
+  onMomentumScrollEnd?: (event: ScrollEvent) => void;
 } = {};
+const scrollCalls: { animated: boolean }[] = [];
 let countedTextRenders = 0;
+let screenReaderEnabled = false;
+let readScreenReader = () => Promise.resolve(screenReaderEnabled);
+let screenReaderChange: ((enabled: boolean) => void) | undefined;
 mock.module("../AuthenticatedMedia", () => ({
   AuthenticatedMedia: () => null,
 }));
 mock.module("../ChatMarkdown", () => ({ ChatMarkdown: () => null }));
 mock.module("../TranscriptIcons", () => ({ TranscriptIcon: () => null }));
 mock.module("../node_modules/react-native/index.js", () => ({
+  AccessibilityInfo: {
+    isScreenReaderEnabled: () => readScreenReader(),
+    addEventListener: (
+      _event: string,
+      listener: (enabled: boolean) => void,
+    ) => {
+      screenReaderChange = listener;
+      return {
+        remove() {
+          if (screenReaderChange === listener) screenReaderChange = undefined;
+        },
+      };
+    },
+  },
   View: ({ children }: { children?: ReactTypes.ReactNode }) =>
     React.createElement("div", null, children),
   Text: ({ children }: { children?: ReactTypes.ReactNode }) => {
@@ -68,15 +94,45 @@ mock.module("../node_modules/react-native/index.js", () => ({
     onContentSizeChange,
     onLayout,
     onScroll,
+    onScrollBeginDrag,
+    onScrollEndDrag,
+    onMomentumScrollBegin,
+    onMomentumScrollEnd,
+    ref,
   }: {
     data: unknown[];
     keyExtractor: (row: unknown) => string;
     renderItem: (props: { item: unknown }) => ReactTypes.ReactNode;
-    onContentSizeChange?: () => void;
+    onContentSizeChange?: typeof listEvents.onContentSizeChange;
     onLayout?: typeof listEvents.onLayout;
     onScroll?: typeof listEvents.onScroll;
+    onScrollBeginDrag?: typeof listEvents.onScrollBeginDrag;
+    onScrollEndDrag?: typeof listEvents.onScrollEndDrag;
+    onMomentumScrollBegin?: typeof listEvents.onMomentumScrollBegin;
+    onMomentumScrollEnd?: typeof listEvents.onMomentumScrollEnd;
+    ref?: ReactTypes.Ref<{
+      scrollToEnd: (options: { animated: boolean }) => void;
+    }>;
   }) => {
-    listEvents = { onContentSizeChange, onLayout, onScroll };
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        scrollToEnd: (options) => {
+          scrollCalls.push(options);
+        },
+      }),
+      [],
+    );
+    listEvents = {
+      data,
+      onContentSizeChange,
+      onLayout,
+      onScroll,
+      onScrollBeginDrag,
+      onScrollEndDrag,
+      onMomentumScrollBegin,
+      onMomentumScrollEnd,
+    };
     return React.createElement(
       "div",
       null,
@@ -359,6 +415,7 @@ test("hidden transcript layout does not change its follow position", () => {
     expect(
       ui.queryByRole("button", { name: "Jump to latest message" }),
     ).toBeNull();
+    act(() => listEvents.onScrollBeginDrag?.());
     act(() =>
       listEvents.onScroll?.({
         nativeEvent: {
@@ -403,8 +460,9 @@ test("hidden transcript layout does not change its follow position", () => {
     expect(
       ui.getByRole("button", { name: "Jump to latest message" }),
     ).toBeTruthy();
+    act(() => listEvents.onScrollBeginDrag?.());
     act(() =>
-      listEvents.onScroll?.({
+      listEvents.onMomentumScrollEnd?.({
         nativeEvent: {
           contentOffset: { y: 500 },
           contentSize: { height: 1000 },
@@ -469,5 +527,501 @@ test("unchanged transcript rows retain rendering while actions stay current", ()
     expect(ui.getByText("New message")).toBeTruthy();
   } finally {
     ui.unmount();
+  }
+});
+
+function scrollEvent(y: number, height = 1000, viewport = 500): ScrollEvent {
+  return {
+    nativeEvent: {
+      contentOffset: { y },
+      contentSize: { height },
+      layoutMeasurement: { height: viewport },
+    },
+  };
+}
+
+function controlledFrames() {
+  const originalRequest = globalThis.requestAnimationFrame;
+  const originalCancel = globalThis.cancelAnimationFrame;
+  const frames = new Map<number, FrameRequestCallback>();
+  let next = 0;
+  globalThis.requestAnimationFrame = (callback) => {
+    const id = ++next;
+    frames.set(id, callback);
+    return id;
+  };
+  globalThis.cancelAnimationFrame = (id) => {
+    if (id != null) frames.delete(id);
+  };
+  return {
+    flush() {
+      const callbacks = [...frames.values()];
+      frames.clear();
+      act(() => {
+        for (const callback of callbacks) callback(0);
+      });
+    },
+    restore() {
+      globalThis.requestAnimationFrame = originalRequest;
+      globalThis.cancelAnimationFrame = originalCancel;
+    },
+  };
+}
+
+test("stream and resize follow is coalesced and cannot overtake a drag or history page", () => {
+  const frames = controlledFrames();
+  scrollCalls.length = 0;
+  let loads = 0;
+  const messages: ChatTranscriptProps["messages"] = [
+    { role: "user", content: "First", timestamp: 1 },
+  ];
+  const ui = render(
+    <ChatTranscript
+      messages={messages}
+      entryIds={["first"]}
+      historyHasMore
+      onLoadOlder={() => {
+        loads++;
+      }}
+    />,
+  );
+  try {
+    act(() => {
+      listEvents.onLayout?.({ nativeEvent: { layout: { height: 500 } } });
+      listEvents.onContentSizeChange?.();
+      listEvents.onContentSizeChange?.();
+    });
+    frames.flush();
+    expect(scrollCalls).toEqual([{ animated: false }]);
+    act(() => {
+      listEvents.onContentSizeChange?.();
+      listEvents.onLayout?.({ nativeEvent: { layout: { height: 400 } } });
+      listEvents.onScroll?.(scrollEvent(100, 1100, 400));
+      listEvents.onScrollBeginDrag?.();
+      listEvents.onScroll?.(scrollEvent(0, 1100, 400));
+      listEvents.onScroll?.(scrollEvent(0, 1100, 400));
+    });
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    expect(loads).toBe(1);
+    act(() => {
+      listEvents.onScrollEndDrag?.(scrollEvent(0, 1100, 400));
+      listEvents.onMomentumScrollBegin?.();
+      listEvents.onMomentumScrollEnd?.(scrollEvent(100, 1100, 400));
+    });
+    ui.rerender(
+      <ChatTranscript
+        messages={[
+          { role: "user", content: "Older", timestamp: 0 },
+          ...messages,
+        ]}
+        entryIds={["older", "first"]}
+        historyHasMore
+        onLoadOlder={() => {
+          loads++;
+        }}
+      />,
+    );
+    act(() => {
+      listEvents.onContentSizeChange?.();
+      listEvents.onScroll?.(scrollEvent(700, 1100, 400));
+    });
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+
+    act(() => {
+      listEvents.onScrollBeginDrag?.();
+      listEvents.onScrollEndDrag?.(scrollEvent(699, 1100, 400));
+    });
+    frames.flush();
+    frames.flush();
+    expect(
+      ui.queryByRole("button", { name: "Jump to latest message" }),
+    ).toBeNull();
+    expect(scrollCalls).toHaveLength(2);
+  } finally {
+    ui.unmount();
+    frames.restore();
+  }
+});
+
+test("accepted send waits for a gesture; a newer gesture or hidden tab supersedes it", () => {
+  const frames = controlledFrames();
+  scrollCalls.length = 0;
+  const messages: ChatTranscriptProps["messages"] = [
+    { role: "user", content: "First", timestamp: 1 },
+  ];
+  const view = (followRequest: number, visible = true) => (
+    <ChatTranscript
+      messages={messages}
+      entryIds={["first"]}
+      followRequest={followRequest}
+      visible={visible}
+    />
+  );
+  const ui = render(view(0));
+  try {
+    act(() => listEvents.onContentSizeChange?.());
+    frames.flush();
+    act(() => {
+      listEvents.onScrollBeginDrag?.();
+      listEvents.onScroll?.(scrollEvent(100));
+    });
+    ui.rerender(view(1));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    act(() => listEvents.onMomentumScrollEnd?.(scrollEvent(100)));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(2);
+    expect(
+      ui.queryByRole("button", { name: "Jump to latest message" }),
+    ).toBeNull();
+
+    act(() => listEvents.onScrollBeginDrag?.());
+    ui.rerender(view(2));
+    act(() => {
+      listEvents.onScrollBeginDrag?.();
+      listEvents.onMomentumScrollEnd?.(scrollEvent(100));
+    });
+    frames.flush();
+    expect(scrollCalls).toHaveLength(2);
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+
+    act(() => listEvents.onScrollBeginDrag?.());
+    ui.rerender(view(3));
+    ui.rerender(view(3, false));
+    ui.rerender(view(3, true));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(2);
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+  } finally {
+    ui.unmount();
+    frames.restore();
+  }
+});
+
+test("live text changes retain saved row identity", () => {
+  const messages: ChatTranscriptProps["messages"] = [
+    { role: "user", content: "Counting first message", timestamp: 1 },
+  ];
+  const ids = ["first"];
+  const live = (text: string) => ({
+    role: "assistant" as const,
+    content: [{ type: "text" as const, text }],
+  });
+  countedTextRenders = 0;
+  const ui = render(
+    <ChatTranscript
+      messages={messages}
+      entryIds={ids}
+      liveMessage={live("one")}
+    />,
+  );
+  try {
+    const savedRow = listEvents.data?.[0];
+    const rendered = countedTextRenders;
+    ui.rerender(
+      <ChatTranscript
+        messages={messages}
+        entryIds={ids}
+        liveMessage={live("two")}
+      />,
+    );
+    expect(listEvents.data?.[0]).toBe(savedRow);
+    expect(countedTextRenders).toBe(rendered);
+  } finally {
+    ui.unmount();
+  }
+});
+
+test("delayed send receipts cannot override newer scrolling or navigation", async () => {
+  const frames = controlledFrames();
+  scrollCalls.length = 0;
+  const receipts = [
+    Promise.withResolvers<void>(),
+    Promise.withResolvers<void>(),
+    Promise.withResolvers<void>(),
+  ];
+  const messages: ChatTranscriptProps["messages"] = [
+    { role: "user", content: "First", timestamp: 1 },
+  ];
+  const ids = ["first"];
+  function Consumer({ selection }: { selection: string }) {
+    const intents = React.useRef(new TranscriptFollowIntents());
+    const [followRequest, setFollowRequest] = React.useState(0);
+    const nextReceipt = React.useRef(0);
+    intents.current.select(selection);
+    async function send() {
+      const ticket = intents.current.begin("chat");
+      await receipts[nextReceipt.current++].promise;
+      if (intents.current.accepts(ticket))
+        setFollowRequest((value) => value + 1);
+    }
+    return (
+      <>
+        <button onClick={() => void send()}>Send</button>
+        <ChatTranscript
+          messages={messages}
+          entryIds={ids}
+          visible={selection === "chat"}
+          followRequest={followRequest}
+          onUserGesture={() => intents.current.gesture("chat")}
+        />
+      </>
+    );
+  }
+  const ui = render(<Consumer selection="chat" />);
+  try {
+    act(() => listEvents.onContentSizeChange?.());
+    frames.flush();
+    fireEvent.click(ui.getByRole("button", { name: "Send" }));
+    act(() => {
+      listEvents.onScrollBeginDrag?.();
+      listEvents.onScroll?.(scrollEvent(100));
+      listEvents.onMomentumScrollEnd?.(scrollEvent(100));
+    });
+    await act(async () => {
+      receipts[0].resolve();
+      await receipts[0].promise;
+    });
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+
+    fireEvent.click(ui.getByRole("button", { name: "Send" }));
+    ui.rerender(<Consumer selection="other" />);
+    ui.rerender(<Consumer selection="chat" />);
+    await act(async () => {
+      receipts[1].resolve();
+      await receipts[1].promise;
+    });
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+
+    act(() => listEvents.onScrollBeginDrag?.());
+    fireEvent.click(ui.getByRole("button", { name: "Send" }));
+    await act(async () => {
+      receipts[2].resolve();
+      await receipts[2].promise;
+    });
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    act(() => listEvents.onMomentumScrollEnd?.(scrollEvent(100)));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(2);
+    expect(
+      ui.queryByRole("button", { name: "Jump to latest message" }),
+    ).toBeNull();
+  } finally {
+    ui.unmount();
+    frames.restore();
+  }
+});
+
+test("closing an inspected disclosure reattaches only at the actual end", () => {
+  const frames = controlledFrames();
+  scrollCalls.length = 0;
+  const messages: ChatTranscriptProps["messages"] = [
+    {
+      role: "assistant",
+      model: "fixture",
+      provider: "fixture",
+      content: [
+        { type: "toolCall", toolCallId: "tool", toolName: "read", input: {} },
+      ],
+    },
+  ];
+  const ui = render(<ChatTranscript messages={messages} entryIds={["call"]} />);
+  try {
+    act(() => {
+      listEvents.onLayout?.({ nativeEvent: { layout: { height: 500 } } });
+      listEvents.onContentSizeChange?.(320, 1000);
+      listEvents.onScroll?.(scrollEvent(500));
+    });
+    frames.flush();
+    fireEvent.click(ui.getByRole("button", { name: /Process details/ }));
+    act(() => {
+      listEvents.onContentSizeChange?.(320, 1200);
+      listEvents.onScroll?.(scrollEvent(500, 1200));
+      listEvents.onContentSizeChange?.(320, 1200);
+    });
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+
+    fireEvent.click(ui.getByRole("button", { name: /Process details/ }));
+    act(() => listEvents.onContentSizeChange?.(320, 1000));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    expect(
+      ui.queryByRole("button", { name: "Jump to latest message" }),
+    ).toBeNull();
+    act(() => listEvents.onContentSizeChange?.(320, 1100));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(2);
+
+    fireEvent.click(ui.getByRole("button", { name: /Process details/ }));
+    act(() => {
+      listEvents.onContentSizeChange?.(320, 1300);
+      listEvents.onScroll?.(scrollEvent(500, 1300));
+    });
+    fireEvent.click(ui.getByRole("button", { name: /Process details/ }));
+    act(() => listEvents.onContentSizeChange?.(320, 1200));
+    frames.flush();
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+    act(() => listEvents.onContentSizeChange?.(320, 1400));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(2);
+  } finally {
+    ui.unmount();
+    frames.restore();
+  }
+});
+
+test("a late native offset clamp reattaches after collapsing at the end", () => {
+  const frames = controlledFrames();
+  scrollCalls.length = 0;
+  const messages: ChatTranscriptProps["messages"] = [
+    {
+      role: "assistant",
+      model: "fixture",
+      provider: "fixture",
+      content: [
+        { type: "toolCall", toolCallId: "tool", toolName: "read", input: {} },
+      ],
+    },
+  ];
+  const ui = render(<ChatTranscript messages={messages} entryIds={["call"]} />);
+  try {
+    act(() => {
+      listEvents.onLayout?.({ nativeEvent: { layout: { height: 500 } } });
+      listEvents.onContentSizeChange?.(320, 1000);
+      listEvents.onScroll?.(scrollEvent(500));
+    });
+    frames.flush();
+    fireEvent.click(ui.getByRole("button", { name: /Process details/ }));
+    act(() => {
+      listEvents.onContentSizeChange?.(320, 1200);
+      listEvents.onScroll?.(scrollEvent(650, 1200));
+    });
+    fireEvent.click(ui.getByRole("button", { name: /Process details/ }));
+    act(() => listEvents.onContentSizeChange?.(320, 1000));
+    frames.flush();
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+    act(() => listEvents.onScroll?.(scrollEvent(500, 1000)));
+    frames.flush();
+    expect(
+      ui.queryByRole("button", { name: "Jump to latest message" }),
+    ).toBeNull();
+    expect(scrollCalls).toHaveLength(1);
+    act(() => listEvents.onContentSizeChange?.(320, 1100));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(2);
+  } finally {
+    ui.unmount();
+    frames.restore();
+  }
+});
+
+test("VoiceOver scrolls detach and return to following without drag events", async () => {
+  const frames = controlledFrames();
+  screenReaderEnabled = true;
+  scrollCalls.length = 0;
+  let gestures = 0;
+  const messages: ChatTranscriptProps["messages"] = [
+    { role: "user", content: "First", timestamp: 1 },
+  ];
+  const ui = render(
+    <ChatTranscript
+      messages={messages}
+      entryIds={["first"]}
+      onUserGesture={() => {
+        gestures++;
+      }}
+    />,
+  );
+  try {
+    await act(async () => {});
+    act(() => {
+      listEvents.onLayout?.({ nativeEvent: { layout: { height: 500 } } });
+      listEvents.onContentSizeChange?.(320, 1000);
+      listEvents.onScroll?.(scrollEvent(500));
+    });
+    frames.flush();
+    act(() => listEvents.onScroll?.(scrollEvent(100)));
+    expect(gestures).toBe(1);
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+    act(() => {
+      listEvents.onContentSizeChange?.(320, 1200);
+      listEvents.onScroll?.(scrollEvent(100, 1200));
+    });
+    frames.flush();
+    expect(scrollCalls).toHaveLength(1);
+    act(() => listEvents.onScroll?.(scrollEvent(700, 1200)));
+    expect(gestures).toBe(2);
+    expect(
+      ui.queryByRole("button", { name: "Jump to latest message" }),
+    ).toBeNull();
+    act(() => listEvents.onContentSizeChange?.(320, 1300));
+    frames.flush();
+    expect(scrollCalls).toHaveLength(2);
+  } finally {
+    ui.unmount();
+    screenReaderEnabled = false;
+    frames.restore();
+  }
+});
+
+test("a newer screen-reader change wins over the initial asynchronous read", async () => {
+  const frames = controlledFrames();
+  const initial = Promise.withResolvers<boolean>();
+  readScreenReader = () => initial.promise;
+  scrollCalls.length = 0;
+  const messages: ChatTranscriptProps["messages"] = [
+    { role: "user", content: "First", timestamp: 1 },
+  ];
+  const ui = render(
+    <ChatTranscript messages={messages} entryIds={["first"]} />,
+  );
+  try {
+    act(() => screenReaderChange?.(true));
+    await act(async () => {
+      initial.resolve(false);
+      await initial.promise;
+    });
+    act(() => {
+      listEvents.onLayout?.({ nativeEvent: { layout: { height: 500 } } });
+      listEvents.onContentSizeChange?.(320, 1000);
+      listEvents.onScroll?.(scrollEvent(500));
+    });
+    frames.flush();
+    act(() => listEvents.onScroll?.(scrollEvent(100)));
+    expect(
+      ui.getByRole("button", { name: "Jump to latest message" }),
+    ).toBeTruthy();
+  } finally {
+    ui.unmount();
+    readScreenReader = () => Promise.resolve(screenReaderEnabled);
+    frames.restore();
   }
 });

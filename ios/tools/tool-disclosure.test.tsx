@@ -33,6 +33,10 @@ mock.module("../node_modules/react-native/index.js", () => ({
     createElement("div", null, children),
   Image: () => null,
   ActivityIndicator: () => null,
+  AccessibilityInfo: {
+    isScreenReaderEnabled: async () => false,
+    addEventListener: () => ({ remove: () => {} }),
+  },
   Modal: () => null,
   Linking: { openURL: async () => {} },
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
@@ -154,6 +158,72 @@ test.each([false, true])(
     }
   },
 );
+
+test("saved result joins a changing live call without duplicates or losing disclosure", () => {
+  const saved = result("durable result");
+  const b = call("B");
+  const c = call("C");
+  const transient = { B: { ...result("transient result"), partial: true } };
+  const ui = render(
+    <ChatTranscript
+      messages={[saved]}
+      entryIds={["result"]}
+      liveMessage={b}
+      toolResults={transient}
+    />,
+  );
+  try {
+    expect(ui.getAllByRole("button", { name: /Process details/ })).toHaveLength(
+      1,
+    );
+    fireEvent.click(ui.getByRole("button", { name: /Process details/ }));
+    fireEvent.click(ui.getByRole("button", { name: /tool-B/ }));
+    expect(ui.getAllByText("durable result")).toHaveLength(1);
+    expect(ui.queryByText("transient result")).toBeNull();
+
+    ui.rerender(
+      <ChatTranscript
+        messages={[saved]}
+        entryIds={["result"]}
+        liveMessage={c}
+        toolResults={transient}
+      />,
+    );
+    expect(ui.getAllByRole("button", { name: /Process details/ })).toHaveLength(
+      2,
+    );
+    ui.rerender(
+      <ChatTranscript
+        messages={[saved]}
+        entryIds={["result"]}
+        liveMessage={b}
+        toolResults={transient}
+      />,
+    );
+    expect(ui.getAllByRole("button", { name: /Process details/ })).toHaveLength(
+      1,
+    );
+    expect(
+      ui.getByRole("button", { name: /tool-B/ }).getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(ui.getAllByText("durable result")).toHaveLength(1);
+
+    ui.rerender(
+      <ChatTranscript
+        messages={[b, saved]}
+        entryIds={["call", "result"]}
+        toolResults={transient}
+      />,
+    );
+    expect(
+      ui.getByRole("button", { name: /tool-B/ }).getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(ui.getAllByText("durable result")).toHaveLength(1);
+    expect(ui.queryByText("transient result")).toBeNull();
+  } finally {
+    ui.unmount();
+  }
+});
 
 test("tool disclosure shows a compact preview and makes full input optional", () => {
   const message: Message = {

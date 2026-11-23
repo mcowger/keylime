@@ -41,6 +41,7 @@ import { ChatComposer, type ChatComposerProps } from "./ChatComposer";
 import { ChatDialog } from "./ChatDialog";
 import { PlanReview } from "./PlanReview";
 import { ChatTranscript, type ChatTranscriptProps } from "./ChatTranscript";
+import { TranscriptFollowIntents } from "./transcript-follow-intents";
 import type { operations } from "./generated/web-http";
 import {
   ensureChatSession,
@@ -244,6 +245,9 @@ export function LiveChat({
     );
   }, [onHeaderState, headerKey, headerHost, headerSession, active, state]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const followRequests = useRef(new Map<string, number>());
+  const followIntents = useRef(new TranscriptFollowIntents());
+  const [, setFollowVersion] = useState(0);
   const attachments = useChatAttachments(
     origin,
     target?.hostId,
@@ -251,8 +255,23 @@ export function LiveChat({
   );
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [forcedSelection, setForcedSelection] = useState<typeof selection>();
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const latest = useRef(target);
   latest.current = target;
+  const selectedOwner = target?.sessionId
+    ? JSON.stringify([origin, target.hostId, target.sessionId])
+    : null;
+  followIntents.current.select(
+    JSON.stringify([
+      origin,
+      target?.key,
+      target?.hostId,
+      target?.sessionId,
+      visible,
+      selectedOwner ? openSessionKeys.has(selectedOwner) : false,
+    ]),
+  );
   const slash = useNativeSlashMenu({
     advisorEnabled,
     link,
@@ -630,6 +649,11 @@ export function LiveChat({
     )
       return;
     const { key, sessionId } = target;
+    const followTicket = sessionId
+      ? followIntents.current.begin(
+          JSON.stringify([origin, target.hostId, sessionId]),
+        )
+      : null;
     const message = drafts[key] ?? "";
     if (!attachments.canSend || (!message.trim() && !attachments.items.length))
       return;
@@ -690,12 +714,28 @@ export function LiveChat({
     try {
       if (sessionId) {
         if (command) await runSlashAction(key, command);
-        else
+        else {
           await chat.send(
             outgoing,
             chat.active ? "followUp" : "prompt",
             attachments.payload,
           );
+          if (
+            visibleRef.current &&
+            followTicket &&
+            followIntents.current.accepts(followTicket) &&
+            latest.current?.key === key &&
+            latest.current.sessionId === sessionId &&
+            latest.current.hostId === target.hostId
+          ) {
+            const owner = JSON.stringify([origin, target.hostId, sessionId]);
+            followRequests.current.set(
+              owner,
+              (followRequests.current.get(owner) ?? 0) + 1,
+            );
+            setFollowVersion((version) => version + 1);
+          }
+        }
         attachments.clear(true);
         setDrafts((old) =>
           old[key] === message ? { ...old, [key]: "" } : old,
@@ -774,6 +814,10 @@ export function LiveChat({
   for (const [id, entry] of transcripts.current) {
     if (!openSessionKeys.has(entry.owner)) transcripts.current.delete(id);
   }
+  for (const owner of followRequests.current.keys()) {
+    if (!openSessionKeys.has(owner)) followRequests.current.delete(owner);
+  }
+  followIntents.current.retain(openSessionKeys);
 
   if (!target) return null;
   const { key, sessionId } = target;
@@ -1099,6 +1143,8 @@ export function LiveChat({
       element: (
         <ChatTranscript
           sessionKey={transcriptOwner}
+          followRequest={followRequests.current.get(transcriptOwner) ?? 0}
+          onUserGesture={() => followIntents.current.gesture(transcriptOwner)}
           mediaOrigin={origin}
           mediaHostId={target.hostId}
           onOpenActivityTarget={(kind, value) =>
