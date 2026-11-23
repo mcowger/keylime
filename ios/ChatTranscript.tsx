@@ -608,12 +608,16 @@ function ActivityEntry({
   mediaOrigin,
   preferences,
   latestThinking,
+  toolOpen,
+  onToolOpen,
 }: {
   piece: Piece;
   results: Map<string, ToolResult>;
   mediaOrigin?: string;
   preferences?: SettingsPreferences;
   latestThinking?: Piece;
+  toolOpen: ReadonlyMap<string, boolean>;
+  onToolOpen: (id: string, open: boolean) => void;
 }) {
   const styles = useTranscriptStyles();
   const { palette } = useContext(PaletteContext);
@@ -645,7 +649,9 @@ function ActivityEntry({
     (piece.streaming ||
       !results.has(tool.toolCallId) ||
       !!results.get(tool.toolCallId)?.partial);
-  const expanded = override ?? (thinkingDefault || toolDefault);
+  const expanded =
+    (tool ? toolOpen.get(tool.toolCallId) : override) ??
+    (thinkingDefault || toolDefault);
   let title = "Activity";
   let body = "";
   if (tool) {
@@ -732,7 +738,10 @@ function ActivityEntry({
   return (
     <View>
       <Pressable
-        onPress={() => setOverride(!expanded)}
+        onPress={() => {
+          if (tool) onToolOpen(tool.toolCallId, !expanded);
+          else setOverride(!expanded);
+        }}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         style={styles.activityRow}
@@ -814,12 +823,20 @@ function ProcessRow({
   mediaOrigin,
   preferences,
   latestThinking,
+  groupOpen,
+  onGroupOpen,
+  toolOpen,
+  onToolOpen,
 }: {
   row: Extract<Row, { kind: "activity" }>;
   results: Map<string, ToolResult>;
   mediaOrigin?: string;
   preferences?: SettingsPreferences;
   latestThinking?: Piece;
+  groupOpen: ReadonlyMap<string, boolean>;
+  onGroupOpen: (ids: readonly string[], open: boolean) => void;
+  toolOpen: ReadonlyMap<string, boolean>;
+  onToolOpen: (id: string, open: boolean) => void;
 }) {
   const styles = useTranscriptStyles();
   const { palette } = useContext(PaletteContext);
@@ -835,7 +852,18 @@ function ProcessRow({
     !!row.unfolded ||
     (!!row.streaming && preferences?.hideToolActivityWhileWorking === false) ||
     containsThinking;
-  const open = row.unfolded || (override ?? automaticallyOpen);
+  const ids = row.pieces.flatMap(
+    (piece) =>
+      piece.blocks?.flatMap((block) =>
+        block.type === "toolCall" ? [block.toolCallId] : [],
+      ) ?? [],
+  );
+  const explicit = ids.some((id) => groupOpen.get(id) === true)
+    ? true
+    : ids.some((id) => groupOpen.get(id) === false)
+      ? false
+      : override;
+  const open = row.unfolded || (explicit ?? automaticallyOpen);
   const count = row.pieces.length;
   return (
     <View style={styles.process}>
@@ -843,7 +871,10 @@ function ProcessRow({
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: !!open }}
-          onPress={() => setOverride(!open)}
+          onPress={() => {
+            if (ids.length) onGroupOpen(ids, !open);
+            else setOverride(!open);
+          }}
           style={styles.processToggle}
         >
           <TranscriptIcon name="layers" color={palette.accent} />
@@ -872,6 +903,8 @@ function ProcessRow({
             mediaOrigin={mediaOrigin}
             preferences={preferences}
             latestThinking={latestThinking}
+            toolOpen={toolOpen}
+            onToolOpen={onToolOpen}
           />
         ))}
     </View>
@@ -972,6 +1005,12 @@ export function ChatTranscript({
   const requested = useRef<string | undefined>(undefined);
   const positioned = useRef(false);
   const [showLatest, setShowLatest] = useState(false);
+  const [groupOpen, setGroupOpen] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
+  );
+  const [toolOpen, setToolOpen] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
+  );
   const lastSession = useRef(sessionKey);
   if (lastSession.current !== sessionKey) {
     lastSession.current = sessionKey;
@@ -979,6 +1018,8 @@ export function ChatTranscript({
     interacted.current = false;
     requested.current = undefined;
     positioned.current = false;
+    setGroupOpen(new Map());
+    setToolOpen(new Map());
   }
   const firstId = entryIds[0];
   const loadOlder = useCallback(
@@ -1048,6 +1089,18 @@ export function ChatTranscript({
                 mediaOrigin={mediaOrigin}
                 preferences={preferences}
                 latestThinking={latestThinking}
+                groupOpen={groupOpen}
+                onGroupOpen={(ids, open) =>
+                  setGroupOpen((previous) => {
+                    const next = new Map(previous);
+                    for (const id of ids) next.set(id, open);
+                    return next;
+                  })
+                }
+                toolOpen={toolOpen}
+                onToolOpen={(id, open) =>
+                  setToolOpen((previous) => new Map(previous).set(id, open))
+                }
               />
             )
           }

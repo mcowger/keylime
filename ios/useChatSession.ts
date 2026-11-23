@@ -73,6 +73,7 @@ export type ChatSessionView = {
   liveMessage: LiveMessage | null;
   modelActivity?: ModelActivity;
   toolResults: ChatToolResults;
+  historyView: number;
   queue: Queue;
   outbox: OutboxEntry[];
   pendingInput: PendingChatInput[];
@@ -94,6 +95,7 @@ const initial = (): ChatSessionView => ({
   state: null,
   liveMessage: null,
   toolResults: {},
+  historyView: 0,
   queue: emptyQueue,
   outbox: [],
   pendingInput: [],
@@ -592,7 +594,7 @@ export function useChatSession({
         buffered = buffered.filter(
           (item) => !item.type.startsWith("tool_execution_"),
         );
-        view = { ...view, toolResults: {} };
+        view = { ...view, toolResults: {}, historyView: view.historyView + 1 };
         publish();
       }
       if (event.type === "ui_request" || event.type === "ui_end") {
@@ -715,7 +717,7 @@ export function useChatSession({
         return null;
       }
       if (replacedHistory) {
-        view = { ...view, toolResults: {} };
+        view = { ...view, toolResults: {}, historyView: view.historyView + 1 };
         buffered = buffered.filter(
           (event) => !event.type.startsWith("tool_execution_"),
         );

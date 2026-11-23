@@ -651,6 +651,12 @@ export function LiveChat({
             chat.liveMessage ||
             chat.echoedUserMessages.length > 0 ? (
               <ChatTranscript
+                key={JSON.stringify([
+                  origin,
+                  target.hostId,
+                  sessionId,
+                  chat.historyView,
+                ])}
                 sessionKey={key}
                 mediaOrigin={origin}
                 mediaHostId={target.hostId}
