@@ -847,7 +847,11 @@ function ProcessRow({
           style={styles.processToggle}
         >
           <TranscriptIcon name="layers" color={palette.accent} />
-          <TranscriptIcon name="chevron" color={palette.muted} expanded={!!open} />
+          <TranscriptIcon
+            name="chevron"
+            color={palette.muted}
+            expanded={!!open}
+          />
           <Text style={styles.processLabel}>
             Process details · {count} {count === 1 ? "message" : "messages"}
             {row.toolCount
@@ -1134,7 +1138,12 @@ const transcriptStyles = (colors: NativeTranscriptPalette, light: boolean) =>
       marginTop: 7,
     },
     userActions: { justifyContent: "flex-end" },
-    action: { paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 4 },
+    action: {
+      paddingVertical: 2,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
     actionText: { color: colors.muted, fontSize: 11 },
     actionIcon: { color: colors.muted, fontSize: 14 },
     time: {

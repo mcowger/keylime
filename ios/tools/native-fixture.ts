@@ -35,14 +35,19 @@ if (values["stream-delay-ms"] !== undefined && !values["offline-model"])
   throw new Error("--stream-delay-ms requires --offline-model");
 if (values["failed-bash"] && !values["offline-model"])
   throw new Error("--failed-bash requires --offline-model");
-const delayMs = values["stream-delay-ms"] === undefined ? 350 : Number(values["stream-delay-ms"]);
+const delayMs =
+  values["stream-delay-ms"] === undefined
+    ? 350
+    : Number(values["stream-delay-ms"]);
 if (!Number.isInteger(delayMs) || delayMs < 25 || delayMs > 2000)
   throw new Error("--stream-delay-ms must be an integer from 25 to 2000");
 const offlineModel = values["offline-model"]
   ? startOfflineModel(delayMs, values["failed-bash"])
   : undefined;
 if (offlineModel)
-  console.log(`[offline-model] keylime-fixture/offline at http://127.0.0.1:${offlineModel.port}/v1; ${delayMs} ms per fragment`);
+  console.log(
+    `[offline-model] keylime-fixture/offline at http://127.0.0.1:${offlineModel.port}/v1; ${delayMs} ms per fragment`,
+  );
 
 // Do not pass provider credentials, Git overrides, production configuration, or
 // the plaintext fixture password to the dev launcher or either of its services.
@@ -53,7 +58,11 @@ const env: NodeJS.ProcessEnv = {
   ...(password === undefined
     ? {}
     : { KEYLIME_DEV_FIXTURE_PASSWORD_HASH: hashPassword(password) }),
-  ...(offlineModel ? { KEYLIME_DEV_NATIVE_MODEL_URL: `http://127.0.0.1:${offlineModel.port}/v1` } : {}),
+  ...(offlineModel
+    ? {
+        KEYLIME_DEV_NATIVE_MODEL_URL: `http://127.0.0.1:${offlineModel.port}/v1`,
+      }
+    : {}),
 };
 const root = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const child = spawn(

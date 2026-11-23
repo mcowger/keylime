@@ -2,12 +2,50 @@
 // It never examines or logs prompts and only listens on the host loopback interface.
 const model = "offline";
 const fragments = [
-  "This ", "is ", "a ", "deterministic ", "offline ", "fixture ", "response. ",
-  "It ", "streams ", "slowly ", "through ", "the ", "real ", "Keylime ",
-  "daemon ", "and ", "runner. ", "You ", "can ", "stop ", "this ", "response ",
-  "while ", "it ", "is ", "in ", "progress. ", "No ", "external ", "model ",
-  "service ", "or ", "credentials ", "are ", "used. ", "The ", "same ", "prompt ",
-  "always ", "receives ", "the ", "same ", "fixture ", "text.",
+  "This ",
+  "is ",
+  "a ",
+  "deterministic ",
+  "offline ",
+  "fixture ",
+  "response. ",
+  "It ",
+  "streams ",
+  "slowly ",
+  "through ",
+  "the ",
+  "real ",
+  "Keylime ",
+  "daemon ",
+  "and ",
+  "runner. ",
+  "You ",
+  "can ",
+  "stop ",
+  "this ",
+  "response ",
+  "while ",
+  "it ",
+  "is ",
+  "in ",
+  "progress. ",
+  "No ",
+  "external ",
+  "model ",
+  "service ",
+  "or ",
+  "credentials ",
+  "are ",
+  "used. ",
+  "The ",
+  "same ",
+  "prompt ",
+  "always ",
+  "receives ",
+  "the ",
+  "same ",
+  "fixture ",
+  "text.",
 ];
 const text = fragments.join("");
 const usage = {
@@ -72,7 +110,10 @@ export function startOfflineModel(delayMs: number, failedBash = false) {
       try {
         body = await request.json();
       } catch {
-        return Response.json({ error: { message: "Invalid JSON" } }, { status: 400 });
+        return Response.json(
+          { error: { message: "Invalid JSON" } },
+          { status: 400 },
+        );
       }
       if (
         !body ||
@@ -99,7 +140,12 @@ export function startOfflineModel(delayMs: number, failedBash = false) {
           }
         : undefined;
 
-      const base = { id: "chatcmpl-keylime-fixture", object: "chat.completion", created: 0, model };
+      const base = {
+        id: "chatcmpl-keylime-fixture",
+        object: "chat.completion",
+        created: 0,
+        model,
+      };
       if (!("stream" in body) || body.stream !== true) {
         return Response.json({
           ...base,
@@ -132,7 +178,11 @@ export function startOfflineModel(delayMs: number, failedBash = false) {
             finished = true;
             cleanup();
             console.log("[offline-model] Stream cancelled");
-            try { controller.close(); } catch { /* Client already disconnected. */ }
+            try {
+              controller.close();
+            } catch {
+              /* Client already disconnected. */
+            }
           };
           request.signal.addEventListener("abort", abort, { once: true });
           if (request.signal.aborted) return abort();
@@ -183,7 +233,10 @@ export function startOfflineModel(delayMs: number, failedBash = false) {
       });
       console.log("[offline-model] Stream started");
       return new Response(stream, {
-        headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
+        headers: {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+        },
       });
     },
   });

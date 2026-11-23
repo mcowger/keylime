@@ -159,7 +159,10 @@ export function NavigationShell({
   const [picker, setPicker] = useState<"project" | "workspace" | null>(null);
   const draftSeq = useRef(0);
   const [headerState, setHeaderState] = useState<ChatHeaderState | null>(null);
-  const [shipAvailability, setShipAvailability] = useState<{ key: string; empty: boolean } | null>(null);
+  const [shipAvailability, setShipAvailability] = useState<{
+    key: string;
+    empty: boolean;
+  } | null>(null);
   const dark = useColorScheme() !== "light";
   const colors = dark
     ? theme
@@ -219,15 +222,46 @@ export function NavigationShell({
         sessionId: selected?.sessionId ?? selected?.session?.id ?? null,
       }
     : null;
-  const header = headerState && target && headerState.key === target.key && headerState.hostId === target.hostId && headerState.sessionId === target.sessionId ? headerState : null;
-  const owner = target?.sessionId ? workspaceForPath(byHost, target.hostId, target.path) : undefined;
-  const shipTarget = target?.sessionId && owner && owner.project.kind === "git" && !owner.workspace.isDefault
-    ? { hostId: target.hostId, projectPath: owner.project.path, path: owner.workspace.path, sessionId: target.sessionId, workspaceId: owner.workspace.id }
+  const header =
+    headerState &&
+    target &&
+    headerState.key === target.key &&
+    headerState.hostId === target.hostId &&
+    headerState.sessionId === target.sessionId
+      ? headerState
+      : null;
+  const owner = target?.sessionId
+    ? workspaceForPath(byHost, target.hostId, target.path)
+    : undefined;
+  const shipTarget =
+    target?.sessionId &&
+    owner &&
+    owner.project.kind === "git" &&
+    !owner.workspace.isDefault
+      ? {
+          hostId: target.hostId,
+          projectPath: owner.project.path,
+          path: owner.workspace.path,
+          sessionId: target.sessionId,
+          workspaceId: owner.workspace.id,
+        }
+      : null;
+  const shipKey = shipTarget
+    ? JSON.stringify([
+        origin,
+        shipTarget.hostId,
+        shipTarget.projectPath,
+        shipTarget.path,
+      ])
     : null;
-  const shipKey = shipTarget ? JSON.stringify([origin, shipTarget.hostId, shipTarget.projectPath, shipTarget.path]) : null;
   useEffect(() => {
     if (!shipKey) return;
-    const [, host, projectPath, path] = JSON.parse(shipKey) as [string, string, string, string];
+    const [, host, projectPath, path] = JSON.parse(shipKey) as [
+      string,
+      string,
+      string,
+      string,
+    ];
     let disposed = false;
     let pending = false;
     const refresh = async () => {
@@ -235,12 +269,27 @@ export function NavigationShell({
       pending = true;
       try {
         const query = `host=${encodeURIComponent(host)}&projectPath=${encodeURIComponent(projectPath)}&path=${encodeURIComponent(path)}`;
-        const preview = await requestJson<ShipPreview>(origin, `/api/ship?${query}`);
-        if (!disposed) setShipAvailability({ key: shipKey, empty: !preview.dirty && preview.ahead === 0 && preview.issues.length === 0 && preview.pr?.state !== "open" });
+        const preview = await requestJson<ShipPreview>(
+          origin,
+          `/api/ship?${query}`,
+        );
+        if (!disposed)
+          setShipAvailability({
+            key: shipKey,
+            empty:
+              !preview.dirty &&
+              preview.ahead === 0 &&
+              preview.issues.length === 0 &&
+              preview.pr?.state !== "open",
+          });
       } catch (cause) {
         if (!disposed) {
           setShipAvailability(null);
-          if (cause instanceof KeylimeHttpError && cause.kind === "unauthorized") onUnauthorized();
+          if (
+            cause instanceof KeylimeHttpError &&
+            cause.kind === "unauthorized"
+          )
+            onUnauthorized();
         }
       } finally {
         pending = false;
@@ -248,11 +297,27 @@ export function NavigationShell({
     };
     void refresh();
     const timer = setInterval(refresh, 5000);
-    return () => { disposed = true; clearInterval(timer); };
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
   }, [origin, shipKey, onUnauthorized]);
-  const shipBusy = !!header?.active || !!header?.state?.state?.isStreaming || !!header?.state?.state?.isPromptRunning || !!header?.state?.state?.isBashRunning || active.some((item) => (item.session.hostId ?? "local") === target?.hostId && item.session.id === target?.sessionId && item.status === "Running");
-  const nothingToShip = shipAvailability?.key === shipKey && shipAvailability.empty;
-  useEffect(() => { setMenu(false); }, [section, target?.key, target?.sessionId]);
+  const shipBusy =
+    !!header?.active ||
+    !!header?.state?.state?.isStreaming ||
+    !!header?.state?.state?.isPromptRunning ||
+    !!header?.state?.state?.isBashRunning ||
+    active.some(
+      (item) =>
+        (item.session.hostId ?? "local") === target?.hostId &&
+        item.session.id === target?.sessionId &&
+        item.status === "Running",
+    );
+  const nothingToShip =
+    shipAvailability?.key === shipKey && shipAvailability.empty;
+  useEffect(() => {
+    setMenu(false);
+  }, [section, target?.key, target?.sessionId]);
 
   const hierarchyByHost = useMemo(
     () =>
@@ -486,8 +551,9 @@ export function NavigationShell({
       {
         title: "Ship progress",
         options: [
-          ...admittedShips.map(([, { target }]) =>
-            `${target.path.split("/").pop() ?? target.path} · ${hosts.find((host) => host.id === target.hostId)?.label || target.hostId}`,
+          ...admittedShips.map(
+            ([, { target }]) =>
+              `${target.path.split("/").pop() ?? target.path} · ${hosts.find((host) => host.id === target.hostId)?.label || target.hostId}`,
           ),
           "Cancel",
         ],
@@ -503,7 +569,12 @@ export function NavigationShell({
     <SafeAreaView
       style={[
         styles.root,
-        { backgroundColor: section === "settings" && !sidebar ? colors.background : colors.panel },
+        {
+          backgroundColor:
+            section === "settings" && !sidebar
+              ? colors.background
+              : colors.panel,
+        },
       ]}
     >
       <StatusBar barStyle={dark ? "light-content" : "dark-content"} />
@@ -567,16 +638,16 @@ export function NavigationShell({
                   <SidebarMenuIcon color={colors.text} />
                 </Pressable>
                 {!(section === "workspace" && target?.sessionId) && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="More actions"
-                  onPress={() => setMenu((old) => !old)}
-                  style={styles.headerButton}
-                >
-                  <Text style={[styles.menuIcon, { color: colors.text }]}>
-                    ⋯
-                  </Text>
-                </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="More actions"
+                    onPress={() => setMenu((old) => !old)}
+                    style={styles.headerButton}
+                  >
+                    <Text style={[styles.menuIcon, { color: colors.text }]}>
+                      ⋯
+                    </Text>
+                  </Pressable>
                 )}
                 {section === "workspace" && target?.sessionId && (
                   <SessionActions
@@ -612,7 +683,9 @@ export function NavigationShell({
                     }}
                     onSettings={openSettings}
                     onChangeServer={onChangeServer}
-                    onShipProgress={admittedShips.length ? openShipProgress : undefined}
+                    onShipProgress={
+                      admittedShips.length ? openShipProgress : undefined
+                    }
                   />
                 )}
                 <View style={styles.headerCenter}>
@@ -644,7 +717,10 @@ export function NavigationShell({
                     hostId={target.hostId}
                     sessionId={target.sessionId}
                     usage={header?.state?.state?.contextUsage ?? null}
-                    model={header?.state?.state?.model?.name ?? header?.state?.state?.model?.id}
+                    model={
+                      header?.state?.state?.model?.name ??
+                      header?.state?.state?.model?.id
+                    }
                     busy={shipBusy || status !== "open"}
                     running={!!header?.state?.running}
                     colors={colors}
@@ -653,11 +729,35 @@ export function NavigationShell({
                 {section === "workspace" && shipTarget && (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={shipBusy ? "Ship unavailable while chat is busy" : nothingToShip ? "Nothing to ship" : "Ship workspace"}
-                    accessibilityState={{ disabled: shipBusy || nothingToShip || !owner?.available || status !== "open" }}
-                    disabled={shipBusy || nothingToShip || !owner?.available || status !== "open"}
+                    accessibilityLabel={
+                      shipBusy
+                        ? "Ship unavailable while chat is busy"
+                        : nothingToShip
+                          ? "Nothing to ship"
+                          : "Ship workspace"
+                    }
+                    accessibilityState={{
+                      disabled:
+                        shipBusy ||
+                        nothingToShip ||
+                        !owner?.available ||
+                        status !== "open",
+                    }}
+                    disabled={
+                      shipBusy ||
+                      nothingToShip ||
+                      !owner?.available ||
+                      status !== "open"
+                    }
                     onPress={() => openShip(shipTarget)}
-                    style={[styles.headerButton, (shipBusy || nothingToShip || !owner?.available || status !== "open") && styles.disabled]}
+                    style={[
+                      styles.headerButton,
+                      (shipBusy ||
+                        nothingToShip ||
+                        !owner?.available ||
+                        status !== "open") &&
+                        styles.disabled,
+                    ]}
                   >
                     <ShipIcon color={colors.text} />
                   </Pressable>
@@ -1215,7 +1315,12 @@ export function NavigationShell({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  headerCenter: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center" },
+  headerCenter: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   body: { flex: 1 },
   header: {
     minHeight: 52,
