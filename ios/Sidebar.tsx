@@ -170,6 +170,7 @@ export function Sidebar({
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={action}
+      hitSlop={boxed ? 8 : undefined}
       style={[
         styles.iconButton,
         boxed && styles.boxedButton,
@@ -667,10 +668,12 @@ export function Sidebar({
                                         return (
                                           <View
                                             key={workspace.id}
-                                            style={{
-                                              flexDirection: "row",
-                                              alignItems: "center",
-                                            }}
+                                            style={[
+                                              styles.workspaceRow,
+                                              active && {
+                                                backgroundColor: colors.hover,
+                                              },
+                                            ]}
                                           >
                                             <Pressable
                                               accessibilityRole="button"
@@ -683,13 +686,7 @@ export function Sidebar({
                                               onPress={() =>
                                                 onWorkspace(host.id, workspace)
                                               }
-                                              style={[
-                                                styles.workspace,
-                                                { flex: 1 },
-                                                active && {
-                                                  backgroundColor: colors.hover,
-                                                },
-                                              ]}
+                                              style={styles.workspace}
                                             >
                                               <Text
                                                 numberOfLines={1}
@@ -710,12 +707,8 @@ export function Sidebar({
                                                 <Pressable
                                                   accessibilityRole="button"
                                                   accessibilityLabel={`Actions for ${workspace.name}`}
-                                                  style={{
-                                                    minWidth: 44,
-                                                    minHeight: 44,
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                  }}
+                                                  hitSlop={7}
+                                                  style={styles.workspaceAction}
                                                   onPress={() =>
                                                     ActionSheetIOS.showActionSheetWithOptions(
                                                       {
@@ -877,12 +870,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // Reserve the PWA's trailing action column when no native action is available.
   boxedButton: {
     height: 28,
     minWidth: 30,
     borderWidth: 1,
     borderRadius: 9,
-    marginRight: 5,
+    marginRight: 43,
   },
   plus: { fontSize: 22, fontWeight: "300", lineHeight: 26 },
   projectIcon: {
@@ -895,11 +889,25 @@ const styles = StyleSheet.create({
   },
   projectInitial: { color: "#fff", fontWeight: "600", fontSize: 13 },
   workspaceChildren: { paddingLeft: 1 },
+  workspaceRow: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 8,
+  },
   workspace: {
+    flex: 1,
+    minWidth: 0,
     minHeight: 30,
     justifyContent: "center",
     borderRadius: 8,
     paddingHorizontal: 12,
+  },
+  workspaceAction: {
+    width: 44,
+    minHeight: 30,
+    alignItems: "center",
+    justifyContent: "center",
   },
   archivedRow: {
     minHeight: 36,

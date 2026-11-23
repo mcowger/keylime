@@ -83,6 +83,59 @@ export function WorkspacePanel(props: WorkspacePanelProps) {
     />
   );
 }
+function PanelGlyph({
+  name,
+  active = false,
+}: {
+  name: "folder" | "git" | "search" | "collapse" | "refresh";
+  active?: boolean;
+}) {
+  const color = active ? theme.accent : theme.muted;
+  return (
+    <View accessible={false} style={styles.panelGlyph}>
+      {name === "folder" && (
+        <>
+          <View style={[styles.folderTab, { borderColor: color }]} />
+          <View style={[styles.folderBody, { borderColor: color }]} />
+        </>
+      )}
+      {name === "git" && (
+        <>
+          <View style={[styles.gitStem, { backgroundColor: color }]} />
+          <View style={[styles.gitBranch, { borderColor: color }]} />
+          <View
+            style={[styles.gitNode, styles.gitTop, { borderColor: color }]}
+          />
+          <View
+            style={[styles.gitNode, styles.gitBottom, { borderColor: color }]}
+          />
+          <View
+            style={[styles.gitNode, styles.gitRight, { borderColor: color }]}
+          />
+        </>
+      )}
+      {name === "search" && (
+        <>
+          <View style={[styles.searchCircle, { borderColor: color }]} />
+          <View style={[styles.searchHandle, { backgroundColor: color }]} />
+        </>
+      )}
+      {name === "collapse" && (
+        <>
+          <View style={[styles.collapseTop, { borderColor: color }]} />
+          <View style={[styles.collapseBottom, { borderColor: color }]} />
+        </>
+      )}
+      {name === "refresh" && (
+        <>
+          <View style={[styles.refreshCircle, { borderColor: color }]} />
+          <View style={[styles.refreshTop, { borderColor: color }]} />
+          <View style={[styles.refreshBottom, { borderColor: color }]} />
+        </>
+      )}
+    </View>
+  );
+}
 
 function Panel(props: WorkspacePanelProps) {
   const [view, setView] = useState("explorer");
@@ -105,12 +158,14 @@ function Panel(props: WorkspacePanelProps) {
           contentContainerStyle={styles.tabs}
         >
           <Tab
-            label="▱  Explorer"
+            label="Explorer"
+            icon="folder"
             active={view === "explorer"}
             onPress={() => setView("explorer")}
           />
           <Tab
-            label="⑂  Git"
+            label="Git"
+            icon="git"
             active={view === "git"}
             onPress={() => setView("git")}
           />
@@ -204,10 +259,12 @@ function Panel(props: WorkspacePanelProps) {
 
 function Tab({
   label,
+  icon,
   active,
   onPress,
 }: {
   label: string;
+  icon?: "folder" | "git";
   active: boolean;
   onPress: () => void;
 }) {
@@ -218,6 +275,7 @@ function Tab({
       onPress={onPress}
       style={[styles.tab, active && styles.activeTab]}
     >
+      {icon && <PanelGlyph name={icon} active={active} />}
       <Text style={[styles.tabText, active && styles.activeText]}>{label}</Text>
     </Pressable>
   );
@@ -376,10 +434,12 @@ function Explorer({
       <View style={styles.toolbar}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Collapse all folders"
           onPress={() => setOpen(new Set([cwd]))}
           style={styles.tool}
         >
-          <Text style={styles.toolText}>⌃ Collapse all folders</Text>
+          <PanelGlyph name="collapse" />
+          <Text style={styles.toolText}>Collapse all folders</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -387,12 +447,12 @@ function Explorer({
           onPress={onRefresh}
           style={styles.tool}
         >
-          <Text style={styles.toolText}>↻</Text>
+          <PanelGlyph name="refresh" />
         </Pressable>
       </View>
       <ScrollView>
         <View style={styles.root}>
-          <Text style={styles.rootIcon}>▱</Text>
+          <PanelGlyph name="folder" active />
           <View style={styles.rootText}>
             <Text style={styles.rootName}>{nameOf(cwd)}</Text>
             <Text numberOfLines={1} style={styles.rootPath}>
@@ -454,7 +514,7 @@ function Git({
         onRefresh={onRefresh}
         onShip={onShip}
       >
-        <Text style={styles.dim}>⌕</Text>
+        <PanelGlyph name="search" />
         <TextInput
           value={filter}
           onChangeText={setFilter}
@@ -615,6 +675,9 @@ const styles = StyleSheet.create({
   tab: {
     minWidth: 84,
     paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     justifyContent: "center",
     borderRightWidth: 1,
     borderColor: theme.border,
@@ -650,8 +713,119 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     backgroundColor: theme.panel,
   },
-  tool: { paddingHorizontal: 15, minHeight: 40, justifyContent: "center" },
+  tool: {
+    paddingHorizontal: 10,
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   toolText: { color: theme.muted, fontSize: 13 },
+  panelGlyph: { width: 14, height: 14, flexShrink: 0 },
+  folderTab: {
+    position: "absolute",
+    left: 1,
+    top: 2,
+    width: 6,
+    height: 4,
+    borderWidth: 1.3,
+    borderRadius: 1,
+  },
+  folderBody: {
+    position: "absolute",
+    left: 1,
+    top: 4,
+    width: 12,
+    height: 8,
+    borderWidth: 1.3,
+    borderRadius: 1.5,
+  },
+  gitStem: { position: "absolute", left: 3, top: 3, width: 1.3, height: 8 },
+  gitBranch: {
+    position: "absolute",
+    left: 3,
+    top: 3,
+    width: 7,
+    height: 5,
+    borderLeftWidth: 1.3,
+    borderBottomWidth: 1.3,
+    borderBottomLeftRadius: 4,
+  },
+  gitNode: {
+    position: "absolute",
+    width: 4,
+    height: 4,
+    borderWidth: 1.2,
+    borderRadius: 2,
+    backgroundColor: theme.panel,
+  },
+  gitTop: { left: 1.7, top: 0 },
+  gitBottom: { left: 1.7, bottom: 0 },
+  gitRight: { right: 0, top: 3 },
+  searchCircle: {
+    position: "absolute",
+    left: 1,
+    top: 1,
+    width: 9,
+    height: 9,
+    borderWidth: 1.4,
+    borderRadius: 5,
+  },
+  searchHandle: {
+    position: "absolute",
+    left: 9,
+    top: 9,
+    width: 5,
+    height: 1.4,
+    transform: [{ rotate: "45deg" }],
+  },
+  collapseTop: {
+    position: "absolute",
+    left: 4,
+    top: 1,
+    width: 6,
+    height: 6,
+    borderRightWidth: 1.4,
+    borderBottomWidth: 1.4,
+    transform: [{ rotate: "45deg" }],
+  },
+  collapseBottom: {
+    position: "absolute",
+    left: 4,
+    bottom: 1,
+    width: 6,
+    height: 6,
+    borderRightWidth: 1.4,
+    borderBottomWidth: 1.4,
+    transform: [{ rotate: "225deg" }],
+  },
+  refreshCircle: {
+    position: "absolute",
+    left: 1.5,
+    top: 1.5,
+    width: 11,
+    height: 11,
+    borderWidth: 1.4,
+    borderRadius: 6,
+  },
+  refreshTop: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: 4,
+    height: 4,
+    borderRightWidth: 1.4,
+    borderBottomWidth: 1.4,
+  },
+  refreshBottom: {
+    position: "absolute",
+    left: 0,
+    bottom: 0,
+    width: 4,
+    height: 4,
+    borderLeftWidth: 1.4,
+    borderTopWidth: 1.4,
+  },
   root: {
     flexDirection: "row",
     alignItems: "center",
@@ -662,7 +836,6 @@ const styles = StyleSheet.create({
     padding: 9,
     gap: 9,
   },
-  rootIcon: { color: theme.accent, fontSize: 19 },
   rootText: { flex: 1 },
   rootName: { color: theme.text, fontSize: 13, fontWeight: "700" },
   rootPath: {
@@ -691,6 +864,7 @@ const styles = StyleSheet.create({
   hint: { color: theme.muted, fontSize: 13, padding: 14 },
   filter: {
     flex: 1,
+    minWidth: 0,
     borderWidth: 1,
     borderColor: theme.border,
     borderRadius: 8,

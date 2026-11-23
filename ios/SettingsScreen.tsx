@@ -241,19 +241,27 @@ function Card({
   description,
   scope,
   children,
+  compact,
 }: {
   label: string;
   description?: string;
   scope?: string;
   children?: React.ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, compact && styles.compactCard]}>
       <View style={styles.cardHeading}>
         <Text style={styles.cardTitle}>{label}</Text>
         {scope && <Text style={styles.scope}>{scope}</Text>}
       </View>
-      {description && <Text style={styles.description}>{description}</Text>}
+      {description && (
+        <Text
+          style={[styles.description, compact && styles.compactDescription]}
+        >
+          {description}
+        </Text>
+      )}
       {children}
     </View>
   );
@@ -265,6 +273,7 @@ function ToggleCard({
   value,
   onChange,
   disabled,
+  compact,
 }: {
   label: string;
   description: string;
@@ -272,15 +281,26 @@ function ToggleCard({
   value: boolean;
   onChange: (value: boolean) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <View style={[styles.card, styles.toggleCard]}>
+    <View
+      style={[styles.card, compact && styles.compactCard, styles.toggleCard]}
+    >
       <View style={styles.flex}>
         <View style={styles.cardHeading}>
           <Text style={[styles.cardTitle, styles.flex]}>{label}</Text>
           {scope && <Text style={styles.scope}>{scope}</Text>}
         </View>
-        <Text style={styles.description}>{description}</Text>
+        <Text
+          style={[
+            styles.description,
+            compact && styles.compactDescription,
+            compact && styles.compactToggleDescription,
+          ]}
+        >
+          {description}
+        </Text>
       </View>
       <Switch
         accessibilityLabel={label}
@@ -295,12 +315,14 @@ function ToggleCard({
 function Heading({
   title,
   description,
+  compact,
 }: {
   title: string;
   description?: string;
+  compact?: boolean;
 }) {
   return (
-    <View style={styles.heading}>
+    <View style={[styles.heading, compact && styles.compactHeading]}>
       <Text accessibilityRole="header" style={styles.headingTitle}>
         {title}
       </Text>
@@ -887,7 +909,10 @@ export function SettingsScreen({
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[
+              styles.content,
+              tab === "general" && styles.generalContent,
+            ]}
           >
             {!!error && (
               <Text accessibilityRole="alert" style={styles.error}>
@@ -906,6 +931,7 @@ export function SettingsScreen({
                 <Heading
                   title="Interface & Behavior"
                   description="Controls interface presentation, notification sounds, and execution submission mode."
+                  compact
                 />
                 {prefs.map((item) => {
                   const value = preferences?.[item.key];
@@ -917,6 +943,7 @@ export function SettingsScreen({
                         label={item.label}
                         description={item.description}
                         scope="UI"
+                        compact
                       >
                         <Choice
                           label={item.label}
@@ -941,6 +968,7 @@ export function SettingsScreen({
                       label={item.label}
                       description={item.description}
                       scope="UI"
+                      compact
                       value={value === true}
                       onChange={(next) => onChangePreference(item.key, next)}
                     />
@@ -1388,6 +1416,8 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
     gap: 20,
   },
+  generalContent: { paddingTop: 16 },
+  compactHeading: { gap: 4, marginBottom: 4 },
   heading: { gap: 9, marginBottom: 14 },
   headingTitle: { color: theme.text, fontSize: 23, fontWeight: "700" },
   subtitle: { color: theme.muted, fontSize: 13, lineHeight: 19 },
@@ -1401,6 +1431,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   toggleCard: { flexDirection: "row", alignItems: "center", gap: 16 },
+  compactCard: { paddingVertical: 16, paddingHorizontal: 22, gap: 8 },
+  compactDescription: { fontSize: 12, lineHeight: 17.4 },
+  compactToggleDescription: { marginTop: 4 },
   cardHeading: {
     flexDirection: "row",
     alignItems: "center",

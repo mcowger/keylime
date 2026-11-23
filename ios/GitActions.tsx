@@ -6,11 +6,13 @@ import {
   StyleSheet,
   Text,
   View,
+  useColorScheme,
 } from "react-native";
 import type { operations } from "./generated/web-http";
 import { normalizeOrigin } from "./keylime-http";
 import { nativeRequest } from "./native-network";
 import { theme } from "./theme";
+import { ShipIcon } from "./ShellIcons";
 
 type ActionRequest =
   operations["workspaceGitAction"]["requestBody"]["content"]["application/json"];
@@ -72,6 +74,48 @@ const labels: Record<GitAction, string> = {
   "rebase-main": "Rebase onto local main",
   "rebase-origin-main": "Rebase onto origin/main",
 };
+type ActionIcon = "push" | "pull" | "fetch" | "rebase" | "refresh" | "ship";
+
+function ActionGlyph({ name }: { name: ActionIcon }) {
+  const scheme = useColorScheme();
+  if (name === "ship")
+    return <ShipIcon color={scheme === "light" ? "#625C57" : theme.muted} />;
+  return (
+    <View accessible={false} style={styles.glyph}>
+      {(name === "push" || name === "pull" || name === "fetch") && (
+        <>
+          <View
+            style={[styles.arrowShaft, name === "push" && styles.arrowShaftUp]}
+          />
+          <View
+            style={[styles.arrowHead, name === "push" && styles.arrowHeadUp]}
+          />
+          <View
+            style={name === "fetch" ? styles.downloadTray : styles.arrowLine}
+          />
+        </>
+      )}
+      {name === "rebase" && (
+        <>
+          <View style={styles.mergeStem} />
+          <View style={styles.mergeBranch} />
+          <View style={[styles.mergeNode, styles.mergeTop]} />
+          <View style={[styles.mergeNode, styles.mergeBottom]} />
+          <View style={[styles.mergeNode, styles.mergeEnd]} />
+        </>
+      )}
+      {name === "refresh" && (
+        <>
+          <View style={styles.refreshCircle} />
+          <View style={[styles.refreshArrow, styles.refreshArrowTop]} />
+          <View style={[styles.refreshArrow, styles.refreshArrowBottom]} />
+        </>
+      )}
+    </View>
+  );
+}
+
+const iconColor = DynamicColorIOS({ dark: theme.muted, light: "#625C57" });
 
 export function GitActions({
   origin,
@@ -156,7 +200,7 @@ export function GitActions({
     ]);
   const button = (
     label: string,
-    symbol: string,
+    symbol: ActionIcon,
     onPress: () => void,
     isDisabled: boolean,
   ) => (
@@ -169,19 +213,19 @@ export function GitActions({
       onPress={onPress}
       style={[styles.button, isDisabled && styles.disabled]}
     >
-      <Text style={styles.icon}>{symbol}</Text>
+      <ActionGlyph name={symbol} />
     </Pressable>
   );
   return (
     <>
       <View style={styles.actions}>
         {children}
-        {button("Push", "↑", () => confirm("push"), blocked)}
-        {button("Pull", "↓", () => confirm("pull"), blocked)}
-        {button("Fetch", "⇩", () => confirm("fetch"), blocked)}
-        {button("Rebase", "⑂", rebase, blocked)}
-        {button("Refresh Git status", "↻", onRefresh, false)}
-        {onShip && button("Ship", "⇧", onShip, blocked)}
+        {button("Push", "push", () => confirm("push"), blocked)}
+        {button("Pull", "pull", () => confirm("pull"), blocked)}
+        {button("Fetch", "fetch", () => confirm("fetch"), blocked)}
+        {button("Rebase", "rebase", rebase, blocked)}
+        {button("Refresh Git status", "refresh", onRefresh, false)}
+        {onShip && button("Ship", "ship", onShip, blocked)}
       </View>
       {state.pending && <Text style={styles.status}>Running Git action…</Text>}
       {state.error && (
@@ -197,19 +241,120 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: 10,
-    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 6,
   },
   button: {
-    minWidth: 34,
-    minHeight: 40,
+    width: 26,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
   },
-  disabled: { opacity: 0.45 },
-  icon: {
-    color: DynamicColorIOS({ dark: theme.muted, light: "#625C57" }),
-    fontSize: 18,
+  disabled: { opacity: 0.5 },
+  glyph: { width: 14, height: 14 },
+  arrowShaft: {
+    position: "absolute",
+    left: 6.3,
+    top: 1,
+    height: 9,
+    width: 1.4,
+    backgroundColor: iconColor,
+  },
+  arrowShaftUp: { top: 3 },
+  arrowHead: {
+    position: "absolute",
+    left: 4,
+    top: 5,
+    width: 6,
+    height: 6,
+    borderRightWidth: 1.4,
+    borderBottomWidth: 1.4,
+    borderColor: iconColor,
+    transform: [{ rotate: "45deg" }],
+  },
+  arrowHeadUp: { top: 2, transform: [{ rotate: "225deg" }] },
+  arrowLine: {
+    position: "absolute",
+    left: 2,
+    bottom: 1,
+    width: 10,
+    height: 1.4,
+    backgroundColor: iconColor,
+  },
+  downloadTray: {
+    position: "absolute",
+    left: 1,
+    bottom: 1,
+    width: 12,
+    height: 4,
+    borderWidth: 1.4,
+    borderTopWidth: 0,
+    borderColor: iconColor,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  mergeStem: {
+    position: "absolute",
+    left: 3,
+    top: 3,
+    width: 1.4,
+    height: 8,
+    backgroundColor: iconColor,
+  },
+  mergeBranch: {
+    position: "absolute",
+    left: 3,
+    top: 5,
+    width: 7,
+    height: 5,
+    borderBottomWidth: 1.4,
+    borderLeftWidth: 1.4,
+    borderBottomLeftRadius: 4,
+    borderColor: iconColor,
+  },
+  mergeNode: {
+    position: "absolute",
+    width: 4,
+    height: 4,
+    borderWidth: 1.2,
+    borderRadius: 2,
+    borderColor: iconColor,
+    backgroundColor: DynamicColorIOS({
+      dark: theme.background,
+      light: "#F7F5F0",
+    }),
+  },
+  mergeTop: { left: 1.7, top: 0 },
+  mergeBottom: { left: 1.7, bottom: 0 },
+  mergeEnd: { right: 0, bottom: 2.7 },
+  refreshCircle: {
+    position: "absolute",
+    left: 1.5,
+    top: 1.5,
+    width: 11,
+    height: 11,
+    borderWidth: 1.4,
+    borderColor: iconColor,
+    borderRadius: 6,
+  },
+  refreshArrow: {
+    position: "absolute",
+    width: 4,
+    height: 4,
+    borderColor: iconColor,
+  },
+  refreshArrowTop: {
+    right: 0,
+    top: 0,
+    borderRightWidth: 1.4,
+    borderBottomWidth: 1.4,
+  },
+  refreshArrowBottom: {
+    left: 0,
+    bottom: 0,
+    borderLeftWidth: 1.4,
+    borderTopWidth: 1.4,
   },
   status: {
     color: DynamicColorIOS({ dark: theme.muted, light: "#625C57" }),
