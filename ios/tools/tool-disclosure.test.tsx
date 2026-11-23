@@ -149,3 +149,39 @@ test.each([false, true])(
     }
   },
 );
+
+test("plan approval hides the internal abort marker but keeps real errors and the implementation", () => {
+  const ui = render(
+    <ChatTranscript
+      messages={[
+        {
+          role: "assistant",
+          model: "fixture",
+          provider: "fixture",
+          content: [],
+          stopReason: "aborted",
+          errorMessage: "__omp.silent_abort__",
+        },
+        {
+          role: "assistant",
+          model: "fixture",
+          provider: "fixture",
+          content: [],
+          stopReason: "error",
+          errorMessage: "Provider unavailable",
+        },
+        {
+          role: "assistant",
+          model: "fixture",
+          provider: "fixture",
+          content: [{ type: "text", text: "Implementation started" }],
+        },
+      ]}
+      entryIds={["internal", "error", "result"]}
+    />,
+  );
+  expect(ui.queryByText("__omp.silent_abort__")).toBeNull();
+  expect(ui.getByText("Provider unavailable")).toBeTruthy();
+  expect(ui.getByText("Implementation started")).toBeTruthy();
+  ui.unmount();
+});

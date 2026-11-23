@@ -66,6 +66,14 @@ type Block = Assistant["content"][number];
 type ImageBlock = Extract<Block, { type: "image" }>;
 type ToolBlock = Extract<Block, { type: "toolCall" }>;
 type ToolResult = Extract<TranscriptMessage, { role: "toolResult" }>;
+// OMP stamps this exact marker only on expected internal plan-mode aborts.
+function assistantError(message: Assistant): string | undefined {
+  return message.stopReason === "aborted" &&
+    message.errorMessage === "__omp.silent_abort__"
+    ? undefined
+    : message.errorMessage;
+}
+
 type MessageAction = (
   message: TranscriptMessage,
   entryId: string,
@@ -149,6 +157,7 @@ function makeRows(
         provider: live.provider ?? "",
         timestamp: live.timestamp,
         errorMessage: live.errorMessage,
+        stopReason: live.stopReason,
       },
       index: messages.length,
       entryId: "live",
@@ -268,7 +277,7 @@ function makeRows(
     }
     const finalIsText = mode === "text";
     flushBlocks(true);
-    if (msg.errorMessage?.trim() && !finalIsText)
+    if (assistantError(msg)?.trim() && !finalIsText)
       addMessage(ref, "error", [], true);
   }
   return { rows, results };
@@ -407,6 +416,8 @@ function MessageRow({
   if (msg.role !== "user" && msg.role !== "assistant") return null;
   const user = msg.role === "user";
   const content = user ? msg.content : (blocks ?? msg.content);
+  const errorMessage =
+    msg.role === "assistant" ? assistantError(msg) : undefined;
   const text = textOf(content);
   const images =
     typeof content === "string"
@@ -418,7 +429,7 @@ function MessageRow({
       !!images.length ||
       (msg.role === "assistant" &&
         last !== false &&
-        !!msg.errorMessage &&
+        !!errorMessage &&
         !!onFork));
   const time = last !== false ? timestamp(msg.timestamp) : "";
   return (
@@ -436,11 +447,11 @@ function MessageRow({
           <Images blocks={images} origin={mediaOrigin} />
         </View>
       </View>
-      {msg.role === "assistant" && last !== false && !!msg.errorMessage && (
+      {msg.role === "assistant" && last !== false && !!errorMessage && (
         <View style={styles.error}>
           <Text style={styles.errorTitle}>Error</Text>
           <Text selectable style={styles.errorText}>
-            {msg.errorMessage}
+            {errorMessage}
           </Text>
         </View>
       )}
@@ -1004,6 +1015,8 @@ export function ChatTranscript({
   const interacted = useRef(false);
   const requested = useRef<string | undefined>(undefined);
   const positioned = useRef(false);
+  const viewportHeight = useRef(0);
+  const correctingViewport = useRef(false);
   const [showLatest, setShowLatest] = useState(false);
   const [groupOpen, setGroupOpen] = useState<ReadonlyMap<string, boolean>>(
     () => new Map(),
@@ -1018,6 +1031,8 @@ export function ChatTranscript({
     interacted.current = false;
     requested.current = undefined;
     positioned.current = false;
+    viewportHeight.current = 0;
+    correctingViewport.current = false;
     setGroupOpen(new Map());
     setToolOpen(new Map());
   }
@@ -1050,6 +1065,19 @@ export function ChatTranscript({
       const { contentOffset, contentSize, layoutMeasurement } =
         event.nativeEvent;
       if (!positioned.current) return;
+      if (correctingViewport.current) return;
+      if (viewportHeight.current !== layoutMeasurement.height) {
+        viewportHeight.current = layoutMeasurement.height;
+        if (following.current) {
+          correctingViewport.current = true;
+          requestAnimationFrame(() => {
+            if (following.current)
+              list.current?.scrollToEnd({ animated: false });
+            correctingViewport.current = false;
+          });
+          return;
+        }
+      }
       const atBottom =
         contentSize.height - layoutMeasurement.height - contentOffset.y < 48;
       following.current = atBottom;
@@ -1126,6 +1154,19 @@ export function ChatTranscript({
           }}
           onScroll={onScroll}
           scrollEventThrottle={16}
+          onLayout={(event) => {
+            const height = event.nativeEvent.layout.height;
+            if (height === viewportHeight.current) return;
+            viewportHeight.current = height;
+            if (positioned.current && following.current) {
+              correctingViewport.current = true;
+              requestAnimationFrame(() => {
+                if (following.current)
+                  list.current?.scrollToEnd({ animated: false });
+                correctingViewport.current = false;
+              });
+            }
+          }}
           onContentSizeChange={() => {
             if (!positioned.current || following.current) {
               positioned.current = true;

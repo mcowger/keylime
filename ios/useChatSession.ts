@@ -56,6 +56,54 @@ export type ChatDialogValue = Extract<
   BrowserCommand,
   { type: "ui_response" }
 >["value"];
+type PlanState = NonNullable<
+  Extract<
+    BrowserComponents["schemas"]["BrowserReply_get_plan_state"]["data"],
+    { success: true }
+  >["data"]
+>;
+export type ChatPlanProposal = NonNullable<PlanState["proposal"]>;
+
+function readPlanState(value: unknown): PlanState | null {
+  if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
+  const proposal = value.proposal;
+  if (
+    proposal !== undefined &&
+    (!value.enabled ||
+      !isRecord(proposal) ||
+      typeof proposal.id !== "string" ||
+      typeof proposal.title !== "string" ||
+      typeof proposal.content !== "string" ||
+      typeof proposal.planFilePath !== "string")
+  )
+    return null;
+  return {
+    enabled: value.enabled,
+    ...(proposal === undefined
+      ? {}
+      : { proposal: proposal as ChatPlanProposal }),
+  };
+}
+
+type PendingPlanDecision = {
+  id: string;
+  proposal: ChatPlanProposal;
+  uncertain: boolean;
+  inFlight: boolean;
+  reconcile?: () => void;
+};
+const planDecisionsByLink = new WeakMap<
+  BrowserLink,
+  { current: Map<string, PendingPlanDecision> }
+>();
+function planDecisions(link: BrowserLink) {
+  let pending = planDecisionsByLink.get(link);
+  if (!pending) {
+    pending = { current: new Map() };
+    planDecisionsByLink.set(link, pending);
+  }
+  return pending;
+}
 export type ChatAttachments = Pick<
   Extract<BrowserCommand, { type: "prompt" }>,
   "images" | "uploads" | "uploadProofs"
@@ -71,6 +119,9 @@ export type ChatSessionView = {
   context: ChatContext | null;
   state: StateResponse | null;
   liveMessage: LiveMessage | null;
+  planEnabled: boolean;
+  planProposal?: ChatPlanProposal;
+  planCommandPending: boolean;
   modelActivity?: ModelActivity;
   toolResults: ChatToolResults;
   historyView: number;
@@ -94,6 +145,8 @@ const initial = (): ChatSessionView => ({
   context: null,
   state: null,
   liveMessage: null,
+  planEnabled: false,
+  planCommandPending: false,
   toolResults: {},
   historyView: 0,
   queue: emptyQueue,
@@ -177,6 +230,7 @@ export function useChatSession({
     new Map<string, Map<string, ChatUserMessage>>(),
   );
   const uncertainDialogs = useRef(new Map<string, Set<string | number>>());
+  const pendingPlans = planDecisions(link);
   const runtime = useRef<{
     key: string;
     issue(command: BrowserCommand): Promise<BrowserReply>;
@@ -187,6 +241,11 @@ export function useChatSession({
     ): Promise<void>;
     sendFirst(message: string, attachments?: ChatAttachments): Promise<void>;
     respondDialog(value?: ChatDialogValue): Promise<void>;
+    respondPlanProposal(
+      id: string,
+      approved: boolean,
+      feedback?: string,
+    ): Promise<boolean>;
     older(): Promise<void>;
     refresh(): Promise<void>;
   } | null>(null);
@@ -200,6 +259,19 @@ export function useChatSession({
     let disposed = false;
     const current = () => !disposed && keyRef.current === key;
     let view = initial();
+    const savedPlan = pendingPlans.current.get(key);
+    if (savedPlan) {
+      view = {
+        ...view,
+        planEnabled: true,
+        planProposal: savedPlan.proposal,
+        planCommandPending: true,
+      };
+    }
+    let planRevision = 0;
+    let planModePending = false;
+    let planModeAwaitingAuthority = false;
+    let planSynchronized = false;
     let cursor: Cursor | null = null;
     let rootKnown = false;
     let revision: string | null = null;
@@ -376,6 +448,55 @@ export function useChatSession({
         view = { ...view, liveMessage: null };
       }
     }
+    function applyPlanState(state: PlanState) {
+      if (planModeAwaitingAuthority) {
+        planModeAwaitingAuthority = false;
+        planModePending = false;
+      }
+      const pending = pendingPlans.current.get(key);
+      if (
+        pending &&
+        !pending.inFlight &&
+        (!pending.uncertain || state.proposal?.id !== pending.id)
+      )
+        pendingPlans.current.delete(key);
+      view = {
+        ...view,
+        planEnabled: state.enabled,
+        planProposal: state.proposal,
+        planCommandPending: planModePending || pendingPlans.current.has(key),
+      };
+    }
+    function applyPlanSnapshot(value: unknown, revisionAtStart: number) {
+      if (!current() || planRevision !== revisionAtStart) return false;
+      if (value === null) {
+        // No live child is a valid passive read, but cannot resolve an
+        // interrupted decision without a process-exit confirmation.
+        if (pendingPlans.current.has(key)) return false;
+        applyPlanState({ enabled: false });
+      } else {
+        const state = readPlanState(value);
+        if (!state) return false;
+        applyPlanState(state);
+      }
+      planSynchronized = true;
+      publish();
+      return true;
+    }
+    async function refreshPlan() {
+      if (!current()) return false;
+      const revisionAtStart = ++planRevision;
+      try {
+        const reply = await issueRaw({ type: "get_plan_state" });
+        const data: unknown =
+          "success" in reply.data && reply.data.success
+            ? reply.data.data
+            : undefined;
+        return applyPlanSnapshot(data, revisionAtStart);
+      } catch {
+        return false;
+      }
+    }
     function applyEvent(event: Event) {
       if (!current()) return;
       const coveredByLive =
@@ -387,6 +508,10 @@ export function useChatSession({
         mark &&
         event.type !== "ui_request" &&
         event.type !== "ui_end" &&
+        event.type !== "plan_state_changed" &&
+        event.type !== "connected" &&
+        event.type !== "disconnected" &&
+        event.type !== "process_exit" &&
         typeof mark.streamId === "string" &&
         typeof mark.sequence === "number"
       ) {
@@ -469,17 +594,43 @@ export function useChatSession({
           recoverHandoffs();
           view = { ...view, ready: true };
           void Promise.resolve().then(() => refresh(true));
+          void refreshPlan();
           break;
         case "disconnected":
         case "process_exit":
           wrapperConnected = false;
+          planRevision += 1;
+          if (event.type === "process_exit") {
+            pendingPlans.current.delete(key);
+            if (planModeAwaitingAuthority) {
+              planModeAwaitingAuthority = false;
+              planModePending = false;
+            }
+          }
+          planSynchronized = false;
           view = {
             ...view,
             ready: false,
             active: false,
             modelActivity: undefined,
+            ...(event.type === "process_exit"
+              ? {
+                  planEnabled: false,
+                  planProposal: undefined,
+                  planCommandPending: planModePending,
+                }
+              : {}),
           };
           break;
+        case "plan_state_changed": {
+          const state = readPlanState(event);
+          if (state) {
+            planRevision += 1;
+            planSynchronized = true;
+            applyPlanState(state);
+          }
+          break;
+        }
         case "agent_start":
           view = {
             ...view,
@@ -597,7 +748,14 @@ export function useChatSession({
         view = { ...view, toolResults: {}, historyView: view.historyView + 1 };
         publish();
       }
-      if (event.type === "ui_request" || event.type === "ui_end") {
+      if (
+        event.type === "ui_request" ||
+        event.type === "ui_end" ||
+        event.type === "connected" ||
+        event.type === "disconnected" ||
+        event.type === "process_exit" ||
+        event.type === "plan_state_changed"
+      ) {
         applyEvent(event);
         return;
       }
@@ -838,7 +996,10 @@ export function useChatSession({
       });
       return readPromise;
     }
-    async function issue(command: BrowserCommand): Promise<BrowserReply> {
+    async function issueRaw(
+      command: BrowserCommand,
+      allowSessionChange = false,
+    ): Promise<BrowserReply> {
       if (!current()) throw new Error("Session changed");
       const reply = await link.command(
         sessionId!,
@@ -846,14 +1007,127 @@ export function useChatSession({
         command,
         advisorRef.current,
       );
-      if (!current()) throw new Error("Session changed");
+      if (!current() && !allowSessionChange) throw new Error("Session changed");
       if (!("success" in reply.data) || !reply.data.success) {
-        const failure = reply.data as { error?: string; delivery?: string };
+        const failure = reply.data as {
+          error?: string;
+          delivery?: string;
+          code?: string;
+        };
         const error = new Error(failure.error ?? "Command failed");
-        Object.assign(error, { delivery: failure.delivery });
+        Object.assign(error, {
+          delivery: failure.delivery,
+          code: failure.code,
+        });
         throw error;
       }
       return reply;
+    }
+    async function issue(command: BrowserCommand): Promise<BrowserReply> {
+      if (command.type === "respond_plan_proposal")
+        throw new Error("Use respondPlanProposal to decide a plan.");
+      if (command.type !== "get_plan_state" && command.type !== "set_plan_mode")
+        return issueRaw(command);
+      if (command.type === "set_plan_mode") {
+        if (planModePending || pendingPlans.current.has(key))
+          throw new Error("A plan command is already pending.");
+        planModePending = true;
+        view = { ...view, planCommandPending: true };
+        publish();
+      }
+      const revisionAtStart = ++planRevision;
+      try {
+        const reply = await issueRaw(command);
+        const data: unknown =
+          "success" in reply.data && reply.data.success
+            ? reply.data.data
+            : undefined;
+        applyPlanSnapshot(data, revisionAtStart);
+        return reply;
+      } catch (cause) {
+        if (command.type === "set_plan_mode" && current()) {
+          planModeAwaitingAuthority = true;
+          await refreshPlan();
+        }
+        throw cause;
+      } finally {
+        if (command.type === "set_plan_mode") {
+          if (!planModeAwaitingAuthority) planModePending = false;
+          if (current()) {
+            view = {
+              ...view,
+              planCommandPending:
+                planModePending || pendingPlans.current.has(key),
+            };
+            publish();
+          }
+        }
+      }
+    }
+    async function respondPlanProposal(
+      id: string,
+      approved: boolean,
+      feedback?: string,
+    ): Promise<boolean> {
+      const proposal = view.planProposal;
+      if (
+        !current() ||
+        !view.ready ||
+        !planSynchronized ||
+        !proposal ||
+        proposal.id !== id ||
+        planModePending ||
+        pendingPlans.current.has(key)
+      )
+        return false;
+      const pending: PendingPlanDecision = {
+        id,
+        proposal,
+        uncertain: false,
+        inFlight: true,
+      };
+      pendingPlans.current.set(key, pending);
+      const revisionAtStart = ++planRevision;
+      view = { ...view, planCommandPending: true };
+      publish();
+      try {
+        const reply = await issueRaw(
+          {
+            type: "respond_plan_proposal",
+            id,
+            approved,
+            ...(feedback === undefined ? {} : { feedback }),
+          },
+          true,
+        );
+        const data: unknown =
+          "success" in reply.data && reply.data.success
+            ? reply.data.data
+            : undefined;
+        const state = readPlanState(data);
+        if (!state) throw new Error("Invalid plan decision response.");
+        pending.inFlight = false;
+        if (pendingPlans.current.get(key) === pending && current()) {
+          if (!applyPlanSnapshot(state, revisionAtStart)) await refreshPlan();
+          void refresh(true);
+        } else if (!current()) pending.reconcile?.();
+        return true;
+      } catch (cause) {
+        pending.inFlight = false;
+        pending.uncertain = !(
+          (cause instanceof BrowserLinkError &&
+            cause.code === "transport_unavailable") ||
+          (isRecord(cause) &&
+            (cause.delivery === "refused" ||
+              cause.code === "stale_proposal" ||
+              cause.code === "rpc_command_failed"))
+        );
+        if (pendingPlans.current.get(key) === pending && current()) {
+          await refreshPlan();
+          void refresh(true);
+        } else if (!current()) pending.reconcile?.();
+        return false;
+      }
     }
     async function respondDialog(value?: ChatDialogValue) {
       const request = view.dialog;
@@ -1133,6 +1407,7 @@ export function useChatSession({
         {
           onOpen() {
             wrapperConnected = false;
+            planSynchronized = false;
             if (!current()) return;
             clearTimeout(dialogTimer);
             view = {
@@ -1143,12 +1418,15 @@ export function useChatSession({
               dialogError: null,
             };
             publish();
+            void refreshPlan();
             if (initialized) void refresh(true);
             else stateRequested = true;
           },
           onEnd(reason, code) {
             if (!current()) return;
+            planSynchronized = false;
             wrapperConnected = false;
+            planRevision += 1;
             if (code) {
               subscribed = false;
               releaseSession = undefined;
@@ -1169,12 +1447,17 @@ export function useChatSession({
         },
       );
     }
+    if (savedPlan)
+      savedPlan.reconcile = () => {
+        void refreshPlan();
+      };
     runtime.current = {
       key,
       issue,
       send,
       sendFirst,
       respondDialog,
+      respondPlanProposal,
       older,
       refresh: () => refresh(true),
     };
@@ -1299,6 +1582,15 @@ export function useChatSession({
       return Promise.reject(new Error("No active session"));
     return target.respondDialog(value);
   }, []);
+  const respondPlanProposal = useCallback(
+    (id: string, approved: boolean, feedback?: string) => {
+      const target = runtime.current;
+      if (!target || target.key !== keyRef.current)
+        return Promise.resolve(false);
+      return target.respondPlanProposal(id, approved, feedback);
+    },
+    [],
+  );
   const stop = useCallback(async () => {
     await issueCommand({ type: "abort" });
   }, [issueCommand]);
@@ -1328,6 +1620,7 @@ export function useChatSession({
     send,
     sendFirst,
     respondDialog,
+    respondPlanProposal,
     stop,
     loadOlder,
     refresh,

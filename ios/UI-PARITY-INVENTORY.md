@@ -6,20 +6,23 @@ The [PWA baseline](screenshots/baseline/README.md) is a dark-mode iPhone 18 Pro 
 
 ## Fix first
 
-- [ ] **Composer hidden by the keyboard.** On the reported physical iPhone, the keyboard with Write with Siri visible covers the toolbar and part of the composer. [PWA 35](screenshots/baseline/35-chat-keyboard.png) keeps the whole card above the keyboard. The earlier native `milestone-2/native/keyboard.png` has a focused field but no visible software keyboard; it doesn't cover the failure.
-- [ ] **Pink focus outline trails the composer.** Motion defect reported on the phone, not something a still can prove. Keep the focus treatment and check that the border stays attached to the card during keyboard appearance and dismissal.
-  - Simulator evidence: `screenshots/parity/01-keyboard/native-after.png` and `transition.mp4`. The saved chat's Send button ended at y=540 pt with the iOS keyboard's Q row at y=597 pt. This does not verify the physical-iPhone Writing Tools variant.
+- [ ] **Keyboard focus and motion.** The latest physical-iPhone recording shows the keyboard starting to rise and then disappearing. In a controlled simulator comparison of the same chat with the software keyboard enabled, changing only `collapsable={false}` kept the keyboard open; without it, the keyboard dismissed. A separate search input still opened the software keyboard in the comparison build. This matches a known React Native Fabric view-flattening issue, but native reparenting was not directly instrumented. Physical-iPhone motion, Write with Siri, and transcript follow remain to be checked on device.
+- [ ] **Pink focus outline trails the composer.** Motion defect reported on the phone, not something a still can prove. Check the border stays attached during both keyboard appearance and dismissal. Earlier simulator captures in `screenshots/parity/01-keyboard/` do not verify the physical-iPhone Writing Tools variant.
+- [ ] **More actions menu.** Attach files now offers Photo Library and Files. In the simulator, a HEIC photo was supplied as JPEG, a PNG stayed PNG, and both reached the fixture session. Files opened and cancelled normally. Check the menu and photo selection on a physical iPhone.
+- [ ] **Model picker.** The phone recording shows roles and model catalog rows without PWA favorites or reasoning controls. Match favorites, role/model selection, supported reasoning levels, Plan and Auto prewalk against the same host and catalog, including persistence and startup application. Verify the picker with the keyboard open and closed.
+- [ ] **New-chat typing and staged selections.** The simulator now accepts text in a new chat after switching from a focused saved chat, and returning to the saved chat preserves its draft. The first-prompt handoff of staged reasoning, Plan and Auto prewalk still needs verification.
 - [x] **Saved-chat header.** One overflow, workspace breadcrumb, session context, and panel toggle. Checked the header on a saved chat. Long titles still need a matched [PWA 52](screenshots/baseline/52-long-conversation.png) capture.
 - [x] **Ship placement and disabled states.** The existing dialog opens from the header on a qualifying non-default Git workspace. Ship remained visible but disabled both during a run and when the fixture worktree had nothing to ship.
 
 ## Chat polish
 
+- [x] **Plan proposal review.** On the same isolated runner, the installed PWA and native iPhone both showed the pending plan. Native feedback requested revisions; the runner received `Add tests`, produced a new proposal, then accepted native approval and continued into implementation. A reload retained the completed transcript without exposing OMP's internal transition marker. Snapshot/event ordering and uncertain decision recovery have regression coverage.
 - [x] **Composer activity feedback.** Native shows the model's idle, waiting, streaming, and tooling phases without changing the Send/Stop controls. See the captures below for streaming and tooling. Queued and host-offline states still need matched PWA captures.
 - [x] **Transcript glyphs.** Replaced text symbols for Copy, Markdown, Read, Edit, Fork, and Process details with line icons. Labels, order, and actions are unchanged.
 - [x] **Tool activity while running and settling.** Native shows live and failed output in the existing in-place Process details. Tests exercise both end-frame races: a refresh after an end frame before the saved result arrives, and an end frame buffered during a refresh whose cursor already covers it.
   - Rendered transcript tests open live call B and its Process details, merge B into the saved group for call A, and then reconcile B's saved result. Both refresh timings preserve the open disclosures and show the result exactly once.
   - Scope retained results to the active host, session, and history view. Verify retention clears on navigation or a history edit so stale output cannot appear in another chat or branch.
-- [ ] **Composer overlays need matched keyboard captures.** [Slash suggestions](screenshots/baseline/36-chat-slash-commands.png), [attachments](screenshots/baseline/37-chat-attachments.png), and the [online model picker](screenshots/baseline/55-online-model-picker.png) have native counterparts, but native photo picker/paste captures aren't the same state as a PWA composer attachment menu. Compare card and sheet placement, chip styling, and enabled controls with the same draft and catalog. Keep the system picker and clipboard consent.
+- [ ] **Remaining composer overlays.** Compare [slash suggestions](screenshots/baseline/36-chat-slash-commands.png), attachment chips and the system picker with the same draft and catalog. Keep native clipboard consent.
 
 ## Navigation and workspace chrome
 
@@ -33,7 +36,7 @@ The [PWA baseline](screenshots/baseline/README.md) is a dark-mode iPhone 18 Pro 
 
 ## Native simulator evidence
 
-Release captures on the iPhone 18 Pro simulator are under `ios/screenshots/parity/` (local, ignored by Git). The comparisons use the existing standalone PWA baselines unless noted; no new matched PWA session was captured.
+Release captures on the iPhone 18 Pro simulator are under `ios/screenshots/parity/` (local, ignored by Git). Earlier passes used the historical PWA baselines; passes 13 and 14 use the installed standalone PWA and native app against isolated fixtures.
 
 | Pass | Capture directory | Observed |
 | --- | --- | --- |
@@ -46,8 +49,12 @@ Release captures on the iPhone 18 Pro simulator are under `ios/screenshots/parit
 | Sidebar, Home and sheets | `07-sidebar/`, `08-home-new/`, `09-sheets/` | Home, new chat, open tab sheet, both location pickers, and a Ready Effort under the expanded System. |
 | Workspace panel and Settings | `10-workspace/`, `11-settings/` | Explorer, Git controls in changed and clean fixture states, and Interface & Behavior. |
 | Archive and confirmations | `12-confirmations/` | Archive surface and Edit/Fork dialogs opened. Archive selection and confirmation target are not matched with the PWA baseline. |
+| Composer parity | `13-composer-pwa/` | Paired saved-chat and more-actions captures; native favorite survives app relaunch. A separate fixture chat's reasoning-enabled model accepted `high` in the running session. Plan and Auto prewalk were checked against the runner's `get_plan_state` and `get_auto_prewalk`. `keyboard-motion.mp4` records simulator opening and dismissal; the physical Write with Siri variant remains unverified. |
+| Plan review | `14-plan-review/` | Same pending proposal in the standalone PWA and native app, revision feedback and revised plan, then native approval and a real runner implementation turn. |
+| Keyboard and photos | `15-composer-photos/` | Software keyboard stayed open while typing in saved and new chats; switching back preserved the saved draft. Photo Library accepted two selected photos, including a HEIC supplied as JPEG, and both reached the fixture session. Files opened and cancelled without losing focus. Physical-iPhone verification remains open. |
+| Focus A/B | `16-focus-ab/` | Same simulator, chat and software-keyboard setting; only the composer's `collapsable` flag changed. With the flag the keyboard remained open for five seconds; without it the composer lost focus. `without-flag-control.png` shows the software keyboard opening in the model search field on the comparison build. |
 
-The keyboard motion was sampled on the simulator, including open and close (`01-keyboard/open-close.mp4`). No disconnected outline is visible in those samples. Write with Siri and the transition on a physical iPhone remain unverified.
+The simulator keyboard motion was sampled in `01-keyboard/open-close.mp4` and `13-composer-pwa/keyboard-motion.mp4`. The composer stayed above the standard software keyboard. This does not establish physical-iPhone motion or the Write with Siri geometry; leave those items open until checked on device.
 
 ## Capture before calling these states matched
 

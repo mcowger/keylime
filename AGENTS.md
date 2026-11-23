@@ -84,6 +84,8 @@ Session browsing and seeded UI checks work without it.
 
 Follow [`ios/AGENTS.md`](ios/AGENTS.md) for Expo setup, builds, and simulator testing, or to open the Keylime PWA in iOS Simulator and take screenshots. The root build and test commands don't cover the Expo app.
 
+Expo EAS cloud builds can incur charges. Never submit one without the user's explicit permission for that submission, including retries. Permission for an earlier build or for unrelated development does not authorize another build. Local simulator builds do not require this approval.
+
 ### Development and browser testing
 
 Use `bun run dev` for seeded development and browser checks. The launcher picks

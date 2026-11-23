@@ -28,6 +28,8 @@ AsyncAPI directions are from the server's perspective: `receive` is client → s
 
 Use macOS with Xcode, an installed iOS simulator runtime, CocoaPods on `PATH`, and mise. The `ios` script uses the pinned Bun for Expo and its `node` subprocesses; don't install Node or npm for this app.
 
+Do not submit an Expo EAS cloud build without the user's explicit permission for that submission, including retries. Cloud builds can incur charges; local simulator builds do not require this approval.
+
 From the repository root:
 
 ```sh
@@ -59,6 +61,7 @@ This compiles for the generic iOS simulator and writes `dist/Keylime.app` withou
 ```sh
 mise exec -- bun check -p tsconfig.json
 mise exec -- bun check -p tools/tsconfig.json
+mise exec -- bun check -p tools/tsconfig.tests.json
 ```
 
 For a simulator smoke, launch Release and connect to an isolated Keylime server. From the repo root, run `mise exec -- bun --no-env-file ios/tools/native-fixture.ts`; set `KEYLIME_NATIVE_FIXTURE_PASSWORD` to a disposable password for a protected fixture. Enter the printed URL and verify that Home lists the seeded chats. If Expo leaves the simulator on its Home Screen after installing, tap Keylime or run `xcrun simctl launch <SIMULATOR_UDID> com.mcowger.keylime`.

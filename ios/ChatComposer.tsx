@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { File, Paths } from "expo-file-system";
+import { selectableThinkingLevels } from "../lib/thinking-levels";
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -15,6 +17,7 @@ import {
 import type { operations } from "./generated/web-http";
 import type { ModelActivity } from "../lib/model-activity";
 import { ComposerActivity } from "./ComposerActivity";
+import { NativeReasoningSlider } from "./NativeReasoningSlider";
 
 type ModelCatalog =
   operations["getModels"]["responses"][200]["content"]["application/json"];
@@ -26,7 +29,7 @@ type ModelSelection = { provider: string; modelId: string };
 export type ChatComposerProps = {
   children?: React.ReactNode;
   canSendAttachment?: boolean;
-  onAddAttachment?: () => void;
+  moreActions?: React.ReactNode;
   selection?: { start: number; end: number };
   onSelectionChange?: (selection: { start: number; end: number }) => void;
   onComposerKey?: (key: string) => void;
@@ -37,13 +40,25 @@ export type ChatComposerProps = {
   running: boolean;
   modelActivity?: ModelActivity;
   disabled?: boolean;
+  submissionBlocked?: boolean;
+  favoriteScope: string;
   catalog: ModelCatalog | null;
   catalogLoading?: boolean;
   catalogError?: string | null;
+  pickerError?: string;
   roles: readonly ChatRole[];
   selectedModel: ModelSelection | null;
   onSelectModel: (provider: string, modelId: string) => void;
   onSelectRole: (role: ChatRole) => void;
+  thinkingLevel: string;
+  availableThinkingLevels: string[] | null;
+  onThinkingLevelChange: (level: string) => void;
+  planEnabled: boolean;
+  planUnknown: boolean;
+  planBusy: boolean;
+  prewalk: "off" | "suggest" | "on" | null;
+  onPlanChange: (enabled: boolean) => void;
+  onPrewalkChange: (mode: "off" | "suggest" | "on") => void;
   onRefreshModels?: () => void;
 };
 
@@ -53,10 +68,30 @@ const roleNames: Record<string, string> = {
   slow: "Thinking",
 };
 
+function readFavorites(): Record<string, string[]> {
+  try {
+    const file = new File(Paths.document, "native-favorite-models.json");
+    const value: unknown = file.exists ? JSON.parse(file.textSync()) : {};
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, models]) => Array.isArray(models))
+        .map(([scope, models]) => [
+          scope,
+          (models as unknown[]).filter(
+            (item): item is string => typeof item === "string",
+          ),
+        ]),
+    );
+  } catch {
+    return {};
+  }
+}
+
 export function ChatComposer({
   children,
   canSendAttachment,
-  onAddAttachment,
+  moreActions,
   selection,
   onSelectionChange,
   onComposerKey,
@@ -67,13 +102,25 @@ export function ChatComposer({
   running,
   modelActivity,
   disabled = false,
+  submissionBlocked = false,
+  favoriteScope,
   catalog,
   catalogLoading = false,
   catalogError,
+  pickerError,
   roles,
   selectedModel,
   onSelectModel,
   onSelectRole,
+  thinkingLevel,
+  availableThinkingLevels,
+  onThinkingLevelChange,
+  planEnabled,
+  planUnknown,
+  planBusy,
+  prewalk,
+  onPlanChange,
+  onPrewalkChange,
   onRefreshModels,
 }: ChatComposerProps) {
   const dark = useColorScheme() !== "light";
@@ -107,17 +154,26 @@ export function ChatComposer({
   const [query, setQuery] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
   const [provider, setProvider] = useState<string | null>(null);
+  const [favoriteScopes, setFavoriteScopes] = useState(readFavorites);
+  const favorites = new Set(favoriteScopes[favoriteScope] ?? []);
   const [focused, setFocused] = useState(false);
   const models = catalog?.modelList ?? [];
   const search = query.trim().toLocaleLowerCase();
   const expanded = search ? collapsedSearch !== query : moreOpen;
   const matchingModels = useMemo(
     () =>
-      models.filter((model) =>
-        [model.name, model.id, model.provider].some((value) =>
-          value.toLocaleLowerCase().includes(search),
+      models
+        .filter((model) =>
+          [model.name, model.id, model.provider].some((value) =>
+            value.toLocaleLowerCase().includes(search),
+          ),
+        )
+        .sort(
+          (a, b) =>
+            (a.name || a.id).localeCompare(b.name || b.id) ||
+            a.provider.localeCompare(b.provider) ||
+            a.id.localeCompare(b.id),
         ),
-      ),
     [models, search],
   );
   const matchingRoles = roles.filter((role) =>
@@ -127,12 +183,95 @@ export function ChatComposer({
       role.provider,
       role.modelId,
       role.modelName,
+      role.thinkingLevel,
       role.effectiveThinkingLevel,
     ].some((value) => value?.toLocaleLowerCase().includes(search)),
   );
+  const favoriteModels = matchingModels.filter((model) =>
+    favorites.has(`${model.provider}:${model.id}`),
+  );
+  const otherModels = matchingModels.filter(
+    (model) => !favorites.has(`${model.provider}:${model.id}`),
+  );
   const providers = [
-    ...new Set(matchingModels.map((model) => model.provider)),
-  ].sort();
+    ...new Set(otherModels.map((model) => model.provider)),
+  ].sort((a, b) =>
+    a === selectedModel?.provider
+      ? -1
+      : b === selectedModel?.provider
+        ? 1
+        : a.localeCompare(b),
+  );
+  const levels = selectableThinkingLevels(availableThinkingLevels);
+  const toggleFavorite = (key: string) => {
+    const next = new Set(favorites);
+    if (!next.delete(key)) next.add(key);
+    const scopes = { ...favoriteScopes, [favoriteScope]: [...next] };
+    setFavoriteScopes(scopes);
+    try {
+      new File(Paths.document, "native-favorite-models.json").writeSync(
+        JSON.stringify(scopes),
+      );
+    } catch {
+      // Keep the in-memory choice when storage is unavailable.
+    }
+  };
+  const renderModel = (
+    model: ModelCatalog["modelList"][number],
+    showProvider = false,
+  ) => {
+    const key = `${model.provider}:${model.id}`;
+    const favorite = favorites.has(key);
+    const selected =
+      selectedModel?.provider === model.provider &&
+      selectedModel.modelId === model.id;
+    return (
+      <View key={key} style={styles.modelRow}>
+        <Pressable
+          accessibilityRole="radio"
+          accessibilityState={{
+            checked: selected,
+            disabled: disabled || running,
+          }}
+          disabled={disabled || running}
+          onPress={() => {
+            onSelectModel(model.provider, model.id);
+            closePicker();
+          }}
+          style={[styles.row, styles.modelChoice]}
+        >
+          <Text style={{ color: colors.muted }}>{selected ? "✓" : "  "}</Text>
+          <Text
+            numberOfLines={1}
+            style={[styles.rowText, { color: colors.muted }]}
+          >
+            {model.name || model.id}
+          </Text>
+          {showProvider && (
+            <Text
+              numberOfLines={1}
+              style={[styles.rowMeta, { color: colors.dim }]}
+            >
+              {model.provider}
+            </Text>
+          )}
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${favorite ? "Remove" : "Add"} ${model.name || model.id} (${model.provider}) ${favorite ? "from" : "to"} favorites`}
+          accessibilityState={{ selected: favorite }}
+          onPress={() => toggleFavorite(key)}
+          style={styles.star}
+        >
+          <Text
+            style={{ color: favorite ? colors.text : colors.dim, fontSize: 18 }}
+          >
+            {favorite ? "★" : "☆"}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  };
   const selectedName = models.find(
     (model) =>
       model.provider === selectedModel?.provider &&
@@ -148,7 +287,9 @@ export function ChatComposer({
         : "No models");
   const error = catalogError || catalog?.modelError;
   const canSend =
-    !disabled && (draft.trim().length > 0 || canSendAttachment === true);
+    !disabled &&
+    !submissionBlocked &&
+    (draft.trim().length > 0 || canSendAttachment === true);
 
   const closePicker = () => {
     setPickerOpen(false);
@@ -188,11 +329,19 @@ export function ChatComposer({
         </View>
       )}
       <View
+        // Keep the native container stable when focus adds a shadow.
+        collapsable={false}
         style={[
           styles.composer,
           {
             backgroundColor: colors.background,
             borderColor: focused ? "#A94B80" : colors.border,
+          },
+          focused && {
+            shadowColor: dark ? "#EC5BAB" : "#A62972",
+            shadowOpacity: 0.28,
+            shadowRadius: 4,
+            shadowOffset: { width: 0, height: 0 },
           },
         ]}
       >
@@ -215,23 +364,19 @@ export function ChatComposer({
         />
         {children}
         <View style={[styles.toolbar, { borderColor: colors.border }]}>
-          {onAddAttachment && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Composer options"
-              onPress={onAddAttachment}
-              style={styles.send}
-            >
-              <Text style={[styles.sendIcon, { color: colors.muted }]}>+</Text>
-            </Pressable>
-          )}
+          {moreActions}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Models: ${modelLabel}`}
             onPress={openPicker}
             style={styles.modelButton}
           >
-            <Text style={[styles.modelIcon, { color: colors.muted }]}>◯</Text>
+            <Text
+              accessibilityLabel={`Reasoning: ${thinkingLevel}`}
+              style={[styles.modelIcon, { color: colors.muted }]}
+            >
+              ◉
+            </Text>
             <Text
               numberOfLines={1}
               style={[styles.modelLabel, { color: colors.muted }]}
@@ -282,7 +427,7 @@ export function ChatComposer({
       <Modal
         transparent
         visible={pickerOpen}
-        animationType="fade"
+        animationType="none"
         onRequestClose={closePicker}
       >
         <KeyboardAvoidingView
@@ -310,27 +455,38 @@ export function ChatComposer({
                 {catalogLoading ? "Loading…" : catalog ? models.length : ""}
               </Text>
             </View>
-            <TextInput
-              accessibilityLabel="Search models"
-              value={query}
-              onChangeText={(value) => {
-                setQuery(value);
-                setCollapsedSearch(null);
-                setProvider(null);
-              }}
-              placeholder="Search models..."
-              placeholderTextColor={colors.dim}
-              autoCorrect={false}
-              returnKeyType="search"
+            <View
               style={[
                 styles.search,
                 {
-                  color: colors.text,
                   borderColor: colors.border,
                   backgroundColor: colors.background,
                 },
               ]}
-            />
+            >
+              <View pointerEvents="none" style={styles.searchIcon}>
+                <View
+                  style={[styles.searchCircle, { borderColor: colors.dim }]}
+                />
+                <View
+                  style={[styles.searchHandle, { backgroundColor: colors.dim }]}
+                />
+              </View>
+              <TextInput
+                accessibilityLabel="Search models"
+                value={query}
+                onChangeText={(value) => {
+                  setQuery(value);
+                  setCollapsedSearch(null);
+                  setProvider(null);
+                }}
+                placeholder="Search models..."
+                placeholderTextColor={colors.dim}
+                autoCorrect={false}
+                returnKeyType="search"
+                style={[styles.searchInput, { color: colors.text }]}
+              />
+            </View>
             <ScrollView keyboardShouldPersistTaps="handled" style={styles.list}>
               {!!error && (
                 <Text
@@ -338,6 +494,14 @@ export function ChatComposer({
                   style={[styles.message, { color: colors.error }]}
                 >
                   {error}
+                </Text>
+              )}
+              {!!pickerError && (
+                <Text
+                  accessibilityRole="alert"
+                  style={[styles.message, { color: colors.error }]}
+                >
+                  {pickerError}
                 </Text>
               )}
               {catalogLoading && !catalog && (
@@ -376,12 +540,20 @@ export function ChatComposer({
                     >
                       {role.modelId
                         ? `${role.modelName || role.modelId} · ${role.effectiveThinkingLevel ?? "Unspecified"}`
-                        : "Unavailable"}
+                        : "Unspecified"}
                     </Text>
                   </Pressable>
                 );
               })}
-              {(models.length > 0 || onRefreshModels) && (
+              {favoriteModels.length > 0 && (
+                <View accessibilityLabel="Favorite models">
+                  <Text style={[styles.groupLabel, { color: colors.dim }]}>
+                    FAVORITES
+                  </Text>
+                  {favoriteModels.map((model) => renderModel(model, true))}
+                </View>
+              )}
+              {(otherModels.length > 0 || onRefreshModels) && (
                 <>
                   <Pressable
                     accessibilityRole="button"
@@ -447,49 +619,11 @@ export function ChatComposer({
                         </Pressable>
                       )}
                       {(!!search || providers.length <= 1 || !!provider) &&
-                        matchingModels
+                        otherModels
                           .filter(
                             (model) => !provider || model.provider === provider,
                           )
-                          .map((model) => (
-                            <Pressable
-                              key={`${model.provider}:${model.id}`}
-                              accessibilityRole="button"
-                              accessibilityState={{
-                                selected:
-                                  selectedModel?.provider === model.provider &&
-                                  selectedModel.modelId === model.id,
-                                disabled: disabled || running,
-                              }}
-                              disabled={disabled || running}
-                              onPress={() => {
-                                onSelectModel(model.provider, model.id);
-                                closePicker();
-                              }}
-                              style={styles.row}
-                            >
-                              <Text
-                                numberOfLines={1}
-                                style={[
-                                  styles.rowText,
-                                  { color: colors.muted },
-                                ]}
-                              >
-                                {model.name || model.id}
-                              </Text>
-                              {!!search && (
-                                <Text
-                                  numberOfLines={1}
-                                  style={[
-                                    styles.rowMeta,
-                                    { color: colors.dim },
-                                  ]}
-                                >
-                                  {model.provider}
-                                </Text>
-                              )}
-                            </Pressable>
-                          ))}
+                          .map((model) => renderModel(model, !!search))}
                     </>
                   )}
                 </>
@@ -500,6 +634,21 @@ export function ChatComposer({
                 </Text>
               )}
             </ScrollView>
+            <NativeReasoningSlider
+              levels={levels}
+              value={thinkingLevel}
+              disabled={disabled || running}
+              dim={colors.dim}
+              border={colors.border}
+              accent={dark ? "#EC5BAB" : "#A62972"}
+              planEnabled={planEnabled}
+              planUnknown={planUnknown}
+              prewalk={prewalk}
+              planDisabled={disabled || planUnknown || planBusy}
+              onPlanChange={onPlanChange}
+              onPrewalkChange={onPrewalkChange}
+              onChange={onThinkingLevelChange}
+            />
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -587,7 +736,28 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     marginVertical: 8,
     paddingHorizontal: 10,
-    fontSize: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  searchInput: { flex: 1, height: "100%", padding: 0, fontSize: 13 },
+  searchIcon: { width: 14, height: 14 },
+  searchCircle: {
+    position: "absolute",
+    left: 1,
+    top: 1,
+    width: 9,
+    height: 9,
+    borderWidth: 1.5,
+    borderRadius: 5,
+  },
+  searchHandle: {
+    position: "absolute",
+    left: 9,
+    top: 9,
+    width: 5,
+    height: 1.5,
+    transform: [{ rotate: "45deg" }],
   },
   list: { flexGrow: 0 },
   groupLabel: {
@@ -604,6 +774,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+  },
+  modelRow: { flexDirection: "row", alignItems: "center" },
+  modelChoice: { flex: 1, justifyContent: "flex-start" },
+  star: {
+    width: 44,
+    minHeight: 38,
+    alignItems: "center",
+    justifyContent: "center",
   },
   rowText: { fontSize: 13, flexShrink: 1 },
   rowMeta: { fontSize: 11, flexShrink: 1, textAlign: "right" },

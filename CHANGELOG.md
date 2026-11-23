@@ -13,15 +13,19 @@ All notable changes to **key lime** (`@kahme247/ompweb`) are documented in this 
 
 ### Added
 - The native iPhone client connects to Keylime for live chat, saved history, Settings, and workspace browsing. It uses the PWA's Browser Link WebSocket; the workspace Browser viewer and terminals are not included.
+- The iPhone app uses the Keylime home screen icon.
 - If a host disconnects while setting up a new iPhone chat, Keylime keeps the chat the server already created and leaves the draft unsent.
 - iPhone remembers protected sessions across launches using Keychain and supports the Git action row, Ship, and the PWA prompt shortcuts plus `/compact`, `/reload`, and `/name`.
 - iPhone workspace setup, Effort setup, Jobs, and Ship update over Browser Link without polling.
 - On iPhone, reopen Ship progress and logs from the workspace menu or **More actions → Ship progress**, even after cleanup removes the workspace or you cancel a new Ship form.
 - Finished iPhone Ship jobs keep their progress and logs without holding a live job subscription.
 - Keep the native iPhone composer and toolbar above the software keyboard.
+- Keep iPhone composer focus when its outline changes, and offer Photo Library alongside Files when attaching items.
 - Match the iPhone saved-chat header to the mobile PWA, including session context and Ship. Keep Ship visible but disabled while busy or when there is nothing to ship.
 - Show native composer model activity and keep failed tool output visible while saved history catches up.
 - Keep open iPhone Process details and tool output expanded when live calls merge into saved history.
+- Align the iPhone composer’s keyboard movement, anchored actions menu and model picker with the PWA, including favorites, reasoning, Plan and Auto Prewalk.
+- Review and approve or request revisions to running Plan proposals on iPhone; uncertain decisions remain visible until reconciled.
 - Refine native transcript, sidebar, Git and Explorer icons and tighten Interface & Behavior spacing.
 - From `ios/`, run `bun run api:types` to generate TypeScript types from the web server's OpenAPI and AsyncAPI documents.
 - The context popup separates reported agent and subagent costs across the session file, including other branches. Costs update as history is saved and may exclude unreported or nested usage.

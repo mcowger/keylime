@@ -1,6 +1,7 @@
 import { registerRootComponent } from "expo";
 import { File, Paths } from "expo-file-system";
 import { useCallback, useState } from "react";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { normalizeOrigin } from "./keylime-http";
 import { ConnectionScreen } from "./ConnectionScreen";
 import { NavigationShell } from "./NavigationShell";
@@ -51,4 +52,12 @@ function App() {
   );
 }
 
-registerRootComponent(App);
+function Root() {
+  return (
+    <KeyboardProvider preload={false}>
+      <App />
+    </KeyboardProvider>
+  );
+}
+
+registerRootComponent(Root);

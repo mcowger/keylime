@@ -96,8 +96,101 @@ function hasBashTool(body: object): boolean {
     )
   );
 }
+const initialPlan = "# Fixture plan\n\nImplement the feature.\n";
+const revisedPlan = "# Fixture plan\n\nImplement the feature and add tests.\n";
 
-export function startOfflineModel(delayMs: number, failedBash = false) {
+/** Drive the real runner's write/propose tools; never inspect user prompts. */
+function planWrite(
+  body: object,
+): { path: string; content: string } | undefined {
+  if (!("messages" in body) || !Array.isArray(body.messages)) return;
+  let last: { id: string; path: string; content: string } | undefined;
+  let result: unknown;
+  for (const message of body.messages as unknown[]) {
+    if (!message || typeof message !== "object") continue;
+    if (
+      "role" in message &&
+      message.role === "assistant" &&
+      "tool_calls" in message &&
+      Array.isArray(message.tool_calls)
+    ) {
+      for (const call of message.tool_calls as unknown[]) {
+        if (
+          !call ||
+          typeof call !== "object" ||
+          !("id" in call) ||
+          typeof call.id !== "string" ||
+          !("function" in call) ||
+          !call.function ||
+          typeof call.function !== "object" ||
+          !("name" in call.function) ||
+          call.function.name !== "write" ||
+          !("arguments" in call.function) ||
+          typeof call.function.arguments !== "string"
+        )
+          continue;
+        try {
+          const args: unknown = JSON.parse(call.function.arguments);
+          if (
+            args &&
+            typeof args === "object" &&
+            "path" in args &&
+            typeof args.path === "string" &&
+            "content" in args &&
+            typeof args.content === "string" &&
+            (args.path === "local://feature-plan.md" ||
+              args.path === "xd://propose")
+          ) {
+            last = { id: call.id, path: args.path, content: args.content };
+            result = undefined;
+          }
+        } catch {
+          // Ignore malformed model history; it cannot establish a fixture step.
+        }
+      }
+    } else if (
+      last &&
+      "role" in message &&
+      message.role === "tool" &&
+      "tool_call_id" in message &&
+      message.tool_call_id === last.id &&
+      "content" in message
+    ) {
+      result = message.content;
+    }
+  }
+  if (!last) return { path: "local://feature-plan.md", content: initialPlan };
+  if (last.path === "local://feature-plan.md")
+    return { path: "xd://propose", content: "Fixture plan" };
+  if (
+    typeof result === "string" &&
+    result.includes("Plan refinement requested.")
+  )
+    return { path: "local://feature-plan.md", content: revisedPlan };
+}
+
+function hasWriteTool(body: object): boolean {
+  return (
+    "tools" in body &&
+    Array.isArray(body.tools) &&
+    body.tools.some(
+      (tool: unknown) =>
+        !!tool &&
+        typeof tool === "object" &&
+        "function" in tool &&
+        !!tool.function &&
+        typeof tool.function === "object" &&
+        "name" in tool.function &&
+        tool.function.name === "write",
+    )
+  );
+}
+
+export function startOfflineModel(
+  delayMs: number,
+  failedBash = false,
+  planReview = false,
+) {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -127,18 +220,27 @@ export function startOfflineModel(delayMs: number, failedBash = false) {
         );
 
       const callBash = failedBash && shouldCallBash(body);
+      const write = planReview ? planWrite(body) : undefined;
+      if (write && !hasWriteTool(body))
+        return Response.json(
+          { error: { message: "Plan fixture requires the write tool" } },
+          { status: 400 },
+        );
       if (callBash && !hasBashTool(body))
         return Response.json(
           { error: { message: "Fixture requires the bash tool" } },
           { status: 400 },
         );
-      const toolCall = callBash
-        ? {
-            id: `call_fixture_${crypto.randomUUID().replaceAll("-", "")}`,
-            type: "function" as const,
-            function: { name: "bash", arguments: JSON.stringify({ command }) },
-          }
-        : undefined;
+      const toolCall =
+        callBash || write
+          ? {
+              id: `call_fixture_${crypto.randomUUID().replaceAll("-", "")}`,
+              type: "function" as const,
+              function: write
+                ? { name: "write", arguments: JSON.stringify(write) }
+                : { name: "bash", arguments: JSON.stringify({ command }) },
+            }
+          : undefined;
 
       const base = {
         id: "chatcmpl-keylime-fixture",

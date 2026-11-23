@@ -25,6 +25,7 @@ import {
   pickNativeAttachments,
   readNativeAttachment,
   removeNativeAttachment,
+  type NativeAttachmentSelection,
   type NativePickedFile,
 } from "./native-network";
 
@@ -58,6 +59,11 @@ type Draft = {
 const MAX_IMAGES = MAX_ATTACHED_IMAGES;
 const MAX_IMAGE_BYTES = MAX_TOTAL_ATTACHED_IMAGE_BYTES;
 const MAX_FILES = MAX_UPLOADS_PER_MESSAGE;
+
+const supportsInlineImage = (mimeType: string) =>
+  ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(
+    mimeType.toLowerCase(),
+  );
 const CHUNK = 1024 * 1024;
 
 class UploadError extends Error {
@@ -360,13 +366,13 @@ export function useChatAttachments(
         MAX_IMAGE_BYTES
     );
   };
-  const select = async (source: () => Promise<NativePickedFile[]>) => {
+  const select = async (source: () => Promise<NativeAttachmentSelection>) => {
     if (!host || active.picking) return;
     active.picking = true;
     active.error = null;
     notify();
     try {
-      const files = await source();
+      const { files, errors } = await source();
       if (active.disposed || current.current !== key) {
         for (const file of files)
           void removeNativeAttachment(file.file).catch(() => {});
@@ -374,11 +380,12 @@ export function useChatAttachments(
       }
       for (const file of files) {
         if (file.size > MAX_UPLOAD_BYTES) {
-          active.error = "Files must be 2 GB or smaller.";
+          errors.push(`${file.name}: files must be 2 GB or smaller.`);
+          void removeNativeAttachment(file.file).catch(() => {});
           continue;
         }
         const inline =
-          file.mimeType.startsWith("image/") &&
+          supportsInlineImage(file.mimeType) &&
           file.size > 0 &&
           fitsInline(file.size);
         if (
@@ -386,7 +393,9 @@ export function useChatAttachments(
           active.items.filter((item) => item.mode === "file").length >=
             MAX_FILES
         ) {
-          active.error = `A message can attach at most ${MAX_FILES} files.`;
+          errors.push(
+            `${file.name}: a message can attach at most ${MAX_FILES} files.`,
+          );
           void removeNativeAttachment(file.file).catch(() => {});
           continue;
         }
@@ -398,11 +407,19 @@ export function useChatAttachments(
           received: 0,
         };
         active.items.push(item);
+        if (
+          file.mimeType.startsWith("image/") &&
+          !supportsInlineImage(file.mimeType)
+        )
+          errors.push(
+            `${file.name} was attached as a file because ${file.mimeType} is not supported inline.`,
+          );
         if (inline) readImage(item);
         else startUpload(item);
       }
+      active.error = errors.length ? errors.join("\n") : null;
     } catch (error) {
-      if (!active.disposed)
+      if (!active.disposed && current.current === key)
         active.error =
           error instanceof Error ? error.message : "Could not pick files";
     } finally {
@@ -429,6 +446,11 @@ export function useChatAttachments(
     const item = active.items.find((entry) => entry.id === id);
     if (!item || !item.mimeType.startsWith("image/")) return;
     if (item.mode === "file") {
+      if (!supportsInlineImage(item.mimeType)) {
+        active.error = `${item.mimeType} images cannot be sent inline. Keep this image attached as a file.`;
+        notify();
+        return;
+      }
       if (!fitsInline(item.size, item) || item.size === 0) {
         active.error = "This image exceeds the inline image limit.";
         notify();
@@ -511,11 +533,20 @@ export function useChatAttachments(
     picking: active.picking,
     canSend,
     payload,
-    pick: () => select(pickNativeAttachments),
+    pick: () =>
+      select(() => {
+        const inline = active.items.filter(
+          (item) => item.mode === "inline",
+        ).length;
+        const files = active.items.length - inline;
+        return pickNativeAttachments(
+          Math.max(0, MAX_IMAGES - inline) + Math.max(0, MAX_FILES - files),
+        );
+      }),
     paste: () =>
       select(async () => {
         const file = await pasteNativeAttachment();
-        return file ? [file] : [];
+        return { files: file ? [file] : [], errors: [] };
       }),
     remove,
     retry,

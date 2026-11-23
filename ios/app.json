@@ -8,6 +8,7 @@
       "ios"
     ],
     "ios": {
+      "icon": "./assets/icon.png",
       "bundleIdentifier": "com.mcowger.keylime",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Keylime connects to the server you choose, which may be on your local network.",

@@ -27,7 +27,9 @@ const network = requireNativeModule<{
   newUploadId(): string;
   copyText(text: string): Promise<void>;
   readText(text: string): Promise<void>;
-  pickAttachments(): Promise<NativePickedFile[]>;
+  pickAttachments(
+    maxPhotoSelection: number,
+  ): Promise<NativeAttachmentSelection>;
   pasteAttachmentImage(): Promise<NativePickedFile | null>;
   readAttachmentBase64(file: string): Promise<string>;
   removeAttachmentFile(file: string): Promise<void>;
@@ -66,10 +68,16 @@ export interface NativePickedFile {
   mimeType: string;
 }
 
+export interface NativeAttachmentSelection {
+  files: NativePickedFile[];
+  errors: string[];
+}
+
 export const newUploadId = () => network.newUploadId();
 export const copyText = (text: string) => network.copyText(text);
 export const readText = (text: string) => network.readText(text);
-export const pickNativeAttachments = () => network.pickAttachments();
+export const pickNativeAttachments = (maxPhotoSelection: number) =>
+  network.pickAttachments(maxPhotoSelection);
 export const pasteNativeAttachment = () => network.pasteAttachmentImage();
 export const readNativeAttachment = (file: string) =>
   network.readAttachmentBase64(file);

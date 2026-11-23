@@ -1,16 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ComponentRef,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { File, Paths } from "expo-file-system";
 import {
-  ActionSheetIOS,
   Image,
-  KeyboardAvoidingView,
   Pressable,
   StyleSheet,
   Text,
@@ -18,7 +9,7 @@ import {
   View,
 } from "react-native";
 import type { SettingsPreferences } from "./SettingsScreen";
-import type { BrowserCommand, BrowserLink } from "./browser-link";
+import type { BrowserCommand, BrowserLink, BrowserReply } from "./browser-link";
 import {
   ChatAttachmentChips,
   useChatAttachments,
@@ -29,9 +20,18 @@ import { useNativeChatActions } from "./useNativeChatActions";
 import { copyText, readText } from "./native-network";
 import { validateOutgoingPrompt } from "../lib/image-attachments";
 import { expandWebSlashCommand } from "../lib/web-slash-commands";
+import { resolveAvailableThinkingLevels } from "../lib/thinking-levels";
+import {
+  getToolNamesForPreset,
+  isToolPreset,
+  type ToolPreset,
+} from "../lib/tool-presets";
 import english from "../lib/i18n/locales/en.json";
+import { ChatKeyboardArea } from "./ChatKeyboardArea";
+import { ComposerMoreMenu } from "./ComposerMoreMenu";
 import { ChatComposer, type ChatComposerProps } from "./ChatComposer";
 import { ChatDialog } from "./ChatDialog";
+import { PlanReview } from "./PlanReview";
 import { ChatTranscript } from "./ChatTranscript";
 import type { operations } from "./generated/web-http";
 import {
@@ -41,28 +41,6 @@ import {
 } from "./keylime-http";
 import { theme } from "./theme";
 import { useChatSession } from "./useChatSession";
-
-function ChatKeyboardArea({ children }: { children: ReactNode }) {
-  const host = useRef<ComponentRef<typeof View>>(null);
-  const [windowTop, setWindowTop] = useState(0);
-  const measure = useCallback(() => {
-    host.current?.measureInWindow((_x, y) => setWindowTop(y));
-  }, []);
-
-  // The keyboard reports a window-space top, while the avoiding view's
-  // frame is local to this host below the safe area and workspace header.
-  return (
-    <View ref={host} collapsable={false} onLayout={measure} style={styles.root}>
-      <KeyboardAvoidingView
-        style={styles.root}
-        behavior="padding"
-        keyboardVerticalOffset={windowTop}
-      >
-        {children}
-      </KeyboardAvoidingView>
-    </View>
-  );
-}
 
 type ModelCatalog = NonNullable<ChatComposerProps["catalog"]>;
 type Roles =
@@ -103,9 +81,29 @@ export type LiveChatProps = {
   onHeaderState?: (state: ChatHeaderState | null) => void;
 };
 
-type Selection = NonNullable<ChatComposerProps["selectedModel"]> & {
+type Selection = {
+  provider?: string;
+  modelId?: string;
   role?: string;
+  thinkingLevel?: string;
+  roleEffort?: string;
+  previousThinkingLevel?: string;
 };
+type PrewalkMode = "off" | "suggest" | "on";
+type ComposerModes = { plan?: boolean | null; prewalk?: PrewalkMode | null };
+
+function resultField(reply: BrowserReply, field: string): unknown {
+  const data =
+    "success" in reply.data && reply.data.success ? reply.data.data : null;
+  return data && typeof data === "object" && field in data
+    ? (data as Record<string, unknown>)[field]
+    : undefined;
+}
+
+function isPrewalkMode(value: unknown): value is PrewalkMode {
+  return value === "off" || value === "suggest" || value === "on";
+}
+
 type SlashAction = Extract<
   BrowserCommand,
   { type: "compact" | "reload" | "set_session_name" }
@@ -127,6 +125,15 @@ function loadAdvisorChoices(): Record<string, boolean> {
     return {};
   }
 }
+function loadToolPreset(): ToolPreset {
+  try {
+    const file = new File(Paths.document, "native-tool-preset.txt");
+    const value = file.exists ? file.textSync() : undefined;
+    return isToolPreset(value) ? value : "full";
+  } catch {
+    return "full";
+  }
+}
 
 export function LiveChat({
   origin,
@@ -142,6 +149,7 @@ export function LiveChat({
   onHeaderState,
 }: LiveChatProps) {
   const [advisorChoices, setAdvisorChoices] = useState(loadAdvisorChoices);
+  const [toolPreset, setToolPreset] = useState(loadToolPreset);
   const advisorChoicesRef = useRef(advisorChoices);
   advisorChoicesRef.current = advisorChoices;
   const [newAdvisorChoices, setNewAdvisorChoices] = useState<
@@ -282,18 +290,42 @@ export function LiveChat({
         message: string;
         original: string;
         command?: SlashAction;
+        modes?: ComposerModes;
         attachments: ChatAttachmentsController;
       }
     >(),
   );
-  const [modelRefresh, setModelRefresh] = useState(0);
+  const [modelRefresh, setModelRefresh] = useState<{
+    host: string;
+    cwd: string;
+    count: number;
+  }>();
   const [notices, setNotices] = useState<Record<string, string>>({});
   const [catalog, setCatalog] = useState<{
+    origin: string;
     host: string;
+    cwd: string;
     data: ModelCatalog | null;
-    roles: Roles["roles"];
     error?: string;
   }>();
+  const [rolesResult, setRolesResult] = useState<{
+    origin: string;
+    query: string;
+    roles: Roles["roles"];
+  }>();
+  const [thinkingOverrides, setThinkingOverrides] = useState<
+    Record<string, string>
+  >({});
+  const [selectionBusy, setSelectionBusy] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [modes, setModes] = useState<Record<string, ComposerModes>>({});
+  const modeRevision = useRef(0);
+  const lastPlanSignal = useRef<{ owner: string; enabled: boolean } | null>(
+    null,
+  );
+  const selectionLocked = useRef(new Set<string>());
+  const lastModelRefresh = useRef<typeof modelRefresh>(undefined);
   const dark = useColorScheme() !== "light";
   const colors = dark
     ? theme
@@ -306,51 +338,177 @@ export function LiveChat({
       };
   const hostId = target?.hostId;
   const cwd = target?.path;
+  const sessionIdForRoles = target?.sessionId;
+  const selectionOwner = target
+    ? JSON.stringify([
+        origin,
+        target.hostId,
+        target.sessionId
+          ? ["session", target.sessionId]
+          : ["new", target.key, target.path],
+      ])
+    : "";
+  const currentSelection =
+    target && !target.sessionId ? selections[selectionOwner] : undefined;
+  const liveModel = chat.state?.state?.model;
+  const catalogForTarget =
+    catalog?.origin === origin && catalog.host === hostId && catalog.cwd === cwd
+      ? catalog.data
+      : null;
+  const selected =
+    currentSelection?.provider && currentSelection.modelId
+      ? {
+          provider: currentSelection.provider,
+          modelId: currentSelection.modelId,
+        }
+      : liveModel
+        ? { provider: liveModel.provider, modelId: liveModel.id }
+        : (chat.context?.model ?? catalogForTarget?.defaultModel ?? null);
+  const thinkingLevel = target
+    ? (currentSelection?.thinkingLevel ??
+      currentSelection?.roleEffort ??
+      thinkingOverrides[selectionOwner] ??
+      chat.state?.state?.thinkingLevel ??
+      chat.context?.thinkingLevel ??
+      "auto")
+    : "auto";
+  const currentModes = modes[selectionOwner] ?? {};
+  const roleQuery =
+    hostId && cwd
+      ? new URLSearchParams({
+          hostId,
+          cwd,
+          ...(sessionIdForRoles ? { sessionId: sessionIdForRoles } : {}),
+          ...(thinkingLevel !== "auto" ||
+          currentSelection?.thinkingLevel === "auto" ||
+          thinkingOverrides[selectionOwner] === "auto"
+            ? { thinkingLevel }
+            : {}),
+          ...(selected
+            ? {
+                currentProvider: selected.provider,
+                currentModelId: selected.modelId,
+              }
+            : {}),
+        }).toString()
+      : null;
   useEffect(() => {
     if (!hostId || !cwd) return;
     let valid = true;
-    const query = `hostId=${encodeURIComponent(hostId)}`;
+    const query = `hostId=${encodeURIComponent(hostId)}&cwd=${encodeURIComponent(cwd)}`;
+    const refresh =
+      modelRefresh?.host === hostId &&
+      modelRefresh.cwd === cwd &&
+      modelRefresh !== lastModelRefresh.current;
+    if (refresh) lastModelRefresh.current = modelRefresh;
     setCatalog(undefined);
-    void Promise.allSettled([
-      requestJson<ModelCatalog>(origin, `/api/models?${query}`),
-      requestJson<Roles>(
-        origin,
-        `/api/chat-roles?${query}&cwd=${encodeURIComponent(cwd)}`,
-      ),
-    ]).then(([models, roles]) => {
-      if (!valid) return;
-      if (
-        [models, roles].some(
-          (entry) =>
-            entry.status === "rejected" &&
-            entry.reason instanceof KeylimeHttpError &&
-            entry.reason.kind === "unauthorized",
-        )
-      ) {
-        onUnauthorized();
-        return;
-      }
-      setCatalog({
-        host: hostId,
-        data: models.status === "fulfilled" ? models.value : null,
-        roles: roles.status === "fulfilled" ? roles.value.roles : [],
-        ...(models.status === "rejected"
-          ? {
-              error:
-                "Model list is temporarily unavailable. Check your configuration and try again.",
-            }
-          : {}),
-      });
-    });
+    void requestJson<ModelCatalog>(
+      origin,
+      `/api/models?${query}`,
+      refresh ? { method: "POST" } : undefined,
+    ).then(
+      (data) => {
+        if (valid) setCatalog({ origin, host: hostId, cwd, data });
+      },
+      (cause) => {
+        if (!valid) return;
+        if (cause instanceof KeylimeHttpError && cause.kind === "unauthorized")
+          onUnauthorized();
+        else
+          setCatalog({
+            origin,
+            host: hostId,
+            cwd,
+            data: null,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+      },
+    );
     return () => {
       valid = false;
     };
   }, [origin, hostId, cwd, modelRefresh, onUnauthorized]);
+  useEffect(() => {
+    if (!roleQuery) return;
+    let valid = true;
+    void requestJson<Roles>(origin, `/api/chat-roles?${roleQuery}`).then(
+      (data) => {
+        if (valid)
+          setRolesResult({ origin, query: roleQuery, roles: data.roles });
+      },
+      (cause) => {
+        if (!valid) return;
+        if (cause instanceof KeylimeHttpError && cause.kind === "unauthorized")
+          onUnauthorized();
+        else if (target) error(target.key, cause);
+      },
+    );
+    return () => {
+      valid = false;
+    };
+  }, [origin, roleQuery, onUnauthorized]);
+  useEffect(() => {
+    if (!sessionIdForRoles || !chat.ready) return;
+    const revision = ++modeRevision.current;
+    const owner = selectionOwner;
+    void Promise.all([
+      chat.issueCommand({ type: "get_plan_state" }),
+      chat.issueCommand({ type: "get_auto_prewalk" }),
+    ])
+      .then(([plan, prewalk]) => {
+        if (modeRevision.current !== revision) return;
+        const enabled = resultField(plan, "enabled");
+        const mode = resultField(prewalk, "mode");
+        setModes((old) => ({
+          ...old,
+          [owner]: {
+            plan: typeof enabled === "boolean" ? enabled : false,
+            prewalk: isPrewalkMode(mode) ? mode : null,
+          },
+        }));
+      })
+      .catch(() => {
+        // A disconnected or unsupported runner leaves its mode unknown.
+      });
+    return () => {
+      modeRevision.current++;
+    };
+  }, [chat.ready, chat.issueCommand, sessionIdForRoles, selectionOwner]);
+
+  useEffect(() => {
+    if (!sessionIdForRoles || !chat.ready) return;
+    const previous = lastPlanSignal.current;
+    lastPlanSignal.current = {
+      owner: selectionOwner,
+      enabled: chat.planEnabled,
+    };
+    if (
+      !previous ||
+      previous.owner !== selectionOwner ||
+      previous.enabled === chat.planEnabled
+    )
+      return;
+    modeRevision.current++;
+    setModes((old) => ({
+      ...old,
+      [selectionOwner]: {
+        ...old[selectionOwner],
+        plan: chat.planEnabled,
+      },
+    }));
+  }, [chat.planEnabled, chat.ready, sessionIdForRoles, selectionOwner]);
 
   function error(key: string, cause: unknown) {
     setErrors((old) => ({
       ...old,
       [key]: cause instanceof Error ? cause.message : String(cause),
+    }));
+  }
+  function refreshModels(host: string, path: string) {
+    setModelRefresh((old) => ({
+      host,
+      cwd: path,
+      count: (old?.count ?? 0) + 1,
     }));
   }
 
@@ -360,9 +518,30 @@ export function LiveChat({
     if (!pending || pending.sessionId !== target.sessionId) return;
     first.current.delete(target.key);
     const { key } = target;
-    const operation = pending.command
-      ? runSlashAction(key, pending.command)
-      : chat.sendFirst(pending.message, pending.attachments.payload);
+    const operation = (async () => {
+      modeRevision.current++;
+      if (pending.modes?.plan)
+        await chat.issueCommand({ type: "set_plan_mode", enabled: true });
+      if (pending.modes?.prewalk) {
+        const reply = await chat.issueCommand({
+          type: "set_auto_prewalk",
+          mode: pending.modes.prewalk,
+        });
+        if (resultField(reply, "mode") !== pending.modes.prewalk)
+          throw new Error(
+            "The runner did not accept the selected Auto prewalk mode. The message was not sent.",
+          );
+        setModes((old) => ({
+          ...old,
+          [selectionOwner]: {
+            ...old[selectionOwner],
+            prewalk: pending.modes?.prewalk,
+          },
+        }));
+      }
+      if (pending.command) await runSlashAction(key, pending.command);
+      else await chat.sendFirst(pending.message, pending.attachments.payload);
+    })();
     void operation
       .then(
         () => {
@@ -381,7 +560,8 @@ export function LiveChat({
 
   async function runSlashAction(key: string, command: SlashAction) {
     await chat.issueCommand(command);
-    if (command.type === "reload") setModelRefresh((old) => old + 1);
+    if (command.type === "reload" && target)
+      refreshModels(target.hostId, target.path);
     void chat.refresh().catch(() => {});
     setNotices((old) => ({
       ...old,
@@ -395,7 +575,14 @@ export function LiveChat({
   }
 
   async function send() {
-    if (!target || locked.current.has(target.key)) return;
+    if (
+      !target ||
+      chat.planProposal ||
+      chat.planCommandPending ||
+      locked.current.has(target.key) ||
+      selectionLocked.current.has(target.key)
+    )
+      return;
     const { key, sessionId } = target;
     const message = drafts[key] ?? "";
     if (!attachments.canSend || (!message.trim() && !attachments.items.length))
@@ -468,17 +655,24 @@ export function LiveChat({
           old[key] === message ? { ...old, [key]: "" } : old,
         );
       } else {
-        const selection = selections[key];
+        const selection = selections[selectionOwner];
         const created = await ensureChatSession(origin, {
           type: "ensure_session",
           hostId: target.hostId,
           cwd: target.path,
+          ...(toolPreset === "full"
+            ? {}
+            : { toolNames: getToolNamesForPreset(toolPreset) }),
           ...(advisorEnabled ? { advisor: true } : {}),
           ...(selection?.role
             ? { chatRole: selection.role }
-            : selection
+            : selection?.provider && selection.modelId
               ? { provider: selection.provider, modelId: selection.modelId }
               : {}),
+          ...(selection?.thinkingLevel &&
+          (selection.role || selection.thinkingLevel !== "auto")
+            ? { thinkingLevel: selection.thinkingLevel }
+            : {}),
         });
         persistAdvisor(target.hostId, created.sessionId, advisorEnabled);
         setNewAdvisorChoices((old) => {
@@ -486,14 +680,14 @@ export function LiveChat({
           delete next[key];
           return next;
         });
+        setSelections((old) => {
+          if (old[selectionOwner] !== selection) return old;
+          const next = { ...old };
+          delete next[selectionOwner];
+          return next;
+        });
         if (created.kind === "initialization-interrupted") {
           onCreated(key, created.sessionId, target.hostId, target.path);
-          setSelections((old) => {
-            if (old[key] !== selection) return old;
-            const next = { ...old };
-            delete next[key];
-            return next;
-          });
           error(
             key,
             "The host disconnected during setup. This chat was created, but your message wasn't sent. Check the model before sending again.",
@@ -501,6 +695,7 @@ export function LiveChat({
           return;
         }
         first.current.set(key, {
+          modes: currentModes,
           sessionId: created.sessionId,
           message: outgoing,
           original: message,
@@ -533,74 +728,222 @@ export function LiveChat({
 
   if (!target || !visible) return null;
   const { key, sessionId } = target;
-  const data = catalog?.host === target.hostId ? catalog : undefined;
-  const sessionModel = chat.state?.state?.model;
-  const fallback = sessionModel
-    ? { provider: sessionModel.provider, modelId: sessionModel.id }
-    : null;
+  const data =
+    catalog?.origin === origin &&
+    catalog.host === target.hostId &&
+    catalog.cwd === target.path
+      ? catalog
+      : undefined;
   const messageError = errors[key] || chat.error;
-  const choose = (provider: string, modelId: string, role?: string) => {
-    if (sessionId) {
-      void chat
-        .issueCommand(
-          role
-            ? { type: "set_chat_role", role }
-            : { type: "set_model", provider, modelId },
+  const availableThinkingLevels = resolveAvailableThinkingLevels(
+    selected
+      ? data?.data?.thinkingLevels[`${selected.provider}:${selected.modelId}`]
+      : undefined,
+    selected,
+    liveModel ? { ...liveModel, modelId: liveModel.id } : null,
+  );
+  const applySelection = (command: BrowserCommand, onSuccess: () => void) => {
+    if (selectionLocked.current.has(key) || locked.current.has(key)) return;
+    selectionLocked.current.add(key);
+    setSelectionBusy((old) => ({ ...old, [key]: true }));
+    setErrors((old) => ({ ...old, [key]: "" }));
+    void chat
+      .issueCommand(command)
+      .then(async () => {
+        onSuccess();
+        if (
+          latest.current?.key === key &&
+          latest.current.sessionId === sessionId &&
+          latest.current.hostId === target.hostId
         )
-        .then(
-          () =>
-            setSelections((old) => ({
-              ...old,
-              [key]: { provider, modelId, role },
-            })),
-          (cause) => error(key, cause),
-        );
-    } else
-      setSelections((old) => ({ ...old, [key]: { provider, modelId, role } }));
+          await chat.refresh();
+      })
+      .catch((cause) => {
+        error(key, cause);
+        if (
+          latest.current?.key === key &&
+          latest.current.sessionId === sessionId &&
+          latest.current.hostId === target.hostId
+        )
+          void chat.refresh();
+      })
+      .finally(() => {
+        selectionLocked.current.delete(key);
+        setSelectionBusy((old) => ({ ...old, [key]: false }));
+      });
+  };
+  const choose = (provider: string, modelId: string) => {
+    if (sessionId)
+      applySelection({ type: "set_model", provider, modelId }, () => {});
+    else
+      setSelections((old) => ({
+        ...old,
+        [selectionOwner]: {
+          provider,
+          modelId,
+          thinkingLevel:
+            old[selectionOwner]?.thinkingLevel ??
+            old[selectionOwner]?.previousThinkingLevel,
+        },
+      }));
+  };
+  const chooseRole = (role: Roles["roles"][number]) => {
+    if (sessionId) {
+      applySelection({ type: "set_chat_role", role: role.id }, () => {
+        setThinkingOverrides((old) => {
+          const next = { ...old };
+          delete next[selectionOwner];
+          return next;
+        });
+      });
+    } else {
+      setSelections((old) => ({
+        ...old,
+        [selectionOwner]: {
+          role: role.id,
+          ...(role.provider && role.modelId
+            ? { provider: role.provider, modelId: role.modelId }
+            : {}),
+          previousThinkingLevel:
+            old[selectionOwner]?.thinkingLevel ??
+            old[selectionOwner]?.previousThinkingLevel,
+          ...(role.effectiveThinkingLevel
+            ? { roleEffort: role.effectiveThinkingLevel }
+            : {}),
+        },
+      }));
+    }
+  };
+  const chooseThinking = (level: string) => {
+    if (!sessionId) {
+      setSelections((old) => ({
+        ...old,
+        [selectionOwner]: { ...old[selectionOwner], thinkingLevel: level },
+      }));
+    } else if (level === "auto") {
+      // As in the PWA, Auto leaves the runner's current selector untouched.
+      setThinkingOverrides((old) => ({ ...old, [selectionOwner]: level }));
+    } else {
+      applySelection({ type: "set_thinking_level", level }, () => {
+        setThinkingOverrides((old) => {
+          const next = { ...old };
+          delete next[selectionOwner];
+          return next;
+        });
+      });
+    }
+  };
+  const chooseMode = (
+    field: "plan" | "prewalk",
+    value: boolean | PrewalkMode,
+  ) => {
+    if (!sessionId) {
+      setModes((old) => ({
+        ...old,
+        [selectionOwner]: { ...old[selectionOwner], [field]: value },
+      }));
+      return;
+    }
+    if (selectionLocked.current.has(key) || locked.current.has(key)) return;
+    selectionLocked.current.add(key);
+    modeRevision.current++;
+    setSelectionBusy((old) => ({ ...old, [key]: true }));
+    setErrors((old) => ({ ...old, [key]: "" }));
+    const command: BrowserCommand =
+      field === "plan"
+        ? { type: "set_plan_mode", enabled: value === true }
+        : { type: "set_auto_prewalk", mode: value as PrewalkMode };
+    const query: BrowserCommand =
+      field === "plan"
+        ? { type: "get_plan_state" }
+        : { type: "get_auto_prewalk" };
+    const applyResult = (reply: BrowserReply) => {
+      const actual = resultField(reply, field === "plan" ? "enabled" : "mode");
+      if (
+        field === "plan" ? typeof actual !== "boolean" : !isPrewalkMode(actual)
+      )
+        throw new Error("The runner did not report the selected mode.");
+      setModes((old) => ({
+        ...old,
+        [selectionOwner]: { ...old[selectionOwner], [field]: actual },
+      }));
+      if (actual !== value)
+        throw new Error("The runner selected a different mode.");
+    };
+    void chat
+      .issueCommand(command)
+      .then((reply) => {
+        applyResult(reply);
+        void chat.refresh();
+      })
+      .catch(async (cause) => {
+        error(key, cause);
+        try {
+          const reply = await chat.issueCommand(query);
+          const actual = resultField(
+            reply,
+            field === "plan" ? "enabled" : "mode",
+          );
+          setModes((old) => ({
+            ...old,
+            [selectionOwner]: {
+              ...old[selectionOwner],
+              [field]:
+                field === "plan"
+                  ? typeof actual === "boolean"
+                    ? actual
+                    : null
+                  : isPrewalkMode(actual)
+                    ? actual
+                    : null,
+            },
+          }));
+        } catch {
+          setModes((old) => ({
+            ...old,
+            [selectionOwner]: {
+              ...old[selectionOwner],
+              [field]: null,
+            },
+          }));
+        }
+      })
+      .finally(() => {
+        selectionLocked.current.delete(key);
+        setSelectionBusy((old) => ({ ...old, [key]: false }));
+      });
   };
   const composer = (
     <ChatComposer
       draft={drafts[key] ?? ""}
       canSendAttachment={attachments.items.length > 0 && attachments.canSend}
-      onAddAttachment={() =>
-        ActionSheetIOS.showActionSheetWithOptions(
-          {
-            options: [
-              "Choose file",
-              "Paste image",
-              `Advisor: ${advisorEnabled ? "On" : "Off"}`,
-              "Cancel",
-            ],
-            cancelButtonIndex: 3,
-          },
-          (index) => {
-            if (index === 0) void attachments.pick();
-            else if (index === 1) void attachments.paste();
-            else if (index === 2) {
-              ActionSheetIOS.showActionSheetWithOptions(
-                {
-                  options: [
-                    advisorEnabled
-                      ? "Disable advisor for this chat"
-                      : "Enable advisor for this chat",
-                    "Cancel",
-                  ],
-                  cancelButtonIndex: 1,
-                },
-                (choice) => {
-                  if (choice !== 0) return;
-                  if (sessionId)
-                    persistAdvisor(target.hostId, sessionId, !advisorEnabled);
-                  else
-                    setNewAdvisorChoices((old) => ({
-                      ...old,
-                      [key]: !advisorEnabled,
-                    }));
-                },
+      moreActions={
+        <ComposerMoreMenu
+          onAttach={() => void attachments.pick()}
+          onPasteImage={() => void attachments.paste()}
+          attachmentsDisabled={attachments.picking}
+          toolPreset={toolPreset}
+          onToolPresetChange={(preset) => {
+            setToolPreset(preset);
+            try {
+              new File(Paths.document, "native-tool-preset.txt").writeSync(
+                preset,
               );
+            } catch {
+              // Keep the selection in memory if local storage is unavailable.
             }
-          },
-        )
+            if (sessionId)
+              setNotices((old) => ({
+                ...old,
+                [key]: english["agentSession.toolPresetNotice"],
+              }));
+          }}
+          advisorEnabled={advisorEnabled}
+          onAdvisorChange={(enabled) => {
+            if (sessionId) persistAdvisor(target.hostId, sessionId, enabled);
+            else setNewAdvisorChoices((old) => ({ ...old, [key]: enabled }));
+          }}
+        />
       }
       selection={forcedSelection}
       onSelectionChange={(position) => {
@@ -616,21 +959,33 @@ export function LiveChat({
       disabled={
         !attachments.canSend ||
         !!busy[key] ||
+        !!selectionBusy[key] ||
         (!!sessionId && !chat.state?.outboxScope)
       }
+      submissionBlocked={!!chat.planProposal || chat.planCommandPending}
+      favoriteScope={origin}
       catalog={data?.data ?? null}
       catalogLoading={!data}
       catalogError={data?.error}
-      roles={data?.roles ?? []}
-      selectedModel={
-        selections[key] ?? fallback ?? data?.data?.defaultModel ?? null
+      pickerError={errors[key]}
+      roles={
+        rolesResult?.origin === origin && rolesResult.query === roleQuery
+          ? rolesResult.roles
+          : []
       }
+      selectedModel={selected}
+      thinkingLevel={thinkingLevel}
+      availableThinkingLevels={availableThinkingLevels}
+      onThinkingLevelChange={chooseThinking}
+      planEnabled={currentModes.plan === true}
+      planUnknown={currentModes.plan === null}
+      planBusy={chat.planCommandPending}
+      prewalk={currentModes.prewalk ?? null}
+      onPlanChange={(enabled) => chooseMode("plan", enabled)}
+      onPrewalkChange={(mode) => chooseMode("prewalk", mode)}
       onSelectModel={choose}
-      onSelectRole={(role) => {
-        if (role.provider && role.modelId)
-          choose(role.provider, role.modelId, role.id);
-      }}
-      onRefreshModels={() => setModelRefresh((old) => old + 1)}
+      onSelectRole={chooseRole}
+      onRefreshModels={() => refreshModels(target.hostId, target.path)}
     >
       <ChatAttachmentChips controller={attachments} />
     </ChatComposer>
@@ -740,6 +1095,16 @@ export function LiveChat({
               {actions.uncertain}
             </Text>
           )}
+          {chat.planProposal && (
+            <View style={styles.planReview}>
+              <PlanReview
+                key={chat.planProposal.id}
+                proposal={chat.planProposal}
+                pending={chat.planCommandPending}
+                onRespond={chat.respondPlanProposal}
+              />
+            </View>
+          )}
           <NativeSlashMenu menu={slash} />
           {chat.dialog ? (
             <ChatDialog
@@ -826,6 +1191,7 @@ export function LiveChat({
 }
 
 const styles = StyleSheet.create({
+  planReview: { marginHorizontal: 16, marginBottom: 8, flexShrink: 1 },
   root: { flex: 1 },
   fresh: { flex: 1, justifyContent: "center", paddingBottom: 48 },
   brand: {

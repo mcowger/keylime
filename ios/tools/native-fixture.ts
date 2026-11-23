@@ -12,6 +12,7 @@ const { values } = parseArgs({
     port: { type: "string" },
     "offline-model": { type: "boolean" },
     "failed-bash": { type: "boolean" },
+    "plan-review": { type: "boolean" },
     "stream-delay-ms": { type: "string" },
     help: { type: "boolean", short: "h" },
   },
@@ -19,10 +20,11 @@ const { values } = parseArgs({
 });
 if (values.help) {
   console.log(
-    "Usage: bun --no-env-file ios/tools/native-fixture.ts [--port <port>] [--offline-model [--stream-delay-ms <ms>] [--failed-bash]]\n" +
+    "Usage: bun --no-env-file ios/tools/native-fixture.ts [--port <port>] [--offline-model [--stream-delay-ms <ms>] [--failed-bash | --plan-review]]\n" +
       "Build the real runner first: mise exec -- bun runner/scripts/build-binary.ts\n" +
       "--offline-model enables keylime-fixture/offline on loopback, with a deterministic slowly streamed response. Select it in a new chat and use Stop to abort. Default delay: 350 ms per fragment.\n" +
       "--failed-bash makes each turn run a harmless six-second Bash command that prints twice and exits 1 before the response. Requires --offline-model and the runner's bash tool.\n" +
+      "--plan-review makes the fixture model write and propose a real plan, revise it after feedback, and respond after approval. Requires --offline-model.\n" +
       "Set KEYLIME_NATIVE_FIXTURE_PASSWORD to enable fixture-only password authentication. Leave it unset for an open fixture.",
   );
   process.exit(0);
@@ -35,6 +37,10 @@ if (values["stream-delay-ms"] !== undefined && !values["offline-model"])
   throw new Error("--stream-delay-ms requires --offline-model");
 if (values["failed-bash"] && !values["offline-model"])
   throw new Error("--failed-bash requires --offline-model");
+if (values["plan-review"] && !values["offline-model"])
+  throw new Error("--plan-review requires --offline-model");
+if (values["plan-review"] && values["failed-bash"])
+  throw new Error("--plan-review cannot be combined with --failed-bash");
 const delayMs =
   values["stream-delay-ms"] === undefined
     ? 350
@@ -42,7 +48,7 @@ const delayMs =
 if (!Number.isInteger(delayMs) || delayMs < 25 || delayMs > 2000)
   throw new Error("--stream-delay-ms must be an integer from 25 to 2000");
 const offlineModel = values["offline-model"]
-  ? startOfflineModel(delayMs, values["failed-bash"])
+  ? startOfflineModel(delayMs, values["failed-bash"], values["plan-review"])
   : undefined;
 if (offlineModel)
   console.log(

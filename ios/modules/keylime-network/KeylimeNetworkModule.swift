@@ -72,12 +72,12 @@ public final class KeylimeNetworkModule: Module {
       self.transport.cancelRequest(id: id)
     }.runOnQueue(networkQueue)
 
-    AsyncFunction("pickAttachments") { (promise: Promise) in
+    AsyncFunction("pickAttachments") { (maxPhotoSelection: Int, promise: Promise) in
       guard self.picker == nil, let controller = self.appContext?.utilities?.currentViewController() else {
         promise.reject("ERR_KEYLIME_PICKER", "File picker is unavailable")
         return
       }
-      let picker = AttachmentPicker(promise: promise) { [weak self] in self?.picker = nil }
+      let picker = AttachmentPicker(promise: promise, maxPhotoSelection: maxPhotoSelection) { [weak self] in self?.picker = nil }
       self.picker = picker
       picker.present(from: controller)
     }.runOnQueue(.main)
