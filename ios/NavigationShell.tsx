@@ -222,6 +222,14 @@ export function NavigationShell({
         sessionId: selected?.sessionId ?? selected?.session?.id ?? null,
       }
     : null;
+  const openSessionKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const tab of tabs) {
+      const id = tab.sessionId ?? tab.session?.id;
+      if (id) keys.add(JSON.stringify([origin, tab.location.hostId, id]));
+    }
+    return keys;
+  }, [origin, tabs]);
   const header =
     headerState &&
     target &&
@@ -845,6 +853,7 @@ export function NavigationShell({
             origin={origin}
             link={link}
             target={target}
+            openSessionKeys={openSessionKeys}
             visible={section === "workspace" && !panel}
             preferences={preferences.preferences}
             onUnauthorized={onUnauthorized}

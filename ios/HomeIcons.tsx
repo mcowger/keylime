@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
-import { theme } from "./theme";
+import { dynamicTheme as theme } from "./dynamic-theme";
 
 type IconName = "folder-plus" | "layers" | "message" | "bot" | "question";
 

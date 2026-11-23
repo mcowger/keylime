@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { operations } from "./generated/web-http";
 import { HomeIcon } from "./HomeIcons";
-import { theme } from "./theme";
+import { dynamicTheme as theme } from "./dynamic-theme";
 
 export type HomeSessionInfo =
   operations["listSessions"]["responses"][200]["content"]["application/json"]["sessions"][number];

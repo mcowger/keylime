@@ -26,7 +26,7 @@ import type { NativeTranscriptPalette } from "./ChatTranscript";
 import type { components } from "./generated/browser-link";
 import type { operations } from "./generated/web-http";
 import { requestJson } from "./keylime-http";
-import { theme } from "./theme";
+import { lightTheme, theme } from "./theme";
 
 type State =
   operations["getSessionState"]["responses"][200]["content"]["application/json"];
@@ -114,17 +114,7 @@ function ActivityContent({
     cancel(): void;
   } | null>(null);
   const dark = useColorScheme() !== "light";
-  const colors = dark
-    ? theme
-    : {
-        background: "#FFFFFF",
-        panel: "#F2F0EA",
-        hover: "#EAE7DF",
-        border: "#E2DDD2",
-        text: "#2B2823",
-        muted: "#69635A",
-        accent: "#B03E22",
-      };
+  const colors = dark ? theme : lightTheme;
 
   useEffect(() => {
     if (!sessionId) {

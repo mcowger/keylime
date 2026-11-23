@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyMessageDelta,
   displayMessage,
@@ -163,10 +163,23 @@ const initial = (): ChatSessionView => ({
   active: false,
   error: null,
 });
+
+type CachedSession = {
+  view: ChatSessionView;
+  cursor: Cursor | null;
+  revision: string | null;
+  rootKnown: boolean;
+};
 const messageId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : String(cause);
+function sameToolResults(a: ChatToolResults, b: ChatToolResults): boolean {
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length && keys.every((id) => a[id] === b[id])
+  );
+}
 function userText(message: ChatUserMessage): string {
   return typeof message.content === "string"
     ? message.content
@@ -202,18 +215,23 @@ export function useChatSession({
   sessionId,
   link,
   onUnauthorized,
+  openSessionKeys,
   advisor = false,
 }: {
   origin: string;
   hostId: string;
   sessionId: string | null;
   link: BrowserLink;
+  openSessionKeys: ReadonlySet<string>;
   advisor?: boolean;
   onUnauthorized?: () => void;
 }) {
   const key = JSON.stringify([origin, hostId, sessionId]);
+  const sessionOpen = openSessionKeys.has(key);
   const keyRef = useRef(key);
   keyRef.current = key;
+  const openKeysRef = useRef(openSessionKeys);
+  openKeysRef.current = openSessionKeys;
   const unauthorizedRef = useRef(onUnauthorized);
   const advisorRef = useRef(advisor);
   advisorRef.current = advisor;
@@ -222,6 +240,7 @@ export function useChatSession({
     key: string;
     value: ChatSessionView;
   }>({ key, value: initial() });
+  const recent = useRef(new Map<string, CachedSession>());
   // Intents remain associated with their server and host across chat navigation.
   const pendingBySession = useRef(
     new Map<string, Map<string, PendingChatInput>>(),
@@ -251,14 +270,31 @@ export function useChatSession({
   } | null>(null);
 
   useEffect(() => {
-    if (!sessionId) {
+    for (const cachedKey of recent.current.keys()) {
+      if (!openSessionKeys.has(cachedKey)) recent.current.delete(cachedKey);
+    }
+  }, [openSessionKeys]);
+
+  useEffect(() => {
+    if (!sessionId || !sessionOpen) {
       runtime.current = null;
       setRendered({ key, value: { ...initial(), loading: false } });
       return;
     }
     let disposed = false;
-    const current = () => !disposed && keyRef.current === key;
-    let view = initial();
+    const current = () =>
+      !disposed && keyRef.current === key && openKeysRef.current.has(key);
+    const cached = recent.current.get(key);
+    let view = cached
+      ? {
+          ...cached.view,
+          ready: false,
+          loadingHistory: false,
+          dialog: null,
+          dialogSubmitting: false,
+          dialogError: null,
+        }
+      : initial();
     const savedPlan = pendingPlans.current.get(key);
     if (savedPlan) {
       view = {
@@ -272,12 +308,13 @@ export function useChatSession({
     let planModePending = false;
     let planModeAwaitingAuthority = false;
     let planSynchronized = false;
-    let cursor: Cursor | null = null;
-    let rootKnown = false;
-    let revision: string | null = null;
+    let cursor: Cursor | null = cached?.cursor ?? null;
+    let rootKnown = cached?.rootKnown ?? false;
+    let revision: string | null = cached?.revision ?? null;
     let liveId: string | null = null;
     let stream: { streamId: string; sequence: number } | null = null;
-    let initialized = false;
+    let initialized = !!cached;
+    let reconcilingCached = !!cached;
     let reading = false;
     let requested = false;
     let stateRequested = false;
@@ -351,10 +388,13 @@ export function useChatSession({
         )
           echoes.delete(id);
       }
-      const echoedUserMessages = [...echoes].map(([id, message]) => ({
-        id,
-        message,
-      }));
+      const previousEchoes = view.echoedUserMessages;
+      const unchangedEchoes =
+        previousEchoes.length === echoes.size &&
+        previousEchoes.every(({ id, message }) => echoes.get(id) === message);
+      const echoedUserMessages = unchangedEchoes
+        ? previousEchoes
+        : [...echoes].map(([id, message]) => ({ id, message }));
       const represented = new Set<string>();
       for (const id of view.context?.resolvedClientMessageIds ?? [])
         represented.add(id);
@@ -386,10 +426,14 @@ export function useChatSession({
           !entries.some((item) => item.id === entry.id)
         )
           pendingInput.push(entry);
-      setRendered({
-        key,
-        value: { ...view, pendingInput, echoedUserMessages },
-      });
+      const value = { ...view, pendingInput, echoedUserMessages };
+      view = value;
+      if (value.context && cursor) {
+        recent.current.set(key, { view: value, cursor, revision, rootKnown });
+      } else if (!cursor) {
+        recent.current.delete(key);
+      }
+      setRendered({ key, value });
     }
     function applyOutbox(
       entries: OutboxEntry[],
@@ -846,6 +890,13 @@ export function useChatSession({
           if (position?.lastEntryId) replacedHistory = true;
           next = result.context;
           nextHasOlder = false;
+        } else if (next && result.context.entryIds.length === 0) {
+          // Metadata may change even when the durable transcript does not.
+          next = {
+            ...result.context,
+            messages: next.messages,
+            entryIds: next.entryIds,
+          };
         } else {
           const ids = new Set(next?.entryIds ?? []);
           const messages = [...(next?.messages ?? [])];
@@ -882,16 +933,19 @@ export function useChatSession({
       }
       cursor = position;
       rootKnown = true;
+      const reconciledTools = reconcileToolSnapshot(
+        view.toolResults,
+        last.live?.toolEvents ?? [],
+        next.messages,
+      );
       view = {
         ...view,
         context: next,
         hasOlder: nextHasOlder,
         error: null,
-        toolResults: reconcileToolSnapshot(
-          view.toolResults,
-          last.live?.toolEvents ?? [],
-          next.messages,
-        ),
+        toolResults: sameToolResults(view.toolResults, reconciledTools)
+          ? view.toolResults
+          : reconciledTools,
       };
       releaseSaved();
       if (last.live) {
@@ -957,6 +1011,25 @@ export function useChatSession({
             }
             const snapshot = await sync();
             if (!current()) return;
+            if (reconcilingCached && !requested) {
+              reconcilingCached = false;
+              if (
+                !snapshot ||
+                (!snapshot.isStreaming &&
+                  !snapshot.isPromptRunning &&
+                  !snapshot.isCompacting)
+              ) {
+                liveId = null;
+                const retained = retainEndedTools(view.toolResults);
+                view = {
+                  ...view,
+                  liveMessage: null,
+                  toolResults: sameToolResults(view.toolResults, retained)
+                    ? view.toolResults
+                    : retained,
+                };
+              }
+            }
             if (state) {
               view = {
                 ...view,
@@ -1461,7 +1534,7 @@ export function useChatSession({
       older,
       refresh: () => refresh(true),
     };
-    setRendered({ key, value: view });
+    publish();
     subscribeSession();
     const releaseRunning = link.subscribe(
       { kind: "running" },
@@ -1495,50 +1568,56 @@ export function useChatSession({
         },
       },
     );
-    void (async () => {
-      try {
-        const historyAtStart = historyGeneration;
-        const params = new URLSearchParams({ tail: "30", hostId });
-        const page = await requestJson<JsonResponse<"getSession">>(
-          origin,
-          `${sessionPath}?${params}`,
-        );
-        if (!current()) return;
-        if (historyAtStart !== historyGeneration) {
-          initialized = true;
-          await refresh(true);
-          return;
-        }
-        if (page.context.messages.length !== page.context.entryIds.length)
-          throw new Error("Invalid session history");
-        revision = page.historyRevision ?? null;
-        cursor = {
-          firstEntryId: page.context.entryIds[0] ?? null,
-          lastEntryId:
-            page.context.entryIds[page.context.entryIds.length - 1] ?? null,
-        };
-        rootKnown = !page.historyHasMore;
-        view = {
-          ...view,
-          context: page.context,
-          hasOlder: !!page.historyHasMore,
-        };
-        initialized = true;
-        await refresh(true);
+    if (cached) {
+      void refresh(true).then(() => {
         for (const pending of local.values())
           if (pending.state === "uncertain") void reconcileIntent(pending.id);
-      } catch (cause) {
-        if (current()) {
-          initialized = true;
-          if (cause instanceof KeylimeHttpError && cause.status === 404) {
+      });
+    } else
+      void (async () => {
+        try {
+          const historyAtStart = historyGeneration;
+          const params = new URLSearchParams({ tail: "30", hostId });
+          const page = await requestJson<JsonResponse<"getSession">>(
+            origin,
+            `${sessionPath}?${params}`,
+          );
+          if (!current()) return;
+          if (historyAtStart !== historyGeneration) {
+            initialized = true;
             await refresh(true);
             return;
           }
-          drain(null);
-          report(cause);
+          if (page.context.messages.length !== page.context.entryIds.length)
+            throw new Error("Invalid session history");
+          revision = page.historyRevision ?? null;
+          cursor = {
+            firstEntryId: page.context.entryIds[0] ?? null,
+            lastEntryId:
+              page.context.entryIds[page.context.entryIds.length - 1] ?? null,
+          };
+          rootKnown = !page.historyHasMore;
+          view = {
+            ...view,
+            context: page.context,
+            hasOlder: !!page.historyHasMore,
+          };
+          initialized = true;
+          await refresh(true);
+          for (const pending of local.values())
+            if (pending.state === "uncertain") void reconcileIntent(pending.id);
+        } catch (cause) {
+          if (current()) {
+            initialized = true;
+            if (cause instanceof KeylimeHttpError && cause.status === 404) {
+              await refresh(true);
+              return;
+            }
+            drain(null);
+            report(cause);
+          }
         }
-      }
-    })();
+      })();
     return () => {
       disposed = true;
       clearTimeout(dialogTimer);
@@ -1546,7 +1625,7 @@ export function useChatSession({
       releaseRunning();
       if (runtime.current?.key === key) runtime.current = null;
     };
-  }, [origin, hostId, sessionId, link, key]);
+  }, [origin, hostId, sessionId, link, key, sessionOpen]);
 
   const issueCommand = useCallback((command: BrowserCommand) => {
     const target = runtime.current;
@@ -1608,14 +1687,31 @@ export function useChatSession({
         : Promise.resolve(),
     [],
   );
-  const result = rendered.key === key ? rendered.value : initial();
+  const result =
+    rendered.key === key && (!sessionId || openSessionKeys.has(key))
+      ? rendered.value
+      : openSessionKeys.has(key) && recent.current.has(key)
+        ? {
+            ...recent.current.get(key)!.view,
+            ready: false,
+            loadingHistory: false,
+            dialog: null,
+            dialogSubmitting: false,
+            dialogError: null,
+          }
+        : initial();
+  const liveMessage = useMemo(
+    () =>
+      result.liveMessage
+        ? (normalizeToolCalls(
+            displayMessage(result.liveMessage) as unknown as AgentMessage,
+          ) as unknown as LiveMessage)
+        : null,
+    [result.liveMessage],
+  );
   return {
     ...result,
-    liveMessage: result.liveMessage
-      ? (normalizeToolCalls(
-          displayMessage(result.liveMessage) as unknown as AgentMessage,
-        ) as unknown as LiveMessage)
-      : null,
+    liveMessage,
     issueCommand,
     send,
     sendFirst,

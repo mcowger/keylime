@@ -121,7 +121,7 @@ export function WorkspaceTabs({
         border: "#D6CFC1",
         text: "#221A14",
         muted: "#625C57",
-        accent: "#A62972",
+        accent: "#B03E22",
         placeholder: "#77716B",
       };
   const active = openTabs.find((tab) => tab.key === activeTabKey);

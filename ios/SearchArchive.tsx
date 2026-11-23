@@ -769,7 +769,7 @@ function palette(light: boolean): Palette {
         text: "#221A14",
         muted: "#625C57",
         dim: "#77716B",
-        accent: "#A4246D",
+        accent: "#B03E22",
         error: "#B32E3D",
       }
     : {

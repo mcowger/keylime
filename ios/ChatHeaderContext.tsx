@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useColorScheme,
 } from "react-native";
 import {
   formatCompactNumber,
@@ -72,6 +73,7 @@ function ContextContent({
   running,
   colors,
 }: Props) {
+  const light = useColorScheme() === "light";
   const [open, setOpen] = useState(false);
   const [compacting, setCompacting] = useState(false);
   const [error, setError] = useState("");
@@ -244,9 +246,13 @@ function ContextContent({
   const fraction = Math.max(0, Math.min(1, (percent ?? 0) / 100));
   const color =
     percent !== null && percent > 90
-      ? "#E67070"
+      ? light
+        ? "#B42318"
+        : "#FF9B92"
       : percent !== null && percent > 70
-        ? "#D9A65B"
+        ? light
+          ? "#8A5A00"
+          : "#F0C36A"
         : colors.muted;
   const selectedModel = modelIdentity
     ? { provider: modelIdentity.provider, id: modelIdentity.id }
@@ -511,7 +517,13 @@ function ContextContent({
                   </Text>
                 )}
                 {!!error && (
-                  <Text accessibilityRole="alert" style={styles.error}>
+                  <Text
+                    accessibilityRole="alert"
+                    style={[
+                      styles.error,
+                      { color: light ? "#B42318" : "#FF9B92" },
+                    ]}
+                  >
                     {error}
                   </Text>
                 )}
@@ -630,5 +642,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  error: { color: "#E67070", fontSize: 12 },
+  error: { fontSize: 12 },
 });

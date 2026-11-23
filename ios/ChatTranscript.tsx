@@ -1,5 +1,6 @@
 import {
   createContext,
+  memo,
   useCallback,
   useContext,
   useMemo,
@@ -101,6 +102,8 @@ export type ChatTranscriptProps = {
   mediaHostId?: string;
   /** Change when selecting another host-qualified session. */
   sessionKey?: string;
+  /** Hidden retained lists must not interpret layout changes as user scrolling. */
+  visible?: boolean;
   preferences?: SettingsPreferences;
   palette?: NativeTranscriptPalette;
 };
@@ -922,6 +925,9 @@ function ProcessRow({
   );
 }
 
+const MemoMessageRow = memo(MessageRow);
+const MemoProcessRow = memo(ProcessRow);
+
 export function ChatTranscript({
   toolResults,
   messages,
@@ -938,6 +944,7 @@ export function ChatTranscript({
   mediaOrigin,
   mediaHostId,
   sessionKey,
+  visible = true,
   preferences,
   palette,
 }: ChatTranscriptProps) {
@@ -1011,6 +1018,8 @@ export function ChatTranscript({
     return undefined;
   }, [rows]);
   const list = useRef<FlatList<Row>>(null);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const following = useRef(true);
   const interacted = useRef(false);
   const requested = useRef<string | undefined>(undefined);
@@ -1024,6 +1033,37 @@ export function ChatTranscript({
   const [toolOpen, setToolOpen] = useState<ReadonlyMap<string, boolean>>(
     () => new Map(),
   );
+  const actionRef = useRef({ onEdit, onFork, onCopy, onRead });
+  actionRef.current = { onEdit, onFork, onCopy, onRead };
+  const editMessage = useCallback<MessageAction>(
+    (...args) => actionRef.current.onEdit?.(...args),
+    [],
+  );
+  const forkMessage = useCallback<MessageAction>(
+    (...args) => actionRef.current.onFork?.(...args),
+    [],
+  );
+  const copyMessage = useCallback(
+    (text: string) => actionRef.current.onCopy?.(text),
+    [],
+  );
+  const readMessage = useCallback(
+    (text: string) => actionRef.current.onRead?.(text),
+    [],
+  );
+  const changeGroupOpen = useCallback(
+    (ids: readonly string[], open: boolean) => {
+      setGroupOpen((previous) => {
+        const next = new Map(previous);
+        for (const id of ids) next.set(id, open);
+        return next;
+      });
+    },
+    [],
+  );
+  const changeToolOpen = useCallback((id: string, open: boolean) => {
+    setToolOpen((previous) => new Map(previous).set(id, open));
+  }, []);
   const lastSession = useRef(sessionKey);
   if (lastSession.current !== sessionKey) {
     lastSession.current = sessionKey;
@@ -1064,14 +1104,21 @@ export function ChatTranscript({
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } =
         event.nativeEvent;
-      if (!positioned.current) return;
+      if (!visibleRef.current || !positioned.current) return;
+      // Retained native lists can emit stale or impossible metrics while relayout settles.
+      if (layoutMeasurement.height <= 0 || contentSize.height <= 0) return;
+      const maxOffset = Math.max(
+        0,
+        contentSize.height - layoutMeasurement.height,
+      );
+      if (contentOffset.y > maxOffset + 48) return;
       if (correctingViewport.current) return;
       if (viewportHeight.current !== layoutMeasurement.height) {
         viewportHeight.current = layoutMeasurement.height;
         if (following.current) {
           correctingViewport.current = true;
           requestAnimationFrame(() => {
-            if (following.current)
+            if (visibleRef.current && following.current)
               list.current?.scrollToEnd({ animated: false });
             correctingViewport.current = false;
           });
@@ -1086,6 +1133,62 @@ export function ChatTranscript({
     },
     [loadOlder],
   );
+  const hasEdit = !!onEdit;
+  const hasFork = !!onFork;
+  const hasCopy = !!onCopy;
+  const hasRead = !!onRead;
+  const renderItem = useCallback(
+    ({ item }: { item: Row }) =>
+      item.kind === "message" ? (
+        <MemoMessageRow
+          row={item}
+          onEdit={
+            hasEdit && !item.ref.entryId.startsWith("live-user:")
+              ? editMessage
+              : undefined
+          }
+          onFork={
+            hasFork && (!canFork || canFork(item.ref.index))
+              ? forkMessage
+              : undefined
+          }
+          onCopy={hasCopy ? copyMessage : undefined}
+          onRead={hasRead ? readMessage : undefined}
+          mediaOrigin={mediaOrigin}
+        />
+      ) : (
+        <MemoProcessRow
+          row={item}
+          results={results}
+          mediaOrigin={mediaOrigin}
+          preferences={preferences}
+          latestThinking={latestThinking}
+          groupOpen={groupOpen}
+          onGroupOpen={changeGroupOpen}
+          toolOpen={toolOpen}
+          onToolOpen={changeToolOpen}
+        />
+      ),
+    [
+      hasEdit,
+      hasFork,
+      hasCopy,
+      hasRead,
+      canFork,
+      editMessage,
+      forkMessage,
+      copyMessage,
+      readMessage,
+      mediaOrigin,
+      results,
+      preferences,
+      latestThinking,
+      groupOpen,
+      changeGroupOpen,
+      toolOpen,
+      changeToolOpen,
+    ],
+  );
   return (
     <PaletteContext.Provider value={context}>
       <View style={styles.container}>
@@ -1096,42 +1199,7 @@ export function ChatTranscript({
           contentContainerStyle={styles.listContent}
           data={displayRows}
           keyExtractor={(item) => item.key}
-          renderItem={({ item }) =>
-            item.kind === "message" ? (
-              <MessageRow
-                row={item}
-                onEdit={
-                  item.ref.entryId.startsWith("live-user:") ? undefined : onEdit
-                }
-                onFork={
-                  canFork && !canFork(item.ref.index) ? undefined : onFork
-                }
-                onCopy={onCopy}
-                onRead={onRead}
-                mediaOrigin={mediaOrigin}
-              />
-            ) : (
-              <ProcessRow
-                row={item}
-                results={results}
-                mediaOrigin={mediaOrigin}
-                preferences={preferences}
-                latestThinking={latestThinking}
-                groupOpen={groupOpen}
-                onGroupOpen={(ids, open) =>
-                  setGroupOpen((previous) => {
-                    const next = new Map(previous);
-                    for (const id of ids) next.set(id, open);
-                    return next;
-                  })
-                }
-                toolOpen={toolOpen}
-                onToolOpen={(id, open) =>
-                  setToolOpen((previous) => new Map(previous).set(id, open))
-                }
-              />
-            )
-          }
+          renderItem={renderItem}
           ListHeaderComponent={
             historyHasMore ? (
               <Pressable
@@ -1155,23 +1223,25 @@ export function ChatTranscript({
           onScroll={onScroll}
           scrollEventThrottle={16}
           onLayout={(event) => {
+            if (!visibleRef.current) return;
             const height = event.nativeEvent.layout.height;
             if (height === viewportHeight.current) return;
             viewportHeight.current = height;
             if (positioned.current && following.current) {
               correctingViewport.current = true;
               requestAnimationFrame(() => {
-                if (following.current)
+                if (visibleRef.current && following.current)
                   list.current?.scrollToEnd({ animated: false });
                 correctingViewport.current = false;
               });
             }
           }}
           onContentSizeChange={() => {
+            if (!visibleRef.current) return;
             if (!positioned.current || following.current) {
               positioned.current = true;
               requestAnimationFrame(() => {
-                if (following.current)
+                if (visibleRef.current && following.current)
                   list.current?.scrollToEnd({ animated: false });
               });
             }

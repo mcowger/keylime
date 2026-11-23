@@ -35,6 +35,7 @@ mock.module(nativeRequire.resolve("react-native"), () => ({
     React.createElement("span", null, children),
   View: container,
   StyleSheet: { create: (styles: unknown) => styles, absoluteFill: {} },
+  useColorScheme: () => "dark",
 }));
 mock.module("../native-network", () => ({ copyText: async () => {} }));
 

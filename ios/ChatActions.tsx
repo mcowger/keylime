@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
+  DynamicColorIOS,
   Modal,
   Pressable,
   StyleSheet,
@@ -652,10 +653,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  primary: { backgroundColor: "#A62673", borderColor: "#A62673" },
+  primary: {
+    backgroundColor: DynamicColorIOS({ dark: "#A62673", light: "#B03E22" }),
+    borderColor: DynamicColorIOS({ dark: "#A62673", light: "#B03E22" }),
+  },
   buttonText: { fontSize: 14, fontWeight: "500" },
   disabled: { opacity: 0.45 },
-  error: { color: "#E67070", fontSize: 13, marginTop: 10 },
+  error: {
+    color: DynamicColorIOS({ dark: "#E67070", light: "#B42318" }),
+    fontSize: 13,
+    marginTop: 10,
+  },
   toolbarAnchor: { position: "relative", zIndex: 20 },
   trigger: {
     width: 40,

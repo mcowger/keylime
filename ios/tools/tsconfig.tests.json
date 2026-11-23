@@ -5,6 +5,7 @@
   },
   "include": [
     "useNative*.test.tsx",
+    "useChatNavigation.test.tsx",
     "chat-header-context.test.tsx",
     "../chat-context-stats.test.ts"
   ],

@@ -3,6 +3,7 @@ import { parseDocument, DomUtils } from "htmlparser2";
 import type { ChildNode } from "domhandler";
 import {
   ActivityIndicator,
+  DynamicColorIOS,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +12,7 @@ import {
   View,
 } from "react-native";
 import type { ChatDialogRequest, ChatDialogValue } from "./useChatSession";
-import { theme } from "./theme";
+import { dynamicTheme as theme } from "./dynamic-theme";
 
 type DialogProps = {
   request: ChatDialogRequest | null;
@@ -910,7 +911,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   multiline: { minHeight: 80, textAlignVertical: "top" },
-  error: { color: "#ff7777", fontSize: 13 },
+  error: {
+    color: DynamicColorIOS({ dark: "#ff7777", light: "#9E3434" }),
+    fontSize: 13,
+  },
   footer: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -928,6 +932,10 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     alignSelf: "flex-end",
   },
-  primaryText: { color: "#000", fontSize: 14, fontWeight: "600" },
+  primaryText: {
+    color: DynamicColorIOS({ dark: "#000000", light: "#FFFFFF" }),
+    fontSize: 14,
+    fontWeight: "600",
+  },
   disabled: { opacity: 0.45 },
 });

@@ -22,7 +22,7 @@ import { WEB_SLASH_COMMANDS } from "../lib/web-slash-commands";
 import english from "../lib/i18n/locales/en.json";
 import type { BrowserLink } from "./browser-link";
 import type { components } from "./generated/browser-link";
-import { theme } from "./theme";
+import { lightTheme, theme } from "./theme";
 
 type CommandReply = components["schemas"]["BrowserReply_get_commands"];
 type CommandData = Extract<CommandReply["data"], { success: true }>["data"];
@@ -380,12 +380,12 @@ export function NativeSlashMenu({ menu }: { menu: NativeSlashMenuModel }) {
         accent: theme.accent,
       }
     : {
-        panel: "#F2F0EA",
-        border: "#D6CFC1",
-        text: "#221A14",
-        muted: "#746D66",
-        selected: "#E8E4DC",
-        accent: "#B03E22",
+        panel: lightTheme.panel,
+        border: lightTheme.border,
+        text: lightTheme.text,
+        muted: lightTheme.muted,
+        selected: lightTheme.hover,
+        accent: lightTheme.accent,
       };
   if (!menu.open) return null;
   return (

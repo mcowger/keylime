@@ -98,6 +98,9 @@ function mount(link: FakeLink) {
       origin: "https://example.test",
       hostId: "host",
       sessionId: "session",
+      openSessionKeys: new Set([
+        JSON.stringify(["https://example.test", "host", "session"]),
+      ]),
       link: link as unknown as BrowserLink,
     }),
   );

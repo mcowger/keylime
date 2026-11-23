@@ -8,17 +8,8 @@ import {
   useColorScheme,
   type TextStyle,
 } from "react-native";
-import { theme } from "./theme";
+import { lightTheme, theme } from "./theme";
 import type { NativeTranscriptPalette } from "./ChatTranscript";
-
-const lightPalette: NativeTranscriptPalette = {
-  background: "#FAF9F6",
-  panel: "#F2F0EA",
-  border: "#E2DDD2",
-  text: "#2B2823",
-  muted: "#69635A",
-  accent: "#B03E22",
-};
 
 // Render the common Markdown constructs as native text so selection, dynamic
 // type and VoiceOver remain available. URLs are opened by the OS, not a web view.
@@ -213,7 +204,7 @@ export function ChatMarkdown({
   palette?: NativeTranscriptPalette;
 }) {
   const light = useColorScheme() === "light";
-  const colors = palette ?? (light ? lightPalette : theme);
+  const colors = palette ?? (light ? lightTheme : theme);
   const styles = useMemo(() => markdownStyles(colors, light), [colors, light]);
   const blocks = useMemo(() => parse(text), [text]);
   return (

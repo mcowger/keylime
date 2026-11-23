@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActionSheetIOS,
   Alert,
+  DynamicColorIOS,
   Keyboard,
   Pressable,
   ScrollView,
@@ -18,7 +19,7 @@ import {
   requestJson,
   type HostsResponse,
 } from "./keylime-http";
-import { theme } from "./theme";
+import { dynamicTheme as theme } from "./dynamic-theme";
 
 type Host = HostsResponse["hosts"][number];
 type NativeSettings =
@@ -307,7 +308,7 @@ function ToggleCard({
         value={value}
         onValueChange={onChange}
         disabled={disabled}
-        trackColor={{ true: "#a52470", false: "#27272f" }}
+        trackColor={{ true: theme.accent, false: theme.border }}
       />
     </View>
   );
@@ -824,7 +825,7 @@ export function SettingsScreen({
             value={query}
             onChangeText={setQuery}
             placeholder="Search settings"
-            placeholderTextColor="#77777e"
+            placeholderTextColor={theme.muted}
             style={styles.searchInput}
             returnKeyType="search"
           />
@@ -1401,7 +1402,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     width: 150,
   },
-  tabSelected: { backgroundColor: "#1b1b21" },
+  tabSelected: { backgroundColor: theme.hover },
   tabIcon: { color: theme.text, fontSize: 15 },
   tabLabel: { color: theme.text, fontSize: 13, fontWeight: "600" },
   tabDescription: {
@@ -1444,7 +1445,7 @@ const styles = StyleSheet.create({
   description: { color: theme.muted, fontSize: 13, lineHeight: 21 },
   scope: {
     color: theme.muted,
-    backgroundColor: "#17171b",
+    backgroundColor: theme.hover,
     fontSize: 11,
     paddingHorizontal: 6,
     paddingVertical: 3,
@@ -1464,7 +1465,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   choiceText: { color: theme.text, fontSize: 13, flexShrink: 1 },
-  dim: { color: "#9999a1", fontSize: 12, lineHeight: 18 },
+  dim: { color: theme.muted, fontSize: 12, lineHeight: 18 },
   button: {
     borderWidth: 1,
     borderColor: theme.border,
@@ -1487,7 +1488,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: theme.panel,
   },
-  error: { color: "#ff8b95", fontSize: 13 },
+  error: {
+    color: DynamicColorIOS({ dark: "#ff8b95", light: "#9E3434" }),
+    fontSize: 13,
+  },
   input: {
     color: theme.text,
     borderWidth: 1,

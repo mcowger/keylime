@@ -18,6 +18,7 @@ import type { operations } from "./generated/web-http";
 import type { ModelActivity } from "../lib/model-activity";
 import { ComposerActivity } from "./ComposerActivity";
 import { NativeReasoningSlider } from "./NativeReasoningSlider";
+import { lightTheme, theme } from "./theme";
 
 type ModelCatalog =
   operations["getModels"]["responses"][200]["content"]["application/json"];
@@ -126,28 +127,32 @@ export function ChatComposer({
   const dark = useColorScheme() !== "light";
   const colors = dark
     ? {
-        background: "#000000",
-        panel: "#0A0A0C",
-        text: "#F5F5F5",
-        muted: "#C9C9D1",
-        dim: "#929299",
-        border: "#29292E",
-        hover: "#17171B",
+        background: theme.background,
+        panel: theme.panel,
+        text: theme.text,
+        muted: theme.muted,
+        dim: "#8E8E96",
+        border: theme.border,
+        hover: theme.hover,
         error: "#F0A3A0",
         errorBg: "#160C0D",
         errorBorder: "#704D50",
+        accent: theme.accent,
+        onAccent: "#000000",
       }
     : {
-        background: "#FAF9F6",
-        panel: "#F2F0EA",
-        text: "#221A14",
-        muted: "#554C45",
-        dim: "#746D66",
-        border: "#D6CFC1",
-        hover: "#E8E4DC",
+        background: lightTheme.background,
+        panel: lightTheme.panel,
+        text: lightTheme.text,
+        muted: lightTheme.muted,
+        dim: "#6A6458",
+        border: lightTheme.border,
+        hover: lightTheme.hover,
         error: "#9E3434",
         errorBg: "#FCEDED",
         errorBorder: "#D8A6A4",
+        accent: lightTheme.accent,
+        onAccent: "#FFFFFF",
       };
   const [collapsedSearch, setCollapsedSearch] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -335,10 +340,10 @@ export function ChatComposer({
           styles.composer,
           {
             backgroundColor: colors.background,
-            borderColor: focused ? "#A94B80" : colors.border,
+            borderColor: focused ? colors.accent : colors.border,
           },
           focused && {
-            shadowColor: dark ? "#EC5BAB" : "#A62972",
+            shadowColor: colors.accent,
             shadowOpacity: 0.28,
             shadowRadius: 4,
             shadowOffset: { width: 0, height: 0 },
@@ -392,7 +397,7 @@ export function ChatComposer({
           <ComposerActivity
             activity={modelActivity}
             color={colors.muted}
-            accent={dark ? "#EC5BAB" : "#A62972"}
+            accent={colors.accent}
           />
           {running && !canSend ? (
             <Pressable
@@ -412,13 +417,13 @@ export function ChatComposer({
               onPress={onSend}
               style={[
                 styles.send,
-                { backgroundColor: canSend ? "#EC5BAB" : colors.hover },
+                { backgroundColor: canSend ? colors.accent : colors.hover },
               ]}
             >
               <Text
                 style={[
                   styles.sendIcon,
-                  { color: canSend ? "#000000" : colors.dim },
+                  { color: canSend ? colors.onAccent : colors.dim },
                 ]}
               >
                 ➜
@@ -643,7 +648,7 @@ export function ChatComposer({
               disabled={disabled || running}
               dim={colors.dim}
               border={colors.border}
-              accent={dark ? "#EC5BAB" : "#A62972"}
+              accent={colors.accent}
               planEnabled={planEnabled}
               planUnknown={planUnknown}
               prewalk={prewalk}

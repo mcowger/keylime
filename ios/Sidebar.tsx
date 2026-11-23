@@ -125,7 +125,7 @@ export function Sidebar({
         border: "#D6CFC1",
         hover: "#E7E3DB",
         surface: "#F2F0EA",
-        accent: "#A4246D",
+        accent: "#B03E22",
       };
   const [expansion, setExpansion] = useState<Record<string, boolean>>({});
   const isOpen = (key: string, fallback: boolean) => expansion[key] ?? fallback;

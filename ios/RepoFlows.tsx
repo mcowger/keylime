@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  DynamicColorIOS,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -1109,7 +1110,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
   },
-  primary: { backgroundColor: "#A61F70", borderColor: "#A61F70" },
+  primary: {
+    backgroundColor: DynamicColorIOS({ dark: "#A61F70", light: "#B03E22" }),
+    borderColor: DynamicColorIOS({ dark: "#A61F70", light: "#B03E22" }),
+  },
   disabled: { opacity: 0.45 },
   buttonText: { fontSize: 13, fontWeight: "500", textAlign: "center" },
   label: { fontSize: 13 },

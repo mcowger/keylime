@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import type { components } from "./generated/browser-link";
 import { ChatMarkdown } from "./ChatMarkdown";
-import { theme } from "./theme";
+import { lightTheme, theme } from "./theme";
 
 type PlanState = NonNullable<
   Extract<
@@ -27,22 +27,13 @@ type Props = {
   onRespond(id: string, approved: boolean, feedback?: string): Promise<boolean>;
 };
 
-const lightPalette = {
-  background: "#FAF9F6",
-  panel: "#F2F0EA",
-  border: "#E2DDD2",
-  text: "#2B2823",
-  muted: "#69635A",
-  accent: "#B03E22",
-};
-
 export function PlanReview({ proposal, pending, onRespond }: Props) {
   const [revising, setRevising] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState(false);
   const inFlight = useRef(false);
-  const colors = useColorScheme() === "light" ? lightPalette : theme;
+  const colors = useColorScheme() === "light" ? lightTheme : theme;
   const { height } = useWindowDimensions();
   const busy = pending || submitting;
 

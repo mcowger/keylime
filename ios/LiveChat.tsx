@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  cloneElement,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { File, Paths } from "expo-file-system";
 import {
   Image,
@@ -32,7 +40,7 @@ import { ComposerMoreMenu } from "./ComposerMoreMenu";
 import { ChatComposer, type ChatComposerProps } from "./ChatComposer";
 import { ChatDialog } from "./ChatDialog";
 import { PlanReview } from "./PlanReview";
-import { ChatTranscript } from "./ChatTranscript";
+import { ChatTranscript, type ChatTranscriptProps } from "./ChatTranscript";
 import type { operations } from "./generated/web-http";
 import {
   ensureChatSession,
@@ -56,6 +64,17 @@ export type ChatTarget = {
   sessionId: string | null;
 };
 type ChatView = ReturnType<typeof useChatSession>;
+const emptyTranscriptMessages: ChatTranscriptProps["messages"] = [];
+const RetainedTranscript = memo(function RetainedTranscript({
+  element,
+  visible,
+}: {
+  element: ReactElement<ChatTranscriptProps>;
+  visible: boolean;
+}) {
+  return cloneElement(element, { visible });
+});
+const emptyTranscriptIds: ChatTranscriptProps["entryIds"] = [];
 export type ChatHeaderState = Pick<ChatView, "active" | "state"> & {
   key: string;
   sessionId: string;
@@ -66,6 +85,7 @@ export type LiveChatProps = {
   origin: string;
   link: BrowserLink;
   target: ChatTarget | null;
+  openSessionKeys: ReadonlySet<string>;
   visible: boolean;
   onUnauthorized: () => void;
   preferences?: SettingsPreferences;
@@ -139,6 +159,7 @@ export function LiveChat({
   origin,
   link,
   target,
+  openSessionKeys,
   visible,
   onUnauthorized,
   preferences,
@@ -182,8 +203,21 @@ export function LiveChat({
     hostId: target?.hostId ?? "local",
     sessionId: target?.sessionId ?? null,
     advisor: advisorEnabled,
+    openSessionKeys,
     onUnauthorized,
   });
+  const transcripts = useRef(
+    new Map<
+      string,
+      {
+        owner: string;
+        element: ReactElement<ChatTranscriptProps>;
+        messages: ChatTranscriptProps["messages"];
+        entryIds: ChatTranscriptProps["entryIds"];
+        echoes: ChatView["echoedUserMessages"];
+      }
+    >(),
+  );
   const headerKey = target?.key;
   const headerHost = target?.hostId;
   const headerSession = target?.sessionId;
@@ -233,8 +267,8 @@ export function LiveChat({
       hostId: target?.hostId ?? "local",
       sessionId: target?.sessionId ?? "",
     },
-    messages: chat.context?.messages ?? [],
-    entryIds: chat.context?.entryIds ?? [],
+    messages: chat.context?.messages ?? emptyTranscriptMessages,
+    entryIds: chat.context?.entryIds ?? emptyTranscriptIds,
     busy: !target?.sessionId || chat.active || !!chat.dialog,
     issueCommand: chat.issueCommand,
     async reloadEdited(result, expected) {
@@ -725,8 +759,11 @@ export function LiveChat({
       }
     }
   }
+  for (const [id, entry] of transcripts.current) {
+    if (!openSessionKeys.has(entry.owner)) transcripts.current.delete(id);
+  }
 
-  if (!target || !visible) return null;
+  if (!target) return null;
   const { key, sessionId } = target;
   const data =
     catalog?.origin === origin &&
@@ -991,203 +1028,272 @@ export function LiveChat({
       <ChatAttachmentChips controller={attachments} />
     </ChatComposer>
   );
+  const transcriptOwner = sessionId
+    ? JSON.stringify([origin, target.hostId, sessionId])
+    : null;
+  const transcriptKey = transcriptOwner
+    ? JSON.stringify([transcriptOwner, chat.historyView])
+    : null;
+  const hasTranscript = !!(
+    chat.context ||
+    chat.liveMessage ||
+    chat.echoedUserMessages.length
+  );
+  // A history invalidated while away must not reuse the old branch's list.
+  if (transcriptOwner && !hasTranscript) {
+    for (const [id, entry] of transcripts.current) {
+      if (entry.owner === transcriptOwner) transcripts.current.delete(id);
+    }
+  }
+  if (
+    transcriptKey &&
+    transcriptOwner &&
+    openSessionKeys.has(transcriptOwner) &&
+    hasTranscript
+  ) {
+    for (const [id, entry] of transcripts.current) {
+      if (entry.owner === transcriptOwner && id !== transcriptKey)
+        transcripts.current.delete(id);
+    }
+    const previous = transcripts.current.get(transcriptKey);
+    const baseMessages = chat.context?.messages ?? emptyTranscriptMessages;
+    const baseIds = chat.context?.entryIds ?? emptyTranscriptIds;
+    const unchanged =
+      previous &&
+      previous.messages === baseMessages &&
+      previous.entryIds === baseIds &&
+      previous.echoes === chat.echoedUserMessages;
+    const messages = unchanged
+      ? previous.element.props.messages
+      : chat.echoedUserMessages.length
+        ? [
+            ...baseMessages,
+            ...chat.echoedUserMessages.map(({ message }) => message),
+          ]
+        : baseMessages;
+    const entryIds = unchanged
+      ? previous.element.props.entryIds
+      : chat.echoedUserMessages.length
+        ? [
+            ...baseIds,
+            ...chat.echoedUserMessages.map(({ id }) => `live-user:${id}`),
+          ]
+        : baseIds;
+    transcripts.current.set(transcriptKey, {
+      owner: transcriptOwner,
+      messages: baseMessages,
+      entryIds: baseIds,
+      echoes: chat.echoedUserMessages,
+      element: (
+        <ChatTranscript
+          sessionKey={transcriptOwner}
+          mediaOrigin={origin}
+          mediaHostId={target.hostId}
+          onCopy={(text) =>
+            void copyText(text).catch((cause) => error(key, cause))
+          }
+          onRead={(text) =>
+            void readText(text).catch((cause) => error(key, cause))
+          }
+          onEdit={
+            chat.active || chat.dialog || actions.uncertain
+              ? undefined
+              : actions.onEdit
+          }
+          onFork={actions.onFork}
+          canFork={actions.canFork}
+          preferences={preferences}
+          messages={messages}
+          entryIds={entryIds}
+          liveMessage={chat.liveMessage}
+          toolResults={chat.toolResults}
+          historyHasMore={chat.hasOlder}
+          loadingHistory={chat.loadingHistory}
+          onLoadOlder={chat.loadOlder}
+        />
+      ),
+    });
+  }
   return (
-    <ChatKeyboardArea>
-      {actions.confirmation}
-      {sessionId ? (
-        <>
-          <View style={styles.root}>
-            {chat.context ||
-            chat.liveMessage ||
-            chat.echoedUserMessages.length > 0 ? (
-              <ChatTranscript
-                key={JSON.stringify([
-                  origin,
-                  target.hostId,
-                  sessionId,
-                  chat.historyView,
-                ])}
-                sessionKey={key}
-                mediaOrigin={origin}
-                mediaHostId={target.hostId}
-                onCopy={(text) =>
-                  void copyText(text).catch((cause) => error(key, cause))
+    <View
+      style={visible ? styles.root : { display: "none" }}
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
+    >
+      <ChatKeyboardArea>
+        {actions.confirmation}
+        <View style={sessionId ? styles.root : { display: "none" }}>
+          {[...transcripts.current].map(([id, entry]) => {
+            const active = id === transcriptKey && hasTranscript;
+            return (
+              <View
+                key={id}
+                style={active ? styles.root : { display: "none" }}
+                accessibilityElementsHidden={!active}
+                importantForAccessibility={
+                  active ? "auto" : "no-hide-descendants"
                 }
-                onRead={(text) =>
-                  void readText(text).catch((cause) => error(key, cause))
-                }
-                onEdit={
-                  chat.active || chat.dialog || actions.uncertain
-                    ? undefined
-                    : actions.onEdit
-                }
-                onFork={actions.onFork}
-                canFork={actions.canFork}
-                preferences={preferences}
-                messages={[
-                  ...(chat.context?.messages ?? []),
-                  ...chat.echoedUserMessages.map(({ message }) => message),
+              >
+                <RetainedTranscript
+                  element={entry.element}
+                  visible={active && visible}
+                />
+              </View>
+            );
+          })}
+          {sessionId && !hasTranscript && chat.loading && (
+            <Text style={[styles.status, { color: colors.muted }]}>
+              Loading…
+            </Text>
+          )}
+        </View>
+        {sessionId ? (
+          <>
+            {chat.pendingInput.map((item) => (
+              <View
+                key={item.id}
+                style={[
+                  styles.pending,
+                  { backgroundColor: colors.panel, borderColor: colors.border },
                 ]}
-                entryIds={[
-                  ...(chat.context?.entryIds ?? []),
-                  ...chat.echoedUserMessages.map(({ id }) => `live-user:${id}`),
-                ]}
-                liveMessage={chat.liveMessage}
-                toolResults={chat.toolResults}
-                historyHasMore={chat.hasOlder}
-                loadingHistory={chat.loadingHistory}
-                onLoadOlder={() => void chat.loadOlder()}
-              />
-            ) : chat.loading ? (
-              <Text style={[styles.status, { color: colors.muted }]}>
-                Loading…
-              </Text>
-            ) : null}
-          </View>
-          {chat.pendingInput.map((item) => (
-            <View
-              key={item.id}
-              style={[
-                styles.pending,
-                { backgroundColor: colors.panel, borderColor: colors.border },
-              ]}
-            >
-              <Text style={{ color: colors.text }}>{item.message}</Text>
-              <Text style={{ color: colors.muted }}>
-                {item.error ||
-                  (item.state === "uncertain"
-                    ? "Delivery unconfirmed"
-                    : item.state.replace(/_/g, " "))}
-              </Text>
-            </View>
-          ))}
-          {[...chat.queue.steering, ...chat.queue.followUp].map(
-            (text, index) => (
+              >
+                <Text style={{ color: colors.text }}>{item.message}</Text>
+                <Text style={{ color: colors.muted }}>
+                  {item.error ||
+                    (item.state === "uncertain"
+                      ? "Delivery unconfirmed"
+                      : item.state.replace(/_/g, " "))}
+                </Text>
+              </View>
+            ))}
+            {[...chat.queue.steering, ...chat.queue.followUp].map(
+              (text, index) => (
+                <Text
+                  numberOfLines={1}
+                  key={index}
+                  style={[styles.status, { color: colors.muted }]}
+                >
+                  {text}
+                </Text>
+              ),
+            )}
+            {messageError && (
               <Text
-                numberOfLines={1}
-                key={index}
+                accessibilityRole="alert"
+                style={[styles.status, { color: colors.accent }]}
+              >
+                {messageError}
+              </Text>
+            )}
+            {!!notices[key] && (
+              <Text
+                accessibilityRole="alert"
                 style={[styles.status, { color: colors.muted }]}
               >
-                {text}
+                {notices[key]}
               </Text>
-            ),
-          )}
-          {messageError && (
-            <Text
-              accessibilityRole="alert"
-              style={[styles.status, { color: colors.accent }]}
-            >
-              {messageError}
-            </Text>
-          )}
-          {!!notices[key] && (
-            <Text
-              accessibilityRole="alert"
-              style={[styles.status, { color: colors.muted }]}
-            >
-              {notices[key]}
-            </Text>
-          )}
-          {actions.uncertain && (
-            <Text
-              accessibilityRole="alert"
-              style={[styles.status, { color: colors.accent }]}
-            >
-              {actions.uncertain}
-            </Text>
-          )}
-          {chat.planProposal && (
-            <View style={styles.planReview}>
-              <PlanReview
-                key={chat.planProposal.id}
-                proposal={chat.planProposal}
-                pending={chat.planCommandPending}
-                onRespond={chat.respondPlanProposal}
-              />
-            </View>
-          )}
-          <NativeSlashMenu menu={slash} />
-          {chat.dialog ? (
-            <ChatDialog
-              request={chat.dialog}
-              onRespond={chat.respondDialog}
-              submitting={chat.dialogSubmitting}
-              error={chat.dialogError}
-            />
-          ) : (
-            composer
-          )}
-        </>
-      ) : (
-        <View style={styles.fresh}>
-          <View style={styles.brand}>
-            <Image
-              source={require("../public/icon-192.png")}
-              style={styles.logo}
-            />
-            <Text style={[styles.brandText, { color: colors.text }]}>
-              key lime
-            </Text>
-          </View>
-          {!target.effort && (
-            <View
-              style={[
-                styles.picker,
-                { backgroundColor: colors.panel, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.options}>
-                <Pressable
-                  style={styles.option}
-                  accessibilityRole="button"
-                  onPress={onChooseProject}
-                >
-                  <Text style={{ color: colors.muted }}>Project</Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.optionLabel,
-                      { color: colors.text, borderColor: colors.border },
-                    ]}
-                  >
-                    {target.project} ⌄
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={styles.option}
-                  accessibilityRole="button"
-                  onPress={onChooseWorkspace}
-                >
-                  <Text style={{ color: colors.muted }}>Workspace</Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.optionLabel,
-                      { color: colors.text, borderColor: colors.border },
-                    ]}
-                  >
-                    {target.workspace} ⌄
-                  </Text>
-                </Pressable>
+            )}
+            {actions.uncertain && (
+              <Text
+                accessibilityRole="alert"
+                style={[styles.status, { color: colors.accent }]}
+              >
+                {actions.uncertain}
+              </Text>
+            )}
+            {chat.planProposal && (
+              <View style={styles.planReview}>
+                <PlanReview
+                  key={chat.planProposal.id}
+                  proposal={chat.planProposal}
+                  pending={chat.planCommandPending}
+                  onRespond={chat.respondPlanProposal}
+                />
               </View>
-              <Text style={[styles.path, { color: colors.muted }]}>
-                {target.path}
+            )}
+            <NativeSlashMenu menu={slash} />
+            {chat.dialog ? (
+              <ChatDialog
+                request={chat.dialog}
+                onRespond={chat.respondDialog}
+                submitting={chat.dialogSubmitting}
+                error={chat.dialogError}
+              />
+            ) : (
+              composer
+            )}
+          </>
+        ) : (
+          <View style={styles.fresh}>
+            <View style={styles.brand}>
+              <Image
+                source={require("../public/icon-192.png")}
+                style={styles.logo}
+              />
+              <Text style={[styles.brandText, { color: colors.text }]}>
+                key lime
               </Text>
             </View>
-          )}
-          {messageError && (
-            <Text
-              accessibilityRole="alert"
-              style={[styles.status, { color: colors.accent }]}
-            >
-              {messageError}
-            </Text>
-          )}
-          <NativeSlashMenu menu={slash} />
-          {composer}
-        </View>
-      )}
-    </ChatKeyboardArea>
+            {!target.effort && (
+              <View
+                style={[
+                  styles.picker,
+                  { backgroundColor: colors.panel, borderColor: colors.border },
+                ]}
+              >
+                <View style={styles.options}>
+                  <Pressable
+                    style={styles.option}
+                    accessibilityRole="button"
+                    onPress={onChooseProject}
+                  >
+                    <Text style={{ color: colors.muted }}>Project</Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.optionLabel,
+                        { color: colors.text, borderColor: colors.border },
+                      ]}
+                    >
+                      {target.project} ⌄
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.option}
+                    accessibilityRole="button"
+                    onPress={onChooseWorkspace}
+                  >
+                    <Text style={{ color: colors.muted }}>Workspace</Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.optionLabel,
+                        { color: colors.text, borderColor: colors.border },
+                      ]}
+                    >
+                      {target.workspace} ⌄
+                    </Text>
+                  </Pressable>
+                </View>
+                <Text style={[styles.path, { color: colors.muted }]}>
+                  {target.path}
+                </Text>
+              </View>
+            )}
+            {messageError && (
+              <Text
+                accessibilityRole="alert"
+                style={[styles.status, { color: colors.accent }]}
+              >
+                {messageError}
+              </Text>
+            )}
+            <NativeSlashMenu menu={slash} />
+            {composer}
+          </View>
+        )}
+      </ChatKeyboardArea>
+    </View>
   );
 }
 

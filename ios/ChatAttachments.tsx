@@ -29,6 +29,7 @@ import {
   type NativeAttachmentSelection,
   type NativePickedFile,
 } from "./native-network";
+import { lightTheme, theme } from "./theme";
 
 type Prompt = Extract<
   components["schemas"]["BrowserCommand"]["command"],
@@ -577,17 +578,17 @@ export function ChatAttachmentChips({
   const dark = useColorScheme() !== "light";
   const colors = dark
     ? {
-        text: "#F5F5F5",
-        muted: "#C9C9D1",
-        border: "#29292E",
-        background: "#17171B",
+        text: theme.text,
+        muted: theme.muted,
+        border: theme.border,
+        background: theme.hover,
         error: "#F0A3A0",
       }
     : {
-        text: "#221A14",
-        muted: "#554C45",
-        border: "#D6CFC1",
-        background: "#E8E4DC",
+        text: lightTheme.text,
+        muted: lightTheme.muted,
+        border: lightTheme.border,
+        background: lightTheme.hover,
         error: "#9E3434",
       };
   if (!controller.items.length && !controller.error && !controller.picking)

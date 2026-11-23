@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import type { ToolPreset } from "../lib/tool-presets";
+import { lightTheme, theme } from "./theme";
 export type ComposerMoreMenuProps = {
   onAttachFiles: () => void;
   onPhotoLibrary: () => void;
@@ -87,25 +88,25 @@ export function ComposerMoreMenu({
   advisorModel,
   disabled = false,
 }: ComposerMoreMenuProps) {
-  const dark = useColorScheme() === "dark";
+  const dark = useColorScheme() !== "light";
   const colors = dark
     ? {
-        panel: "#0A0A0C",
-        border: "#29292E",
-        text: "#F5F5F5",
-        muted: "#C9C9D1",
-        dim: "#929299",
-        selected: "#232329",
-        accent: "#EC5BAB",
+        panel: theme.panel,
+        border: theme.border,
+        text: theme.text,
+        muted: theme.muted,
+        dim: "#8E8E96",
+        selected: theme.hover,
+        accent: theme.accent,
       }
     : {
-        panel: "#F2F0EA",
-        border: "#D6CFC1",
-        text: "#221A14",
-        muted: "#554C45",
-        dim: "#746D66",
-        selected: "#E8E4DC",
-        accent: "#A52672",
+        panel: lightTheme.panel,
+        border: lightTheme.border,
+        text: lightTheme.text,
+        muted: lightTheme.muted,
+        dim: "#6A6458",
+        selected: lightTheme.hover,
+        accent: lightTheme.accent,
       };
   const { width, height } = useWindowDimensions();
   const anchorRef = useRef<ComponentRef<typeof View>>(null);

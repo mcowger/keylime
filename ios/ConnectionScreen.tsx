@@ -64,7 +64,7 @@ export function ConnectionScreen({
   expiredOrigin,
   onCancel,
 }: Props) {
-  const colors = useColorScheme() === "dark" ? dark : light;
+  const colors = useColorScheme() === "light" ? light : dark;
   const [originInput, setOriginInput] = useState(expiredOrigin ?? "");
   const [origin, setOrigin] = useState(expiredOrigin ?? "");
   const [step, setStep] = useState<"server" | "password">(

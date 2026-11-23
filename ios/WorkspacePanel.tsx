@@ -29,7 +29,7 @@ const theme = {
   border: DynamicColorIOS({ dark: darkTheme.border, light: "#D6CFC1" }),
   text: DynamicColorIOS({ dark: darkTheme.text, light: "#221A14" }),
   muted: DynamicColorIOS({ dark: darkTheme.muted, light: "#625C57" }),
-  accent: DynamicColorIOS({ dark: darkTheme.accent, light: "#A4246D" }),
+  accent: DynamicColorIOS({ dark: darkTheme.accent, light: "#B03E22" }),
 };
 
 import { SessionActivity } from "./SessionActivity";
